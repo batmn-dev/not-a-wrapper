@@ -16,11 +16,13 @@ describe("Composer action registry", () => {
     )
     expect(getComposerAction("web-search")).toMatchObject({
       behavior: "toggle",
+      compactLabel: "Web search",
       description: "Find real-time news and info",
       keywords: expect.arrayContaining(["internet", "search"]),
       label: "Web search",
     })
     expect(getComposerAction("add-files")).toMatchObject({
+      compactLabel: "Files",
       description: "Upload from computer",
       label: "Add photos & files",
     })

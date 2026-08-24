@@ -1,6 +1,15 @@
 "use client"
 
 import { ComposerIconButton } from "@/components/ui/composer-icon-button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useFileUpload } from "@/components/ui/file-upload"
 import { floatingMenuItemActiveClassName } from "@/components/ui/floating-surface"
 import { Icon } from "@/components/ui/icon"
@@ -17,6 +26,7 @@ import {
   TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { cn } from "@/lib/utils"
 import { RiAddLargeLine } from "@remixicon/react"
 import {
@@ -28,6 +38,7 @@ import {
 } from "react"
 import {
   composerActionRegistry,
+  getComposerAction,
   getComposerActionQueryMatches,
   type ComposerActionId,
 } from "./composer-action-registry"
@@ -41,6 +52,8 @@ const composerPlusTooltip = (
     <Kbd>@</Kbd>
   </TooltipShortcut>
 )
+const addFilesAction = getComposerAction("add-files")
+const webSearchAction = getComposerAction("web-search")
 
 type ButtonPlusMenuProps = {
   isUserAuthenticated: boolean
@@ -71,6 +84,7 @@ export function ButtonPlusMenu({
   onActivateActionQuery,
 }: ButtonPlusMenuProps) {
   const { openFilePicker } = useFileUpload()
+  const isMobile = useBreakpoint(768)
   const [isTriggerMenuOpen, setIsTriggerMenuOpen] = useState(false)
   const [dismissedActionQueryId, setDismissedActionQueryId] = useState<
     number | null
@@ -250,6 +264,9 @@ export function ButtonPlusMenu({
             resolvedHighlightedActionId
           ) {
             activateAction(resolvedHighlightedActionId)
+          } else {
+            setIsTriggerMenuOpen(false)
+            setHighlightedActionId(null)
           }
           return
         default:
@@ -323,6 +340,11 @@ export function ButtonPlusMenu({
     if (open) focusEditor()
   }
 
+  const handleTriggerMenuOpenChange = (open: boolean) => {
+    setIsTriggerMenuOpen(open)
+    setHighlightedActionId(open ? initialActionId : null)
+  }
+
   // Unauthenticated: show auth popover instead of dropdown
   if (!isUserAuthenticated) {
     return (
@@ -349,6 +371,203 @@ export function ButtonPlusMenu({
         </Tooltip>
         <PopoverContentAuth portalContainer={overlayContainerRef} />
       </Popover>
+    )
+  }
+
+  const editorOwnedContent = (
+    <PopoverContent
+      anchor={composerAnchor}
+      portalContainer={overlayContainerRef}
+      side="bottom"
+      sideOffset={8}
+      align="start"
+      aria-busy={false}
+      role={undefined}
+      tabIndex={undefined}
+      initialFocus={false}
+      finalFocus={false}
+      geometry="custom"
+      className="max-h-[min(var(--available-height,50svh),var(--floating-menu-max-height))] w-(--anchor-width) max-w-[calc(100vw-12px)] overflow-y-auto rounded-(--floating-menu-radius) py-2 [scrollbar-width:none]"
+    >
+      <div
+        role="group"
+        className="empty:hidden [:not(:has(div:not([role=group])))]:hidden"
+      >
+        {visibleActions.map((action) => {
+          const state = getActionState(action.id)
+          return (
+            <div key={action.id}>
+              <Tooltip disabled={!state.disabled}>
+                <TooltipTrigger
+                  render={
+                    <div
+                      ref={(node) => {
+                        if (
+                          node &&
+                          action.id === resolvedHighlightedActionId &&
+                          typeof node.scrollIntoView === "function"
+                        ) {
+                          node.scrollIntoView({ block: "nearest" })
+                        }
+                      }}
+                      aria-disabled={state.disabled || undefined}
+                      data-fill=""
+                      data-highlighted={
+                        action.id === resolvedHighlightedActionId
+                          ? ""
+                          : undefined
+                      }
+                      className={cn(
+                        floatingMenuItemActiveClassName,
+                        "menu-item-hoverable relative mx-2 flex h-(--floating-menu-item-height) cursor-pointer items-center gap-3 rounded-(--floating-menu-item-radius) px-2 py-1.5 text-sm outline-none select-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                      )}
+                      tabIndex={state.disabled ? -1 : 0}
+                      onClick={() => {
+                        if (!state.disabled) activateAction(action.id)
+                      }}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onPointerMove={() => {
+                        if (!state.disabled) {
+                          setHighlightedActionId(action.id)
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          state.disabled ||
+                          (event.key !== "Enter" && event.key !== " ")
+                        ) {
+                          return
+                        }
+                        event.preventDefault()
+                        activateAction(action.id)
+                      }}
+                    />
+                  }
+                >
+                  <span className="relative flex size-5 shrink-0 items-center justify-center">
+                    <Icon icon={action.icon} glyphInset={0} slotSize={20} />
+                  </span>
+                  <span className="flex min-w-0 grow items-center gap-2.5">
+                    <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
+                      <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
+                        {action.label}
+                      </span>
+                      <span className="min-w-0 truncate text-[var(--text-tertiary)]">
+                        {action.description}
+                      </span>
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={4}>
+                  {state.disabledMessage}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          )
+        })}
+      </div>
+    </PopoverContent>
+  )
+
+  if (isMobile) {
+    const addFilesState = getActionState("add-files")
+    const webSearchState = getActionState("web-search")
+
+    return (
+      <>
+        <DropdownMenu
+          open={isTriggerMenuOpen}
+          onOpenChange={handleTriggerMenuOpenChange}
+          modal
+        >
+          <Tooltip disableHoverablePopup disabled={isMenuOpen}>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <DropdownMenuTrigger
+                render={
+                  <ComposerIconButton
+                    ref={setTriggerNode}
+                    type="button"
+                    id="composer-plus-btn"
+                    data-testid="composer-plus-btn"
+                    aria-label="Add files and more"
+                    aria-expanded={isTriggerMenuOpen}
+                    onClick={() => {
+                      if (actionQuery) {
+                        setDismissedActionQueryId(actionQuery.id)
+                      }
+                    }}
+                  />
+                }
+              >
+                {composerPlusIcon}
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" hideArrow>
+              {composerPlusTooltip}
+            </TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent
+            side="top"
+            sideOffset={-44}
+            align="start"
+            alignOffset={-8}
+            animated={false}
+            geometry="custom"
+            data-content-appearance="touch-optimized"
+            className="max-h-(--available-height) w-[240px] min-w-[240px] max-w-xs overflow-y-auto rounded-[28px] bg-floating-surface py-1.5 [--floating-menu-item-active:#414141] [scrollbar-width:none] dark:bg-[#1b1b1b] dark:shadow-[0_8px_16px_rgba(0,0,0,0.32),inset_0_0_1px_rgba(255,255,255,0.2),0_0_1px_rgba(0,0,0,0.62)]"
+            onKeyDownCapture={(event) => {
+              if (event.key === "Tab") event.preventDefault()
+            }}
+          >
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                geometry="custom"
+                disabled={addFilesState.disabled}
+                className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
+                onClick={() => activateAction("add-files")}
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141]">
+                  <Icon
+                    icon={addFilesAction.icon}
+                    glyphInset={0}
+                    slotSize={20}
+                  />
+                </span>
+                <span className="min-w-0 grow truncate">
+                  {addFilesAction.compactLabel}
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuRadioGroup
+              value={enableSearch ? "web-search" : ""}
+            >
+              <DropdownMenuRadioItem
+                value="web-search"
+                disabled={webSearchState.disabled}
+                className="mx-1.5 h-12 gap-3 rounded-[28px] p-1.5 text-base/6"
+                onClick={() => activateAction("web-search")}
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#414141] [--web-search-icon-foreground:currentColor] [--web-search-icon-surface:transparent]">
+                  <Icon
+                    icon={webSearchAction.icon}
+                    glyphInset={0}
+                    slotSize={20}
+                  />
+                </span>
+                <span className="min-w-0 grow truncate">
+                  {webSearchAction.compactLabel}
+                </span>
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Popover
+          open={isActionQueryOpen}
+          onOpenChange={handleMenuOpenChange}
+        >
+          {editorOwnedContent}
+        </Popover>
+      </>
     )
   }
 
@@ -381,98 +600,7 @@ export function ButtonPlusMenu({
           {composerPlusTooltip}
         </TooltipContent>
       </Tooltip>
-      <PopoverContent
-        anchor={composerAnchor}
-        portalContainer={overlayContainerRef}
-        side="bottom"
-        sideOffset={8}
-        align="start"
-        aria-busy={false}
-        role={undefined}
-        tabIndex={undefined}
-        initialFocus={false}
-        finalFocus={false}
-        geometry="custom"
-        className="max-h-[min(var(--available-height,50svh),var(--floating-menu-max-height))] w-(--anchor-width) max-w-[calc(100vw-12px)] overflow-y-auto rounded-(--floating-menu-radius) py-2 [scrollbar-width:none]"
-      >
-        <div
-          role="group"
-          className="empty:hidden [:not(:has(div:not([role=group])))]:hidden"
-        >
-          {visibleActions.map((action) => {
-            const state = getActionState(action.id)
-            return (
-              <div key={action.id}>
-                <Tooltip disabled={!state.disabled}>
-                  <TooltipTrigger
-                    render={
-                      <div
-                        ref={(node) => {
-                          if (
-                            node &&
-                            action.id === resolvedHighlightedActionId &&
-                            typeof node.scrollIntoView === "function"
-                          ) {
-                            node.scrollIntoView({ block: "nearest" })
-                          }
-                        }}
-                        aria-disabled={state.disabled || undefined}
-                        data-fill=""
-                        data-highlighted={
-                          action.id === resolvedHighlightedActionId
-                            ? ""
-                            : undefined
-                        }
-                        className={cn(
-                          floatingMenuItemActiveClassName,
-                          "menu-item-hoverable relative mx-2 flex h-(--floating-menu-item-height) cursor-pointer items-center gap-3 rounded-(--floating-menu-item-radius) px-2 py-1.5 text-sm outline-none select-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                        )}
-                        tabIndex={state.disabled ? -1 : 0}
-                        onClick={() => {
-                          if (!state.disabled) activateAction(action.id)
-                        }}
-                        onPointerDown={(event) => event.preventDefault()}
-                        onPointerMove={() => {
-                          if (!state.disabled) {
-                            setHighlightedActionId(action.id)
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (
-                            state.disabled ||
-                            (event.key !== "Enter" && event.key !== " ")
-                          ) {
-                            return
-                          }
-                          event.preventDefault()
-                          activateAction(action.id)
-                        }}
-                      />
-                    }
-                  >
-                    <span className="relative flex size-5 shrink-0 items-center justify-center">
-                      <Icon icon={action.icon} glyphInset={0} slotSize={20} />
-                    </span>
-                    <span className="flex min-w-0 grow items-center gap-2.5">
-                      <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
-                        <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
-                          {action.label}
-                        </span>
-                        <span className="min-w-0 truncate text-[var(--text-tertiary)]">
-                          {action.description}
-                        </span>
-                      </span>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" sideOffset={4}>
-                    {state.disabledMessage}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            )
-          })}
-        </div>
-      </PopoverContent>
+      {editorOwnedContent}
     </Popover>
   )
 }

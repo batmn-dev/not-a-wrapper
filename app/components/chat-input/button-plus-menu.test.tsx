@@ -6,6 +6,11 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ButtonPlusMenu } from "./button-plus-menu"
 
+const breakpointMocks = vi.hoisted(() => ({ isMobile: false }))
+
+vi.mock("@/hooks/use-breakpoint", () => ({
+  useBreakpoint: () => breakpointMocks.isMobile,
+}))
 vi.mock("./popover-content-auth", () => ({ PopoverContentAuth: () => null }))
 
 describe("ButtonPlusMenu editor-owned interaction", () => {
@@ -14,6 +19,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
   let scrollIntoView: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
+    breakpointMocks.isMobile = false
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -120,6 +126,123 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(onToggleSearch).toHaveBeenCalledWith(true)
     expect(trigger.getAttribute("aria-expanded")).toBe("false")
     expect(document.activeElement).toBe(editor)
+  })
+
+  it("closes the desktop trigger menu on Tab while retaining editor focus", () => {
+    act(() => {
+      root.render(
+        <FileUpload onFilesAdded={() => {}}>
+          <form data-type="unified-composer">
+            <div id="prompt-textarea" role="textbox" tabIndex={0} />
+            <ButtonPlusMenu
+              enableSearch={false}
+              isFileUploadAvailable
+              isSearchDisabled={false}
+              isUserAuthenticated
+              onToggleSearch={() => {}}
+            />
+            <div data-composer-overlay-host />
+          </form>
+        </FileUpload>
+      )
+    })
+
+    const editor = container.querySelector("#prompt-textarea") as HTMLElement
+    const trigger = container.querySelector(
+      '[aria-label="Add files and more"]'
+    ) as HTMLButtonElement
+
+    act(() => {
+      editor.focus()
+      trigger.click()
+    })
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+
+    let tabWasAllowed = true
+    act(() => {
+      tabWasAllowed = editor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "Tab",
+        })
+      )
+    })
+
+    expect(tabWasAllowed).toBe(false)
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    expect(document.activeElement).toBe(editor)
+  })
+
+  it("uses ChatGPT's touch menu semantics and compact geometry on mobile", () => {
+    breakpointMocks.isMobile = true
+
+    act(() => {
+      root.render(
+        <FileUpload onFilesAdded={() => {}}>
+          <form data-type="unified-composer">
+            <div id="prompt-textarea" role="textbox" tabIndex={0} />
+            <ButtonPlusMenu
+              enableSearch={false}
+              isFileUploadAvailable
+              isSearchDisabled={false}
+              isUserAuthenticated
+              onToggleSearch={() => {}}
+            />
+            <div data-composer-overlay-host />
+          </form>
+        </FileUpload>
+      )
+    })
+
+    const trigger = container.querySelector(
+      '[aria-label="Add files and more"]'
+    ) as HTMLButtonElement
+
+    act(() => {
+      trigger.focus()
+      trigger.click()
+    })
+
+    const menu = document.body.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-content"]'
+    )
+    const filesItem = menu?.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-item"]'
+    )
+    const webSearchItem = menu?.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-radio-item"]'
+    )
+
+    expect(menu?.getAttribute("role")).toBe("menu")
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    expect(menu?.getAttribute("data-content-appearance")).toBe(
+      "touch-optimized"
+    )
+    expect(menu?.className).toContain("w-[240px]")
+    expect(menu?.className).toContain("rounded-[28px]")
+    expect(filesItem?.getAttribute("role")).toBe("menuitem")
+    expect(filesItem?.className).toContain("h-12")
+    expect(filesItem?.textContent).toBe("Files")
+    expect(menu?.textContent).not.toContain("Upload from computer")
+    expect(webSearchItem?.getAttribute("role")).toBe("menuitemradio")
+    expect(webSearchItem?.getAttribute("aria-checked")).toBe("false")
+
+    let tabWasAllowed = true
+    act(() => {
+      filesItem?.focus()
+      tabWasAllowed = filesItem?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "Tab",
+        })
+      ) ?? true
+    })
+
+    expect(tabWasAllowed).toBe(false)
+    expect(document.activeElement).toBe(filesItem)
+    expect(menu?.hasAttribute("data-open")).toBe(true)
   })
 
   it("keeps @ discovery editor-owned across filtering, Escape, and Tab activation", () => {
