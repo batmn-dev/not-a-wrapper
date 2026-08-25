@@ -21,6 +21,8 @@ export type PromptInputEntity = Readonly<{
   /** Connector-style pills carry an icon image (ChatGPT's iconUrl); built-in
    * capabilities without one fall back to the web-search glyph. */
   iconUrl?: string | null
+  /** False for status entities that are visible but cannot be removed. */
+  removable?: boolean
 }>
 
 const promptInputSchema = new Schema({
@@ -63,6 +65,7 @@ const promptInputSchema = new Schema({
         kind: { validate: "string" },
         label: { validate: "string" },
         iconUrl: { default: null },
+        removable: { default: true },
       },
       group: "inline",
       inline: true,
@@ -138,6 +141,7 @@ function readPromptInputEntities(document: ProseMirrorNode) {
       kind: node.attrs.kind,
       label: node.attrs.label,
       iconUrl: node.attrs.iconUrl ?? null,
+      ...(node.attrs.removable === false ? { removable: false } : {}),
     })
     return false
   })
@@ -155,7 +159,8 @@ function promptInputEntitiesEqual(
         entity.id === right[index]?.id &&
         entity.kind === right[index]?.kind &&
         entity.label === right[index]?.label &&
-        (entity.iconUrl ?? null) === (right[index]?.iconUrl ?? null)
+        (entity.iconUrl ?? null) === (right[index]?.iconUrl ?? null) &&
+        (entity.removable ?? true) === (right[index]?.removable ?? true)
     )
   )
 }

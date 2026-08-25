@@ -7,12 +7,30 @@ import {
   DECAY_BUCKET_MS,
   DECAY_TOTAL_MS,
   decayBucketOf,
+  decayStylesheetText,
   MAX_WORD_MERGE_CHARS,
   observeStreamingDecay,
   setStreamingDecayEnabled,
   settleStreamingDecay,
   type DecayCohort,
 } from "./streaming-decay-overlay"
+
+describe("decayStylesheetText", () => {
+  it("emits one motion-gated ::highlight rule per bucket on the 4%→96% ramp", () => {
+    const css = decayStylesheetText()
+    expect(
+      css.startsWith("@media (prefers-reduced-motion: no-preference)")
+    ).toBe(true)
+    const rules = css.match(/::highlight\(naw-stream-decay-\d+\)/g) ?? []
+    expect(rules.length).toBe(DECAY_BUCKET_COUNT)
+    expect(css).toContain(
+      "::highlight(naw-stream-decay-0) { color: color-mix(in oklab, var(--foreground) 4%, transparent); }"
+    )
+    expect(css).toContain(
+      `::highlight(naw-stream-decay-${DECAY_BUCKET_COUNT - 1}) { color: color-mix(in oklab, var(--foreground) 96%, transparent); }`
+    )
+  })
+})
 
 describe("advanceDecayCohorts", () => {
   it("seeds the baseline without animating on first observation", () => {

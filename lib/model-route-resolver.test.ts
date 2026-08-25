@@ -448,7 +448,7 @@ describe("resolveModelRoute", () => {
   })
 
   it("filters candidates by required capabilities before preference order", async () => {
-    // GLM 5.2 via OpenRouter has no vision; a key alone must not select it.
+    // GLM-5.2 via OpenRouter has no vision; a key alone must not select it.
     const result = await resolveModelRoute(
       {
         modelId: "openrouter:z-ai/glm-5.2",
@@ -463,6 +463,61 @@ describe("resolveModelRoute", () => {
       ok: false,
       reason: "no_eligible_route",
       modelId: "openrouter:z-ai/glm-5.2",
+      keyProviders: [],
+    })
+  })
+
+  it("rejects routes that explicitly opt out when web search is required", async () => {
+    const result = await resolveModelRoute(
+      {
+        modelId: "gemma-3-27b-it",
+        ...authed,
+        requiredCapabilities: { webSearch: true },
+      },
+      makeDeps({
+        userKeys: { google: { key: "sk-google", preference: "priority" } },
+      })
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "no_eligible_route",
+      modelId: "gemma-3-27b-it",
+      keyProviders: [],
+    })
+  })
+
+  it("requires inherent-search routes to stay enabled", async () => {
+    const deps = makeDeps({
+      userKeys: {
+        perplexity: { key: "sk-perplexity", preference: "priority" },
+      },
+    })
+    const enabled = await resolveModelRoute(
+      {
+        modelId: "sonar",
+        ...authed,
+        requiredCapabilities: { webSearch: true },
+      },
+      deps
+    )
+    const disabled = await resolveModelRoute(
+      {
+        modelId: "sonar",
+        ...authed,
+        requiredCapabilities: { webSearch: false },
+      },
+      deps
+    )
+
+    expect(enabled).toMatchObject({
+      ok: true,
+      route: { providerId: "perplexity" },
+    })
+    expect(disabled).toEqual({
+      ok: false,
+      reason: "no_eligible_route",
+      modelId: "sonar",
       keyProviders: [],
     })
   })

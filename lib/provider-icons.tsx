@@ -17,6 +17,10 @@ import PerplexityIcon from "@/components/icons/perplexity"
 import QwenIcon from "@/components/icons/qwen"
 import XaiIcon from "@/components/icons/xai"
 import XiaomiIcon from "@/components/icons/xiaomi"
+import {
+  getModelPresentationVendorId,
+  type ModelPresentationSource,
+} from "@/lib/models/presentation"
 import type { KnownVendorId } from "@/lib/provider-identity"
 import { isKnownVendorId } from "@/lib/provider-identity"
 
@@ -63,4 +67,9 @@ export function getVendorIcon(id: string | undefined): VendorIcon {
   return id !== undefined && isKnownVendorId(id)
     ? VENDOR_ICONS[id]
     : OpenRouterIcon
+}
+
+/** Model icon with the shared explicit-icon-then-base-vendor precedence. */
+export function getModelIcon(model: ModelPresentationSource): VendorIcon {
+  return getVendorIcon(getModelPresentationVendorId(model))
 }

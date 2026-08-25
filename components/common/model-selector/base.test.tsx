@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import type { ModelConfig } from "@/lib/models/types"
+import type { LogicalModelView } from "@/lib/models/catalog"
 import { JSDOM } from "jsdom"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -23,6 +23,7 @@ vi.mock("server-only", () => ({}))
 
 let ModelSelector: typeof import("./base").ModelSelector
 let testDom: JSDOM | null = null
+let changeDropdownOpen: ((open: boolean) => void) | undefined
 let completeDropdownOpenChange: ((open: boolean) => void) | undefined
 
 function installDomIfNeeded() {
@@ -47,7 +48,9 @@ function installDomIfNeeded() {
 }
 
 const modelSelectorMocks = {
-  isModelHidden: vi.fn((modelId: string) => modelId === "claude-opus-4-6"),
+  isModelHidden: vi.fn(
+    (modelId: string) => modelId === "claude-haiku-4-5-20251001"
+  ),
   models: [
     {
       id: "gpt-5.4",
@@ -55,42 +58,170 @@ const modelSelectorMocks = {
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
+      classification: "current",
       idKind: "stable",
       baseProviderId: "openai",
       accessible: false,
+      routes: [
+        { id: "gpt-5.4", providerId: "openai" },
+        { id: "openrouter:openai/gpt-5.4", providerId: "openrouter" },
+      ],
     },
     {
       id: "gpt-5-mini",
       name: "GPT-5 Mini",
+      shortName: "5 Mini",
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
+      classification: "current",
       idKind: "stable",
       baseProviderId: "openai",
       accessible: true,
+      routes: [{ id: "gpt-5-mini", providerId: "openai" }],
     },
     {
-      id: "openrouter:z-ai/glm-5.2",
-      name: "GLM 5.2",
+      id: "gpt-4.1",
+      name: "GPT-4.1",
+      provider: "OpenAI",
+      providerId: "openai",
+      catalogStatus: "visible",
+      classification: "legacy",
+      classificationReason: "superseded",
+      idKind: "stable",
+      baseProviderId: "openai",
+      accessible: true,
+      routes: [{ id: "gpt-4.1", providerId: "openai" }],
+    },
+    {
+      id: "gpt-5.5",
+      name: "GPT-5.5",
+      provider: "OpenAI",
+      providerId: "openai",
+      catalogStatus: "visible",
+      classification: "legacy",
+      classificationReason: "not_recommended",
+      idKind: "stable",
+      baseProviderId: "openai",
+      accessible: true,
+      routes: [{ id: "gpt-5.5", providerId: "openai" }],
+    },
+    {
+      id: "openrouter:moonshotai/kimi-k2.6",
+      name: "Kimi K2.6",
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
+      classification: "legacy",
+      idKind: "wrapped",
+      baseProviderId: "moonshotai",
+      icon: "moonshotai",
+      accessible: true,
+      routes: [
+        {
+          id: "openrouter:moonshotai/kimi-k2.6",
+          providerId: "openrouter",
+        },
+      ],
+    },
+    {
+      id: "openrouter:z-ai/glm-5.2",
+      name: "GLM-5.2",
+      provider: "OpenRouter",
+      providerId: "openrouter",
+      catalogStatus: "visible",
+      classification: "current",
       idKind: "wrapped",
       baseProviderId: "z-ai",
       icon: "openrouter",
       accessible: true,
+      routes: [
+        {
+          id: "openrouter:z-ai/glm-5.2",
+          providerId: "openrouter",
+        },
+      ],
     },
     {
-      id: "claude-opus-4-6",
-      name: "Claude Opus 4.6",
+      id: "openrouter:moonshotai/kimi-k3",
+      name: "Kimi K3",
+      provider: "OpenRouter",
+      providerId: "openrouter",
+      catalogStatus: "visible",
+      classification: "current",
+      idKind: "wrapped",
+      baseProviderId: "moonshotai",
+      icon: "moonshotai",
+      accessible: true,
+      routes: [
+        {
+          id: "openrouter:moonshotai/kimi-k3",
+          providerId: "openrouter",
+        },
+      ],
+    },
+    {
+      id: "claude-haiku-4-5-20251001",
+      name: "Claude Haiku 4.5",
+      shortName: "Haiku 4.5",
       provider: "Anthropic",
       providerId: "anthropic",
       catalogStatus: "visible",
-      idKind: "stable",
-      baseProviderId: "claude",
+      classification: "current",
+      snapshotDate: "2025-10-01",
+      idKind: "snapshot",
+      baseProviderId: "anthropic",
+      icon: "claude",
       accessible: false,
+      routes: [
+        {
+          id: "claude-haiku-4-5-20251001",
+          providerId: "anthropic",
+        },
+      ],
     },
-  ] satisfies ModelConfig[],
+    {
+      id: "claude-sonnet-5",
+      name: "Claude Sonnet 5",
+      shortName: "Sonnet 5",
+      provider: "Anthropic",
+      providerId: "anthropic",
+      catalogStatus: "visible",
+      classification: "current",
+      idKind: "stable",
+      baseProviderId: "anthropic",
+      icon: "claude",
+      accessible: true,
+      routes: [
+        { id: "claude-sonnet-5", providerId: "anthropic" },
+        {
+          id: "openrouter:anthropic/claude-sonnet-5",
+          providerId: "openrouter",
+        },
+      ],
+    },
+    {
+      id: "claude-sonnet-4-5-20250929",
+      name: "Claude Sonnet 4.5",
+      shortName: "Sonnet 4.5",
+      provider: "Anthropic",
+      providerId: "anthropic",
+      catalogStatus: "visible",
+      classification: "legacy",
+      classificationReason: "superseded",
+      snapshotDate: "2025-09-29",
+      idKind: "snapshot",
+      baseProviderId: "anthropic",
+      icon: "claude",
+      accessible: true,
+      routes: [
+        {
+          id: "claude-sonnet-4-5-20250929",
+          providerId: "anthropic",
+        },
+      ],
+    },
+  ] satisfies LogicalModelView[],
 }
 
 vi.mock("@/hooks/use-breakpoint", () => ({
@@ -105,7 +236,7 @@ vi.mock("@/lib/model-store/provider", () => ({
   useModel: () => ({
     models: modelSelectorMocks.models,
     isLoading: false,
-    favoriteModels: ["gpt-5.4"],
+    favoriteModels: ["gpt-5.4", "openrouter:moonshotai/kimi-k2.6"],
   }),
 }))
 
@@ -122,11 +253,14 @@ vi.mock("./pro-dialog", () => ({
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({
     children,
+    onOpenChange,
     onOpenChangeComplete,
   }: {
     children: React.ReactNode
+    onOpenChange?: (open: boolean) => void
     onOpenChangeComplete?: (open: boolean) => void
   }) => {
+    changeDropdownOpen = onOpenChange
     completeDropdownOpenChange = onOpenChangeComplete
     return <div>{children}</div>
   },
@@ -158,18 +292,26 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     children,
     className,
     geometry,
+    closeOnClick,
+    "data-testid": dataTestId,
+    "aria-label": ariaLabel,
     onClick,
   }: {
     children: React.ReactNode
     className?: string
     geometry?: "menu" | "custom"
+    closeOnClick?: boolean
+    "data-testid"?: string
+    "aria-label"?: string
     onClick?: () => void
   }) => (
     <button
-      data-testid="model-option"
+      data-testid={dataTestId ?? "model-option"}
+      data-close-on-click={closeOnClick}
       data-geometry={geometry}
       className={className}
       type="button"
+      aria-label={ariaLabel}
       onClick={onClick}
     >
       {children}
@@ -253,6 +395,7 @@ describe("ModelSelector", () => {
     modelSelectorMocks.isModelHidden.mockClear()
     breakpointMocks.isMobile = false
     useKeyShortcutMock.mockClear()
+    changeDropdownOpen = undefined
     completeDropdownOpenChange = undefined
   })
 
@@ -359,12 +502,206 @@ describe("ModelSelector", () => {
     return option
   }
 
+  function getModelOptionNames() {
+    return Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="model-name"]')
+    ).map((name) => name.textContent?.trim())
+  }
+
+  function getLegacyDisclosure(providerName: string) {
+    return document.body.querySelector(
+      `[aria-label="Show legacy models for ${providerName}"]`
+    )
+  }
+
+  function searchModels(query: string) {
+    const input = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
+    const setValue = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value"
+    )?.set
+
+    if (!input || !setValue) {
+      throw new Error("Could not find model search input")
+    }
+
+    act(() => {
+      setValue.call(input, query)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+  }
+
+  it("uses the shared provider order without promoting a default selection", () => {
+    renderSelector({ isUserAuthenticated: true })
+
+    expect(getModelOptionNames()).toEqual([
+      "GPT-5.4",
+      "Claude Sonnet 5",
+      "GPT-5 Mini",
+      "GLM-5.2",
+      "Kimi K3",
+    ])
+  })
+
+  it("keeps only the selected legacy composer model visible", () => {
+    renderSelector({
+      isUserAuthenticated: true,
+      selectedModelId: "gpt-5.5",
+      variant: "composer",
+    })
+
+    const selectedOption = getModelOption("GPT-5.5")
+
+    expect(selectedOption.className).toContain("bg-interactive-selected")
+    expect(
+      selectedOption.querySelector('[data-slot="selected-model-check"]')
+    ).not.toBeNull()
+    expect(document.body.textContent).not.toContain("GPT-4.1")
+    expect(
+      document.body.querySelector(
+        '[aria-label="Show legacy models for OpenAI"]'
+      )
+    ).not.toBeNull()
+  })
+
+  it("reveals legacy models for one provider with its logo", () => {
+    renderSelector({ isUserAuthenticated: true })
+
+    expect(document.body.textContent).not.toContain("GPT-4.1")
+    expect(document.body.textContent).not.toContain("Claude Sonnet 4.5")
+    expect(document.body.textContent).not.toContain("September 2025")
+
+    const revealOptions = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="show-legacy-models"]'
+      )
+    )
+    const anthropicOption = revealOptions.find(
+      (option) =>
+        option.getAttribute("aria-label") === "Show legacy models for Anthropic"
+    )
+
+    expect(revealOptions).toHaveLength(3)
+    expect(anthropicOption?.textContent?.trim()).toBe("Show legacy models...")
+    expect(anthropicOption?.getAttribute("aria-label")).toBe(
+      "Show legacy models for Anthropic"
+    )
+    expect(anthropicOption?.dataset.closeOnClick).toBe("false")
+    expect(
+      anthropicOption
+        ?.querySelector('[data-slot="show-legacy-models-icon"] svg')
+        ?.getAttribute("class")
+    ).toContain("text-claude-logo")
+    expect(anthropicOption?.className).toContain("group/show-legacy")
+    expect(
+      anthropicOption?.querySelector('[data-slot="show-legacy-models-label"]')
+        ?.className
+    ).toContain("opacity-40 group-hover/show-legacy:opacity-100")
+
+    act(() => {
+      anthropicOption?.click()
+    })
+
+    expect(document.body.textContent).toContain("Claude Sonnet 4.5")
+    expect(
+      getModelOption("Claude Sonnet 4.5").querySelector(
+        '[data-slot="model-snapshot-date"]'
+      )?.textContent
+    ).toBe("September 2025")
+    expect(document.body.textContent).not.toContain("GPT-4.1")
+    expect(
+      document.body.querySelector(
+        '[aria-label="Show legacy models for Anthropic"]'
+      )
+    ).toBeNull()
+    expect(
+      document.body.querySelector(
+        '[aria-label="Show legacy models for OpenAI"]'
+      )
+    ).not.toBeNull()
+
+    act(() => {
+      changeDropdownOpen?.(false)
+    })
+
+    expect(document.body.textContent).not.toContain("Claude Sonnet 4.5")
+    expect(document.body.textContent).not.toContain("September 2025")
+    expect(
+      document.body.querySelector(
+        '[aria-label="Show legacy models for Anthropic"]'
+      )
+    ).not.toBeNull()
+  })
+
+  it.each([
+    ["desktop", false],
+    ["mobile", true],
+  ] as const)(
+    "shows a matching legacy model directly during %s search",
+    (_surface, isMobile) => {
+      breakpointMocks.isMobile = isMobile
+      renderSelector({ isUserAuthenticated: true })
+
+      expect(document.body.textContent).not.toContain("GPT-4.1")
+      expect(getLegacyDisclosure("OpenAI")).not.toBeNull()
+
+      searchModels("GPT-4.1")
+
+      expect(getModelOptionNames()).toEqual(["GPT-4.1"])
+      expect(getLegacyDisclosure("OpenAI")).toBeNull()
+
+      searchModels("")
+
+      expect(document.body.textContent).not.toContain("GPT-4.1")
+      expect(getLegacyDisclosure("OpenAI")).not.toBeNull()
+    }
+  )
+
+  it("replaces a provider disclosure in place without reordering current models", () => {
+    renderSelector({ isUserAuthenticated: true })
+
+    const currentNamesBefore = getModelOptionNames()
+    const rowsBefore = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="model-option"], [data-testid="show-legacy-models"]'
+      )
+    )
+    const moonshotOption = rowsBefore.find(
+      (row) =>
+        row.getAttribute("aria-label") === "Show legacy models for Moonshot AI"
+    )
+    const disclosureIndex = moonshotOption
+      ? rowsBefore.indexOf(moonshotOption)
+      : -1
+
+    expect(disclosureIndex).toBeGreaterThan(-1)
+
+    act(() => {
+      moonshotOption?.click()
+    })
+
+    const currentNamesAfter = getModelOptionNames().filter(
+      (name) => name !== "Kimi K2.6"
+    )
+    const rowsAfter = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="model-option"], [data-testid="show-legacy-models"]'
+      )
+    )
+
+    expect(currentNamesAfter).toEqual(currentNamesBefore)
+    expect(rowsAfter[disclosureIndex]?.textContent).toContain("Kimi K2.6")
+  })
+
   it("shows the visible catalog with locked badges for signed-out users", () => {
     renderSelector({ isUserAuthenticated: false })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
     expect(document.body.textContent).toContain("GPT-5.4")
-    expect(document.body.textContent).toContain("Claude Opus 4.6")
+    expect(document.body.textContent).toContain("Claude Haiku 4.5")
+    expect(document.body.textContent).not.toContain("October 2025")
     expect(document.body.textContent).toContain("Locked")
   })
 
@@ -379,22 +716,43 @@ describe("ModelSelector", () => {
     expect(menu?.dataset.geometry).toBe("custom")
     expect(menu?.className).toContain("bg-floating-surface")
     expect(menu?.className).toContain("p-1.5")
+    expect(menu?.className).toContain("relative")
+    expect(menu?.className).toContain("rounded-3xl")
+    const searchOverlay = document.body.querySelector<HTMLElement>(
+      '[data-slot="model-selector-desktop-search"]'
+    )
+    expect(searchOverlay?.className).toContain("absolute")
+    expect(searchOverlay?.className).toContain("from-floating-surface/80")
+    expect(searchOverlay?.className).toContain("to-floating-surface/0")
+    const searchInput = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
+    expect(searchInput?.className).toContain("backdrop-blur-md")
+    expect(searchInput?.className).toContain("rounded-full")
     expect(option.dataset.geometry).toBe("custom")
-    expect(option.className).toContain("h-9")
-    expect(option.className).toContain("rounded-lg")
+    expect(option.className).toContain("h-10")
+    expect(option.className).toContain("rounded-xl")
     expect(option.className).not.toContain("mx-2.5")
     expect(
       document.body.querySelector('[data-slot="model-section"]')
     ).toBeNull()
     expect(
       option.querySelector<HTMLElement>('[data-slot="model-name"]')?.className
-    ).toContain("text-sm")
+    ).toContain("text-base")
     expect(
       option.querySelector('[data-slot="selected-model-check"]')
     ).not.toBeNull()
-    expect(
-      document.body.querySelector("[data-scrollable-surface]")
-    ).not.toBeNull()
+    const scrollSurface = document.body.querySelector<HTMLElement>(
+      "[data-scrollable-surface]"
+    )
+    expect(scrollSurface?.className).toContain(
+      "pt-(--model-selector-fixed-height)"
+    )
+    expect(scrollSurface?.className).toContain(
+      "scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)]"
+    )
+    expect(scrollSurface?.className).not.toContain("pr-1")
+    expect(scrollSurface?.className).not.toContain("pb-1")
   })
 
   it("selects the anonymous model but opens auth for locked guest models", () => {
@@ -448,10 +806,13 @@ describe("ModelSelector", () => {
 
   it("uses the same model list and selection rules in the mobile drawer", () => {
     breakpointMocks.isMobile = true
-    const onSelect = renderSelector({ isUserAuthenticated: true })
+    const onSelect = renderSelector({
+      isUserAuthenticated: true,
+      variant: "composer",
+    })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
-    expect(document.body.textContent).toContain("GLM 5.2")
+    expect(document.body.textContent).toContain("GLM-5.2")
     expect(
       document.body.querySelector('[data-testid="drawer-trigger"]')
     ).toBeTruthy()
@@ -487,9 +848,7 @@ describe("ModelSelector", () => {
       document.body.querySelector<HTMLElement>(
         '[data-testid="model-drawer-handle-hit-area"]'
       )?.className
-    ).toBe(
-      "pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none"
-    )
+    ).toBe("pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none")
     expect(
       document.body.querySelector<HTMLElement>(
         '[data-slot="model-selector-mobile-search"]'
@@ -528,9 +887,6 @@ describe("ModelSelector", () => {
     const mobileOption = getModelOption("GPT-5 Mini")
     expect(mobileOption.className).toContain("h-14")
     expect(mobileOption.className).toContain("px-4")
-    expect(mobileOption.className).not.toContain(
-      "before:bg-floating-menu-divider/60"
-    )
     const mobileModelIcon = mobileOption.querySelector<HTMLElement>(
       '[data-slot="model-option-icon"]'
     )
@@ -547,7 +903,7 @@ describe("ModelSelector", () => {
     expect(
       mobileOption.querySelector('[data-slot="selected-model-check"]')
     ).not.toBeNull()
-    const secondMobileOption = getModelOption("GLM 5.2")
+    const secondMobileOption = getModelOption("GLM-5.2")
     expect(
       secondMobileOption.querySelector('[data-slot="selected-model-check"]')
     ).toBeNull()
@@ -566,6 +922,13 @@ describe("ModelSelector", () => {
           ?.textContent?.trim()
       )
     ).toEqual(["Favorites", "All models"])
+    const allModelsSection = sections.find(
+      (section) => section.getAttribute("aria-label") === "All models"
+    )
+    expect(
+      allModelsSection?.querySelector('[data-testid="model-option"]')
+        ?.textContent
+    ).toContain("GPT-5 Mini")
     for (const section of sections) {
       const label = section.querySelector('[data-slot="model-section-label"]')
       const container = section.querySelector<HTMLElement>(
@@ -577,6 +940,11 @@ describe("ModelSelector", () => {
       expect(container?.className).toContain("bg-muted/50")
       expect(container?.className).toContain("dark:bg-muted/80")
       expect(container?.className).toContain("rounded-3xl")
+      expect(
+        container
+          ?.querySelector<HTMLElement>('[data-testid="model-option"]')
+          ?.className.includes("before:bg-floating-menu-divider/60")
+      ).toBe(false)
     }
 
     act(() => {
@@ -624,6 +992,40 @@ describe("ModelSelector", () => {
     ).toBe(true)
   })
 
+  it("keeps multi-route Claude provider labels off ordinary selector rows", () => {
+    renderSelector({
+      isUserAuthenticated: true,
+      selectedModelId: "claude-sonnet-5",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+    const sonnetOption = getModelOption("Claude Sonnet 5")
+
+    expect(trigger?.textContent).toBe("Claude Sonnet 5")
+    expect(sonnetOption.textContent).toBe("Claude Sonnet 5")
+  })
+
+  it("uses compact composer text while rows and accessibility stay full", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "gpt-5-mini",
+      variant: "composer",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+    const option = getModelOption("GPT-5 Mini")
+
+    expect(trigger?.textContent).toBe("5 Mini")
+    expect(trigger?.getAttribute("aria-label")).toBe(
+      "Select model, current model GPT-5 Mini"
+    )
+    expect(option.textContent).toBe("GPT-5 Mini")
+  })
+
   it("shows the selected model icon instead of a chevron in the composer", () => {
     renderSelector({
       isUserAuthenticated: false,
@@ -653,8 +1055,23 @@ describe("ModelSelector", () => {
     expect(trigger?.className).toContain("can-hover:after:absolute")
     expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
     expect(trigger?.className).toContain("overflow-visible")
-    expect(trigger?.className).toContain("px-3")
+    expect(trigger?.className).toContain("gap-1.5")
+    expect(trigger?.className).toContain("ps-3.5")
+    expect(trigger?.className).toContain("pe-3")
+    expect(trigger?.className).toContain("text-base")
+    expect(trigger?.className).toContain("leading-[26px]")
     expect(trigger?.className).not.toContain("overflow-hidden")
+
+    const selectedModelIcon = trigger?.querySelector<HTMLElement>(
+      '[data-slot="selected-model-icon"]'
+    )
+    expect(selectedModelIcon?.style.getPropertyValue("--icon-slot-size")).toBe(
+      "16px"
+    )
+    expect(selectedModelIcon?.style.getPropertyValue("--icon-glyph-size")).toBe(
+      "16px"
+    )
+    expect(trigger?.lastElementChild?.className).toContain("text-foreground")
   })
 
   it("keeps the hover bridge scoped to the composer trigger", () => {
@@ -690,8 +1107,12 @@ describe("ModelSelector", () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it("ranks favorites first without hiding the rest of the catalog", () => {
-    renderSelector({ isUserAuthenticated: true })
+  it("promotes a selected non-favorite within All models", () => {
+    renderSelector({
+      isUserAuthenticated: true,
+      selectedModelId: "openrouter:z-ai/glm-5.2",
+      variant: "composer",
+    })
 
     const optionText = Array.from(
       document.body.querySelectorAll<HTMLButtonElement>(
@@ -699,10 +1120,14 @@ describe("ModelSelector", () => {
       )
     ).map((button) => button.textContent ?? "")
 
-    // Favorite (gpt-5.4) leads; every non-hidden model stays reachable.
+    // Favorites remain first; the selection leads within All models.
     expect(optionText[0]).toContain("GPT-5.4")
+    expect(optionText[1]).toContain("GLM-5.2")
+    expect(optionText.filter((text) => text.includes("GLM-5.2"))).toHaveLength(
+      1
+    )
     expect(optionText.join(" ")).toContain("GPT-5 Mini")
-    expect(optionText.join(" ")).toContain("GLM 5.2")
+    expect(optionText.join(" ")).toContain("GLM-5.2")
     // Explicit user-hidden models stay hidden.
     expect(optionText.join(" ")).not.toContain("Claude Opus 4.6")
     // Sections label the ranking.

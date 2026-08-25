@@ -6,6 +6,7 @@ import {
   type LoadToolsResult,
   type ServerInfo,
 } from "@/lib/mcp/load-tools"
+import type { SearchMode } from "@/lib/models/types"
 import { getPostHogClient } from "@/lib/posthog"
 import {
   filterMetadataMapByPolicy,
@@ -32,10 +33,11 @@ import {
   getRuntimeToolApprovalDecision,
   type RuntimeToolApprovalDecision,
 } from "@/lib/tools/runtime-approval"
-import type {
-  ToolCapabilities,
-  ToolMetadata,
-  ToolSource,
+import {
+  resolveToolCapabilities,
+  type ToolCapabilities,
+  type ToolMetadata,
+  type ToolSource,
 } from "@/lib/tools/types"
 import { sanitizeForJson } from "@/lib/tools/utils"
 import type { ToolKeyMode } from "@/lib/user-keys"
@@ -132,6 +134,8 @@ export type PrepareToolRuntimeOptions = {
   providerToolKeyMode: ToolKeyMode
   /** ModelConfig.tools — the model's declared capability switches. */
   modelTools: boolean | ToolCapabilities | undefined
+  /** Resolved route-level web-search behavior from the model catalog. */
+  modelSearchMode: SearchMode
   enableSearch: boolean
   logContext: {
     requestId: string
@@ -288,6 +292,7 @@ async function buildToolRuntime(
     apiKey,
     providerToolKeyMode,
     modelTools,
+    modelSearchMode,
     enableSearch,
     logContext,
     onMcpClientsOpened,
@@ -306,8 +311,12 @@ async function buildToolRuntime(
   let builtInToolMetadata = new Map<string, ToolMetadata>()
 
   // Capability policy — phase 1 (search injection gating)
+  const effectiveModelTools = {
+    ...resolveToolCapabilities(modelTools),
+    search: modelSearchMode === "optional",
+  }
   const initialCapabilityPolicy = resolveCapabilityPolicy({
-    modelTools,
+    modelTools: effectiveModelTools,
     isAuthenticated,
   })
   const capabilities = initialCapabilityPolicy.capabilities
@@ -576,7 +585,7 @@ async function buildToolRuntime(
   ]
 
   const toolPolicy = resolveCapabilityPolicy({
-    modelTools,
+    modelTools: effectiveModelTools,
     isAuthenticated,
     keyMode: resolvedExaKeyMode,
     tools: toolPolicyInputs,
@@ -1184,4 +1193,3 @@ async function buildToolRuntime(
     dispose,
   }
 }
-

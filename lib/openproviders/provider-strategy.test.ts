@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { getProviderStrategy } from "./provider-strategy"
 
-const SEARCH_PROVIDERS = ["openai", "anthropic", "google", "xai"] as const
-const NON_SEARCH_PROVIDERS = ["mistral", "perplexity", "openrouter"] as const
+const SEARCH_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "openrouter",
+] as const
+const NON_SEARCH_PROVIDERS = ["mistral", "perplexity"] as const
 
 describe("provider strategy registry", () => {
   it.each(SEARCH_PROVIDERS)(
@@ -56,6 +62,17 @@ describe("provider strategy registry", () => {
     expect(model.provider).toBe("openrouter")
     expect(model.modelId).toBe("openai/gpt-oss-120b")
     expect(model.specificationVersion).toBe("v4")
+  })
+
+  it("uses OpenRouter's automatic server-side web-search tool", () => {
+    const tool = getProviderStrategy("openrouter")
+      .instance("byok-key")
+      .searchTool()
+
+    expect(tool).toMatchObject({
+      id: "openrouter.web_search",
+      args: { engine: "auto" },
+    })
   })
 
   // Construction settings: the OpenRouter strategy maps the neutral shape to

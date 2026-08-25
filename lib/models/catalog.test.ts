@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest"
 import {
+  auditLogicalModelPriorities,
+  classifyLogicalModel,
   compileLogicalCatalog,
   getLogicalModel,
   LOGICAL_MODELS,
+  resolveModelSearchMode,
   resolveModelSelection,
   resolveModelSelections,
   ROUTE_CONFIGS,
   toLogicalModelView,
 } from "./catalog"
+import { getModelSnapshotDateLabel } from "./presentation"
 import type { ModelConfig } from "./types"
 
 function makeConfig(
@@ -22,6 +26,20 @@ function makeConfig(
     baseProviderId: "openai",
     ...overrides,
   }
+}
+
+function makeLineageConfig(
+  id: string,
+  releasedAt: string,
+  overrides: Partial<ModelConfig> = {},
+  lineageId: NonNullable<ModelConfig["lineageId"]> = "openai:flagship"
+): ModelConfig {
+  return makeConfig({
+    ...overrides,
+    id,
+    lineageId,
+    releasedAt,
+  })
 }
 
 describe("compileLogicalCatalog", () => {
@@ -94,6 +112,122 @@ describe("compileLogicalCatalog", () => {
     ).toThrow(/two/)
   })
 
+  it("fails loudly when lifecycle replacement metadata points to a missing model", () => {
+    expect(() =>
+      compileLogicalCatalog([
+        makeConfig({
+          id: "a",
+          catalogStatus: "hidden",
+          lifecycle: {
+            status: "legacy",
+            source: "editorial",
+            verifiedAt: "2026-01-01",
+            replacementModelId: "missing",
+          },
+        }),
+      ])
+    ).toThrow(/missing lifecycle replacement/)
+  })
+
+  it("rejects non-UTC and impossible catalog dates", () => {
+    expect(() =>
+      compileLogicalCatalog([
+        makeConfig({ id: "impossible", releasedAt: "2026-02-30" }),
+      ])
+    ).toThrow(/invalid releasedAt date/)
+    expect(() =>
+      compileLogicalCatalog([
+        makeConfig({ id: "invalid-snapshot", snapshotDate: "2026-02-30" }),
+      ])
+    ).toThrow(/invalid snapshotDate date/)
+    expect(() =>
+      compileLogicalCatalog([
+        makeConfig({
+          id: "ambiguous",
+          lifecycle: {
+            status: "active",
+            source: "editorial",
+            verifiedAt: "08/25/2026",
+          },
+        }),
+      ])
+    ).toThrow(/invalid lifecycle\.verifiedAt date/)
+  })
+
+  it("requires source evidence for a replacement across recommendation lanes", () => {
+    const predecessor = makeLineageConfig(
+      "predecessor",
+      "2025-01-01",
+      {
+        lifecycle: {
+          status: "active",
+          source: "provider",
+          verifiedAt: "2026-01-01",
+          replacementModelId: "replacement",
+        },
+      },
+      "openai:flagship"
+    )
+    const replacement = makeLineageConfig(
+      "replacement",
+      "2026-01-01",
+      {},
+      "openai:balanced"
+    )
+
+    expect(() => compileLogicalCatalog([predecessor, replacement])).toThrow(
+      /crosses recommendation lanes.*without a sourceUrl/
+    )
+
+    predecessor.lifecycle = {
+      ...predecessor.lifecycle!,
+      sourceUrl: "https://provider.example/models/predecessor",
+    }
+    expect(() =>
+      compileLogicalCatalog([predecessor, replacement])
+    ).not.toThrow()
+  })
+
+  it("rejects lifecycle replacement cycles", () => {
+    expect(() =>
+      compileLogicalCatalog([
+        makeConfig({
+          id: "a",
+          lifecycle: {
+            status: "active",
+            source: "editorial",
+            verifiedAt: "2026-01-01",
+            replacementModelId: "b",
+          },
+        }),
+        makeConfig({
+          id: "b",
+          lifecycle: {
+            status: "active",
+            source: "editorial",
+            verifiedAt: "2026-01-01",
+            replacementModelId: "a",
+          },
+        }),
+      ])
+    ).toThrow(/replacement cycle a -> b -> a/)
+  })
+
+  it("rejects an invalid recommendation policy model id", () => {
+    expect(() =>
+      compileLogicalCatalog(
+        [makeConfig({ id: "available" })],
+        [
+          {
+            vendorId: "openai",
+            currentModelIds: ["missing"],
+            verifiedAt: "2026-08-25",
+          },
+        ]
+      )
+    ).toThrow(/recommendation policy.*names missing model "missing"/)
+  })
+
   it("reports tools when a non-canonical route supports them", () => {
     const [model] = compileLogicalCatalog([
       makeConfig({ id: "direct-a", providerId: "anthropic", tools: false }),
@@ -106,7 +240,245 @@ describe("compileLogicalCatalog", () => {
       }),
     ])
 
-    expect(toLogicalModelView(model!).tools).toBe(true)
+    expect(toLogicalModelView(model!)).toMatchObject({
+      tools: true,
+      searchMode: "optional",
+    })
+  })
+
+  it.each([
+    [{}, "optional"],
+    [{ tools: true }, "optional"],
+    [{ tools: false }, "unsupported"],
+    [{ tools: { search: false } }, "unsupported"],
+    [{ tools: false, searchMode: "always-on" }, "always-on"],
+    [{ tools: true, searchMode: "unsupported" }, "unsupported"],
+  ] as const)(
+    "derives route search mode from tools and explicit behavior",
+    (capabilities, expected) => {
+      expect(resolveModelSearchMode(capabilities)).toBe(expected)
+    }
+  )
+
+  it("carries presentation from the canonical route into logical views", () => {
+    const [model] = compileLogicalCatalog([
+      makeConfig({
+        id: "direct-a",
+        name: "Full Direct A",
+        shortName: "Direct A",
+        providerId: "anthropic",
+      }),
+      makeConfig({
+        id: "openrouter:vendor/a",
+        name: "Wrapped Route A",
+        shortName: "Wrapped A",
+        providerId: "openrouter",
+        idKind: "wrapped",
+        logicalModelId: "direct-a",
+      }),
+    ])
+
+    expect(model).toMatchObject({
+      name: "Full Direct A",
+      shortName: "Direct A",
+    })
+    expect(toLogicalModelView(model!)).toMatchObject({
+      name: "Full Direct A",
+      shortName: "Direct A",
+    })
+  })
+})
+
+describe("classifyLogicalModel", () => {
+  const asOf = (date: string) => new Date(`${date}T00:00:00Z`)
+
+  it("uses an exact vendor portfolio and defaults unlisted models to Legacy", () => {
+    const models = compileLogicalCatalog(
+      [makeConfig({ id: "chosen" }), makeConfig({ id: "newly-added" })],
+      [
+        {
+          vendorId: "openai",
+          currentModelIds: ["chosen"],
+          verifiedAt: "2026-08-25",
+        },
+      ]
+    )
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-08-25"))
+    ).toEqual({ classification: "current" })
+    expect(
+      classifyLogicalModel(models[1]!, models, asOf("2026-08-25"))
+    ).toEqual({
+      classification: "legacy",
+      classificationReason: "not_recommended",
+      classificationSource: "editorial",
+      classificationEffectiveAt: "2026-08-25",
+    })
+    expect(
+      classifyLogicalModel(models[1]!, models, asOf("2026-08-24"))
+    ).toEqual({ classification: "current" })
+  })
+
+  it("does not classify a model from age alone", () => {
+    const [model] = compileLogicalCatalog([
+      makeConfig({ id: "old-but-current", releasedAt: "2020-01-01" }),
+    ])
+
+    expect(classifyLogicalModel(model!, [model!], asOf("2026-08-25"))).toEqual({
+      classification: "current",
+    })
+  })
+
+  it("does not let a newer preview supersede a stable predecessor", () => {
+    const models = compileLogicalCatalog([
+      makeLineageConfig("stable-a", "2025-01-01"),
+      makeLineageConfig("preview-b", "2026-01-01", {
+        releaseStage: "preview",
+      }),
+    ])
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-08-25"))
+    ).toEqual({ classification: "current" })
+  })
+
+  it("classifies a predecessor only after the stable successor grace boundary", () => {
+    const models = compileLogicalCatalog([
+      makeLineageConfig("stable-a", "2025-01-01"),
+      makeLineageConfig("stable-b", "2026-01-01"),
+    ])
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-01-30"))
+    ).toEqual({ classification: "current" })
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-01-31"))
+    ).toEqual({
+      classification: "legacy",
+      classificationReason: "superseded",
+      successorModelId: "stable-b",
+      classificationEffectiveAt: "2026-01-31",
+    })
+  })
+
+  it("never recommends a successor before its release date", () => {
+    const models = compileLogicalCatalog([
+      makeLineageConfig("stable-a", "2025-01-01"),
+      makeLineageConfig("stable-b", "2026-01-01"),
+      makeLineageConfig("future-c", "2027-01-01"),
+    ])
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-03-01"))
+    ).toMatchObject({ successorModelId: "stable-b" })
+  })
+
+  it("never recommends a successor with Legacy lifecycle evidence", () => {
+    const models = compileLogicalCatalog([
+      makeLineageConfig("stable-a", "2025-01-01"),
+      makeLineageConfig("stable-b", "2026-01-01"),
+      makeLineageConfig("deprecated-c", "2026-02-01", {
+        lifecycle: {
+          status: "deprecated",
+          source: "provider",
+          verifiedAt: "2026-02-15",
+        },
+      }),
+    ])
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-03-15"))
+    ).toMatchObject({ successorModelId: "stable-b" })
+  })
+
+  it("lets explicit lifecycle evidence classify a newly released model", () => {
+    const models = compileLogicalCatalog([
+      makeConfig({
+        id: "new-but-deprecated",
+        releasedAt: "2026-08-01",
+        lifecycle: {
+          status: "deprecated",
+          source: "provider",
+          verifiedAt: "2026-08-20",
+          replacementModelId: "replacement",
+        },
+      }),
+      makeConfig({ id: "replacement", releasedAt: "2026-08-15" }),
+    ])
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-08-25"))
+    ).toEqual({
+      classification: "legacy",
+      classificationReason: "lifecycle_deprecated",
+      classificationSource: "provider",
+      successorModelId: "replacement",
+      classificationEffectiveAt: "2026-08-20",
+    })
+  })
+
+  it("uses a dated retirement horizon without treating far-future sentinels as legacy", () => {
+    const models = compileLogicalCatalog([
+      makeConfig({
+        id: "scheduled",
+        lifecycle: {
+          status: "active",
+          source: "openrouter",
+          verifiedAt: "2026-01-01",
+          retiresAt: "2026-12-31",
+        },
+      }),
+      makeConfig({
+        id: "sentinel",
+        lifecycle: {
+          status: "active",
+          source: "openrouter",
+          verifiedAt: "2026-01-01",
+          retiresAt: "2098-12-31",
+        },
+      }),
+    ])
+
+    expect(
+      classifyLogicalModel(models[0]!, models, asOf("2026-10-02"))
+    ).toMatchObject({
+      classification: "legacy",
+      classificationReason: "retirement_scheduled",
+      classificationSource: "openrouter",
+    })
+    expect(
+      classifyLogicalModel(models[1]!, models, asOf("2026-10-02"))
+    ).toEqual({ classification: "current" })
+  })
+})
+
+describe("auditLogicalModelPriorities", () => {
+  it("reports a stale lane without changing its model classification", () => {
+    const models = compileLogicalCatalog([
+      makeLineageConfig("older-lane-head", "2025-01-01"),
+      makeLineageConfig(
+        "newer-provider-model",
+        "2026-01-01",
+        {},
+        "openai:balanced"
+      ),
+    ])
+    const asOf = new Date("2026-08-25T00:00:00Z")
+
+    expect(classifyLogicalModel(models[0]!, models, asOf)).toEqual({
+      classification: "current",
+    })
+    expect(auditLogicalModelPriorities(models, asOf)).toEqual([
+      {
+        code: "stale_recommendation_lane",
+        laneId: "openai:flagship",
+        vendorId: "openai",
+        modelId: "older-lane-head",
+        newestVendorModelId: "newer-provider-model",
+        releaseGapDays: 365,
+      },
+    ])
   })
 })
 
@@ -130,8 +502,16 @@ describe("production logical catalog", () => {
     }
   })
 
+  it("keeps Gemini's preview lifecycle out of its display name", () => {
+    expect(getLogicalModel("gemini-3.1-pro-preview")).toMatchObject({
+      name: "Gemini 3.1 Pro",
+      releaseStage: "preview",
+    })
+  })
+
   it("merges the direct/OpenRouter duplicates into two-route models", () => {
     const sonnet = getLogicalModel("claude-sonnet-5")
+    expect(sonnet?.vendorId).toBe("claude")
     expect(sonnet?.routes.map((route) => route.id)).toEqual([
       "claude-sonnet-5",
       "openrouter:anthropic/claude-sonnet-5",
@@ -153,17 +533,68 @@ describe("production logical catalog", () => {
   })
 
   it.each([
+    {
+      maker: "OpenAI",
+      vendorId: "openai",
+      expectedCurrentIds: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+    },
+    {
+      maker: "Anthropic",
+      vendorId: "claude",
+      expectedCurrentIds: [
+        "claude-fable-5",
+        "openrouter:anthropic/claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5-20251001",
+      ],
+    },
+    {
+      maker: "Google",
+      vendorId: "gemini",
+      expectedCurrentIds: [
+        "openrouter:google/gemini-3.5-flash-lite",
+        "openrouter:google/gemini-3.7-flash",
+        "gemini-3.1-pro-preview",
+      ],
+    },
+  ])(
+    "keeps exactly the curated $maker portfolio Current",
+    ({ vendorId, expectedCurrentIds }) => {
+      const asOf = new Date("2026-08-25T00:00:00Z")
+      const currentIds = LOGICAL_MODELS.filter(
+        (model) =>
+          model.vendorId === vendorId &&
+          model.catalogStatus === "visible" &&
+          classifyLogicalModel(model, LOGICAL_MODELS, asOf).classification ===
+            "current"
+      )
+        .map((model) => model.id)
+        .toSorted()
+
+      expect(currentIds).toEqual(expectedCurrentIds.toSorted())
+    }
+  )
+
+  it.each([
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
     "mistral-medium-3-5",
     "mistral-small-2603",
     "ministral-14b-2512",
+    "ministral-8b-2512",
+    "ministral-3b-2512",
+    "openrouter:deepseek/deepseek-v4-flash-vision-exp",
+    "openrouter:qwen/qwen3.8-2.4t-a95b",
+    "openrouter:qwen/qwen3.8-max",
     "openrouter:qwen/qwen3.8-27b",
+    "openrouter:qwen/qwen3.7-flash",
     "openrouter:stealth/ox-alpha",
     "openrouter:deepseek/deepseek-v3.2",
     "openrouter:google/gemini-3.7-flash",
     "openrouter:minimax/minimax-m2.7",
+    "openrouter:inclusionai/ling-3.0-flash",
+    "openrouter:moonshotai/kimi-k2.7-code",
     "openrouter:moonshotai/kimi-k3",
     "openrouter:openai/gpt-5.5-pro",
     "openrouter:z-ai/glm-5v-turbo",
@@ -185,13 +616,100 @@ describe("production logical catalog", () => {
     }
   )
 
-  it("keeps route-specific facts on the route, not the model", () => {
+  it("reports optional search when every route can provide it", () => {
     const sonnet = getLogicalModel("claude-sonnet-5")!
-    const direct = sonnet.routes[0]!.config
-    const wrapped = sonnet.routes[1]!.config
-    // The two routes legitimately disagree (e.g. native search support);
-    // neither fact is flattened onto the logical model.
-    expect(direct.webSearch).not.toBe(wrapped.webSearch)
+
+    expect(
+      sonnet.routes.every(
+        (route) => resolveModelSearchMode(route.config) === "optional"
+      )
+    ).toBe(true)
+    expect(toLogicalModelView(sonnet).searchMode).toBe("optional")
+  })
+
+  it.each([
+    ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
+    ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],
+    ["sonar", "Perplexity Sonar", "Sonar"],
+    [
+      "sonar-reasoning-pro",
+      "Perplexity Sonar Reasoning Pro",
+      "Sonar Reasoning Pro",
+    ],
+    ["sonar-pro", "Perplexity Sonar Pro", "Sonar Pro"],
+    [
+      "sonar-deep-research",
+      "Perplexity Sonar Deep Research",
+      "Sonar Deep Research",
+    ],
+  ])("exposes full and compact names for %s", (modelId, name, shortName) => {
+    const model = getLogicalModel(modelId)
+
+    expect(model).toMatchObject({ name, shortName })
+    expect(toLogicalModelView(model!)).toMatchObject({ name, shortName })
+  })
+
+  it.each([
+    ["openrouter:google/gemini-3-flash-preview", "Gemini 3 Flash"],
+    [
+      "openrouter:deepseek/deepseek-v4-flash-vision-exp",
+      "DeepSeek V4 Flash Vision",
+    ],
+    ["openrouter:qwen/qwen3.8-2.4t-a95b", "Qwen3.8-2.4T"],
+    ["openrouter:qwen/qwen3-coder", "Qwen3-Coder"],
+    ["openrouter:qwen/qwen3-235b-a22b-2507", "Qwen3-235B"],
+    ["openrouter:qwen/qwen3.6-35b-a3b", "Qwen3.6-35B"],
+  ])("keeps route metadata out of the %s label", (modelId, name) => {
+    expect(toLogicalModelView(getLogicalModel(modelId)!)).toMatchObject({
+      name,
+    })
+  })
+
+  it.each([
+    ["openrouter:deepseek/deepseek-chat-v3-0324", "March 2025"],
+    ["openrouter:deepseek/deepseek-r1-0528", "May 2025"],
+    ["openrouter:deepseek/deepseek-v4-pro", "April 2026"],
+    ["openrouter:deepseek/deepseek-v4-flash", "April 2026"],
+    ["openrouter:moonshotai/kimi-k2", "July 2025"],
+    ["openrouter:moonshotai/kimi-k2-0905", "September 2025"],
+    ["openrouter:qwen/qwen3-235b-a22b-2507", "July 2025"],
+    ["mistral-small-2506", "June 2025"],
+    ["claude-sonnet-4-5-20250929", "September 2025"],
+  ])("classifies older snapshot %s as Legacy", (modelId, dateLabel) => {
+    const model = getLogicalModel(modelId)!
+
+    expect(getModelSnapshotDateLabel(model.routes[0]!.config)).toBe(dateLabel)
+    expect(model.name).not.toMatch(/\b\d{4}\b|\(\d{4}\)/)
+    expect(
+      classifyLogicalModel(
+        model,
+        LOGICAL_MODELS,
+        new Date("2026-08-25T00:00:00Z")
+      ).classification
+    ).toBe("legacy")
+  })
+
+  it.each([
+    "openrouter:deepseek/deepseek-v4-flash-0731",
+    "openrouter:deepseek/deepseek-v4-pro-0813",
+  ])("keeps latest snapshot %s Current without a dated label", (modelId) => {
+    const model = getLogicalModel(modelId)!
+
+    expect(
+      classifyLogicalModel(
+        model,
+        LOGICAL_MODELS,
+        new Date("2026-08-25T00:00:00Z")
+      ).classification
+    ).toBe("current")
+    expect(model.name).not.toMatch(/\b\d{4}\b|\(\d{4}\)/)
+  })
+
+  it("keeps raw route lifecycle metadata on the logical model view", () => {
+    const model = getLogicalModel("openrouter:deepseek/deepseek-v4-pro")!
+    const view = toLogicalModelView(model, new Date("2026-08-25T00:00:00Z"))
+
+    expect(view.routes[0]?.lifecycle).toEqual(model.routes[0]?.config.lifecycle)
   })
 })
 

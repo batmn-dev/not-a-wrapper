@@ -32,6 +32,7 @@ export type ComposerActionAvailability = Readonly<
       disabled: boolean
       disabledMessage: string
       selected?: boolean
+      label?: string
     }>
   >
 >
@@ -43,6 +44,7 @@ export type ComposerActionMenuItem = Readonly<{
   disabled: boolean
   disabledMessage: string
   selected: boolean
+  label: string
 }>
 
 export type ComposerConnectorMenuItem = Readonly<{
@@ -67,6 +69,7 @@ function toActionMenuItem(
     disabled: state.disabled,
     disabledMessage: state.disabledMessage,
     selected: state.selected ?? false,
+    label: state.label ?? action.label,
   }
 }
 

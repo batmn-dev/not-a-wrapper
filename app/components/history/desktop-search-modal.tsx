@@ -236,7 +236,7 @@ export function DesktopSearchModal({
                   role="combobox"
                   className={cn(
                     "text-foreground h-full w-full border-none bg-transparent ps-5 text-base",
-                    "placeholder:text-muted-foreground focus:ring-0 focus:outline-none"
+                    "placeholder:text-placeholder focus:ring-0 focus:outline-none"
                   )}
                 />
                 <DialogPrimitive.Close

@@ -1,5 +1,16 @@
 # To Do
 
+- **Model presentation: Improve how models display across the UI**
+  - Add "Legacy" classifier to better prioritize models in UI
+  - Make model logos appear during thinking states to make assistant output ownership clear
+- **Effort levels:** Show dynamic "thinking" or effort options for various models
+- **Fix Web Search UX:** Fix confusing web search UX on chat composer and expose fine-tuned search controls in UI. Is it on or off? Why does a chip show in the chat composer?
+- **Update Activity UX:** Make activity appear more progressive like ChatGPT, Claude and other modern AI chat platforms. Currently all activity get's logged into the right panel. However, modern AI chat apps show thinking activity, some text below it, more activty, etc... We should still be able to see the right panel, we just need to update our UX in the chat thread view itself.
+- **Chat composer text editing:** Add chat composer text / markdown editing (link, bold, italic, headings, etc...)
+- **Dictation:** Add chat-composer dictation
+- **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
+- **Video generation:** Using Vercel's SDK framework
+- **Admin Portal:** A way to manage users, controls, features, etc...
 - **Dynamic Activity-panel source presentation:** adapt each source item to the
 metadata available instead of forcing every source into one fixed layout.
 Prefer a readable headline when available; include useful supporting details
@@ -22,13 +33,9 @@ similar to ChatGPT Projects and Claude Projects. Make context precedence,
 token budgeting, provenance, access control, versioning, and user-visible
 reset or opt-out behavior explicit so project chats remain reproducible and
 do not leak context across project boundaries.
-- **Add chat-composer dictation**
 - **Voice Mode:** Using Eleven Labs
-- **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
-- **Video generation:** Using Vercel's SDK framework
 - **Assistant Response UI Widgets:** Image Carousels, Image Previews, Weather, Stock UI, Charts (maybe), editable markdown (maybe)
 - **Monetization:** Setup Usage-based monthly pricing using Stripe or better option
-- **Admin Portal:** A way to manage users, controls, features, etc...
 - **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic design system (future):** Define an agent-readable, customizable
@@ -65,12 +72,12 @@ demonstrated threat gap.
 ## Correctness and maintenance
 
 - **Document nuanced motion-performance exceptions:** update the front-end
-  guidance to distinguish the default prohibition on continuously repainting
-  animations from narrowly approved, behavior-critical exceptions. Require a
-  bounded live-state lifecycle, reduced-motion fallback, and measured profiling
-  before assigning severity or changing established behavior; prefer a
-  compositor-friendly equivalent when it preserves the same interaction and
-  visual result.
+guidance to distinguish the default prohibition on continuously repainting
+animations from narrowly approved, behavior-critical exceptions. Require a
+bounded live-state lifecycle, reduced-motion fallback, and measured profiling
+before assigning severity or changing established behavior; prefer a
+compositor-friendly equivalent when it preserves the same interaction and
+visual result.
 - **Retired Google title model:** `selectChatTitleModelConfig` picks the cheapest
 visible same-provider model, which for Google is `gemini-2.5-flash-lite`; Google
 now returns 404 "no longer available to new users" for it, so every new Gemini
@@ -99,5 +106,3 @@ sequential Convex roundtrips on the admission critical path
 Beyond fixing those, look for anything else that makes responses feel fast:
 parallelize admission reads, measure TTFT via the chat-perf spans, and
 re-verify perceived streaming smoothness in the browser.
-- **Model presentation:** centralize route labels and icon precedence currently
-duplicated across model selectors and settings.

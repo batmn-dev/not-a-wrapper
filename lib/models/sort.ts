@@ -5,6 +5,13 @@ type SortableModel = Pick<
   "name" | "releasedAt" | "intelligence" | "inputCost" | "outputCost"
 >
 
+type SectionSortableModel = SortableModel & Pick<ModelConfig, "baseProviderId">
+
+export type OrderedModelSection<M extends SectionSortableModel> = {
+  vendorId: string
+  models: M[]
+}
+
 const INTELLIGENCE_RANK: Record<
   NonNullable<ModelConfig["intelligence"]>,
   number
@@ -20,6 +27,17 @@ const PROVIDER_SECTION_PRIORITY = [
   "xai",
   "google",
   "perplexity",
+  "mistral",
+  "nvidia",
+  "z-ai",
+  "minimax",
+  "qwen",
+  "meta",
+  "xiaomi",
+  "deepseek",
+  "inclusionai",
+  "moonshotai",
+  "stealth",
 ] as const
 
 const PROVIDER_SECTION_RANK = new Map<string, number>(
@@ -42,8 +60,8 @@ function intelligenceRank(intelligence: ModelConfig["intelligence"]): number {
 }
 
 /**
- * Keeps the primary providers in the product-defined order. Returning zero for
- * two unranked providers preserves their existing catalog order via stable sort.
+ * Keeps known vendors in the product-defined order. New vendors sort by id so
+ * filtered subsets cannot silently redefine section order.
  */
 export function compareProviderSections(a: string, b: string): number {
   const aRank = PROVIDER_SECTION_RANK.get(a)
@@ -52,7 +70,7 @@ export function compareProviderSections(a: string, b: string): number {
   if (aRank !== undefined && bRank !== undefined) return aRank - bRank
   if (aRank !== undefined) return -1
   if (bRank !== undefined) return 1
-  return 0
+  return a.localeCompare(b)
 }
 
 /**
@@ -77,4 +95,34 @@ export function compareModelsForProviderSection(
   if (priceDifference !== 0) return priceDifference
 
   return a.name.localeCompare(b.name)
+}
+
+/**
+ * The shared user-facing model order. Models stay grouped by maker (not by
+ * execution route), provider sections follow product priority, and each
+ * section uses the catalog-fact comparator above. Unknown vendors use their id
+ * as a deterministic final order.
+ */
+export function getOrderedModelSections<M extends SectionSortableModel>(
+  models: readonly M[]
+): OrderedModelSection<M>[] {
+  const modelsByVendor = new Map<string, M[]>()
+
+  for (const model of models) {
+    const vendorId = model.baseProviderId || "unknown"
+    const vendorModels = modelsByVendor.get(vendorId)
+
+    if (vendorModels) {
+      vendorModels.push(model)
+    } else {
+      modelsByVendor.set(vendorId, [model])
+    }
+  }
+
+  return Array.from(modelsByVendor.entries())
+    .sort(([a], [b]) => compareProviderSections(a, b))
+    .map(([vendorId, vendorModels]) => ({
+      vendorId,
+      models: vendorModels.toSorted(compareModelsForProviderSection),
+    }))
 }

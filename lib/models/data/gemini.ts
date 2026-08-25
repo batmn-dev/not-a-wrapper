@@ -3,7 +3,7 @@ import { ModelConfig } from "../types"
 const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.1-pro-preview",
-    name: "Gemini 3.1 Pro (Preview)",
+    name: "Gemini 3.1 Pro",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -13,6 +13,8 @@ const geminiModels: ModelConfig[] = [
     verifiedAgainst: "gemini-3.1-pro-preview",
     lastVerifiedAt: "2026-07-05",
     modelFamily: "Gemini 3.1",
+    lineageId: "google:gemini-pro",
+    releaseStage: "preview",
     baseProviderId: "google",
     description:
       "Google's flagship thinking model for code, math, and complex reasoning. $2/$12 per MTok up to 200k-token prompts; $4/$18 above.",
@@ -26,7 +28,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -45,6 +47,7 @@ const geminiModels: ModelConfig[] = [
     verifiedAgainst: "gemini-3.5-flash",
     lastVerifiedAt: "2026-07-05",
     modelFamily: "Gemini 3.5",
+    lineageId: "google:gemini-flash",
     baseProviderId: "google",
     description:
       "Fast multimodal reasoning with a 1M-token context — Google's best price-performance tier.",
@@ -58,7 +61,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -77,6 +80,7 @@ const geminiModels: ModelConfig[] = [
     verifiedAgainst: "gemini-3.1-flash-lite",
     lastVerifiedAt: "2026-07-05",
     modelFamily: "Gemini 3.1",
+    lineageId: "google:gemini-flash-lite",
     baseProviderId: "google",
     description:
       "Cheapest Gemini 3.1 tier for high-throughput, cost-sensitive tasks.",
@@ -90,7 +94,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Low",
@@ -107,11 +111,18 @@ const geminiModels: ModelConfig[] = [
     // 2026-08-21: the Gemini API answers 404 "no longer available to new
     // users" for this id (it recommends gemini-3.5-flash-lite). Kept as a
     // legacy route for existing chats; no longer selectable or title-eligible.
-    catalogStatus: "legacy",
-    replacementModelId: "gemini-3.1-flash-lite",
+    catalogStatus: "hidden",
+    lifecycle: {
+      status: "legacy",
+      source: "provider",
+      verifiedAt: "2026-08-21",
+      sourceUrl: "https://ai.google.dev/gemini-api/docs/models",
+      replacementModelId: "openrouter:google/gemini-3.5-flash-lite",
+    },
     idKind: "stable",
     lastVerifiedAt: "2026-08-21",
     modelFamily: "Gemini",
+    lineageId: "google:gemini-flash-lite",
     baseProviderId: "google",
     description:
       "Fastest, most cost-efficient Gemini model for high-throughput tasks.",
@@ -124,7 +135,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Low",
@@ -142,6 +153,7 @@ const geminiModels: ModelConfig[] = [
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Gemini",
+    lineageId: "google:gemini-flash",
     baseProviderId: "google",
     description:
       "Best price-performance Gemini model with thinking capabilities.",
@@ -154,7 +166,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -172,6 +184,7 @@ const geminiModels: ModelConfig[] = [
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Gemini",
+    lineageId: "google:gemini-pro",
     baseProviderId: "google",
     description:
       "State-of-the-art thinking model for code, math, and complex reasoning.",
@@ -184,7 +197,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -213,7 +226,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: false,
+    searchMode: "unsupported",
     openSource: true,
     speed: "Medium",
     intelligence: "Medium",

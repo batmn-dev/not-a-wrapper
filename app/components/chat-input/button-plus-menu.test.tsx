@@ -57,7 +57,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
                 connectors={[]}
                 enableSearch={false}
                 isFileUploadAvailable
-                isSearchDisabled={false}
+                searchMode="optional"
                 isUserAuthenticated
                 onCloseActionQuery={onCloseActionQuery}
                 onOpenActionMenu={onOpenActionMenu}
@@ -166,6 +166,84 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(onCloseActionQuery).toHaveBeenCalled()
   })
 
+  it("shows inherent search as selected and non-toggleable", () => {
+    const onToggleSearch = vi.fn()
+    act(() => {
+      root.render(
+        <FileUpload onFilesAdded={() => {}}>
+          <form data-type="unified-composer">
+            <div id="prompt-textarea" role="textbox" tabIndex={0} />
+            <ButtonPlusMenu
+              actionQuery={{
+                from: 1,
+                id: 1,
+                isSynthetic: true,
+                query: "web",
+                to: 1,
+                trigger: "@",
+              }}
+              connectors={[]}
+              enableSearch
+              isFileUploadAvailable
+              searchMode="always-on"
+              isUserAuthenticated
+              onToggleSearch={onToggleSearch}
+            />
+            <div data-composer-overlay-host />
+          </form>
+        </FileUpload>
+      )
+    })
+
+    const row = Array.from(
+      container.querySelectorAll<HTMLElement>("[aria-disabled=true]")
+    ).find((item) => item.textContent?.includes("Web search always on"))
+    expect(row?.textContent).toContain("Find real-time news and info")
+    expect(row?.getAttribute("aria-checked")).toBe("true")
+    expect(row?.querySelector("[data-composer-action-check]")).not.toBeNull()
+    act(() => row?.click())
+    expect(onToggleSearch).not.toHaveBeenCalled()
+  })
+
+  it("anchors disabled-action tooltips to the primary text", () => {
+    act(() => {
+      root.render(
+        <FileUpload onFilesAdded={() => {}}>
+          <form data-type="unified-composer">
+            <div id="prompt-textarea" role="textbox" tabIndex={0} />
+            <ButtonPlusMenu
+              actionQuery={{
+                from: 1,
+                id: 1,
+                isSynthetic: true,
+                query: "files",
+                to: 1,
+                trigger: "@",
+              }}
+              connectors={[]}
+              enableSearch={false}
+              isFileUploadAvailable={false}
+              searchMode="optional"
+              isUserAuthenticated
+              onToggleSearch={() => {}}
+            />
+            <div data-composer-overlay-host />
+          </form>
+        </FileUpload>
+      )
+    })
+
+    const row = container.querySelector<HTMLElement>(
+      '[data-slot="tooltip-trigger"][aria-disabled="true"]'
+    )
+    const anchor = row?.querySelector<HTMLElement>(
+      "[data-composer-action-tooltip-anchor]"
+    )
+
+    expect(row?.textContent).toContain("Upload from computer")
+    expect(anchor?.textContent).toBe("Add photos & files")
+  })
+
   it("renders connector rows with skeleton loading and slash scoping", () => {
     const onActivateConnector = vi.fn(() => true)
     const renderMenu = (
@@ -182,7 +260,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
                 connectors={connectors}
                 enableSearch={false}
                 isFileUploadAvailable
-                isSearchDisabled={false}
+                searchMode="optional"
                 isUserAuthenticated
                 onActivateConnector={onActivateConnector}
                 onToggleSearch={() => {}}
@@ -280,7 +358,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
             <ButtonPlusMenu
               enableSearch={false}
               isFileUploadAvailable
-              isSearchDisabled={false}
+              searchMode="optional"
               isUserAuthenticated
               onToggleSearch={() => {}}
             />
@@ -372,7 +450,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
             <ButtonPlusMenu
               enableSearch={false}
               isFileUploadAvailable
-              isSearchDisabled={false}
+              searchMode="optional"
               isUserAuthenticated
               connectors={[
                 {
@@ -510,7 +588,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
               ]}
               enableSearch={false}
               isFileUploadAvailable
-              isSearchDisabled={false}
+              searchMode="optional"
               isUserAuthenticated
               onToggleConnector={onToggleConnector}
               onToggleSearch={() => {}}
@@ -549,7 +627,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
                 connectors={[]}
                 enableSearch={false}
                 isFileUploadAvailable
-                isSearchDisabled={false}
+                searchMode="optional"
                 isUserAuthenticated
                 onActivateActionQuery={onActivateActionQuery}
                 onToggleSearch={() => {}}

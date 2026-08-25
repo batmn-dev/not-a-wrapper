@@ -3,6 +3,7 @@ import { getVisibleLogicalModelViews } from "."
 import {
   compareModelsForProviderSection,
   compareProviderSections,
+  getOrderedModelSections,
 } from "./sort"
 import type { ModelConfig } from "./types"
 
@@ -98,7 +99,7 @@ describe("compareModelsForProviderSection", () => {
 })
 
 describe("compareProviderSections", () => {
-  it("prioritizes the requested providers and preserves the remaining order", () => {
+  it("uses the product-defined vendor order", () => {
     const providers = [
       "openai",
       "mistral",
@@ -107,6 +108,8 @@ describe("compareProviderSections", () => {
       "deepseek",
       "perplexity",
       "xai",
+      "vendor-b",
+      "vendor-a",
     ]
 
     expect(providers.sort(compareProviderSections)).toEqual([
@@ -117,6 +120,47 @@ describe("compareProviderSections", () => {
       "perplexity",
       "mistral",
       "deepseek",
+      "vendor-a",
+      "vendor-b",
     ])
+  })
+})
+
+describe("getOrderedModelSections", () => {
+  it("centralizes provider grouping and within-provider model order", () => {
+    const sections = getOrderedModelSections([
+      {
+        ...model("Mistral Older", { releasedAt: "2025-01-01" }),
+        baseProviderId: "mistral",
+      },
+      {
+        ...model("OpenAI Newer", { releasedAt: "2026-03-01" }),
+        baseProviderId: "openai",
+      },
+      {
+        ...model("Anthropic Older", { releasedAt: "2025-06-01" }),
+        baseProviderId: "anthropic",
+      },
+      {
+        ...model("Mistral Newer", { releasedAt: "2026-01-01" }),
+        baseProviderId: "mistral",
+      },
+      {
+        ...model("DeepSeek", { releasedAt: "2026-04-01" }),
+        baseProviderId: "deepseek",
+      },
+    ])
+
+    expect(sections.map(({ vendorId }) => vendorId)).toEqual([
+      "anthropic",
+      "openai",
+      "mistral",
+      "deepseek",
+    ])
+    expect(
+      sections
+        .find(({ vendorId }) => vendorId === "mistral")
+        ?.models.map(({ name }) => name)
+    ).toEqual(["Mistral Newer", "Mistral Older"])
   })
 })

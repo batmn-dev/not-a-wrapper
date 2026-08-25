@@ -16,6 +16,12 @@ const turnMocks = vi.hoisted(() => ({
   modelStoreLoading: false,
   preferencesLoading: false,
   isChatLoading: false,
+  searchMode: "optional" as "optional" | "always-on" | "unsupported",
+  setWebSearchEnabled: vi.fn(),
+}))
+
+vi.mock("@/lib/models", () => ({
+  getLogicalModelInfo: () => ({ searchMode: turnMocks.searchMode }),
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
@@ -29,7 +35,7 @@ vi.mock("@/lib/chat-store/chats/provider", () => ({
 vi.mock("@/lib/user-preference-store/provider", () => ({
   useUserPreferences: () => ({
     preferences: { webSearchEnabled: true },
-    setWebSearchEnabled: vi.fn(),
+    setWebSearchEnabled: turnMocks.setWebSearchEnabled,
     isLoading: turnMocks.preferencesLoading,
   }),
 }))
@@ -64,6 +70,34 @@ describe("TurnContextProvider snapshot contract", () => {
     container?.remove()
     container = null
     root = null
+    turnMocks.searchMode = "optional"
+    turnMocks.setWebSearchEnabled.mockClear()
+  })
+
+  it("forces inherent search on without overwriting the optional preference", () => {
+    const contexts: Array<ReturnType<typeof useTurnContext>> = []
+    function Probe() {
+      contexts.push(useTurnContext())
+      return null
+    }
+
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    turnMocks.preferencesLoading = false
+    turnMocks.searchMode = "always-on"
+
+    act(() => {
+      root?.render(
+        <TurnContextProvider chatId={null} currentChat={null}>
+          <Probe />
+        </TurnContextProvider>
+      )
+    })
+
+    expect(contexts.at(-1)?.enableSearch).toBe(true)
+    act(() => contexts.at(-1)?.setEnableSearch(false))
+    expect(turnMocks.setWebSearchEnabled).not.toHaveBeenCalled()
   })
 
   it("getTurnSnapshot is identity-stable and commit-fresh, including from a child's passive effect", () => {

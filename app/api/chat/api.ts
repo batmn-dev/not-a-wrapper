@@ -6,6 +6,7 @@ import {
   type ResolvedModelRoute,
   type RouteResolutionFailure,
 } from "@/lib/model-route-resolver"
+import { resolveLogicalModelSearchMode } from "@/lib/models/catalog"
 import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import { type ProviderCredentialResolution } from "@/lib/user-keys"
 import type { UIMessage } from "ai"
@@ -272,13 +273,18 @@ export async function validateAndResolveChatCredential({
       ? { workosUserId }
       : undefined
 
+  const effectiveEnableSearch =
+    resolveLogicalModelSearchMode(model) === "always-on" ? true : enableSearch
+  const requiredCapabilities = {
+    ...(turnRequiresVision(messages) ? { vision: true as const } : {}),
+    webSearch: effectiveEnableSearch,
+  }
+
   const resolution = await resolveModelRoute({
     modelId: model,
     isAuthenticated,
     token: isAuthenticated ? token : undefined,
-    requiredCapabilities: turnRequiresVision(messages)
-      ? { vision: true }
-      : undefined,
+    requiredCapabilities,
     pinnedProviderId,
     ...(platformFundingIdentity
       ? {
@@ -288,7 +294,7 @@ export async function validateAndResolveChatCredential({
             chatId,
             messages,
             systemPrompt,
-            toolsLikely: enableSearch,
+            toolsLikely: effectiveEnableSearch,
           },
         }
       : {}),

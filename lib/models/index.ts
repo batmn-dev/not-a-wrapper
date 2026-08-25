@@ -1,12 +1,14 @@
 import {
+  getLogicalModel,
   LOGICAL_MODELS,
   ROUTE_CONFIGS,
+  resolveModelSelection,
   toLogicalModelView,
   type LogicalModel,
   type LogicalModelView,
 } from "./catalog"
-import { isPlatformEligibleModelForActor } from "./platform-entitlement"
 import { resolveModelId } from "./model-id-migration"
+import { isPlatformEligibleModelForActor } from "./platform-entitlement"
 import { ModelConfig } from "./types"
 
 // Route records (ModelConfig) remain the execution-level registry; logical
@@ -45,11 +47,27 @@ export function getVisibleLogicalModels(): LogicalModel[] {
  * an authenticated user); the client ORs in per-route key presence, and the
  * server route resolver remains the authority at admission.
  */
-export function getVisibleLogicalModelViews(): LogicalModelView[] {
+export function getVisibleLogicalModelViews(
+  asOf: Date = new Date()
+): LogicalModelView[] {
   return getVisibleLogicalModels().map((model) => ({
-    ...toLogicalModelView(model),
+    ...toLogicalModelView(model, asOf),
     accessible: isPlatformEligibleModelForActor(model.id, true),
   }))
+}
+
+/**
+ * Resolve any current or historical selection to its logical client view.
+ * Capability flags therefore describe every viable route, while
+ * `getModelInfo` remains the route-record lookup used during execution.
+ */
+export function getLogicalModelInfo(
+  modelId: string,
+  asOf: Date = new Date()
+): LogicalModelView | undefined {
+  const selection = resolveModelSelection(modelId)
+  const model = getLogicalModel(selection.modelId)
+  return model ? toLogicalModelView(model, asOf) : undefined
 }
 
 export async function getModelsForProvider(

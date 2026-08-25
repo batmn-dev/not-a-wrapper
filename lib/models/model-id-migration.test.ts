@@ -40,6 +40,9 @@ describe("model ID migration", () => {
     expect(resolveModelId("openrouter:xiaomi/mimo-v2-flash")).toBe(
       "openrouter:xiaomi/mimo-v2.5"
     )
+    expect(resolveModelId("openrouter:inclusionai/ling-2.6-flash")).toBe(
+      "openrouter:inclusionai/ling-3.0-flash"
+    )
     // Alias-of-a-delisted-id chains through the succession in one resolve.
     expect(resolveModelId("deepseek-r1")).toBe("openrouter:openai/gpt-oss-120b")
     expect(resolveModelId("mistral-small-2503")).toBe("mistral-small-2506")

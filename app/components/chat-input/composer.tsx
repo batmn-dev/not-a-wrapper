@@ -40,7 +40,7 @@ import {
   type Attachment,
 } from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
-import { getModelInfo } from "@/lib/models"
+import { getLogicalModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
 import { RiArrowUpLine } from "@remixicon/react"
@@ -220,16 +220,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const { user } = useUser()
     const isUserAuthenticated = !!user?.id
     const convex = useConvex()
-    const { selectedModel, handleModelChange, enableSearch, setEnableSearch } =
-      useTurnContext()
+    const {
+      selectedModel,
+      handleModelChange,
+      enableSearch,
+      setEnableSearch,
+      searchMode,
+    } = useTurnContext()
 
-    const selectModelConfig = getModelInfo(selectedModel)
-    // Web search is disabled only when the model explicitly can't accept tool calls
-    // (tools: false) or has opted out of search (webSearch: false).
-    // All other models get search via Layer 1 (provider-native) or Layer 2 (Exa fallback).
-    const isSearchDisabled =
-      selectModelConfig?.tools === false ||
-      selectModelConfig?.webSearch === false
+    const selectModelConfig = getLogicalModelInfo(selectedModel)
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =
@@ -241,7 +240,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       entities: composerEntities,
       handleEntitiesChange: handleComposerEntitiesChange,
       activateActionQuery: handleActivateActionQuery,
-    } = useComposerCapabilities({ enableSearch, setEnableSearch, editorRef })
+    } = useComposerCapabilities({
+      enableSearch,
+      setEnableSearch,
+      searchMode,
+      editorRef,
+    })
     const {
       connectors: menuConnectors,
       activateConnector: handleActivateConnector,
@@ -623,7 +627,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   enableSearch={enableSearch}
                   onActivateActionQuery={handleActivateActionQuery}
                   onToggleSearch={setEnableSearch}
-                  isSearchDisabled={isSearchDisabled}
+                  searchMode={searchMode}
                   connectors={menuConnectors}
                   onActivateConnector={handleActivateConnector}
                   onToggleConnector={handleToggleConnector}

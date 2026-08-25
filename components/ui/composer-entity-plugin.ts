@@ -4,6 +4,8 @@ import type { Node as ProseMirrorNode } from "prosemirror-model"
 import { Plugin, type EditorState, type Transaction } from "prosemirror-state"
 import { Decoration, DecorationSet } from "prosemirror-view"
 
+type DeletionRange = { from: number; to: number }
+
 /**
  * Mention-pill mechanics on top of the Composer schema: atomic deletion of the
  * cursor-target/entity/spacer triple, selection decorations, and the appended
@@ -85,27 +87,88 @@ function getEntityDeletionRange(
   return { from, to }
 }
 
+function mergeDeletionRanges(ranges: readonly DeletionRange[]) {
+  const merged: DeletionRange[] = []
+  for (const range of ranges.toSorted((left, right) => left.from - right.from)) {
+    const previous = merged[merged.length - 1]
+    if (previous && range.from <= previous.to) {
+      previous.to = Math.max(previous.to, range.to)
+    } else {
+      merged.push({ ...range })
+    }
+  }
+  return merged
+}
+
+function excludeDeletionRanges(
+  ranges: readonly DeletionRange[],
+  protectedRanges: readonly DeletionRange[]
+) {
+  return ranges.flatMap((range) => {
+    let fragments = [range]
+    for (const protectedRange of protectedRanges) {
+      fragments = fragments.flatMap((fragment) => {
+        if (
+          protectedRange.to <= fragment.from ||
+          protectedRange.from >= fragment.to
+        ) {
+          return [fragment]
+        }
+        return [
+          ...(protectedRange.from > fragment.from
+            ? [{ from: fragment.from, to: protectedRange.from }]
+            : []),
+          ...(protectedRange.to < fragment.to
+            ? [{ from: protectedRange.to, to: fragment.to }]
+            : []),
+        ]
+      })
+    }
+    return fragments
+  })
+}
+
 function deleteSelectedComposerEntities(
   state: EditorState,
   dispatch?: (transaction: Transaction) => void
 ) {
   if (state.selection.empty) return false
 
-  const ranges: Array<{ from: number; to: number }> = []
-  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
-    if (
-      node.type === promptInputSchema.nodes.composerEntity &&
-      state.selection.from <= pos &&
-      state.selection.to >= pos + node.nodeSize
-    ) {
-      ranges.push(getEntityDeletionRange(state, pos, node))
+  const deletionRanges: DeletionRange[] = [
+    { from: state.selection.from, to: state.selection.to },
+  ]
+  const protectedRanges: DeletionRange[] = []
+  let containsComposerEntity = false
+  state.doc.nodesBetween(
+    state.selection.from,
+    state.selection.to,
+    (node, pos) => {
+      if (
+        node.type === promptInputSchema.nodes.composerEntity &&
+        state.selection.from <= pos &&
+        state.selection.to >= pos + node.nodeSize
+      ) {
+        containsComposerEntity = true
+        if (node.attrs.removable === false) {
+          protectedRanges.push(getEntityDeletionRange(state, pos, node))
+        } else {
+          deletionRanges.push(getEntityDeletionRange(state, pos, node))
+        }
+      }
     }
-  })
-  if (ranges.length === 0) return false
+  )
+  if (!containsComposerEntity) return false
 
-  if (dispatch) {
+  const ranges = excludeDeletionRanges(
+    mergeDeletionRanges(deletionRanges),
+    protectedRanges
+  )
+
+  if (dispatch && ranges.length > 0) {
     const transaction = state.tr
-    for (const range of ranges.toSorted((left, right) => right.from - left.from)) {
+    for (const range of ranges.toSorted(
+      (left, right) => right.from - left.from
+    )) {
       transaction.delete(range.from, range.to)
     }
     dispatch(transaction.scrollIntoView())
@@ -122,6 +185,7 @@ function deleteComposerEntityBackward(
 
   const entity = state.selection.$from.nodeBefore
   if (entity?.type !== promptInputSchema.nodes.composerEntity) return false
+  if (entity.attrs.removable === false) return true
   const entityPos = state.selection.from - entity.nodeSize
   const range = getEntityDeletionRange(state, entityPos, entity)
   dispatch?.(state.tr.delete(range.from, range.to).scrollIntoView())
@@ -149,6 +213,7 @@ function deleteComposerEntityForward(
   ) {
     return false
   }
+  if (entity.attrs.removable === false) return true
 
   const range = getEntityDeletionRange(state, entityPos, entity)
   dispatch?.(state.tr.delete(range.from, range.to).scrollIntoView())

@@ -143,6 +143,7 @@ function baseOptions(
     apiKey: "sk-test",
     providerToolKeyMode: "byok",
     modelTools: true,
+    modelSearchMode: "optional",
     enableSearch: true,
     logContext: {
       requestId: "req_1",
@@ -391,7 +392,6 @@ describe("prepareToolRuntime — Tool budget degradation & recovery", () => {
     ).resolves.toBeUndefined()
     expect(mocks.store.checkAndConsume).not.toHaveBeenCalled()
   })
-
 })
 
 describe("prepareToolRuntime — naming governance", () => {
@@ -828,6 +828,28 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
 // extraction door can open.
 
 describe("prepareToolRuntime — conditional Exa resolution", () => {
+  it("injects optional search but not unsupported or inherent search", async () => {
+    mocks.getProviderTools.mockResolvedValue({
+      tools: { web_search: {} },
+      metadata: new Map([["web_search", meta({ source: "builtin" })]]),
+    })
+
+    const nativeSearch = await prepareToolRuntime(
+      baseOptions({ modelTools: false, modelSearchMode: "optional" })
+    )
+    expect(Object.keys(nativeSearch.tools)).toEqual(["web_search"])
+
+    const optedOut = await prepareToolRuntime(
+      baseOptions({ modelTools: true, modelSearchMode: "unsupported" })
+    )
+    expect(Object.keys(optedOut.tools)).toEqual([])
+
+    const inherentSearch = await prepareToolRuntime(
+      baseOptions({ modelTools: false, modelSearchMode: "always-on" })
+    )
+    expect(Object.keys(inherentSearch.tools)).toEqual([])
+  })
+
   it("zero Exa reads when no Exa-backed tool can be exposed; tool set unchanged", async () => {
     // Door 1 closed: Layer 1 provides search. Door 2 closed: extract off.
     mocks.getProviderTools.mockResolvedValue({

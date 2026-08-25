@@ -48,6 +48,7 @@ export type OpenRouterSnapshotModel = {
   id: string
   name: string
   created: number
+  expiration_date: string | null
   context_length: number
   top_provider: { max_completion_tokens: number | null }
   pricing: { prompt: string; completion: string }
@@ -59,6 +60,18 @@ export type OpenRouterSnapshot = {
   endpoint: string
   retrievedAt: string
   models: OpenRouterSnapshotModel[]
+}
+
+type OpenRouterLiveModel = {
+  id: string
+  name: string
+  created: number
+  expiration_date?: string | null
+  context_length: number
+  top_provider?: { max_completion_tokens?: number | null }
+  pricing?: { prompt?: string; completion?: string }
+  supported_parameters?: string[]
+  architecture?: { input_modalities?: string[] }
 }
 
 /**
@@ -137,11 +150,13 @@ export function buildSnapshot(
   }
 
   const models = allowlist
-    .map((entry) => liveById.get(entry.slug) as Record<string, any>)
+    .map((entry) => liveById.get(entry.slug) as OpenRouterLiveModel)
     .map((live): OpenRouterSnapshotModel => ({
       id: live.id,
       name: live.name,
       created: live.created,
+      expiration_date:
+        typeof live.expiration_date === "string" ? live.expiration_date : null,
       context_length: live.context_length,
       top_provider: {
         max_completion_tokens: live.top_provider?.max_completion_tokens ?? null,
@@ -176,6 +191,26 @@ export function buildModelConfig(
     snapshotModel.supported_parameters.includes("reasoning") &&
     !entry.reasoningOptOut
   const maxCompletionTokens = snapshotModel.top_provider.max_completion_tokens
+  const expirationDate = snapshotModel.expiration_date ?? null
+
+  if (entry.lifecycle !== undefined && expirationDate !== null) {
+    throw new Error(
+      `Allowlist entry "${entry.slug}" has editorial lifecycle evidence and ` +
+        `OpenRouter expiration evidence; preserve both sources explicitly ` +
+        `before choosing the canonical lifecycle.`
+    )
+  }
+  const lifecycle: ModelConfig["lifecycle"] =
+    entry.lifecycle ??
+    (expirationDate === null
+      ? undefined
+      : {
+          status: "active",
+          source: "openrouter",
+          verifiedAt: retrievedAt,
+          sourceUrl: MODELS_ENDPOINT,
+          retiresAt: expirationDate,
+        })
 
   // `icon` must resolve in the Vendor registry — an unregistered vendor id
   // belongs in `baseProviderId` (open set) with icon "openrouter", not here.
@@ -213,10 +248,12 @@ export function buildModelConfig(
   return {
     id: `openrouter:${entry.slug}`,
     name: entry.name,
+    ...(entry.shortName === undefined ? {} : { shortName: entry.shortName }),
     // Provider identity owns the display name; the generator never restates it.
     provider: MODEL_PROVIDER_IDENTITY.openrouter.name,
     providerId: MODEL_PROVIDER_IDENTITY.openrouter.id,
     catalogStatus: "visible",
+    ...(lifecycle === undefined ? {} : { lifecycle }),
     idKind: "wrapped",
     ...(entry.logicalModelId === undefined
       ? {}
@@ -224,6 +261,10 @@ export function buildModelConfig(
     verifiedAgainst: entry.slug,
     lastVerifiedAt: retrievedAt,
     modelFamily: entry.modelFamily,
+    ...(entry.lineageId === undefined ? {} : { lineageId: entry.lineageId }),
+    ...(entry.releaseStage === undefined
+      ? {}
+      : { releaseStage: entry.releaseStage }),
     baseProviderId: entry.baseProviderId,
     description: entry.description,
     tags: entry.tags,
@@ -238,8 +279,8 @@ export function buildModelConfig(
     audio: snapshotModel.architecture.input_modalities.includes("audio"),
     reasoningText: reasoningSupported,
     ...(reasoningSupported ? { reasoning: { effort: "medium" as const } } : {}),
-    // No native search tool on the OpenRouter path (provider-strategy.ts).
-    webSearch: false,
+    // OpenRouter's server-side search plugin works with every routed model.
+    searchMode: "optional",
     openSource: entry.openSource,
     speed: entry.speed,
     intelligence: entry.intelligence,
@@ -247,6 +288,9 @@ export function buildModelConfig(
     apiDocs: `https://openrouter.ai/${entry.slug}`,
     ...(entry.modelPage ? { modelPage: entry.modelPage } : {}),
     releasedAt: entry.releasedAt ?? toIsoDate(snapshotModel.created),
+    ...(entry.snapshotDate === undefined
+      ? {}
+      : { snapshotDate: entry.snapshotDate }),
     icon: entry.icon,
   }
 }

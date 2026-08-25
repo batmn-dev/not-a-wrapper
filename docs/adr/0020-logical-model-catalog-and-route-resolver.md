@@ -32,7 +32,11 @@ choice in one server-owned resolver.
   upstreamModelId, config}`; capabilities, pricing, and construction settings
   stay per-route on `config` and are never flattened upward.
 - **Logical model** — the user-facing identity (`LogicalModel`): `{id, name,
-  vendorId, description, tags, catalogStatus, routes}`. Its id **equals its
+  shortName?, vendorId, description, tags, catalogStatus, lineageId?,
+  releaseStage?, releasedAt?, lifecycle?, routes}`. `catalogStatus` is
+  editorial visibility; ADR-0025 derives lifecycle priority separately.
+  `name` is the authoritative full label; `shortName` is an optional compact label
+  carried only from the canonical route. Its id **equals its
   canonical route id** (the direct route when one exists, else the sole
   wrapped route id). This keeps every persisted model id — chats, messages,
   runs, favorites, last-used — already a valid logical id or resolvable to
@@ -49,14 +53,23 @@ choice in one server-owned resolver.
   free pool is a genuinely different serving tier (rate caps, separate
   product policy in `FREE_MODELS_IDS`), and the allowlist already names them
   distinctly.
+- Client views widen capability availability to “any route supports it” without
+  changing route records. Web search is one typed route state: `optional`,
+  `always-on`, or `unsupported`. An omitted state derives optional search from
+  the route's search-tool capability. Logical aggregation prefers `optional`
+  when any route can honor the toggle, then `always-on`, then `unsupported`.
+  The composer shows the corresponding control, admission filters both enabled
+  and disabled requests so routing preserves that control, and the Tool runtime
+  injects search only for `optional` routes. `always-on` routes rely on their
+  provider's inherent grounding without a duplicate search tool.
 
 ## Route resolver
 
 `resolveModelRoute` (`lib/model-route-resolver.ts`, server-only) replaces
 the provider derivation inside `validateAndResolveChatCredential`. Inputs:
 the (possibly legacy) selected id, auth state, the Convex token, required
-capabilities (vision when the turn carries images), and an optional pinned
-provider for approval continuations. It:
+capabilities (vision when the turn carries images and the effective web-search
+state), and an optional pinned provider for approval continuations. It:
 
 1. normalizes the selection through `resolveModelSelection` (aliases →
    successions → logical id + `legacyRouteHint` for old `openrouter:*` ids);
@@ -144,6 +157,6 @@ its attestation rather than duplicating credential resolution.
 models today), availability is "any eligible route", favorites rank instead
 of filter, and route/credential choice is recorded per run for future cost
 attribution and settlement. The OpenRouter snapshot/refresh/succession
-workflow is unchanged; the allowlist gains one editorial field. The
-`ModelConfig` shape stays the single route-record shape (no parallel
-catalog).
+workflow is unchanged; the allowlist remains the editorial surface for
+explicit route mappings and optional compact names. The `ModelConfig` shape
+stays the single route-record shape (no parallel catalog).

@@ -239,6 +239,14 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
   openrouter: {
     id: "openrouter",
     envVarName: "OPENROUTER_API_KEY",
+    searchToolMetadata: {
+      displayName: "Web Search",
+      source: "builtin",
+      serviceName: "OpenRouter",
+      icon: "search",
+      readOnly: true,
+      openWorld: true,
+    },
     instance(apiKey) {
       // OpenRouter is the documented irregular: use a configured factory for
       // explicit BYOK/env key selection, `.chat()` to produce its V4 chat
@@ -255,7 +263,8 @@ const STRATEGIES: Record<Provider, ProviderStrategy> = {
             toOpenRouterChatModelId(id),
             toOpenRouterChatSettings(settings)
           ),
-        searchTool: () => undefined,
+        searchTool: () =>
+          asSearchTool(provider.tools.webSearch({ engine: "auto" })),
       }
     },
   },

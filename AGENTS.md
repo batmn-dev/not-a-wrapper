@@ -13,7 +13,7 @@ I want to share some of my preferences here so we can be more aligned when worki
 ## General
 
 - **My highest priority preference** is to leverage popular open source repos as quality reference material for researching system architecture, data model and backend behavior. This doesn't mean we should always copy them, but we should consider their approach first before inventing something from scratch. You can use the open-source-references skill AND do your own research online to find relevant open source projects. 
-- I'm a designer with some front-end experience. I'm not a software engineer. This means I need your responses to be clear, concise and easy to understand. The highest form of intelligence is explaining complex ideas simply. You are very smart.
+- I'm a designer with some front-end experience. I'm not a software engineer. This means I need your responses to be simple, concise and easy to understand. The highest form of intelligence is explaining complex ideas simply. You are very smart.
 - Extend existing project patterns instead of introducing parallel systems.
 - Fix root causes instead of symptoms.
 - Optimize for maintainability and clarity over short-term speed.
@@ -21,14 +21,16 @@ I want to share some of my preferences here so we can be more aligned when worki
 - Before proposing architecture, check `docs/adr/` for a decision that already covers it. Significant new decisions get a new ADR.
 - Typesafety is useful, take advantage of it.
 - Don't be scared to propose bold ideas if they can meaningfully and CLEARLY benefit our work
-- Testing essential backend behavior is good! However, endless smoke tests, "regression tests" for feature deletions, etc... is BAD. Tests should be concise, focused and meaningful. Don't add tests just because or if there isn't a clear benefit.
-- Adding essential comments to clarify functionality and intended behavior is good. But don't comment every line, keep it concise, essential, and meaningful. 
+- Testing essential backend behavior is good! However, endless smoke tests, "regression tests" for feature deletions, etc... is BAD. Tests should be ultra concise, focused and meaningful. Prefer very small but essential test coverage that has a clear benefit.
+- Adding ultra concise but essential comments to clarify functionality and intended behavior is okay. However, keep comments very concise, essentail, meaningful and easy to read.
 - Keep comments and documentation up to date. When making changes, it's important to keep things in sync to prevent future agents from getting confused.
 - No `// @ts-ignore`.
 - No lint-rule bypassing (`eslint-disable`) without explicit documented approval.
 - Do not downgrade or disable checks to "make it pass."
 - When extending an existing feature to a new state, audience, or route, identify the current source-of-truth pattern before editing. Match its component ownership, placement logic, accessibility, and interaction model by default.
 - Keep future restyling centralized: prefer shared primitives and semantic tokens over hard-coded, call-site-specific styling. Equivalent controls should preserve shared behavior and structure while the visual language evolves.
+
+
 
 ## Typescript preferences
 
@@ -40,16 +42,21 @@ I want to share some of my preferences here so we can be more aligned when worki
 - When building more complex web and react native apps, I like to pull in Zustand, React Query, Tanstack Start, Workos or Clerk (or better-auth if selfhosting), and ArkType (or zod if perf isn't an issue)
 
 
+
 ## Commands and local dev
 
 - Verify with `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build:next`.
-- **`bun run build` is NOT a build — it deploys to production Convex.** Never run it to verify a change; use `bun run build:next`.
+- `bun run build` **is NOT a build — it deploys to production Convex.** Never run it to verify a change; use `bun run build:next`.
 - My long-running `bun dev` owns port 3000. Verify through it and never kill or restart it, and don't start a competing dev server.
+
+
 
 ## Match ceremony to the task
 
 - Do not spawn subagents or a multi-agent panel for work a single agent finishes in one pass. Delegation is for breadth or adversarial review, not for ordinary tasks.
 - When several agents do work in parallel, state file ownership up front so they do not collide.
+
+
 
 ## Front-end work
 
@@ -57,6 +64,8 @@ I want to share some of my preferences here so we can be more aligned when worki
 - If there is a opportunity to centralize front-end changes to prevent UI drift between two or more obvious UI surfaces, then take that opportunity and tell me about it so I can review it.
 - Information-dense, no decorative card/pill chrome, no light-gray subtitle lines above sections. Minimal copy. No em dashes.
 - Avoid continuously repainting CSS animations (pulse, shimmer, blur, spinners); they peg the GPU on high-refresh displays.
+
+
 
 ## Database
 
@@ -102,16 +111,22 @@ migration discipline.
 - Validation depth must scale with risk; do not treat successful compilation as sufficient evidence of correctness.
 - For medium/high-risk changes, follow the decision process in this section and document the chosen approach before coding.
 
+
+
 ## Security
 
 - Never log or expose secrets, tokens, or credentials.
 - Treat BYOK/API key data as encrypted-at-rest.
+
+
 
 ## Git Safety
 
 - Never create branches unless explicitly asked.
 - Never force-push to shared branches.
 - Avoid destructive git commands unless explicitly requested.
+
+
 
 ## Dirty Worktree And Generated Files
 
@@ -120,6 +135,8 @@ migration discipline.
 - Do not delete, revert, rewrite, or "clean up" out-of-scope files just to make the final diff look cleaner.
 - Never delete untracked files to restore scope. Untracked files are not recoverable from git.
 - If accidental out-of-scope edits occur, stop and report the exact paths before attempting repair.
+
+
 
 ## Other Preferences
 

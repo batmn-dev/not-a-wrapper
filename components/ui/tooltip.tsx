@@ -171,6 +171,7 @@ function TooltipTrigger({
 
 function TooltipContent({
   className,
+  anchor,
   side = "top",
   sideOffset = 6,
   align = "center",
@@ -183,7 +184,7 @@ function TooltipContent({
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   > & {
     hideArrow?: boolean
     variant?: "default" | "outline"
@@ -193,6 +194,7 @@ function TooltipContent({
   return (
     <TooltipPrimitive.Portal keepMounted>
       <TooltipPrimitive.Positioner
+        anchor={anchor}
         align={align}
         alignOffset={alignOffset}
         side={side}

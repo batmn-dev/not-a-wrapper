@@ -27,13 +27,14 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const models = getVisibleLogicalModelViews()
+    const now = new Date()
+    const models = getVisibleLogicalModelViews(now)
     const allModels = await getAllModels()
 
     return NextResponse.json({
       message: "Models refreshed",
       models,
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
       count: models.length,
       routableCount: allModels.length,
     })

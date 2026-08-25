@@ -3,11 +3,9 @@
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
 import type { LogicalModelView } from "@/lib/models/catalog"
-import {
-  compareModelsForProviderSection,
-  compareProviderSections,
-} from "@/lib/models/sort"
-import { getVendorIcon } from "@/lib/provider-icons"
+import { getModelDisplayName } from "@/lib/models/presentation"
+import { getOrderedModelSections } from "@/lib/models/sort"
+import { getModelIcon, getVendorIcon } from "@/lib/provider-icons"
 import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
@@ -49,42 +47,25 @@ export function ModelsSettings() {
       .filter(Boolean) as FavoriteModelItem[]
   }, [currentFavoriteModels, models, isModelHidden])
 
-  const availableModelsByProvider = useMemo(() => {
+  const availableModelSections = useMemo(() => {
     if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
-      return {}
+      return []
     }
 
+    const normalizedSearchQuery = searchQuery.toLowerCase()
     const availableModels = models
       .filter(
         (model) =>
           !currentFavoriteModels.includes(model.id) && !isModelHidden(model.id)
       )
       .filter((model) =>
-        model.name.toLowerCase().includes(searchQuery.toLowerCase())
+        [
+          getModelDisplayName(model),
+          getModelDisplayName(model, "compact"),
+        ].some((name) => name.toLowerCase().includes(normalizedSearchQuery))
       )
 
-    // Group by the model maker's vendor identity (ADR-0020); execution routes
-    // never create vendor groups.
-    const modelsByProvider = availableModels.reduce(
-      (acc, model) => {
-        const vendorKey = model.baseProviderId || "unknown"
-
-        if (!acc[vendorKey]) {
-          acc[vendorKey] = []
-        }
-
-        acc[vendorKey].push(model)
-
-        return acc
-      },
-      {} as Record<string, typeof models>
-    )
-
-    for (const modelsGroup of Object.values(modelsByProvider)) {
-      modelsGroup.sort(compareModelsForProviderSection)
-    }
-
-    return modelsByProvider
+    return getOrderedModelSections(availableModels)
   }, [models, currentFavoriteModels, isModelHidden, searchQuery])
 
   const handleReorder = (newOrder: FavoriteModelItem[]) => {
@@ -116,11 +97,6 @@ export function ModelsSettings() {
     updateFavoriteModels(newIds)
   }
 
-  // Wrapped models can carry real vendor ids without registered icons;
-  // getVendorIcon falls back to the OpenRouter icon.
-  const getModelVendorIcon = (model: LogicalModelView) =>
-    getVendorIcon(model.baseProviderId)
-
   return (
     <div className="space-y-6">
       <div>
@@ -135,7 +111,7 @@ export function ModelsSettings() {
             className="space-y-2"
           >
             {favoriteModels.map((model) => {
-              const VendorIcon = getModelVendorIcon(model)
+              const ModelIcon = getModelIcon(model)
 
               return (
                 <Reorder.Item key={model.id} value={model} className="group">
@@ -144,7 +120,7 @@ export function ModelsSettings() {
                       <Icon icon={RiDraggable} slotSize={16} />
                     </div>
 
-                    {VendorIcon && <VendorIcon className="size-5 shrink-0" />}
+                    <ModelIcon className="size-5 shrink-0" />
 
                     <div className="min-w-0 flex-1">
                       <span className="block truncate font-medium">
@@ -199,58 +175,56 @@ export function ModelsSettings() {
             placeholder="Search models..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="border-input-border bg-input-bg ring-offset-background placeholder:text-muted-foreground focus-visible:ring-focus-ring flex h-9 w-full rounded-md border px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="border-input-border bg-input-bg ring-offset-background placeholder:text-placeholder focus-visible:ring-focus-ring flex h-9 w-full rounded-md border px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
 
         <div className="space-y-6 pb-6">
-          {Object.entries(availableModelsByProvider)
-            .sort(([a], [b]) => compareProviderSections(a, b))
-            .map(([vendorKey, modelsGroup]) => {
-              // Unregistered vendors keep their raw id as the group label.
-              const vendor = getVendor(vendorKey)
-              const GroupIcon = getVendorIcon(vendorKey)
+          {availableModelSections.map(({ vendorId, models: modelsGroup }) => {
+            // Unregistered vendors keep their raw id as the group label.
+            const vendor = getVendor(vendorId)
+            const GroupIcon = getVendorIcon(vendorId)
 
-              return (
-                <div key={vendorKey} className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    {vendor && <GroupIcon className="size-5" />}
-                    <h4 className="font-medium text-balance">
-                      {vendor?.name || vendorKey}
-                    </h4>
-                  </div>
-
-                  <div className="space-y-2 pl-7">
-                    {modelsGroup.map((model) => (
-                      <div
-                        key={model.id}
-                        className="flex items-center justify-between py-1"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm">{model.name}</span>
-                          {model.description && (
-                            <span className="text-muted-foreground text-xs">
-                              {model.description}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => toggleFavorite(model.id)}
-                          type="button"
-                          className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
-                          title="Add to favorites"
-                        >
-                          <Icon icon={RiAddLine} slotSize={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+            return (
+              <div key={vendorId} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  {vendor && <GroupIcon className="size-5" />}
+                  <h4 className="font-medium text-balance">
+                    {vendor?.name || vendorId}
+                  </h4>
                 </div>
-              )
-            })}
+
+                <div className="space-y-2 pl-7">
+                  {modelsGroup.map((model) => (
+                    <div
+                      key={model.id}
+                      className="flex items-center justify-between py-1"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm">{model.name}</span>
+                        {model.description && (
+                          <span className="text-muted-foreground text-xs">
+                            {model.description}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => toggleFavorite(model.id)}
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
+                        title="Add to favorites"
+                      >
+                        <Icon icon={RiAddLine} slotSize={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
-        {Object.keys(availableModelsByProvider).length === 0 && (
+        {availableModelSections.length === 0 && (
           <div className="text-muted-foreground py-8 text-center text-sm">
             {searchQuery
               ? `No models found matching "${searchQuery}"`

@@ -2,7 +2,6 @@ import { getDefaultModelForUser } from "@/lib/config"
 import type { ModelConfig } from "@/lib/models/types"
 import { describe, expect, it } from "vitest"
 import {
-  DEFAULT_MODEL_ORDER,
   groupModelsForSelector,
   isModelAllowedForAnonymous,
   isModelSelectableForAuthState,
@@ -18,16 +17,19 @@ const MODELS: ModelConfig[] = [
     catalogStatus: "visible",
     idKind: "stable",
     baseProviderId: "openai",
+    releasedAt: "2026-03-05",
     accessible: false,
   },
   {
     id: "gpt-5-mini",
     name: "GPT-5 Mini",
+    shortName: "Mini compact",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
     idKind: "stable",
     baseProviderId: "openai",
+    releasedAt: "2025-08-07",
     accessible: true,
   },
   {
@@ -42,12 +44,14 @@ const MODELS: ModelConfig[] = [
   },
   {
     id: "claude-haiku-4-5-20251001",
-    name: "Haiku 4.5",
+    name: "Claude Haiku 4.5",
+    shortName: "Haiku 4.5",
     provider: "Anthropic",
     providerId: "anthropic",
     catalogStatus: "visible",
     idKind: "snapshot",
-    baseProviderId: "claude",
+    baseProviderId: "anthropic",
+    releasedAt: "2025-10-01",
     accessible: true,
   },
 ]
@@ -137,6 +141,7 @@ describe("groupModelsForSelector", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       [],
+      "gpt-5-mini",
       "",
       isModelHidden
     )
@@ -144,10 +149,29 @@ describe("groupModelsForSelector", () => {
     expect(ids).not.toContain("gpt-4.1")
   })
 
-  it("ranks favorites without hiding the rest of the catalog", () => {
+  it("promotes a selected non-favorite within the All models group", () => {
+    const { favorites, others } = groupModelsForSelector(
+      MODELS,
+      ["claude-haiku-4-5-20251001"],
+      "gpt-5-mini",
+      "",
+      isModelHidden
+    )
+
+    expect(favorites.map((model) => model.id)).toEqual([
+      "claude-haiku-4-5-20251001",
+    ])
+    expect(others.map((model) => model.id)).toEqual([
+      "gpt-5-mini",
+      "gpt-5.4",
+    ])
+  })
+
+  it("preserves manual favorite order when the selected model is a favorite", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       ["gpt-5-mini", "claude-haiku-4-5-20251001"],
+      "claude-haiku-4-5-20251001",
       "",
       isModelHidden
     )
@@ -163,6 +187,7 @@ describe("groupModelsForSelector", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       ["gpt-5-mini"],
+      "gpt-5-mini",
       "gpt-5.4",
       isModelHidden
     )
@@ -171,15 +196,35 @@ describe("groupModelsForSelector", () => {
     expect(others.map((model) => model.id)).toEqual(["gpt-5.4"])
   })
 
+  it("matches compact names", () => {
+    const { favorites, others } = groupModelsForSelector(
+      MODELS,
+      [],
+      "gpt-5.4",
+      "Mini compact",
+      isModelHidden
+    )
+
+    expect(favorites).toEqual([])
+    expect(others.map((model) => model.id)).toEqual(["gpt-5-mini"])
+  })
+
   it("keeps locked models visible", () => {
-    const { others } = groupModelsForSelector(MODELS, [], "", isModelHidden)
-    expect(others.some((model) => model.id === "gpt-5.4")).toBe(true)
+    const { others } = groupModelsForSelector(
+      MODELS,
+      [],
+      "gpt-5.4",
+      "",
+      isModelHidden
+    )
+    expect(others[0]?.id).toBe("gpt-5.4")
   })
 
   it("still honors explicit user-hidden models", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       ["gpt-5-mini"],
+      "gpt-5-mini",
       "",
       (modelId) => modelId === "gpt-5-mini"
     )
@@ -188,11 +233,4 @@ describe("groupModelsForSelector", () => {
     expect(others.some((model) => model.id === "gpt-5-mini")).toBe(false)
   })
 
-  it("orders OpenRouter-backed additions by their logical selector ids", () => {
-    expect(DEFAULT_MODEL_ORDER).toContain("claude-sonnet-4-6")
-    expect(DEFAULT_MODEL_ORDER).not.toContain(
-      "openrouter:anthropic/claude-sonnet-4.6"
-    )
-    expect(DEFAULT_MODEL_ORDER).toContain("openrouter:qwen/qwen3.8-27b")
-  })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   getAllModels,
+  getLogicalModelInfo,
   getVisibleLogicalModelViews,
   getVisibleModels,
 } from "./index"
@@ -18,27 +19,19 @@ describe("model catalog exposure", () => {
     ).toBe(true)
   })
 
-  it("points legacy replacement metadata at visible catalog entries", async () => {
-    const allModels = await getAllModels()
-    const modelStatusById = new Map(
-      allModels.map((model) => [model.id, model.catalogStatus])
-    )
-    const invalidLegacyReplacementTargets = allModels
-      .filter(
-        (model) =>
-          model.catalogStatus === "legacy" &&
-          model.replacementModelId &&
-          modelStatusById.get(model.replacementModelId) !== "visible"
-      )
-      .map((model) => ({
-        id: model.id,
-        replacementModelId: model.replacementModelId,
-        replacementStatus: model.replacementModelId
-          ? (modelStatusById.get(model.replacementModelId) ?? "missing")
-          : "missing",
-      }))
+  it("exposes derived priority without changing selector visibility", () => {
+    const models = getVisibleLogicalModelViews(new Date("2026-08-25T00:00:00Z"))
 
-    expect(invalidLegacyReplacementTargets).toEqual([])
+    expect(models.find((model) => model.id === "gpt-5.6-sol")).toMatchObject({
+      classification: "current",
+    })
+    expect(models.find((model) => model.id === "gpt-5.5")).toMatchObject({
+      classification: "legacy",
+      classificationReason: "not_recommended",
+      classificationSource: "editorial",
+      classificationEffectiveAt: "2026-08-25",
+    })
+    expect(models.some((model) => model.id === "grok-code-fast-1")).toBe(false)
   })
 
   it("flags platform access only on the free-listed logical models", () => {
@@ -52,6 +45,19 @@ describe("model catalog exposure", () => {
     )
     expect(models.some((model) => model.id === "pixtral-large-2411")).toBe(
       false
+    )
+  })
+
+  it("exposes optional web search for Opus 5 through its OpenRouter route", () => {
+    expect(
+      getLogicalModelInfo("openrouter:anthropic/claude-opus-5")?.searchMode
+    ).toBe("optional")
+  })
+
+  it("distinguishes inherent and unsupported web search", () => {
+    expect(getLogicalModelInfo("sonar")?.searchMode).toBe("always-on")
+    expect(getLogicalModelInfo("gemma-3-27b-it")?.searchMode).toBe(
+      "unsupported"
     )
   })
 })

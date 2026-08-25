@@ -41,7 +41,7 @@ export function ProjectSearch({ value, onValueChange }: ProjectSearchProps) {
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
         className={cn(
-          "text-foreground border-input-border focus:border-border-strong keyboard-focused:outline-foreground keyboard-focused:outline-[1.5px] keyboard-focused:outline-offset-[2.5px] keyboard-focused:[outline-style:solid] h-9 w-full rounded-full border bg-[var(--projects-control-surface)] py-2 ps-9 pe-3 text-sm/5 outline-none placeholder:text-[var(--text-tertiary)] motion-reduce:transition-none",
+          "text-foreground border-input-border focus:border-border-strong keyboard-focused:outline-foreground keyboard-focused:outline-[1.5px] keyboard-focused:outline-offset-[2.5px] keyboard-focused:[outline-style:solid] h-9 w-full rounded-full border bg-[var(--projects-control-surface)] py-2 ps-9 pe-3 text-sm/5 outline-none placeholder:text-placeholder motion-reduce:transition-none",
           value && "pe-8"
         )}
       />
