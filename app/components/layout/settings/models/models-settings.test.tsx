@@ -9,7 +9,8 @@ const settingsMocks = vi.hoisted(() => ({
   models: [
     {
       id: "claude-sonnet-5",
-      name: "Sonnet 5",
+      name: "Claude Sonnet 5",
+      shortName: "Sonnet 5",
       provider: "Anthropic",
       providerId: "anthropic" as const,
       catalogStatus: "visible" as const,
@@ -27,7 +28,8 @@ const settingsMocks = vi.hoisted(() => ({
     },
     {
       id: "claude-fable-5",
-      name: "Fable 5",
+      name: "Claude Fable 5",
+      shortName: "Story compact",
       provider: "Anthropic",
       providerId: "anthropic" as const,
       catalogStatus: "visible" as const,
@@ -104,7 +106,7 @@ describe("ModelsSettings", () => {
     settingsMocks.isModelHidden.mockClear()
   })
 
-  it("uses model presentation icons while vendor headings keep group identity", () => {
+  function renderSettings() {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -113,16 +115,43 @@ describe("ModelsSettings", () => {
       root?.render(<ModelsSettings />)
     })
 
-    const favoriteItem = container.querySelector('[data-testid="reorder-item"]')
-    const anthropicHeading = Array.from(container.querySelectorAll("h4")).find(
+    return container
+  }
+
+  it("uses model presentation icons while vendor headings keep group identity", () => {
+    const rendered = renderSettings()
+
+    const favoriteItem = rendered.querySelector('[data-testid="reorder-item"]')
+    const anthropicHeading = Array.from(rendered.querySelectorAll("h4")).find(
       (heading) => heading.textContent === "Anthropic"
     )
 
-    expect(favoriteItem?.textContent).toContain("Sonnet 5")
+    expect(favoriteItem?.textContent).toContain("Claude Sonnet 5")
     expect(favoriteItem?.querySelector("svg.text-claude-logo")).not.toBeNull()
     expect(anthropicHeading).toBeTruthy()
     expect(
       anthropicHeading?.parentElement?.querySelector("svg.text-claude-logo")
     ).toBeNull()
+  })
+
+  it("searches compact names while rendering the full settings label", () => {
+    const rendered = renderSettings()
+    const searchInput = rendered.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
+
+    act(() => {
+      if (!searchInput) throw new Error("Missing model search input")
+      const setInputValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set
+      if (!setInputValue) throw new Error("Missing native input value setter")
+      setInputValue.call(searchInput, "Story compact")
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    expect(rendered.textContent).toContain("Claude Fable 5")
+    expect(rendered.textContent).not.toContain("Story compact")
   })
 })

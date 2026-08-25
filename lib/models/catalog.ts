@@ -43,6 +43,7 @@ export type ModelRoute = {
 export type LogicalModel = {
   id: string
   name: string
+  shortName?: string
   /** Open-set vendor id for icon/name presentation (the model's MAKER). */
   vendorId: string
   description?: string
@@ -104,6 +105,9 @@ export function compileLogicalCatalog(
     models.set(config.id, {
       id: config.id,
       name: config.name,
+      ...(config.shortName === undefined
+        ? {}
+        : { shortName: config.shortName }),
       vendorId: getModelPresentationVendorId(config),
       ...(config.description === undefined
         ? {}
@@ -244,6 +248,7 @@ export function toLogicalModelView(model: LogicalModel): LogicalModelView {
   const canonical = model.routes[0]!.config
   return {
     ...canonical,
+    ...(model.shortName === undefined ? {} : { shortName: model.shortName }),
     vision: model.routes.some((route) => route.config.vision === true),
     audio: model.routes.some((route) => route.config.audio === true),
     reasoningText: model.routes.some(

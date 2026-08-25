@@ -32,7 +32,9 @@ choice in one server-owned resolver.
   upstreamModelId, config}`; capabilities, pricing, and construction settings
   stay per-route on `config` and are never flattened upward.
 - **Logical model** — the user-facing identity (`LogicalModel`): `{id, name,
-  vendorId, description, tags, catalogStatus, routes}`. Its id **equals its
+  shortName?, vendorId, description, tags, catalogStatus, routes}`. `name` is
+  the authoritative full label; `shortName` is an optional compact label
+  carried only from the canonical route. Its id **equals its
   canonical route id** (the direct route when one exists, else the sole
   wrapped route id). This keeps every persisted model id — chats, messages,
   runs, favorites, last-used — already a valid logical id or resolvable to
@@ -144,6 +146,6 @@ its attestation rather than duplicating credential resolution.
 models today), availability is "any eligible route", favorites rank instead
 of filter, and route/credential choice is recorded per run for future cost
 attribution and settlement. The OpenRouter snapshot/refresh/succession
-workflow is unchanged; the allowlist gains one editorial field. The
-`ModelConfig` shape stays the single route-record shape (no parallel
-catalog).
+workflow is unchanged; the allowlist remains the editorial surface for
+explicit route mappings and optional compact names. The `ModelConfig` shape
+stays the single route-record shape (no parallel catalog).

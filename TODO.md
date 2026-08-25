@@ -1,7 +1,6 @@
 # To Do
 
 - **Model presentation: Improve how models display across the UI**
-  - Create model name & shortname registry. GPT-5.6 Sol -> 5.6 Sol. We have the ChatGPT logo in the chat composer anyway.
   - Make model names more specific on model selector popovers
   - Make model logos appear during thinking states to make assistant output ownership clear
 

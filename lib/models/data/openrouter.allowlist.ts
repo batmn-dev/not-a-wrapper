@@ -27,7 +27,10 @@ import type { ModelConfig } from "../types"
 export type OpenRouterAllowlistEntry = {
   /** Bare OpenRouter slug (the generated id is `openrouter:` + slug). */
   slug: string
+  /** Authoritative full user-facing model name. */
   name: string
+  /** Optional compact label for constrained presentation surfaces. */
+  shortName?: string
   description: string
   tags: string[]
   modelFamily: string
@@ -87,10 +90,10 @@ function referenceCatalogModel({
 const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.8-27b",
-    name: "Qwen 3.8 27B",
+    name: "Qwen3.8-27B",
     maker: "Qwen",
     tags: ["reasoning", "vision", "coding", "OSS"],
-    modelFamily: "Qwen 3.8",
+    modelFamily: "Qwen3.8",
     baseProviderId: "qwen",
     icon: "qwen",
     speed: "Fast",
@@ -111,10 +114,10 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-5.3",
-    name: "GLM 5.3",
+    name: "GLM-5.3",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "agents", "OSS"],
-    modelFamily: "GLM 5",
+    modelFamily: "GLM-5",
     baseProviderId: "z-ai",
     icon: "z-ai",
     speed: "Medium",
@@ -123,10 +126,10 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "qwen/qwen3-32b",
-    name: "Qwen 3 32B",
+    name: "Qwen3-32B",
     maker: "Qwen",
     tags: ["reasoning", "tools", "OSS"],
-    modelFamily: "Qwen 3",
+    modelFamily: "Qwen3",
     baseProviderId: "qwen",
     icon: "qwen",
     speed: "Fast",
@@ -135,10 +138,11 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "qwen/qwen3-235b-a22b-2507",
-    name: "Qwen 3 235B",
+    name: "Qwen3-235B-A22B-Instruct-2507",
+    shortName: "Qwen3 235B",
     maker: "Qwen",
     tags: ["tools", "OSS"],
-    modelFamily: "Qwen 3",
+    modelFamily: "Qwen3",
     baseProviderId: "qwen",
     icon: "qwen",
     speed: "Medium",
@@ -147,10 +151,10 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "qwen/qwen3.6-27b",
-    name: "Qwen 3.6 27B",
+    name: "Qwen3.6-27B",
     maker: "Qwen",
     tags: ["reasoning", "vision", "coding", "OSS"],
-    modelFamily: "Qwen 3.6",
+    modelFamily: "Qwen3.6",
     baseProviderId: "qwen",
     icon: "qwen",
     speed: "Fast",
@@ -159,10 +163,10 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "qwen/qwen3.6-35b-a3b",
-    name: "Qwen 3.6 35B A3B",
+    name: "Qwen3.6-35B-A3B",
     maker: "Qwen",
     tags: ["reasoning", "vision", "tools", "OSS"],
-    modelFamily: "Qwen 3.6",
+    modelFamily: "Qwen3.6",
     baseProviderId: "qwen",
     icon: "qwen",
     speed: "Fast",
@@ -198,6 +202,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "anthropic/claude-opus-4.1",
     name: "Claude Opus 4.1",
+    shortName: "Opus 4.1",
     maker: "Anthropic",
     tags: ["reasoning", "vision", "agents"],
     modelFamily: "Claude 4.1",
@@ -210,6 +215,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "anthropic/claude-opus-4.5",
     name: "Claude Opus 4.5",
+    shortName: "Opus 4.5",
     maker: "Anthropic",
     tags: ["reasoning", "vision", "agents"],
     modelFamily: "Claude 4.5",
@@ -235,6 +241,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "anthropic/claude-opus-4.7",
     name: "Claude Opus 4.7",
+    shortName: "Opus 4.7",
     maker: "Anthropic",
     tags: ["reasoning", "vision", "agents"],
     modelFamily: "Claude 4.7",
@@ -247,6 +254,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "anthropic/claude-opus-5",
     name: "Claude Opus 5",
+    shortName: "Opus 5",
     maker: "Anthropic",
     tags: ["flagship", "reasoning", "vision", "agents"],
     modelFamily: "Claude 5",
@@ -381,7 +389,8 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "google/gemini-3-flash-preview",
-    name: "Gemini 3 Flash",
+    name: "Gemini 3 Flash Preview",
+    shortName: "Gemini 3 Flash",
     maker: "Google",
     tags: ["reasoning", "vision", "fast", "preview"],
     modelFamily: "Gemini 3",
@@ -489,7 +498,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "xiaomi/mimo-v2.5-pro",
-    name: "MiMo V2.5 Pro",
+    name: "MiMo-V2.5-Pro",
     maker: "Xiaomi",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "MiMo",
@@ -549,7 +558,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "openai/gpt-oss-20b",
-    name: "GPT-OSS 20B",
+    name: "gpt-oss-20b",
     maker: "OpenAI",
     tags: ["reasoning", "tools", "OSS"],
     modelFamily: "GPT-OSS",
@@ -561,7 +570,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "openai/gpt-oss-120b",
-    name: "GPT-OSS 120B",
+    name: "gpt-oss-120b",
     maker: "OpenAI",
     tags: ["reasoning", "tools", "OSS"],
     modelFamily: "GPT-OSS",
@@ -759,7 +768,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-4.5",
-    name: "GLM 4.5",
+    name: "GLM-4.5",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "tools", "OSS"],
     modelFamily: "GLM 4",
@@ -771,7 +780,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-4.5v",
-    name: "GLM 4.5V",
+    name: "GLM-4.5V",
     maker: "Z.ai",
     tags: ["reasoning", "vision", "coding", "OSS"],
     modelFamily: "GLM 4",
@@ -783,7 +792,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-4.5-air",
-    name: "GLM 4.5 Air",
+    name: "GLM-4.5-Air",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "fast", "OSS"],
     modelFamily: "GLM 4",
@@ -795,7 +804,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-4.6",
-    name: "GLM 4.6",
+    name: "GLM-4.6",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "tools", "OSS"],
     modelFamily: "GLM 4",
@@ -807,7 +816,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-4.6v",
-    name: "GLM 4.6V",
+    name: "GLM-4.6V",
     maker: "Z.ai",
     tags: ["reasoning", "vision", "coding", "OSS"],
     modelFamily: "GLM 4",
@@ -819,7 +828,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-4.7",
-    name: "GLM 4.7",
+    name: "GLM-4.7",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "tools", "OSS"],
     modelFamily: "GLM 4",
@@ -831,7 +840,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-5.1",
-    name: "GLM 5.1",
+    name: "GLM-5.1",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "GLM 5",
@@ -843,7 +852,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   }),
   referenceCatalogModel({
     slug: "z-ai/glm-5v-turbo",
-    name: "GLM 5V Turbo",
+    name: "GLM-5V-Turbo",
     maker: "Z.ai",
     tags: ["reasoning", "vision", "tools", "OSS"],
     modelFamily: "GLM 5",
@@ -897,7 +906,8 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   // Free-model product policy remains separate in lib/config.ts.
   {
     slug: "google/gemma-4-26b-a4b-it:free",
-    name: "Gemma 4 26B",
+    name: "Gemma 4 26B A4B (Free)",
+    shortName: "Gemma 4 26B",
     description:
       "Google's open-weight Gemma 4 26B (A4B MoE) instruction-tuned model with vision, served on OpenRouter's free tier.",
     tags: ["OSS", "vision", "reasoning", "free"],
@@ -1078,9 +1088,10 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "deepseek/deepseek-v4-pro",
-    name: "DeepSeek V4 Pro",
+    name: "DeepSeek V4 Pro 0423",
+    shortName: "DeepSeek V4 Pro",
     description:
-      "DeepSeek's V4 Pro via OpenRouter — open-weight frontier reasoning at aggressive pricing.",
+      "DeepSeek's V4 Pro 0423 via OpenRouter — open-weight frontier reasoning at aggressive pricing.",
     tags: ["reasoning", "OSS", "cheap"],
     modelFamily: "DeepSeek V4",
     baseProviderId: "deepseek",
@@ -1091,9 +1102,10 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "deepseek/deepseek-v4-flash",
-    name: "DeepSeek V4 Flash",
+    name: "DeepSeek V4 Flash 0423",
+    shortName: "DeepSeek V4 Flash",
     description:
-      "DeepSeek's fast V4 tier via OpenRouter — very low cost with reasoning support.",
+      "DeepSeek's fast V4 Flash 0423 tier via OpenRouter — very low cost with reasoning support.",
     tags: ["fast", "cheap", "reasoning", "OSS"],
     modelFamily: "DeepSeek V4",
     baseProviderId: "deepseek",
@@ -1104,9 +1116,9 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "z-ai/glm-5.2",
-    name: "GLM 5.2",
+    name: "GLM-5.2",
     description:
-      "Z.ai's GLM 5.2 via OpenRouter — open-weight 1M-context reasoning and coding model.",
+      "Z.ai's GLM-5.2 via OpenRouter — open-weight 1M-context reasoning and coding model.",
     tags: ["reasoning", "coding", "OSS"],
     modelFamily: "GLM",
     baseProviderId: "z-ai",
@@ -1117,9 +1129,9 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "z-ai/glm-5",
-    name: "GLM 5",
+    name: "GLM-5",
     description:
-      "Z.ai's GLM 5 via OpenRouter — the previous open-weight flagship generation.",
+      "Z.ai's GLM-5 via OpenRouter — the previous open-weight flagship generation.",
     tags: ["reasoning", "OSS"],
     modelFamily: "GLM",
     baseProviderId: "z-ai",
@@ -1182,7 +1194,8 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "qwen/qwen3-coder",
-    name: "Qwen3 Coder",
+    name: "Qwen3-Coder-480B-A35B-Instruct",
+    shortName: "Qwen3 Coder",
     description:
       "Qwen's open-weight 480B-A35B coding MoE via OpenRouter — the paid endpoint, without the free pool's rate caps.",
     tags: ["coding", "tools", "OSS"],
@@ -1209,9 +1222,9 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   },
   {
     slug: "xiaomi/mimo-v2.5",
-    name: "MiMo V2.5",
+    name: "MiMo-V2.5",
     description:
-      "Xiaomi's MiMo V2.5 via OpenRouter — open-weight multimodal reasoner at very low cost.",
+      "Xiaomi's MiMo-V2.5 via OpenRouter — open-weight multimodal reasoner at very low cost.",
     tags: ["cheap", "reasoning", "vision", "OSS"],
     modelFamily: "MiMo",
     baseProviderId: "xiaomi",

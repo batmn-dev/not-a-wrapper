@@ -64,7 +64,11 @@ describe("generate-openrouter-catalog invariants", () => {
       ],
     }
     const allowlist = [
-      allowlistEntry({ slug: "vendor/reasoner" }),
+      allowlistEntry({
+        slug: "vendor/reasoner",
+        name: "Vendor Reasoner",
+        shortName: "Reasoner",
+      }),
       allowlistEntry({ slug: "vendor/plain" }),
     ]
 
@@ -76,6 +80,8 @@ describe("generate-openrouter-catalog invariants", () => {
       id: "openrouter:vendor/reasoner",
       providerId: "openrouter",
       idKind: "wrapped",
+      name: "Vendor Reasoner",
+      shortName: "Reasoner",
       verifiedAgainst: "vendor/reasoner",
       lastVerifiedAt: "2026-07-05",
       reasoningText: true,

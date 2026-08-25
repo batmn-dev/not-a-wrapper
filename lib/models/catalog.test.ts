@@ -108,6 +108,34 @@ describe("compileLogicalCatalog", () => {
 
     expect(toLogicalModelView(model!).tools).toBe(true)
   })
+
+  it("carries presentation from the canonical route into logical views", () => {
+    const [model] = compileLogicalCatalog([
+      makeConfig({
+        id: "direct-a",
+        name: "Full Direct A",
+        shortName: "Direct A",
+        providerId: "anthropic",
+      }),
+      makeConfig({
+        id: "openrouter:vendor/a",
+        name: "Wrapped Route A",
+        shortName: "Wrapped A",
+        providerId: "openrouter",
+        idKind: "wrapped",
+        logicalModelId: "direct-a",
+      }),
+    ])
+
+    expect(model).toMatchObject({
+      name: "Full Direct A",
+      shortName: "Direct A",
+    })
+    expect(toLogicalModelView(model!)).toMatchObject({
+      name: "Full Direct A",
+      shortName: "Direct A",
+    })
+  })
 })
 
 describe("production logical catalog", () => {
@@ -193,6 +221,21 @@ describe("production logical catalog", () => {
     // The two routes legitimately disagree (e.g. native search support);
     // neither fact is flattened onto the logical model.
     expect(direct.webSearch).not.toBe(wrapped.webSearch)
+  })
+
+  it.each([
+    ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
+    ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],
+    [
+      "openrouter:qwen/qwen3-coder",
+      "Qwen3-Coder-480B-A35B-Instruct",
+      "Qwen3 Coder",
+    ],
+  ])("exposes full and compact names for %s", (modelId, name, shortName) => {
+    const model = getLogicalModel(modelId)
+
+    expect(model).toMatchObject({ name, shortName })
+    expect(toLogicalModelView(model!)).toMatchObject({ name, shortName })
   })
 })
 

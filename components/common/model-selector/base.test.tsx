@@ -66,6 +66,7 @@ const modelSelectorMocks = {
     {
       id: "gpt-5-mini",
       name: "GPT-5 Mini",
+      shortName: "5 Mini",
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
@@ -76,7 +77,7 @@ const modelSelectorMocks = {
     },
     {
       id: "openrouter:z-ai/glm-5.2",
-      name: "GLM 5.2",
+      name: "GLM-5.2",
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
@@ -104,7 +105,8 @@ const modelSelectorMocks = {
     },
     {
       id: "claude-sonnet-5",
-      name: "Sonnet 5",
+      name: "Claude Sonnet 5",
+      shortName: "Sonnet 5",
       provider: "Anthropic",
       providerId: "anthropic",
       catalogStatus: "visible",
@@ -481,7 +483,7 @@ describe("ModelSelector", () => {
     const onSelect = renderSelector({ isUserAuthenticated: true })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
-    expect(document.body.textContent).toContain("GLM 5.2")
+    expect(document.body.textContent).toContain("GLM-5.2")
     expect(
       document.body.querySelector('[data-testid="drawer-trigger"]')
     ).toBeTruthy()
@@ -574,7 +576,7 @@ describe("ModelSelector", () => {
     expect(
       mobileOption.querySelector('[data-slot="selected-model-check"]')
     ).not.toBeNull()
-    const secondMobileOption = getModelOption("GLM 5.2")
+    const secondMobileOption = getModelOption("GLM-5.2")
     expect(
       secondMobileOption.querySelector('[data-slot="selected-model-check"]')
     ).toBeNull()
@@ -593,6 +595,13 @@ describe("ModelSelector", () => {
           ?.textContent?.trim()
       )
     ).toEqual(["Favorites", "All models"])
+    const allModelsSection = sections.find(
+      (section) => section.getAttribute("aria-label") === "All models"
+    )
+    expect(
+      allModelsSection?.querySelector('[data-testid="model-option"]')
+        ?.textContent
+    ).toContain("GPT-5 Mini")
     for (const section of sections) {
       const label = section.querySelector('[data-slot="model-section-label"]')
       const container = section.querySelector<HTMLElement>(
@@ -665,10 +674,29 @@ describe("ModelSelector", () => {
     const trigger = document.body.querySelector<HTMLButtonElement>(
       '[data-testid="model-trigger"]'
     )
-    const sonnetOption = getModelOption("Sonnet 5")
+    const sonnetOption = getModelOption("Claude Sonnet 5")
 
-    expect(trigger?.textContent).toBe("Sonnet 5")
-    expect(sonnetOption.textContent).toBe("Sonnet 5")
+    expect(trigger?.textContent).toBe("Claude Sonnet 5")
+    expect(sonnetOption.textContent).toBe("Claude Sonnet 5")
+  })
+
+  it("uses compact composer text while rows and accessibility stay full", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "gpt-5-mini",
+      variant: "composer",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+    const option = getModelOption("GPT-5 Mini")
+
+    expect(trigger?.textContent).toBe("5 Mini")
+    expect(trigger?.getAttribute("aria-label")).toBe(
+      "Select model, current model GPT-5 Mini"
+    )
+    expect(option.textContent).toBe("GPT-5 Mini")
   })
 
   it("shows the selected model icon instead of a chevron in the composer", () => {
@@ -737,8 +765,11 @@ describe("ModelSelector", () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it("ranks favorites first without hiding the rest of the catalog", () => {
-    renderSelector({ isUserAuthenticated: true })
+  it("promotes a selected non-favorite within All models", () => {
+    renderSelector({
+      isUserAuthenticated: true,
+      selectedModelId: "openrouter:z-ai/glm-5.2",
+    })
 
     const optionText = Array.from(
       document.body.querySelectorAll<HTMLButtonElement>(
@@ -746,10 +777,12 @@ describe("ModelSelector", () => {
       )
     ).map((button) => button.textContent ?? "")
 
-    // Favorite (gpt-5.4) leads; every non-hidden model stays reachable.
+    // Favorites remain first; the selection leads within All models.
     expect(optionText[0]).toContain("GPT-5.4")
+    expect(optionText[1]).toContain("GLM-5.2")
+    expect(optionText.filter((text) => text.includes("GLM-5.2"))).toHaveLength(1)
     expect(optionText.join(" ")).toContain("GPT-5 Mini")
-    expect(optionText.join(" ")).toContain("GLM 5.2")
+    expect(optionText.join(" ")).toContain("GLM-5.2")
     // Explicit user-hidden models stay hidden.
     expect(optionText.join(" ")).not.toContain("Claude Opus 4.6")
     // Sections label the ranking.

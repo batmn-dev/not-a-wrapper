@@ -21,7 +21,10 @@ export type ModelReasoningSettings =
 
 type ModelConfig = {
   id: string
+  /** Authoritative full user-facing model name. */
   name: string
+  /** Optional compact label for constrained presentation surfaces. */
+  shortName?: string
   provider: string
   providerId: Provider
   modelFamily?: string

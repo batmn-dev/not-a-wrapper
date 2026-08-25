@@ -2,6 +2,7 @@ import { getDefaultModelForUser, NON_AUTH_ALLOWED_MODELS } from "@/lib/config"
 import { getModelInfo } from "@/lib/models"
 import { resolveModelSelection } from "@/lib/models/catalog"
 import { openrouterModels } from "@/lib/models/data/openrouter"
+import { getModelDisplayName } from "@/lib/models/presentation"
 import type { ModelConfig } from "@/lib/models/types"
 
 /**
@@ -74,7 +75,7 @@ export function isModelSelectableForAuthState(
 export type SelectorModelGroups<M extends ModelConfig = ModelConfig> = {
   /** The user's favorites, in the user's order. Ranking, not a filter. */
   favorites: M[]
-  /** Every other visible model, in the curated default order. */
+  /** Every other visible model, selected first, then curated default order. */
   others: M[]
 }
 
@@ -91,21 +92,27 @@ function byDefaultOrder(a: ModelConfig, b: ModelConfig): number {
 }
 
 /**
- * Group the visible catalog for the selector. Favorites RANK models — they
- * never hide the rest of the catalog — and search always covers the whole
- * logical catalog. Only explicit user-hidden models are excluded.
+ * Group the visible catalog for the selector. Favorites RANK models in the
+ * user's order, while a selected non-favorite leads the All models group.
+ * Search always covers the whole logical catalog. Only explicit user-hidden
+ * models are excluded.
  */
 export function groupModelsForSelector<M extends ModelConfig>(
   models: M[],
   favoriteModels: string[],
+  selectedModelId: string | null,
   searchQuery: string,
   isModelHidden: (modelId: string) => boolean
 ): SelectorModelGroups<M> {
+  const normalizedSearchQuery = searchQuery.toLowerCase()
   const selectorModels = models.filter(
     (model) =>
       isModelVisibleInSelector(model) &&
       !isModelHidden(model.id) &&
-      model.name.toLowerCase().includes(searchQuery.toLowerCase())
+      [
+        getModelDisplayName(model),
+        getModelDisplayName(model, "compact"),
+      ].some((name) => name.toLowerCase().includes(normalizedSearchQuery))
   )
 
   const favoriteRank = new Map(
@@ -118,7 +125,11 @@ export function groupModelsForSelector<M extends ModelConfig>(
     )
   const others = selectorModels
     .filter((model) => !favoriteRank.has(model.id))
-    .sort(byDefaultOrder)
+    .sort((a, b) => {
+      if (a.id === selectedModelId) return -1
+      if (b.id === selectedModelId) return 1
+      return byDefaultOrder(a, b)
+    })
 
   return { favorites, others }
 }

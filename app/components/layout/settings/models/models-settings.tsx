@@ -3,6 +3,7 @@
 import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
 import type { LogicalModelView } from "@/lib/models/catalog"
+import { getModelDisplayName } from "@/lib/models/presentation"
 import {
   compareModelsForProviderSection,
   compareProviderSections,
@@ -54,13 +55,17 @@ export function ModelsSettings() {
       return {}
     }
 
+    const normalizedSearchQuery = searchQuery.toLowerCase()
     const availableModels = models
       .filter(
         (model) =>
           !currentFavoriteModels.includes(model.id) && !isModelHidden(model.id)
       )
       .filter((model) =>
-        model.name.toLowerCase().includes(searchQuery.toLowerCase())
+        [
+          getModelDisplayName(model),
+          getModelDisplayName(model, "compact"),
+        ].some((name) => name.toLowerCase().includes(normalizedSearchQuery))
       )
 
     // Group by the model maker's vendor identity (ADR-0020); execution routes

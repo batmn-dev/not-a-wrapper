@@ -6,6 +6,8 @@ export type ModelPresentationSource = Pick<
   "baseProviderId" | "icon"
 >
 
+type ModelDisplayNameSource = Pick<ModelConfig, "name" | "shortName">
+
 type RouteProviderLabel = {
   providerId: Provider
   name: string
@@ -16,6 +18,14 @@ export function getModelPresentationVendorId(
   model: ModelPresentationSource
 ): string {
   return model.icon ?? model.baseProviderId
+}
+
+/** Select an explicit catalog-authored model name for the current surface. */
+export function getModelDisplayName(
+  model: ModelDisplayNameSource,
+  variant: "full" | "compact" = "full"
+): string {
+  return variant === "compact" ? (model.shortName ?? model.name) : model.name
 }
 
 /**

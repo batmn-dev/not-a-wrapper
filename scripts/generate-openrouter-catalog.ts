@@ -213,6 +213,7 @@ export function buildModelConfig(
   return {
     id: `openrouter:${entry.slug}`,
     name: entry.name,
+    ...(entry.shortName === undefined ? {} : { shortName: entry.shortName }),
     // Provider identity owns the display name; the generator never restates it.
     provider: MODEL_PROVIDER_IDENTITY.openrouter.name,
     providerId: MODEL_PROVIDER_IDENTITY.openrouter.id,

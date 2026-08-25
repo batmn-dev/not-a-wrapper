@@ -448,7 +448,7 @@ describe("resolveModelRoute", () => {
   })
 
   it("filters candidates by required capabilities before preference order", async () => {
-    // GLM 5.2 via OpenRouter has no vision; a key alone must not select it.
+    // GLM-5.2 via OpenRouter has no vision; a key alone must not select it.
     const result = await resolveModelRoute(
       {
         modelId: "openrouter:z-ai/glm-5.2",

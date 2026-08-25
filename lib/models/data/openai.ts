@@ -4,6 +4,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.6-sol",
     name: "GPT-5.6 Sol",
+    shortName: "5.6 Sol",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -37,6 +38,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.6-terra",
     name: "GPT-5.6 Terra",
+    shortName: "5.6 Terra",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -70,6 +72,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.6-luna",
     name: "GPT-5.6 Luna",
+    shortName: "5.6 Luna",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -264,13 +267,13 @@ const openaiModels: ModelConfig[] = [
   },
   {
     id: "gpt-5.1",
-    name: "GPT-5.1 Instant",
+    name: "GPT-5.1",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
     idKind: "stable",
     verifiedAgainst: "gpt-5.1-2025-11-13",
-    lastVerifiedAt: "2026-03-08",
+    lastVerifiedAt: "2026-08-25",
     modelFamily: "GPT-5",
     baseProviderId: "openai",
     description:

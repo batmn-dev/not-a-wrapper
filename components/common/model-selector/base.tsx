@@ -32,6 +32,7 @@ import {
 } from "@/lib/model-store/utils"
 import { getModelInfo } from "@/lib/models"
 import { resolveModelSelection } from "@/lib/models/catalog"
+import { getModelDisplayName } from "@/lib/models/presentation"
 import { ModelConfig } from "@/lib/models/types"
 import { getModelIcon } from "@/lib/provider-icons"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
@@ -96,7 +97,7 @@ function ModelOptionContent({
           data-slot="model-name"
           className={cn("truncate", isMobile ? "text-base" : "text-sm")}
         >
-          {model.name}
+          {getModelDisplayName(model)}
         </span>
       </div>
       {isLocked || isSelected ? (
@@ -362,11 +363,15 @@ export function ModelSelector({
   const { favorites, others } = groupModelsForSelector(
     models,
     isUserAuthenticated ? favoriteModels || [] : [],
+    normalizedSelectedModelId,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
 
   const TriggerControl = isComposerVariant ? ComposerControl : Button
+  const currentModelFullName = currentModel
+    ? getModelDisplayName(currentModel)
+    : "unknown"
   const trigger = (
     <TriggerControl
       {...(!isComposerVariant && { variant: "ghost" as const })}
@@ -378,7 +383,7 @@ export function ModelSelector({
         className
       )}
       disabled={disabled || isLoadingModels}
-      aria-label={`Select model, current model ${currentModel?.name || "unknown"}`}
+      aria-label={`Select model, current model ${currentModelFullName}`}
     >
       {isComposerVariant && currentModel ? (
         <Icon
@@ -390,7 +395,12 @@ export function ModelSelector({
         />
       ) : null}
       <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>
-        {currentModel?.name || "Select model"}
+        {currentModel
+          ? getModelDisplayName(
+              currentModel,
+              isComposerVariant ? "compact" : "full"
+            )
+          : "Select model"}
       </span>
       {!isComposerVariant ? (
         <Icon
