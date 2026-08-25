@@ -18,7 +18,7 @@ import { api } from "@/convex/_generated/api"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { APP_NAME } from "@/lib/config"
 import { getLogicalModel, resolveModelSelection } from "@/lib/models/catalog"
-import { MODEL_PROVIDER_IDENTITY } from "@/lib/provider-identity"
+import { getRouteProviderLabels } from "@/lib/models/presentation"
 import { useUser } from "@/lib/user-store/provider"
 import { useMutation as useTanstackMutation } from "@tanstack/react-query"
 import { useMutation as useConvexMutation } from "convex/react"
@@ -50,13 +50,7 @@ export function ProModelDialog({
     ? getLogicalModel(resolveModelSelection(currentModel).modelId)
     : undefined
   const keyProviderNames = logicalModel
-    ? [
-        ...new Set(
-          logicalModel.routes.map(
-            (route) => MODEL_PROVIDER_IDENTITY[route.providerId].name
-          )
-        ),
-      ]
+    ? getRouteProviderLabels(logicalModel.routes).map((label) => label.name)
     : []
 
   const renderContent = () => (

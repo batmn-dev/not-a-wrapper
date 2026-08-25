@@ -132,6 +132,7 @@ describe("production logical catalog", () => {
 
   it("merges the direct/OpenRouter duplicates into two-route models", () => {
     const sonnet = getLogicalModel("claude-sonnet-5")
+    expect(sonnet?.vendorId).toBe("claude")
     expect(sonnet?.routes.map((route) => route.id)).toEqual([
       "claude-sonnet-5",
       "openrouter:anthropic/claude-sonnet-5",

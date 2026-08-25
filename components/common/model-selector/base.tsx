@@ -33,7 +33,7 @@ import {
 import { getModelInfo } from "@/lib/models"
 import { resolveModelSelection } from "@/lib/models/catalog"
 import { ModelConfig } from "@/lib/models/types"
-import { getVendorIcon } from "@/lib/provider-icons"
+import { getModelIcon } from "@/lib/provider-icons"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import {
@@ -86,7 +86,7 @@ function ModelOptionContent({
         )}
       >
         <Icon
-          icon={getVendorIcon(model.icon)}
+          icon={getModelIcon(model)}
           slotSize={isMobile ? 24 : 20}
           glyphSize={isMobile ? 24 : undefined}
           data-slot="model-option-icon"
@@ -382,7 +382,7 @@ export function ModelSelector({
     >
       {isComposerVariant && currentModel ? (
         <Icon
-          icon={getVendorIcon(currentModel.icon)}
+          icon={getModelIcon(currentModel)}
           slotSize={16}
           glyphSize={16}
           data-slot="selected-model-icon"

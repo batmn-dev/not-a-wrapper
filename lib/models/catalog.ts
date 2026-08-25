@@ -2,6 +2,7 @@ import type { Provider } from "@/lib/provider-identity"
 import { directModels } from "./data/direct"
 import { openrouterModels } from "./data/openrouter"
 import { resolveModelId } from "./model-id-migration"
+import { getModelPresentationVendorId } from "./presentation"
 import type { ModelCatalogStatus, ModelConfig } from "./types"
 
 /**
@@ -103,7 +104,7 @@ export function compileLogicalCatalog(
     models.set(config.id, {
       id: config.id,
       name: config.name,
-      vendorId: config.icon ?? config.baseProviderId,
+      vendorId: getModelPresentationVendorId(config),
       ...(config.description === undefined
         ? {}
         : { description: config.description }),

@@ -7,7 +7,7 @@ import {
   compareModelsForProviderSection,
   compareProviderSections,
 } from "@/lib/models/sort"
-import { getVendorIcon } from "@/lib/provider-icons"
+import { getModelIcon, getVendorIcon } from "@/lib/provider-icons"
 import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import {
@@ -116,11 +116,6 @@ export function ModelsSettings() {
     updateFavoriteModels(newIds)
   }
 
-  // Wrapped models can carry real vendor ids without registered icons;
-  // getVendorIcon falls back to the OpenRouter icon.
-  const getModelVendorIcon = (model: LogicalModelView) =>
-    getVendorIcon(model.baseProviderId)
-
   return (
     <div className="space-y-6">
       <div>
@@ -135,7 +130,7 @@ export function ModelsSettings() {
             className="space-y-2"
           >
             {favoriteModels.map((model) => {
-              const VendorIcon = getModelVendorIcon(model)
+              const ModelIcon = getModelIcon(model)
 
               return (
                 <Reorder.Item key={model.id} value={model} className="group">
@@ -144,7 +139,7 @@ export function ModelsSettings() {
                       <Icon icon={RiDraggable} slotSize={16} />
                     </div>
 
-                    {VendorIcon && <VendorIcon className="size-5 shrink-0" />}
+                    <ModelIcon className="size-5 shrink-0" />
 
                     <div className="min-w-0 flex-1">
                       <span className="block truncate font-medium">

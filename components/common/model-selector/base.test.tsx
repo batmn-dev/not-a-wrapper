@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import type { ModelConfig } from "@/lib/models/types"
+import type { LogicalModelView } from "@/lib/models/catalog"
 import { JSDOM } from "jsdom"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -58,6 +58,10 @@ const modelSelectorMocks = {
       idKind: "stable",
       baseProviderId: "openai",
       accessible: false,
+      routes: [
+        { id: "gpt-5.4", providerId: "openai" },
+        { id: "openrouter:openai/gpt-5.4", providerId: "openrouter" },
+      ],
     },
     {
       id: "gpt-5-mini",
@@ -68,6 +72,7 @@ const modelSelectorMocks = {
       idKind: "stable",
       baseProviderId: "openai",
       accessible: true,
+      routes: [{ id: "gpt-5-mini", providerId: "openai" }],
     },
     {
       id: "openrouter:z-ai/glm-5.2",
@@ -79,6 +84,12 @@ const modelSelectorMocks = {
       baseProviderId: "z-ai",
       icon: "openrouter",
       accessible: true,
+      routes: [
+        {
+          id: "openrouter:z-ai/glm-5.2",
+          providerId: "openrouter",
+        },
+      ],
     },
     {
       id: "claude-opus-4-6",
@@ -89,8 +100,27 @@ const modelSelectorMocks = {
       idKind: "stable",
       baseProviderId: "claude",
       accessible: false,
+      routes: [{ id: "claude-opus-4-6", providerId: "anthropic" }],
     },
-  ] satisfies ModelConfig[],
+    {
+      id: "claude-sonnet-5",
+      name: "Sonnet 5",
+      provider: "Anthropic",
+      providerId: "anthropic",
+      catalogStatus: "visible",
+      idKind: "stable",
+      baseProviderId: "anthropic",
+      icon: "claude",
+      accessible: true,
+      routes: [
+        { id: "claude-sonnet-5", providerId: "anthropic" },
+        {
+          id: "openrouter:anthropic/claude-sonnet-5",
+          providerId: "openrouter",
+        },
+      ],
+    },
+  ] satisfies LogicalModelView[],
 }
 
 vi.mock("@/hooks/use-breakpoint", () => ({
@@ -528,9 +558,6 @@ describe("ModelSelector", () => {
     const mobileOption = getModelOption("GPT-5 Mini")
     expect(mobileOption.className).toContain("h-14")
     expect(mobileOption.className).toContain("px-4")
-    expect(mobileOption.className).not.toContain(
-      "before:bg-floating-menu-divider/60"
-    )
     const mobileModelIcon = mobileOption.querySelector<HTMLElement>(
       '[data-slot="model-option-icon"]'
     )
@@ -577,6 +604,11 @@ describe("ModelSelector", () => {
       expect(container?.className).toContain("bg-muted/50")
       expect(container?.className).toContain("dark:bg-muted/80")
       expect(container?.className).toContain("rounded-3xl")
+      expect(
+        container
+          ?.querySelector<HTMLElement>('[data-testid="model-option"]')
+          ?.className.includes("before:bg-floating-menu-divider/60")
+      ).toBe(false)
     }
 
     act(() => {
@@ -622,6 +654,21 @@ describe("ModelSelector", () => {
         .find((option) => option.textContent?.includes("GPT-5.4"))
         ?.className.includes("bg-interactive-selected")
     ).toBe(true)
+  })
+
+  it("keeps multi-route Claude provider labels off ordinary selector rows", () => {
+    renderSelector({
+      isUserAuthenticated: true,
+      selectedModelId: "claude-sonnet-5",
+    })
+
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="model-trigger"]'
+    )
+    const sonnetOption = getModelOption("Sonnet 5")
+
+    expect(trigger?.textContent).toBe("Sonnet 5")
+    expect(sonnetOption.textContent).toBe("Sonnet 5")
   })
 
   it("shows the selected model icon instead of a chevron in the composer", () => {
