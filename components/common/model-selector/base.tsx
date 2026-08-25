@@ -363,7 +363,7 @@ export function ModelSelector({
   const { favorites, others } = groupModelsForSelector(
     models,
     isUserAuthenticated ? favoriteModels || [] : [],
-    normalizedSelectedModelId,
+    isComposerVariant ? normalizedSelectedModelId : null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )

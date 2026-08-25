@@ -2,7 +2,6 @@ import { getDefaultModelForUser } from "@/lib/config"
 import type { ModelConfig } from "@/lib/models/types"
 import { describe, expect, it } from "vitest"
 import {
-  DEFAULT_MODEL_ORDER,
   groupModelsForSelector,
   isModelAllowedForAnonymous,
   isModelSelectableForAuthState,
@@ -18,6 +17,7 @@ const MODELS: ModelConfig[] = [
     catalogStatus: "visible",
     idKind: "stable",
     baseProviderId: "openai",
+    releasedAt: "2026-03-05",
     accessible: false,
   },
   {
@@ -29,6 +29,7 @@ const MODELS: ModelConfig[] = [
     catalogStatus: "visible",
     idKind: "stable",
     baseProviderId: "openai",
+    releasedAt: "2025-08-07",
     accessible: true,
   },
   {
@@ -49,7 +50,8 @@ const MODELS: ModelConfig[] = [
     providerId: "anthropic",
     catalogStatus: "visible",
     idKind: "snapshot",
-    baseProviderId: "claude",
+    baseProviderId: "anthropic",
+    releasedAt: "2025-10-01",
     accessible: true,
   },
 ]
@@ -231,11 +233,4 @@ describe("groupModelsForSelector", () => {
     expect(others.some((model) => model.id === "gpt-5-mini")).toBe(false)
   })
 
-  it("orders OpenRouter-backed additions by their logical selector ids", () => {
-    expect(DEFAULT_MODEL_ORDER).toContain("claude-sonnet-4-6")
-    expect(DEFAULT_MODEL_ORDER).not.toContain(
-      "openrouter:anthropic/claude-sonnet-4.6"
-    )
-    expect(DEFAULT_MODEL_ORDER).toContain("openrouter:qwen/qwen3.8-27b")
-  })
 })

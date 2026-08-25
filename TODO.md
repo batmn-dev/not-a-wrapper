@@ -1,9 +1,7 @@
 # To Do
 
 - **Model presentation: Improve how models display across the UI**
-  - Make model names more specific on model selector popovers
   - Make model logos appear during thinking states to make assistant output ownership clear
-
 - **Effort levels:** Show dynamic "thinking" or effort options for various models
 - **Fix Web Search UX:** Fix confusing web search UX on chat composer and expose fine-tuned search controls in UI. Is it on or off? Why does a chip show in the chat composer?
 - **Chat composer text editing:** Add chat composer text / markdown editing (link, bold, italic, headings, etc...)

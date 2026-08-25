@@ -36,8 +36,34 @@ const settingsMocks = vi.hoisted(() => ({
       idKind: "stable" as const,
       baseProviderId: "anthropic",
       icon: "claude",
+      releasedAt: "2026-06-09",
       accessible: true,
       routes: [{ id: "claude-fable-5", providerId: "anthropic" as const }],
+    },
+    {
+      id: "claude-opus-4-8",
+      name: "Claude Opus 4.8",
+      provider: "Anthropic",
+      providerId: "anthropic" as const,
+      catalogStatus: "visible" as const,
+      idKind: "stable" as const,
+      baseProviderId: "anthropic",
+      icon: "claude",
+      releasedAt: "2026-05-27",
+      accessible: true,
+      routes: [{ id: "claude-opus-4-8", providerId: "anthropic" as const }],
+    },
+    {
+      id: "gpt-5.6-sol",
+      name: "GPT-5.6 Sol",
+      provider: "OpenAI",
+      providerId: "openai" as const,
+      catalogStatus: "visible" as const,
+      idKind: "stable" as const,
+      baseProviderId: "openai",
+      icon: "openai",
+      accessible: true,
+      routes: [{ id: "gpt-5.6-sol", providerId: "openai" as const }],
     },
   ],
 }))
@@ -153,5 +179,22 @@ describe("ModelsSettings", () => {
 
     expect(rendered.textContent).toContain("Claude Fable 5")
     expect(rendered.textContent).not.toContain("Story compact")
+  })
+
+  it("renders available models in the shared provider-section order", () => {
+    const rendered = renderSettings()
+    const availableModelNames = Array.from(
+      rendered.querySelectorAll<HTMLButtonElement>(
+        'button[title="Add to favorites"]'
+      )
+    ).map((button) =>
+      button.parentElement?.querySelector("span")?.textContent?.trim()
+    )
+
+    expect(availableModelNames).toEqual([
+      "Claude Fable 5",
+      "Claude Opus 4.8",
+      "GPT-5.6 Sol",
+    ])
   })
 })

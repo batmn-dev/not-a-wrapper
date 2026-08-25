@@ -4,10 +4,7 @@ import { Icon } from "@/components/ui/icon"
 import { useModel } from "@/lib/model-store/provider"
 import type { LogicalModelView } from "@/lib/models/catalog"
 import { getModelDisplayName } from "@/lib/models/presentation"
-import {
-  compareModelsForProviderSection,
-  compareProviderSections,
-} from "@/lib/models/sort"
+import { getOrderedModelSections } from "@/lib/models/sort"
 import { getModelIcon, getVendorIcon } from "@/lib/provider-icons"
 import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
@@ -50,9 +47,9 @@ export function ModelsSettings() {
       .filter(Boolean) as FavoriteModelItem[]
   }, [currentFavoriteModels, models, isModelHidden])
 
-  const availableModelsByProvider = useMemo(() => {
+  const availableModelSections = useMemo(() => {
     if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
-      return {}
+      return []
     }
 
     const normalizedSearchQuery = searchQuery.toLowerCase()
@@ -68,28 +65,7 @@ export function ModelsSettings() {
         ].some((name) => name.toLowerCase().includes(normalizedSearchQuery))
       )
 
-    // Group by the model maker's vendor identity (ADR-0020); execution routes
-    // never create vendor groups.
-    const modelsByProvider = availableModels.reduce(
-      (acc, model) => {
-        const vendorKey = model.baseProviderId || "unknown"
-
-        if (!acc[vendorKey]) {
-          acc[vendorKey] = []
-        }
-
-        acc[vendorKey].push(model)
-
-        return acc
-      },
-      {} as Record<string, typeof models>
-    )
-
-    for (const modelsGroup of Object.values(modelsByProvider)) {
-      modelsGroup.sort(compareModelsForProviderSection)
-    }
-
-    return modelsByProvider
+    return getOrderedModelSections(availableModels)
   }, [models, currentFavoriteModels, isModelHidden, searchQuery])
 
   const handleReorder = (newOrder: FavoriteModelItem[]) => {
@@ -204,53 +180,51 @@ export function ModelsSettings() {
         </div>
 
         <div className="space-y-6 pb-6">
-          {Object.entries(availableModelsByProvider)
-            .sort(([a], [b]) => compareProviderSections(a, b))
-            .map(([vendorKey, modelsGroup]) => {
-              // Unregistered vendors keep their raw id as the group label.
-              const vendor = getVendor(vendorKey)
-              const GroupIcon = getVendorIcon(vendorKey)
+          {availableModelSections.map(({ vendorId, models: modelsGroup }) => {
+            // Unregistered vendors keep their raw id as the group label.
+            const vendor = getVendor(vendorId)
+            const GroupIcon = getVendorIcon(vendorId)
 
-              return (
-                <div key={vendorKey} className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    {vendor && <GroupIcon className="size-5" />}
-                    <h4 className="font-medium text-balance">
-                      {vendor?.name || vendorKey}
-                    </h4>
-                  </div>
-
-                  <div className="space-y-2 pl-7">
-                    {modelsGroup.map((model) => (
-                      <div
-                        key={model.id}
-                        className="flex items-center justify-between py-1"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm">{model.name}</span>
-                          {model.description && (
-                            <span className="text-muted-foreground text-xs">
-                              {model.description}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => toggleFavorite(model.id)}
-                          type="button"
-                          className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
-                          title="Add to favorites"
-                        >
-                          <Icon icon={RiAddLine} slotSize={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+            return (
+              <div key={vendorId} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  {vendor && <GroupIcon className="size-5" />}
+                  <h4 className="font-medium text-balance">
+                    {vendor?.name || vendorId}
+                  </h4>
                 </div>
-              )
-            })}
+
+                <div className="space-y-2 pl-7">
+                  {modelsGroup.map((model) => (
+                    <div
+                      key={model.id}
+                      className="flex items-center justify-between py-1"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm">{model.name}</span>
+                        {model.description && (
+                          <span className="text-muted-foreground text-xs">
+                            {model.description}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => toggleFavorite(model.id)}
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
+                        title="Add to favorites"
+                      >
+                        <Icon icon={RiAddLine} slotSize={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
-        {Object.keys(availableModelsByProvider).length === 0 && (
+        {availableModelSections.length === 0 && (
           <div className="text-muted-foreground py-8 text-center text-sm">
             {searchQuery
               ? `No models found matching "${searchQuery}"`

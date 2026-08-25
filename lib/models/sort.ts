@@ -5,6 +5,13 @@ type SortableModel = Pick<
   "name" | "releasedAt" | "intelligence" | "inputCost" | "outputCost"
 >
 
+type SectionSortableModel = SortableModel & Pick<ModelConfig, "baseProviderId">
+
+export type OrderedModelSection<M extends SectionSortableModel> = {
+  vendorId: string
+  models: M[]
+}
+
 const INTELLIGENCE_RANK: Record<
   NonNullable<ModelConfig["intelligence"]>,
   number
@@ -77,4 +84,34 @@ export function compareModelsForProviderSection(
   if (priceDifference !== 0) return priceDifference
 
   return a.name.localeCompare(b.name)
+}
+
+/**
+ * The shared user-facing model order. Models stay grouped by maker (not by
+ * execution route), provider sections follow product priority, and each
+ * section uses the catalog-fact comparator above. Unranked vendors retain the
+ * order in which they first appear in the logical catalog.
+ */
+export function getOrderedModelSections<M extends SectionSortableModel>(
+  models: readonly M[]
+): OrderedModelSection<M>[] {
+  const modelsByVendor = new Map<string, M[]>()
+
+  for (const model of models) {
+    const vendorId = model.baseProviderId || "unknown"
+    const vendorModels = modelsByVendor.get(vendorId)
+
+    if (vendorModels) {
+      vendorModels.push(model)
+    } else {
+      modelsByVendor.set(vendorId, [model])
+    }
+  }
+
+  return Array.from(modelsByVendor.entries())
+    .sort(([a], [b]) => compareProviderSections(a, b))
+    .map(([vendorId, vendorModels]) => ({
+      vendorId,
+      models: vendorModels.toSorted(compareModelsForProviderSection),
+    }))
 }

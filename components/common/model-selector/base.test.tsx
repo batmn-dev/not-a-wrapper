@@ -391,6 +391,23 @@ describe("ModelSelector", () => {
     return option
   }
 
+  function getModelOptionNames() {
+    return Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="model-name"]')
+    ).map((name) => name.textContent?.trim())
+  }
+
+  it("uses the shared provider order without promoting a default selection", () => {
+    renderSelector({ isUserAuthenticated: true })
+
+    expect(getModelOptionNames()).toEqual([
+      "GPT-5.4",
+      "Claude Sonnet 5",
+      "GPT-5 Mini",
+      "GLM-5.2",
+    ])
+  })
+
   it("shows the visible catalog with locked badges for signed-out users", () => {
     renderSelector({ isUserAuthenticated: false })
 
@@ -480,7 +497,10 @@ describe("ModelSelector", () => {
 
   it("uses the same model list and selection rules in the mobile drawer", () => {
     breakpointMocks.isMobile = true
-    const onSelect = renderSelector({ isUserAuthenticated: true })
+    const onSelect = renderSelector({
+      isUserAuthenticated: true,
+      variant: "composer",
+    })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
     expect(document.body.textContent).toContain("GLM-5.2")
@@ -769,6 +789,7 @@ describe("ModelSelector", () => {
     renderSelector({
       isUserAuthenticated: true,
       selectedModelId: "openrouter:z-ai/glm-5.2",
+      variant: "composer",
     })
 
     const optionText = Array.from(
