@@ -117,7 +117,7 @@ const geminiModels: ModelConfig[] = [
       source: "provider",
       verifiedAt: "2026-08-21",
       sourceUrl: "https://ai.google.dev/gemini-api/docs/models",
-      replacementModelId: "gemini-3.1-flash-lite",
+      replacementModelId: "openrouter:google/gemini-3.5-flash-lite",
     },
     idKind: "stable",
     lastVerifiedAt: "2026-08-21",

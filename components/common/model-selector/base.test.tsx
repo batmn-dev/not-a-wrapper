@@ -94,6 +94,19 @@ const modelSelectorMocks = {
       routes: [{ id: "gpt-4.1", providerId: "openai" }],
     },
     {
+      id: "gpt-5.5",
+      name: "GPT-5.5",
+      provider: "OpenAI",
+      providerId: "openai",
+      catalogStatus: "visible",
+      classification: "legacy",
+      classificationReason: "not_recommended",
+      idKind: "stable",
+      baseProviderId: "openai",
+      accessible: true,
+      routes: [{ id: "gpt-5.5", providerId: "openai" }],
+    },
+    {
       id: "openrouter:moonshotai/kimi-k2.6",
       name: "Kimi K2.6",
       provider: "OpenRouter",
@@ -495,6 +508,31 @@ describe("ModelSelector", () => {
     ).map((name) => name.textContent?.trim())
   }
 
+  function getLegacyDisclosure(providerName: string) {
+    return document.body.querySelector(
+      `[aria-label="Show legacy models for ${providerName}"]`
+    )
+  }
+
+  function searchModels(query: string) {
+    const input = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
+    const setValue = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value"
+    )?.set
+
+    if (!input || !setValue) {
+      throw new Error("Could not find model search input")
+    }
+
+    act(() => {
+      setValue.call(input, query)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+  }
+
   it("uses the shared provider order without promoting a default selection", () => {
     renderSelector({ isUserAuthenticated: true })
 
@@ -505,6 +543,27 @@ describe("ModelSelector", () => {
       "GLM-5.2",
       "Kimi K3",
     ])
+  })
+
+  it("keeps only the selected legacy composer model visible", () => {
+    renderSelector({
+      isUserAuthenticated: true,
+      selectedModelId: "gpt-5.5",
+      variant: "composer",
+    })
+
+    const selectedOption = getModelOption("GPT-5.5")
+
+    expect(selectedOption.className).toContain("bg-interactive-selected")
+    expect(
+      selectedOption.querySelector('[data-slot="selected-model-check"]')
+    ).not.toBeNull()
+    expect(document.body.textContent).not.toContain("GPT-4.1")
+    expect(
+      document.body.querySelector(
+        '[aria-label="Show legacy models for OpenAI"]'
+      )
+    ).not.toBeNull()
   })
 
   it("reveals legacy models for one provider with its logo", () => {
@@ -575,6 +634,30 @@ describe("ModelSelector", () => {
       )
     ).not.toBeNull()
   })
+
+  it.each([
+    ["desktop", false],
+    ["mobile", true],
+  ] as const)(
+    "shows a matching legacy model directly during %s search",
+    (_surface, isMobile) => {
+      breakpointMocks.isMobile = isMobile
+      renderSelector({ isUserAuthenticated: true })
+
+      expect(document.body.textContent).not.toContain("GPT-4.1")
+      expect(getLegacyDisclosure("OpenAI")).not.toBeNull()
+
+      searchModels("GPT-4.1")
+
+      expect(getModelOptionNames()).toEqual(["GPT-4.1"])
+      expect(getLegacyDisclosure("OpenAI")).toBeNull()
+
+      searchModels("")
+
+      expect(document.body.textContent).not.toContain("GPT-4.1")
+      expect(getLegacyDisclosure("OpenAI")).not.toBeNull()
+    }
+  )
 
   it("replaces a provider disclosure in place without reordering current models", () => {
     renderSelector({ isUserAuthenticated: true })

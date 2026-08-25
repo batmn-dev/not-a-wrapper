@@ -630,21 +630,41 @@ export function ModelSelector({
     })
   }
 
+  const selectedLegacyModelId =
+    isComposerVariant &&
+    models.some(
+      (model) =>
+        model.id === normalizedSelectedModelId &&
+        model.classification === "legacy"
+    )
+      ? normalizedSelectedModelId
+      : null
   const { favorites, others } = groupModelsForSelector(
-    models.filter((model) => model.classification === "current"),
+    models.filter(
+      (model) =>
+        model.classification === "current" ||
+        model.id === selectedLegacyModelId
+    ),
     isUserAuthenticated ? favoriteModels || [] : [],
     isComposerVariant ? normalizedSelectedModelId : null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
   const { others: legacyModels } = groupModelsForSelector(
-    models.filter((model) => model.classification === "legacy"),
+    models.filter(
+      (model) =>
+        model.classification === "legacy" &&
+        model.id !== selectedLegacyModelId
+    ),
     [],
     null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
   const legacyProviders = getLegacyProviderOptions(legacyModels)
+  const effectiveRevealedLegacyProviders = searchQuery
+    ? new Set(legacyProviders.map((provider) => provider.providerId))
+    : revealedLegacyProviders
 
   const TriggerControl = isComposerVariant ? ComposerControl : Button
   const currentModelFullName = currentModel
@@ -759,7 +779,7 @@ export function ModelSelector({
                 favorites={favorites}
                 others={others}
                 legacyProviders={legacyProviders}
-                revealedLegacyProviders={revealedLegacyProviders}
+                revealedLegacyProviders={effectiveRevealedLegacyProviders}
                 isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
@@ -860,7 +880,7 @@ export function ModelSelector({
                 favorites={favorites}
                 others={others}
                 legacyProviders={legacyProviders}
-                revealedLegacyProviders={revealedLegacyProviders}
+                revealedLegacyProviders={effectiveRevealedLegacyProviders}
                 isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}

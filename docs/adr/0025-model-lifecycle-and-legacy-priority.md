@@ -90,9 +90,12 @@ hides Legacy models initially and adds one `Show legacy models...` option for
 each maker with hidden Legacy models. Revealing one maker does not reveal any
 other maker, and the option disappears once that maker is revealed. This state
 lasts only for the current open popover; closing it hides every Legacy model
-again. It never changes catalog visibility, classification, favorites, or
-route lifecycle metadata. Disclosure replaces the maker's option in place with
-its Legacy rows; Current and favorite rows keep their existing order.
+again, except that the composer's selected Legacy model remains visible as
+explicit chat state. Only that selected row bypasses disclosure; the maker's
+other Legacy models remain collapsed. This never changes catalog visibility,
+classification, favorites, or route lifecycle metadata. Disclosure replaces
+the maker's option in place with its Legacy rows; Current and favorite rows keep
+their existing order.
 Anthropic's option uses the Claude product mark, matching its model rows.
 
 Snapshot codes such as `0423`, `0731`, and `0905` do not belong in ordinary
