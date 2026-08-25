@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   getModelDisplayName,
   getModelPresentationVendorId,
+  getModelSnapshotDateLabel,
   getRouteProviderLabels,
 } from "./presentation"
 
@@ -56,5 +57,20 @@ describe("getModelDisplayName", () => {
         "compact"
       )
     ).toBe("5.6 Terra")
+  })
+})
+
+describe("getModelSnapshotDateLabel", () => {
+  it("formats explicit UTC snapshot metadata as a readable month and year", () => {
+    expect(getModelSnapshotDateLabel({ snapshotDate: "2026-04-24" })).toBe(
+      "April 2026"
+    )
+  })
+
+  it("does not infer or render absent and invalid snapshot dates", () => {
+    expect(getModelSnapshotDateLabel({})).toBeUndefined()
+    expect(
+      getModelSnapshotDateLabel({ snapshotDate: "2026-02-30" })
+    ).toBeUndefined()
   })
 })

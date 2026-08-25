@@ -25,9 +25,10 @@ these conditions:
 
 OpenRouter-only records remain BYOK-gated. Existing direct records stay
 canonical and gain an explicitly mapped OpenRouter route through ADR-0020.
-Capabilities, context windows, output limits, release dates, and pricing remain
-machine-derived from the refreshed OpenRouter snapshot. Human-authored fields
-stay in the allowlist.
+Capabilities, context windows, output limits, release dates, pricing, and route
+expiration dates remain machine-derived from the refreshed OpenRouter snapshot.
+Human-authored fields, including explicit product lineages and release stages,
+stay in the allowlist (ADR-0025).
 
 The 2026-08-20 inventory originally produced 89 supported chat models. Three
 GPT-5.6 routes were added once direct OpenAI API and installed provider support
@@ -40,6 +41,12 @@ Nine entries were not added:
   catalogs;
 - MiMo V2 Flash, which was absent from the live OpenRouter listing. Its former
   id succeeds to MiMo V2.5.
+
+A 2026-08-25 currency pass added the newly live DeepSeek V4 Flash Vision Exp,
+Qwen3.8 2.4T and Max, Qwen3.7 Flash, Ling 3.0 Flash, and Kimi K2.7 Code routes.
+It also exposed Mistral's supported Ministral 3 3B and 8B direct routes. Ling
+2.6 Flash had been delisted and now succeeds to Ling 3.0 Flash. Devstral 2 was
+not added because Mistral already marks it deprecated.
 
 The SDK's remaining autocomplete-only omissions do not override the live-route
 rule. In particular, Perplexity retired `sonar-reasoning` in favor of the

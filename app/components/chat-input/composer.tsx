@@ -40,7 +40,7 @@ import {
   type Attachment,
 } from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
-import { getModelInfo } from "@/lib/models"
+import { getLogicalModelInfo } from "@/lib/models"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
 import { RiArrowUpLine } from "@remixicon/react"
@@ -223,13 +223,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const { selectedModel, handleModelChange, enableSearch, setEnableSearch } =
       useTurnContext()
 
-    const selectModelConfig = getModelInfo(selectedModel)
-    // Web search is disabled only when the model explicitly can't accept tool calls
-    // (tools: false) or has opted out of search (webSearch: false).
-    // All other models get search via Layer 1 (provider-native) or Layer 2 (Exa fallback).
-    const isSearchDisabled =
-      selectModelConfig?.tools === false ||
-      selectModelConfig?.webSearch === false
+    const selectModelConfig = getLogicalModelInfo(selectedModel)
+    const isSearchDisabled = selectModelConfig?.webSearch !== true
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =

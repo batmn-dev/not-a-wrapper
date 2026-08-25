@@ -172,6 +172,13 @@ const MODEL_ID_SUCCESSIONS = [
     lastVerifiedAt: "2026-08-20",
   },
   {
+    sourceId: "openrouter:inclusionai/ling-2.6-flash",
+    targetId: "openrouter:inclusionai/ling-3.0-flash",
+    replacementModelId: "openrouter:inclusionai/ling-3.0-flash",
+    verifiedAgainst: "inclusionai/ling-3.0-flash",
+    lastVerifiedAt: "2026-08-25",
+  },
+  {
     sourceId: "mistral-small-2503",
     targetId: "mistral-small-2506",
     replacementModelId: "mistral-small-2506",

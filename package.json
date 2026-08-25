@@ -28,6 +28,7 @@
     "catalog:openrouter": "bun scripts/generate-openrouter-catalog.ts",
     "catalog:openrouter:refresh": "bun scripts/generate-openrouter-catalog.ts --fetch",
     "catalog:openrouter:check": "bun scripts/generate-openrouter-catalog.ts --check",
+    "catalog:models:audit": "bun scripts/audit-model-catalog.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bench": "vitest bench --run",

@@ -31,10 +31,21 @@ import {
   isModelSelectableForAuthState,
 } from "@/lib/model-store/utils"
 import { getModelInfo } from "@/lib/models"
-import { resolveModelSelection } from "@/lib/models/catalog"
-import { getModelDisplayName } from "@/lib/models/presentation"
-import { ModelConfig } from "@/lib/models/types"
-import { getModelIcon } from "@/lib/provider-icons"
+import {
+  resolveModelSelection,
+  type LogicalModelView,
+} from "@/lib/models/catalog"
+import {
+  getModelDisplayName,
+  getModelSnapshotDateLabel,
+} from "@/lib/models/presentation"
+import type { ModelConfig } from "@/lib/models/types"
+import {
+  getModelIcon,
+  getVendorIcon,
+  type VendorIcon,
+} from "@/lib/provider-icons"
+import { getVendor } from "@/lib/provider-identity"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
 import {
@@ -64,42 +75,168 @@ type ModelSelectorProps = {
 const modelSelectorSurfaceClassName =
   "bg-floating-surface text-floating-surface-foreground"
 
+type LegacyProviderOption = {
+  providerId: string
+  providerName: string
+  icon: VendorIcon
+}
+
+type ModelSelectorRow =
+  | { type: "model"; model: LogicalModelView }
+  | { type: "show-legacy"; provider: LegacyProviderOption }
+
+function getModelSelectorRowClassName({
+  isMobile,
+  hasDivider,
+  isSelected = false,
+}: {
+  isMobile: boolean
+  hasDivider: boolean
+  isSelected?: boolean
+}) {
+  return cn(
+    "flex w-full items-center justify-between gap-2",
+    isMobile ? "relative h-14 px-4 py-3" : "h-9 rounded-lg px-2 py-1.5",
+    isMobile &&
+      hasDivider &&
+      "before:bg-floating-menu-divider/60 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:content-['']",
+    isSelected && "bg-interactive-selected"
+  )
+}
+
+function getLegacyProviderOptions(
+  models: readonly ModelConfig[]
+): LegacyProviderOption[] {
+  const providers = new Map<string, LegacyProviderOption>()
+
+  for (const model of models) {
+    if (providers.has(model.baseProviderId)) continue
+
+    providers.set(model.baseProviderId, {
+      providerId: model.baseProviderId,
+      providerName: getVendor(model.baseProviderId)?.name ?? model.provider,
+      icon:
+        model.baseProviderId === "anthropic"
+          ? getVendorIcon("claude")
+          : getModelIcon(model),
+    })
+  }
+
+  return [...providers.values()]
+}
+
+function buildModelSelectorRows(
+  models: readonly LogicalModelView[],
+  legacyProviders: readonly LegacyProviderOption[]
+): ModelSelectorRow[] {
+  const lastModelIndexByProvider = new Map<string, number>()
+  models.forEach((model, index) => {
+    lastModelIndexByProvider.set(model.baseProviderId, index)
+  })
+
+  const legacyProviderById = new Map(
+    legacyProviders.map((provider) => [provider.providerId, provider])
+  )
+  const rows: ModelSelectorRow[] = []
+
+  models.forEach((model, index) => {
+    rows.push({ type: "model", model })
+
+    if (lastModelIndexByProvider.get(model.baseProviderId) !== index) return
+    const legacyProvider = legacyProviderById.get(model.baseProviderId)
+    if (!legacyProvider) return
+
+    rows.push({ type: "show-legacy", provider: legacyProvider })
+    legacyProviderById.delete(model.baseProviderId)
+  })
+
+  for (const provider of legacyProviders) {
+    if (legacyProviderById.has(provider.providerId)) {
+      rows.push({ type: "show-legacy", provider })
+    }
+  }
+
+  return rows
+}
+
+function ModelOptionLabel({
+  icon,
+  label,
+  detail,
+  isMobile,
+  iconSlot,
+  labelSlot,
+}: {
+  icon: VendorIcon
+  label: string
+  detail?: string
+  isMobile: boolean
+  iconSlot: string
+  labelSlot: string
+}) {
+  return (
+    <div
+      className={cn("flex min-w-0 items-center", isMobile ? "gap-3" : "gap-2")}
+    >
+      <Icon
+        icon={icon}
+        slotSize={isMobile ? 24 : 20}
+        glyphSize={isMobile ? 24 : undefined}
+        data-slot={iconSlot}
+        className="shrink-0"
+      />
+      <div className="flex min-w-0 items-baseline gap-1.5">
+        <span
+          data-slot={labelSlot}
+          className={cn("truncate", isMobile ? "text-base" : "text-sm")}
+        >
+          {label}
+        </span>
+        {detail ? (
+          <span
+            data-slot="model-snapshot-date"
+            className={cn(
+              "text-muted-foreground shrink-0",
+              isMobile ? "text-sm" : "text-xs"
+            )}
+          >
+            {detail}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function ModelOptionContent({
   model,
   isLocked,
   isMobile,
   isSelected,
 }: {
-  model: ModelConfig
+  model: LogicalModelView
   isLocked: boolean
   isMobile: boolean
   isSelected: boolean
 }) {
+  const snapshotDateLabel =
+    model.classification === "legacy"
+      ? getModelSnapshotDateLabel(model)
+      : undefined
+
   // The icon is the model MAKER's vendor identity; execution routes never
   // surface in the ordinary selector row (ADR-0020) — route details live in
   // API-key and model settings.
   return (
     <>
-      <div
-        className={cn(
-          "flex min-w-0 items-center",
-          isMobile ? "gap-3" : "gap-2"
-        )}
-      >
-        <Icon
-          icon={getModelIcon(model)}
-          slotSize={isMobile ? 24 : 20}
-          glyphSize={isMobile ? 24 : undefined}
-          data-slot="model-option-icon"
-          className="shrink-0"
-        />
-        <span
-          data-slot="model-name"
-          className={cn("truncate", isMobile ? "text-base" : "text-sm")}
-        >
-          {getModelDisplayName(model)}
-        </span>
-      </div>
+      <ModelOptionLabel
+        icon={getModelIcon(model)}
+        label={getModelDisplayName(model)}
+        detail={snapshotDateLabel}
+        isMobile={isMobile}
+        iconSlot="model-option-icon"
+        labelSlot="model-name"
+      />
       {isLocked || isSelected ? (
         <div className="flex shrink-0 items-center gap-2">
           {isLocked ? (
@@ -124,28 +261,73 @@ function ModelOptionContent({
 
 function ModelSelectorRows({
   models,
+  legacyProviders = [],
   isMobile,
   isUserAuthenticated,
   selectedModelId,
   onSelect,
+  onShowLegacy,
 }: {
-  models: ModelConfig[]
+  models: LogicalModelView[]
+  legacyProviders?: LegacyProviderOption[]
   isMobile: boolean
   isUserAuthenticated: boolean
   selectedModelId: string | null
   onSelect: (modelId: string, isLocked: boolean) => void
+  onShowLegacy: (providerId: string) => void
 }) {
-  return models.map((model, index) => {
+  return buildModelSelectorRows(models, legacyProviders).map((row, index) => {
+    if (row.type === "show-legacy") {
+      const className = getModelSelectorRowClassName({
+        isMobile,
+        hasDivider: index > 0,
+      })
+      const content = (
+        <ModelOptionLabel
+          icon={row.provider.icon}
+          label="Show legacy models..."
+          isMobile={isMobile}
+          iconSlot="show-legacy-models-icon"
+          labelSlot="show-legacy-models-label"
+        />
+      )
+
+      return isMobile ? (
+        <button
+          key={`show-legacy-${row.provider.providerId}`}
+          type="button"
+          data-testid="show-legacy-models"
+          data-provider-id={row.provider.providerId}
+          className={className}
+          aria-label={`Show legacy models for ${row.provider.providerName}`}
+          onClick={() => onShowLegacy(row.provider.providerId)}
+        >
+          {content}
+        </button>
+      ) : (
+        <DropdownMenuItem
+          key={`show-legacy-${row.provider.providerId}`}
+          geometry="custom"
+          closeOnClick={false}
+          data-testid="show-legacy-models"
+          data-provider-id={row.provider.providerId}
+          className={className}
+          aria-label={`Show legacy models for ${row.provider.providerName}`}
+          onClick={() => onShowLegacy(row.provider.providerId)}
+        >
+          {content}
+        </DropdownMenuItem>
+      )
+    }
+
+    const { model } = row
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
     const isSelected = selectedModelId === model.id
-    const className = cn(
-      "flex w-full items-center justify-between gap-2",
-      isMobile ? "relative h-14 px-4 py-3" : "h-9 rounded-lg px-2 py-1.5",
-      isMobile &&
-        index > 0 &&
-        "before:bg-floating-menu-divider/60 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:content-['']",
-      isSelected && "bg-interactive-selected"
-    )
+    const className = getModelSelectorRowClassName({
+      isMobile,
+      hasDivider: index > 0,
+      isSelected,
+    })
     const content = (
       <ModelOptionContent
         model={model}
@@ -181,19 +363,23 @@ function ModelSelectorRows({
 function ModelSelectorList({
   favorites,
   others,
+  legacyProviders,
   isLoading,
   isMobile,
   isUserAuthenticated,
   selectedModelId,
   onSelect,
+  onShowLegacy,
 }: {
-  favorites: ModelConfig[]
-  others: ModelConfig[]
+  favorites: LogicalModelView[]
+  others: LogicalModelView[]
+  legacyProviders: LegacyProviderOption[]
   isLoading: boolean
   isMobile: boolean
   isUserAuthenticated: boolean
   selectedModelId: string | null
   onSelect: (modelId: string, isLocked: boolean) => void
+  onShowLegacy: (providerId: string) => void
 }) {
   if (isLoading) {
     return (
@@ -203,7 +389,11 @@ function ModelSelectorList({
     )
   }
 
-  if (favorites.length === 0 && others.length === 0) {
+  if (
+    favorites.length === 0 &&
+    others.length === 0 &&
+    legacyProviders.length === 0
+  ) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-6 text-center">
         <p className="text-muted-foreground mb-1 text-sm">No results found.</p>
@@ -219,7 +409,13 @@ function ModelSelectorList({
     )
   }
 
-  const rowProps = { isMobile, isUserAuthenticated, selectedModelId, onSelect }
+  const rowProps = {
+    isMobile,
+    isUserAuthenticated,
+    selectedModelId,
+    onSelect,
+    onShowLegacy,
+  }
   const sectionLabelClassName = cn(
     "text-muted-foreground text-xs font-medium",
     isMobile ? "px-3 pt-2 pb-1" : "px-2 pt-1.5 pb-1"
@@ -227,13 +423,16 @@ function ModelSelectorList({
 
   if (isMobile) {
     const sections = [
-      { label: "Favorites", models: favorites },
-      { label: "All models", models: others },
-    ].filter(({ models }) => models.length > 0)
+      { label: "Favorites", models: favorites, legacyProviders: [] },
+      { label: "All models", models: others, legacyProviders },
+    ].filter(
+      ({ models, legacyProviders: sectionLegacyProviders }) =>
+        models.length > 0 || sectionLegacyProviders.length > 0
+    )
 
     return (
       <div className="flex flex-col gap-5 pb-2">
-        {sections.map(({ label, models: sectionModels }) => (
+        {sections.map(({ label, models: sectionModels, legacyProviders }) => (
           <div
             key={label}
             data-slot="model-section"
@@ -250,7 +449,11 @@ function ModelSelectorList({
               data-slot="model-section-container"
               className="bg-muted/50 dark:bg-muted/80 overflow-hidden rounded-3xl"
             >
-              <ModelSelectorRows models={sectionModels} {...rowProps} />
+              <ModelSelectorRows
+                models={sectionModels}
+                legacyProviders={legacyProviders}
+                {...rowProps}
+              />
             </div>
           </div>
         ))}
@@ -260,17 +463,27 @@ function ModelSelectorList({
 
   // Favorites rank; every other model stays reachable beneath them.
   if (favorites.length === 0) {
-    return <ModelSelectorRows models={others} {...rowProps} />
+    return (
+      <ModelSelectorRows
+        models={others}
+        legacyProviders={legacyProviders}
+        {...rowProps}
+      />
+    )
   }
 
   return (
     <>
       <div className={sectionLabelClassName}>Favorites</div>
       <ModelSelectorRows models={favorites} {...rowProps} />
-      {others.length > 0 && (
+      {(others.length > 0 || legacyProviders.length > 0) && (
         <>
           <div className={sectionLabelClassName}>All models</div>
-          <ModelSelectorRows models={others} {...rowProps} />
+          <ModelSelectorRows
+            models={others}
+            legacyProviders={legacyProviders}
+            {...rowProps}
+          />
         </>
       )}
     </>
@@ -297,8 +510,16 @@ export function ModelSelector({
   const [isProDialogOpen, setIsProDialogOpen] = useState(false)
   const [selectedProModel, setSelectedProModel] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [revealedLegacyProviders, setRevealedLegacyProviders] = useState(
+    () => new Set<string>()
+  )
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectionCommittedRef = useRef(false)
+
+  const resetModelList = () => {
+    setSearchQuery("")
+    setRevealedLegacyProviders(new Set<string>())
+  }
 
   // A persisted selection may be a legacy routed id; the trigger shows the
   // logical model identity either way.
@@ -316,9 +537,13 @@ export function ModelSelector({
       if (disabled) return
 
       if (isMobile) {
-        setIsDrawerOpen((prev) => !prev)
+        const nextOpen = !isDrawerOpen
+        setIsDrawerOpen(nextOpen)
+        if (!nextOpen) resetModelList()
       } else {
-        setIsDropdownOpen((prev) => !prev)
+        const nextOpen = !isDropdownOpen
+        setIsDropdownOpen(nextOpen)
+        if (!nextOpen) resetModelList()
       }
     }
   )
@@ -331,7 +556,7 @@ export function ModelSelector({
       if (!isUserAuthenticated) {
         setIsDrawerOpen(false)
         setIsDropdownOpen(false)
-        setSearchQuery("")
+        resetModelList()
         onLockedGuestModelSelect?.(modelId)
         return
       }
@@ -344,7 +569,7 @@ export function ModelSelector({
     setSelectedModelId(modelId)
     setIsDrawerOpen(false)
     setIsDropdownOpen(false)
-    setSearchQuery("")
+    resetModelList()
   }
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -360,13 +585,39 @@ export function ModelSelector({
     e.stopPropagation()
   }
 
+  const handleShowLegacy = (providerId: string) => {
+    setRevealedLegacyProviders((current) => {
+      const next = new Set(current)
+      next.add(providerId)
+      return next
+    })
+  }
+
+  const selectorModels = models.filter(
+    (model) =>
+      model.classification === "current" ||
+      revealedLegacyProviders.has(model.baseProviderId)
+  )
+
   const { favorites, others } = groupModelsForSelector(
-    models,
+    selectorModels,
     isUserAuthenticated ? favoriteModels || [] : [],
     isComposerVariant ? normalizedSelectedModelId : null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
+  const { others: hiddenLegacyModels } = groupModelsForSelector(
+    models.filter(
+      (model) =>
+        model.classification === "legacy" &&
+        !revealedLegacyProviders.has(model.baseProviderId)
+    ),
+    [],
+    null,
+    searchQuery,
+    isUserAuthenticated ? isModelHidden : () => false
+  )
+  const legacyProviders = getLegacyProviderOptions(hiddenLegacyModels)
 
   const TriggerControl = isComposerVariant ? ComposerControl : Button
   const currentModelFullName = currentModel
@@ -378,7 +629,7 @@ export function ModelSelector({
       className={cn(
         "min-w-0 shrink font-normal",
         isComposerVariant
-          ? "text-muted-foreground can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full px-3 py-0 text-sm"
+          ? "text-muted-foreground can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full py-0 ps-3.5 pe-3 text-base leading-[26px]"
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
         className
       )}
@@ -394,7 +645,12 @@ export function ModelSelector({
           className="text-foreground shrink-0 opacity-100"
         />
       ) : null}
-      <span className={cn("min-w-0 truncate", isComposerVariant && "max-w-40")}>
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          isComposerVariant && "text-foreground max-w-40"
+        )}
+      >
         {currentModel
           ? getModelDisplayName(
               currentModel,
@@ -427,7 +683,7 @@ export function ModelSelector({
           onOpenChange={(open) => {
             if (disabled && open) return
             setIsDrawerOpen(open)
-            if (!open) setSearchQuery("")
+            if (!open) resetModelList()
           }}
         >
           <DrawerTrigger render={trigger} />
@@ -469,11 +725,13 @@ export function ModelSelector({
               <ModelSelectorList
                 favorites={favorites}
                 others={others}
+                legacyProviders={legacyProviders}
                 isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
                 selectedModelId={normalizedSelectedModelId}
                 onSelect={handleSelect}
+                onShowLegacy={handleShowLegacy}
               />
             </div>
           </DrawerContent>
@@ -497,7 +755,7 @@ export function ModelSelector({
           if (disabled && open) return
           setIsDropdownOpen(open)
           if (!open) {
-            setSearchQuery("")
+            resetModelList()
           }
         }}
         onOpenChangeComplete={(open) => {
@@ -558,11 +816,13 @@ export function ModelSelector({
               <ModelSelectorList
                 favorites={favorites}
                 others={others}
+                legacyProviders={legacyProviders}
                 isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}
                 selectedModelId={normalizedSelectedModelId}
                 onSelect={handleSelect}
+                onShowLegacy={handleShowLegacy}
               />
             </div>
           </div>

@@ -32,8 +32,10 @@ choice in one server-owned resolver.
   upstreamModelId, config}`; capabilities, pricing, and construction settings
   stay per-route on `config` and are never flattened upward.
 - **Logical model** — the user-facing identity (`LogicalModel`): `{id, name,
-  shortName?, vendorId, description, tags, catalogStatus, routes}`. `name` is
-  the authoritative full label; `shortName` is an optional compact label
+  shortName?, vendorId, description, tags, catalogStatus, lineageId?,
+  releaseStage?, releasedAt?, lifecycle?, routes}`. `catalogStatus` is
+  editorial visibility; ADR-0025 derives lifecycle priority separately.
+  `name` is the authoritative full label; `shortName` is an optional compact label
   carried only from the canonical route. Its id **equals its
   canonical route id** (the direct route when one exists, else the sole
   wrapped route id). This keeps every persisted model id — chats, messages,
@@ -51,14 +53,20 @@ choice in one server-owned resolver.
   free pool is a genuinely different serving tier (rate caps, separate
   product policy in `FREE_MODELS_IDS`), and the allowlist already names them
   distinctly.
+- Client views widen capability availability to “any route supports it” without
+  changing route records. Web search is resolved by one shared rule: an
+  explicit route declaration wins (provider-native search may not require
+  ordinary tool calling), otherwise support follows the route's search-tool
+  capability. The composer, route resolver, and Tool runtime consume that same
+  result.
 
 ## Route resolver
 
 `resolveModelRoute` (`lib/model-route-resolver.ts`, server-only) replaces
 the provider derivation inside `validateAndResolveChatCredential`. Inputs:
 the (possibly legacy) selected id, auth state, the Convex token, required
-capabilities (vision when the turn carries images), and an optional pinned
-provider for approval continuations. It:
+capabilities (vision when the turn carries images and web search when it is
+enabled), and an optional pinned provider for approval continuations. It:
 
 1. normalizes the selection through `resolveModelSelection` (aliases →
    successions → logical id + `legacyRouteHint` for old `openrouter:*` ids);

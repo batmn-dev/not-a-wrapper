@@ -6,9 +6,15 @@
  * Newly arrived words paint near-transparent and materialize to full foreground
  * color without owning any DOM: cohorts of appended rendered text are painted
  * through the CSS Custom Highlight API (`CSS.highlights` +
- * `::highlight(naw-stream-decay-N)` rules in globals.css). The DOM the React
- * tree renders is untouched, so settled content is canonical by construction
- * and the rendered-DOM equivalence corpus is unaffected.
+ * `::highlight(naw-stream-decay-N)` rules this module injects as a constructed
+ * stylesheet). The DOM the React tree renders is untouched, so settled content
+ * is canonical by construction and the rendered-DOM equivalence corpus is
+ * unaffected.
+ *
+ * The `::highlight` rules live here rather than in globals.css because
+ * Turbopack's CSS parser rejects the pseudo-element and warns on every
+ * compile (vercel/next.js#85398); runtime injection also keeps the rules out
+ * of browsers that never pass the `CSS.highlights` support gate below.
  *
  * Each append cohort fades as one unit on a ~400ms linear alpha ramp with no
  * per-word stagger. Consecutive flush cohorts create the trailing gradient.
@@ -73,6 +79,38 @@ export const PAINT_MIN_INTERVAL_MS = 24
 export const MAX_FLIP_WINDOW_CHARS = 64
 
 const highlightName = (bucket: number) => `naw-stream-decay-${bucket}`
+
+/**
+ * The bucket ramp paints each bucket at the midpoint of its slice of the
+ * fade, so bucket 0 starts near-transparent (4%) and the last bucket lands
+ * near-opaque (96%) instead of pinning the endpoints to 0%/100%.
+ */
+export function decayStylesheetText(): string {
+  const rules = Array.from({ length: DECAY_BUCKET_COUNT }, (_, bucket) => {
+    const alpha = Math.round(((bucket + 0.5) / DECAY_BUCKET_COUNT) * 100)
+    return `  ::highlight(${highlightName(bucket)}) { color: color-mix(in oklab, var(--foreground) ${alpha}%, transparent); }`
+  }).join("\n")
+  return `@media (prefers-reduced-motion: no-preference) {\n${rules}\n}`
+}
+
+const styledDocuments = new WeakSet<Document>()
+
+function ensureDecayStylesheet(document: Document): void {
+  if (styledDocuments.has(document)) return
+  styledDocuments.add(document)
+  try {
+    const SheetCtor = document.defaultView?.CSSStyleSheet ?? CSSStyleSheet
+    const sheet = new SheetCtor()
+    sheet.replaceSync(decayStylesheetText())
+    document.adoptedStyleSheets.push(sheet)
+  } catch {
+    // Constructable stylesheets unavailable (jsdom): a <style> node carries
+    // the same rules.
+    const style = document.createElement("style")
+    style.textContent = decayStylesheetText()
+    document.head.appendChild(style)
+  }
+}
 
 /**
  * Pure cohort transition for one observed commit. Returns the next cohort
@@ -213,6 +251,7 @@ class StreamingDecayManager {
    */
   observe(container: Element): void {
     if (!isSupported() || prefersReducedMotion()) return
+    ensureDecayStylesheet(container.ownerDocument)
     const now = performance.now()
     const state = this.states.get(container) ?? {
       baseline: null,

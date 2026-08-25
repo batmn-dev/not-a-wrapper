@@ -467,6 +467,26 @@ describe("resolveModelRoute", () => {
     })
   })
 
+  it("rejects routes that explicitly opt out when web search is required", async () => {
+    const result = await resolveModelRoute(
+      {
+        modelId: "gemma-3-27b-it",
+        ...authed,
+        requiredCapabilities: { webSearch: true },
+      },
+      makeDeps({
+        userKeys: { google: { key: "sk-google", preference: "priority" } },
+      })
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "no_eligible_route",
+      modelId: "gemma-3-27b-it",
+      keyProviders: [],
+    })
+  })
+
   it("pins approval continuations to the paused provider", async () => {
     const result = await resolveModelRoute(
       { modelId: "claude-sonnet-5", ...authed, pinnedProviderId: "openrouter" },

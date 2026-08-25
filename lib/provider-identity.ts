@@ -220,7 +220,7 @@ export const TOOL_PROVIDER_IDENTITY: Record<ToolProvider, ToolProviderIdentity> 
       id: "exa",
       name: "Exa",
       description:
-        "AI-native web search. Powers search for models without built-in search (Mistral, OpenRouter, Perplexity).",
+        "AI-native web search. Powers search for models without built-in search, such as Mistral.",
       costEstimate: "~$0.005 per search",
       available: true,
       envVarName: "EXA_API_KEY",

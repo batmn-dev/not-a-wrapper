@@ -5,7 +5,7 @@
 // refresh with `bun run catalog:openrouter:refresh`.
 //
 // Incident history: OpenRouter has repeatedly delisted free-pool ids without
-// notice (2026-07-04 and 2026-08-20). Successions live in
+// notice (2026-07-04, 2026-08-20, and 2026-08-25). Successions live in
 // `lib/models/model-id-migration.ts`. That churn class is why this catalog is
 // generated: a delisting is a loud generator failure with a ready-to-paste
 // succession stub, not an archaeology session.

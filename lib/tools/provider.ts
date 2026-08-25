@@ -12,8 +12,8 @@ import type { ToolMetadata } from "./types"
  * Provider-instance creation now lives behind the provider strategy: the SAME
  * instance backs the language model and this tool, so tool calls bill to the
  * same key as model calls — the BYOK invariant is structural, not a hand-synced
- * convention. Providers without a native search tool (mistral, perplexity,
- * openrouter) return an empty set.
+ * convention. Providers without a native search tool (mistral, perplexity)
+ * return an empty set.
  *
  * @param providerId - The provider string from getProviderForModel()
  * @param apiKey - The resolved API key (BYOK or undefined for env fallback)

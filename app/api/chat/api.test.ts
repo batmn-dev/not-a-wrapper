@@ -369,6 +369,65 @@ describe("validateAndResolveChatCredential", () => {
     )
   })
 
+  it("requires web-search routes when search is enabled", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await validateAndResolveChatCredential({
+      ...admissionBase,
+      enableSearch: true,
+      model: "openrouter:anthropic/claude-opus-5",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: textMessages,
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requiredCapabilities: { webSearch: true },
+      })
+    )
+  })
+
+  it("requires both capabilities for image search turns", async () => {
+    vi.mocked(resolveModelRoute).mockResolvedValue({
+      ok: true,
+      route: resolvedRoute,
+      apiKey: "sk-or-byok",
+    })
+
+    await validateAndResolveChatCredential({
+      ...admissionBase,
+      enableSearch: true,
+      model: "claude-sonnet-5",
+      isAuthenticated: true,
+      token: "convex-token",
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            { type: "text", text: "Search for this image." },
+            {
+              type: "file",
+              mediaType: "image/png",
+              url: "convex://file-1",
+            },
+          ],
+        },
+      ] as UIMessage[],
+    })
+
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requiredCapabilities: { vision: true, webSearch: true },
+      })
+    )
+  })
+
   it("does not require vision for images from an earlier turn", async () => {
     vi.mocked(resolveModelRoute).mockResolvedValue({
       ok: true,

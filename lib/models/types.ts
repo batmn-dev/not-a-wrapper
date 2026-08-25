@@ -1,7 +1,101 @@
 import type { Provider } from "@/lib/provider-identity"
 import type { ToolCapabilities } from "@/lib/tools/types"
 
-export type ModelCatalogStatus = "visible" | "hidden" | "legacy"
+/** Editorial selector visibility. Lifecycle and priority are separate facts. */
+export type ModelCatalogStatus = "visible" | "hidden"
+
+export type ModelReleaseStage = "stable" | "preview" | "experimental"
+
+/**
+ * Closed vocabulary for models that compete to be the same recommendation.
+ * These lanes intentionally span product-name changes (for example, o-series
+ * to GPT-series); membership remains on each model record, not in a second
+ * registry of "current" heads.
+ */
+export const MODEL_RECOMMENDATION_LANE_IDS = [
+  "anthropic:fable",
+  "anthropic:haiku",
+  "anthropic:opus",
+  "anthropic:sonnet",
+  "google:gemini-flash",
+  "google:gemini-flash-lite",
+  "google:gemini-pro",
+  "deepseek:chat",
+  "deepseek:fast",
+  "deepseek:reasoning",
+  "mistral:codestral",
+  "mistral:large",
+  "mistral:medium",
+  "mistral:ministral-14b",
+  "mistral:ministral-3b",
+  "mistral:ministral-8b",
+  "mistral:pixtral-12b",
+  "mistral:pixtral-large",
+  "mistral:small",
+  "moonshot:kimi",
+  "moonshot:kimi-code",
+  "openai:balanced",
+  "openai:fast",
+  "openai:flagship",
+  "openai:pro",
+  "perplexity:sonar",
+  "perplexity:sonar-deep-research",
+  "perplexity:sonar-pro",
+  "perplexity:sonar-reasoning",
+  "qwen:open-flagship",
+  "xai:grok",
+] as const
+
+export type ModelRecommendationLaneId =
+  (typeof MODEL_RECOMMENDATION_LANE_IDS)[number]
+
+/**
+ * Dated editorial policy for makers whose default model portfolio is an exact
+ * allowlist. Unlisted logical models stay available, but classify as Legacy.
+ */
+export type ModelRecommendationPolicy = {
+  vendorId: string
+  currentModelIds: readonly string[]
+  /** UTC calendar date (`YYYY-MM-DD`). */
+  verifiedAt: string
+}
+
+export type ModelLifecycleStatus =
+  "active" | "legacy" | "deprecated" | "retired"
+
+export type ModelLifecycleSource = "provider" | "openrouter" | "editorial"
+
+/**
+ * Dated lifecycle evidence for one concrete route. The canonical route's
+ * evidence also describes the logical model; non-canonical route evidence
+ * remains route-specific.
+ */
+export type ModelLifecycle = {
+  status: ModelLifecycleStatus
+  source: ModelLifecycleSource
+  /** UTC calendar date (`YYYY-MM-DD`). */
+  verifiedAt: string
+  sourceUrl?: string
+  /** UTC calendar date (`YYYY-MM-DD`). */
+  retiresAt?: string
+  replacementModelId?: string
+}
+
+export type ModelPriorityReason =
+  | "lifecycle_legacy"
+  | "lifecycle_deprecated"
+  | "lifecycle_retired"
+  | "not_recommended"
+  | "retirement_scheduled"
+  | "superseded"
+
+export type ModelPriority = {
+  classification: "current" | "legacy"
+  classificationReason?: ModelPriorityReason
+  classificationSource?: ModelLifecycleSource
+  successorModelId?: string
+  classificationEffectiveAt?: string
+}
 
 export type ModelIdKind = "stable" | "snapshot" | "alias" | "wrapped"
 
@@ -28,12 +122,17 @@ type ModelConfig = {
   provider: string
   providerId: Provider
   modelFamily?: string
+  /** Explicit recommendation lane used for successor-aware classification. */
+  lineageId?: ModelRecommendationLaneId
+  /** Defaults to stable; previews never supersede stable predecessors. */
+  releaseStage?: ModelReleaseStage
   baseProviderId: string
 
   description?: string
   tags?: string[]
 
   catalogStatus: ModelCatalogStatus
+  lifecycle?: ModelLifecycle
   idKind: Exclude<ModelIdKind, "alias">
   /**
    * Explicit logical-model mapping (ADR-0020). A route record whose model is
@@ -44,7 +143,6 @@ type ModelConfig = {
    * missing or itself mapped fails catalog compilation loudly.
    */
   logicalModelId?: string
-  replacementModelId?: string
   verifiedAgainst?: string
   lastVerifiedAt?: string
 
@@ -58,6 +156,11 @@ type ModelConfig = {
   tools?: boolean | ToolCapabilities
   audio?: boolean
   reasoningText?: boolean
+  /**
+   * Explicit route-level override for the app's web-search capability.
+   * Undefined derives support from `tools`; true can expose provider-native
+   * search without general tool calling; false is a deliberate opt-out.
+   */
   webSearch?: boolean
   openSource?: boolean
 
@@ -101,7 +204,10 @@ type ModelConfig = {
   website?: string
   apiDocs?: string
   modelPage?: string
+  /** UTC calendar date (`YYYY-MM-DD`). */
   releasedAt?: string
+  /** Explicit upstream snapshot date; use day 01 for month-only YYMM ids. */
+  snapshotDate?: string
 
   icon?: string
 

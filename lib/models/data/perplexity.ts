@@ -10,6 +10,7 @@ const perplexityModels: ModelConfig[] = [
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Sonar",
+    lineageId: "perplexity:sonar",
     baseProviderId: "perplexity",
     description:
       "Sonar is a fast, affordable QA model with source control and citation support—ideal for lightweight, real-time integrations.",
@@ -40,6 +41,7 @@ const perplexityModels: ModelConfig[] = [
     idKind: "stable",
     lastVerifiedAt: "2026-03-08",
     modelFamily: "Sonar",
+    lineageId: "perplexity:sonar-reasoning",
     baseProviderId: "perplexity",
     description:
       "Perplexity's most advanced Sonar model with pro-level reasoning, accuracy, and context handling—ideal for complex tasks.",
@@ -69,6 +71,7 @@ const perplexityModels: ModelConfig[] = [
     catalogStatus: "hidden",
     idKind: "stable",
     modelFamily: "Sonar",
+    lineageId: "perplexity:sonar-pro",
     baseProviderId: "perplexity",
     description:
       "A high-performance version of Sonar optimized for speed and accuracy across general tasks, with solid reasoning capabilities.",
@@ -98,6 +101,7 @@ const perplexityModels: ModelConfig[] = [
     catalogStatus: "hidden",
     idKind: "stable",
     modelFamily: "Sonar",
+    lineageId: "perplexity:sonar-deep-research",
     baseProviderId: "perplexity",
     description:
       "Perplexity's most powerful model for deep research, long-context understanding, and advanced reasoning tasks.",

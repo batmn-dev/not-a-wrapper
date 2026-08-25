@@ -18,6 +18,7 @@ import type { UIMessage } from "ai"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
 import {
   getLogicalModel,
+  modelRouteSupportsWebSearch,
   resolveModelSelection,
   type ModelRoute,
 } from "./models/catalog"
@@ -93,6 +94,8 @@ export type RouteResolution = RouteResolutionSuccess | RouteResolutionFailure
 export type RequiredRouteCapabilities = {
   /** The turn carries image input; only vision routes are candidates. */
   vision?: boolean
+  /** Web search is enabled; only search-capable routes are candidates. */
+  webSearch?: boolean
 }
 
 /**
@@ -209,6 +212,12 @@ function routeMeetsCapabilities(
   required: RequiredRouteCapabilities | undefined
 ): boolean {
   if (required?.vision && route.config.vision !== true) return false
+  if (
+    required?.webSearch &&
+    !modelRouteSupportsWebSearch(route.config)
+  ) {
+    return false
+  }
   return true
 }
 

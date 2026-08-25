@@ -12,6 +12,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-opus-4-8",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 4.8",
+    lineageId: "anthropic:opus",
     baseProviderId: "anthropic",
     description:
       "Anthropic's flagship for complex agentic coding and enterprise work.",
@@ -46,6 +47,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-sonnet-5",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 5",
+    lineageId: "anthropic:sonnet",
     baseProviderId: "anthropic",
     description:
       "Anthropic's best speed and intelligence balance. Intro pricing $2/$10 per MTok through 2026-08-31 (sticker $3/$15).",
@@ -82,6 +84,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-fable-5",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 5",
+    lineageId: "anthropic:fable",
     baseProviderId: "anthropic",
     description:
       "Anthropic's Mythos-tier flagship for long-running agents. Adaptive thinking is always on; safety classifiers may end dual-use asks with a refusal stop reason, and the API requires 30-day-retention organizations.",
@@ -117,6 +120,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-opus-4-6",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 4.6",
+    lineageId: "anthropic:opus",
     baseProviderId: "anthropic",
     description:
       "Previous Opus generation. Excels at coding, agents, and complex reasoning.",
@@ -157,6 +161,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-sonnet-4-6",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 4.6",
+    lineageId: "anthropic:sonnet",
     baseProviderId: "anthropic",
     description: "Previous Sonnet generation with adaptive thinking support.",
     tags: ["balanced", "fast", "reasoning", "coding"],
@@ -194,6 +199,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-sonnet-4-5-20250929",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 4.5",
+    lineageId: "anthropic:sonnet",
     baseProviderId: "anthropic",
     description:
       "Previous Sonnet 4.5 snapshot retained for compatibility with older chats.",
@@ -215,6 +221,7 @@ const claudeModels: ModelConfig[] = [
     website: "https://www.anthropic.com",
     apiDocs: "https://docs.anthropic.com",
     releasedAt: "2025-09-29",
+    snapshotDate: "2025-09-29",
     icon: "claude",
   },
   {
@@ -228,6 +235,7 @@ const claudeModels: ModelConfig[] = [
     verifiedAgainst: "claude-haiku-4-5-20251001",
     lastVerifiedAt: "2026-08-25",
     modelFamily: "Claude 4.5",
+    lineageId: "anthropic:haiku",
     baseProviderId: "anthropic",
     description: "Fastest Claude model with near-frontier intelligence.",
     tags: ["fast", "cheap", "lightweight", "reasoning"],
@@ -248,6 +256,7 @@ const claudeModels: ModelConfig[] = [
     website: "https://www.anthropic.com",
     apiDocs: "https://docs.anthropic.com",
     releasedAt: "2025-10-01",
+    snapshotDate: "2025-10-01",
     icon: "claude",
   },
 ]

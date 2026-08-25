@@ -26,6 +26,7 @@ import {
 } from "@/lib/config"
 import type { ResolvedModelRoute } from "@/lib/model-route-resolver"
 import { getAllModels } from "@/lib/models"
+import { modelRouteSupportsWebSearch } from "@/lib/models/catalog"
 import type { ModelConfig } from "@/lib/models/types"
 import {
   flushBraintrust,
@@ -589,6 +590,7 @@ export function createChatTurnRuntime(args: {
         apiKey,
         providerToolKeyMode,
         modelTools: modelConfig.tools,
+        modelWebSearch: modelRouteSupportsWebSearch(modelConfig),
         enableSearch,
         logContext: { requestId, chatId, userId, model },
         onMcpClientsOpened: (clientCount) => {

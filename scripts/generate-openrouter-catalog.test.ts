@@ -2,6 +2,7 @@ import type { OpenRouterAllowlistEntry } from "@/lib/models/data/openrouter.allo
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   buildCatalog,
+  buildSnapshot,
   fetchLiveListing,
   MissingAllowlistedIdsError,
   pricePerMillionTokens,
@@ -19,6 +20,7 @@ function snapshotModel(
   return {
     name: overrides.id,
     created: 1751500800, // 2025-07-03
+    expiration_date: null,
     context_length: 131072,
     top_provider: { max_completion_tokens: 8192 },
     pricing: { prompt: "0.000002", completion: "0.00001" },
@@ -60,6 +62,7 @@ describe("generate-openrouter-catalog invariants", () => {
         snapshotModel({
           id: "vendor/plain",
           top_provider: { max_completion_tokens: null },
+          expiration_date: "2026-12-31",
         }),
       ],
     }
@@ -68,6 +71,12 @@ describe("generate-openrouter-catalog invariants", () => {
         slug: "vendor/reasoner",
         name: "Vendor Reasoner",
         shortName: "Reasoner",
+        snapshotDate: "2025-07-03",
+        lifecycle: {
+          status: "legacy",
+          source: "editorial",
+          verifiedAt: "2026-07-05",
+        },
       }),
       allowlistEntry({ slug: "vendor/plain" }),
     ]
@@ -82,6 +91,12 @@ describe("generate-openrouter-catalog invariants", () => {
       idKind: "wrapped",
       name: "Vendor Reasoner",
       shortName: "Reasoner",
+      snapshotDate: "2025-07-03",
+      lifecycle: {
+        status: "legacy",
+        source: "editorial",
+        verifiedAt: "2026-07-05",
+      },
       verifiedAgainst: "vendor/reasoner",
       lastVerifiedAt: "2026-07-05",
       reasoningText: true,
@@ -89,7 +104,7 @@ describe("generate-openrouter-catalog invariants", () => {
       vision: true,
       tools: true,
       audio: true,
-      webSearch: false,
+      webSearch: true,
       apiDocs: "https://openrouter.ai/vendor/reasoner",
     })
     // Textual decimal shift — no IEEE 754 dust in generated prices.
@@ -101,11 +116,69 @@ describe("generate-openrouter-catalog invariants", () => {
     expect(plain?.reasoning).toBeUndefined()
     expect(plain?.vision).toBe(false)
     expect(plain?.audio).toBe(false)
-    expect(plain?.webSearch).toBe(false)
+    // OpenRouter server-side search is independent of ordinary tool support.
+    expect(reasoner?.webSearch).toBe(true)
+    expect(plain?.webSearch).toBe(true)
     // Null max_completion_tokens → field omitted entirely.
     expect(plain && "maxOutput" in plain).toBe(false)
     // releasedAt derives from the snapshot `created` timestamp.
     expect(plain?.releasedAt).toBe("2025-07-03")
+    expect(plain?.lifecycle).toEqual({
+      status: "active",
+      source: "openrouter",
+      verifiedAt: "2026-07-05",
+      sourceUrl: "https://openrouter.ai/api/v1/models",
+      retiresAt: "2026-12-31",
+    })
+  })
+
+  it("preserves OpenRouter expiration evidence in the pruned snapshot", () => {
+    const snapshot = buildSnapshot(
+      [
+        {
+          id: "vendor/model",
+          name: "Vendor Model",
+          created: 1751500800,
+          expiration_date: "2026-12-31",
+          context_length: 131072,
+          top_provider: { max_completion_tokens: 8192 },
+          pricing: { prompt: "0.000002", completion: "0.00001" },
+          supported_parameters: ["tools"],
+          architecture: { input_modalities: ["text"] },
+        },
+      ],
+      [allowlistEntry({ slug: "vendor/model" })],
+      "2026-07-05"
+    )
+
+    expect(snapshot.models[0]?.expiration_date).toBe("2026-12-31")
+  })
+
+  it("refuses to discard either editorial or OpenRouter lifecycle evidence", () => {
+    expect(() =>
+      buildCatalog(
+        {
+          endpoint: "https://openrouter.ai/api/v1/models",
+          retrievedAt: "2026-07-05",
+          models: [
+            snapshotModel({
+              id: "vendor/model",
+              expiration_date: "2026-12-31",
+            }),
+          ],
+        },
+        [
+          allowlistEntry({
+            slug: "vendor/model",
+            lifecycle: {
+              status: "legacy",
+              source: "editorial",
+              verifiedAt: "2026-07-05",
+            },
+          }),
+        ]
+      )
+    ).toThrow(/preserve both sources explicitly/)
   })
 
   it("fails loudly with a succession stub when an allowlisted id is missing", () => {

@@ -23,6 +23,7 @@ vi.mock("server-only", () => ({}))
 
 let ModelSelector: typeof import("./base").ModelSelector
 let testDom: JSDOM | null = null
+let changeDropdownOpen: ((open: boolean) => void) | undefined
 let completeDropdownOpenChange: ((open: boolean) => void) | undefined
 
 function installDomIfNeeded() {
@@ -47,7 +48,9 @@ function installDomIfNeeded() {
 }
 
 const modelSelectorMocks = {
-  isModelHidden: vi.fn((modelId: string) => modelId === "claude-opus-4-6"),
+  isModelHidden: vi.fn(
+    (modelId: string) => modelId === "claude-haiku-4-5-20251001"
+  ),
   models: [
     {
       id: "gpt-5.4",
@@ -55,6 +58,7 @@ const modelSelectorMocks = {
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
+      classification: "current",
       idKind: "stable",
       baseProviderId: "openai",
       accessible: false,
@@ -70,10 +74,24 @@ const modelSelectorMocks = {
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
+      classification: "current",
       idKind: "stable",
       baseProviderId: "openai",
       accessible: true,
       routes: [{ id: "gpt-5-mini", providerId: "openai" }],
+    },
+    {
+      id: "gpt-4.1",
+      name: "GPT-4.1",
+      provider: "OpenAI",
+      providerId: "openai",
+      catalogStatus: "visible",
+      classification: "legacy",
+      classificationReason: "superseded",
+      idKind: "stable",
+      baseProviderId: "openai",
+      accessible: true,
+      routes: [{ id: "gpt-4.1", providerId: "openai" }],
     },
     {
       id: "openrouter:z-ai/glm-5.2",
@@ -81,6 +99,7 @@ const modelSelectorMocks = {
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
+      classification: "current",
       idKind: "wrapped",
       baseProviderId: "z-ai",
       icon: "openrouter",
@@ -93,15 +112,24 @@ const modelSelectorMocks = {
       ],
     },
     {
-      id: "claude-opus-4-6",
-      name: "Claude Opus 4.6",
+      id: "claude-haiku-4-5-20251001",
+      name: "Claude Haiku 4.5",
+      shortName: "Haiku 4.5",
       provider: "Anthropic",
       providerId: "anthropic",
       catalogStatus: "visible",
-      idKind: "stable",
-      baseProviderId: "claude",
+      classification: "current",
+      snapshotDate: "2025-10-01",
+      idKind: "snapshot",
+      baseProviderId: "anthropic",
+      icon: "claude",
       accessible: false,
-      routes: [{ id: "claude-opus-4-6", providerId: "anthropic" }],
+      routes: [
+        {
+          id: "claude-haiku-4-5-20251001",
+          providerId: "anthropic",
+        },
+      ],
     },
     {
       id: "claude-sonnet-5",
@@ -110,6 +138,7 @@ const modelSelectorMocks = {
       provider: "Anthropic",
       providerId: "anthropic",
       catalogStatus: "visible",
+      classification: "current",
       idKind: "stable",
       baseProviderId: "anthropic",
       icon: "claude",
@@ -119,6 +148,27 @@ const modelSelectorMocks = {
         {
           id: "openrouter:anthropic/claude-sonnet-5",
           providerId: "openrouter",
+        },
+      ],
+    },
+    {
+      id: "claude-sonnet-4-5-20250929",
+      name: "Claude Sonnet 4.5",
+      shortName: "Sonnet 4.5",
+      provider: "Anthropic",
+      providerId: "anthropic",
+      catalogStatus: "visible",
+      classification: "legacy",
+      classificationReason: "superseded",
+      snapshotDate: "2025-09-29",
+      idKind: "snapshot",
+      baseProviderId: "anthropic",
+      icon: "claude",
+      accessible: true,
+      routes: [
+        {
+          id: "claude-sonnet-4-5-20250929",
+          providerId: "anthropic",
         },
       ],
     },
@@ -154,11 +204,14 @@ vi.mock("./pro-dialog", () => ({
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({
     children,
+    onOpenChange,
     onOpenChangeComplete,
   }: {
     children: React.ReactNode
+    onOpenChange?: (open: boolean) => void
     onOpenChangeComplete?: (open: boolean) => void
   }) => {
+    changeDropdownOpen = onOpenChange
     completeDropdownOpenChange = onOpenChangeComplete
     return <div>{children}</div>
   },
@@ -190,18 +243,29 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     children,
     className,
     geometry,
+    closeOnClick,
+    "data-testid": dataTestId,
+    "data-provider-id": dataProviderId,
+    "aria-label": ariaLabel,
     onClick,
   }: {
     children: React.ReactNode
     className?: string
     geometry?: "menu" | "custom"
+    closeOnClick?: boolean
+    "data-testid"?: string
+    "data-provider-id"?: string
+    "aria-label"?: string
     onClick?: () => void
   }) => (
     <button
-      data-testid="model-option"
+      data-testid={dataTestId ?? "model-option"}
+      data-provider-id={dataProviderId}
+      data-close-on-click={closeOnClick}
       data-geometry={geometry}
       className={className}
       type="button"
+      aria-label={ariaLabel}
       onClick={onClick}
     >
       {children}
@@ -285,6 +349,7 @@ describe("ModelSelector", () => {
     modelSelectorMocks.isModelHidden.mockClear()
     breakpointMocks.isMobile = false
     useKeyShortcutMock.mockClear()
+    changeDropdownOpen = undefined
     completeDropdownOpenChange = undefined
   })
 
@@ -408,12 +473,76 @@ describe("ModelSelector", () => {
     ])
   })
 
+  it("reveals legacy models for one provider and uses the Claude logo", () => {
+    renderSelector({ isUserAuthenticated: true })
+
+    expect(document.body.textContent).not.toContain("GPT-4.1")
+    expect(document.body.textContent).not.toContain("Claude Sonnet 4.5")
+    expect(document.body.textContent).not.toContain("September 2025")
+
+    const revealOptions = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="show-legacy-models"]'
+      )
+    )
+    const anthropicOption = revealOptions.find(
+      (option) => option.dataset.providerId === "anthropic"
+    )
+
+    expect(revealOptions).toHaveLength(2)
+    expect(anthropicOption?.textContent?.trim()).toBe("Show legacy models...")
+    expect(anthropicOption?.getAttribute("aria-label")).toBe(
+      "Show legacy models for Anthropic"
+    )
+    expect(anthropicOption?.dataset.closeOnClick).toBe("false")
+    expect(
+      anthropicOption
+        ?.querySelector('[data-slot="show-legacy-models-icon"] svg')
+        ?.getAttribute("class")
+    ).toContain("text-claude-logo")
+
+    act(() => {
+      anthropicOption?.click()
+    })
+
+    expect(document.body.textContent).toContain("Claude Sonnet 4.5")
+    expect(
+      getModelOption("Claude Sonnet 4.5").querySelector(
+        '[data-slot="model-snapshot-date"]'
+      )?.textContent
+    ).toBe("September 2025")
+    expect(document.body.textContent).not.toContain("GPT-4.1")
+    expect(
+      document.body.querySelector(
+        '[data-testid="show-legacy-models"][data-provider-id="anthropic"]'
+      )
+    ).toBeNull()
+    expect(
+      document.body.querySelector(
+        '[data-testid="show-legacy-models"][data-provider-id="openai"]'
+      )
+    ).not.toBeNull()
+
+    act(() => {
+      changeDropdownOpen?.(false)
+    })
+
+    expect(document.body.textContent).not.toContain("Claude Sonnet 4.5")
+    expect(document.body.textContent).not.toContain("September 2025")
+    expect(
+      document.body.querySelector(
+        '[data-testid="show-legacy-models"][data-provider-id="anthropic"]'
+      )
+    ).not.toBeNull()
+  })
+
   it("shows the visible catalog with locked badges for signed-out users", () => {
     renderSelector({ isUserAuthenticated: false })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
     expect(document.body.textContent).toContain("GPT-5.4")
-    expect(document.body.textContent).toContain("Claude Opus 4.6")
+    expect(document.body.textContent).toContain("Claude Haiku 4.5")
+    expect(document.body.textContent).not.toContain("October 2025")
     expect(document.body.textContent).toContain("Locked")
   })
 
@@ -539,9 +668,7 @@ describe("ModelSelector", () => {
       document.body.querySelector<HTMLElement>(
         '[data-testid="model-drawer-handle-hit-area"]'
       )?.className
-    ).toBe(
-      "pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none"
-    )
+    ).toBe("pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none")
     expect(
       document.body.querySelector<HTMLElement>(
         '[data-slot="model-selector-mobile-search"]'
@@ -748,8 +875,23 @@ describe("ModelSelector", () => {
     expect(trigger?.className).toContain("can-hover:after:absolute")
     expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
     expect(trigger?.className).toContain("overflow-visible")
-    expect(trigger?.className).toContain("px-3")
+    expect(trigger?.className).toContain("gap-1.5")
+    expect(trigger?.className).toContain("ps-3.5")
+    expect(trigger?.className).toContain("pe-3")
+    expect(trigger?.className).toContain("text-base")
+    expect(trigger?.className).toContain("leading-[26px]")
     expect(trigger?.className).not.toContain("overflow-hidden")
+
+    const selectedModelIcon = trigger?.querySelector<HTMLElement>(
+      '[data-slot="selected-model-icon"]'
+    )
+    expect(selectedModelIcon?.style.getPropertyValue("--icon-slot-size")).toBe(
+      "16px"
+    )
+    expect(selectedModelIcon?.style.getPropertyValue("--icon-glyph-size")).toBe(
+      "16px"
+    )
+    expect(trigger?.lastElementChild?.className).toContain("text-foreground")
   })
 
   it("keeps the hover bridge scoped to the composer trigger", () => {
@@ -801,7 +943,9 @@ describe("ModelSelector", () => {
     // Favorites remain first; the selection leads within All models.
     expect(optionText[0]).toContain("GPT-5.4")
     expect(optionText[1]).toContain("GLM-5.2")
-    expect(optionText.filter((text) => text.includes("GLM-5.2"))).toHaveLength(1)
+    expect(optionText.filter((text) => text.includes("GLM-5.2"))).toHaveLength(
+      1
+    )
     expect(optionText.join(" ")).toContain("GPT-5 Mini")
     expect(optionText.join(" ")).toContain("GLM-5.2")
     // Explicit user-hidden models stay hidden.

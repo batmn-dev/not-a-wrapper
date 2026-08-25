@@ -272,13 +272,19 @@ export async function validateAndResolveChatCredential({
       ? { workosUserId }
       : undefined
 
+  const requiredCapabilities = {
+    ...(turnRequiresVision(messages) ? { vision: true as const } : {}),
+    ...(enableSearch ? { webSearch: true as const } : {}),
+  }
+
   const resolution = await resolveModelRoute({
     modelId: model,
     isAuthenticated,
     token: isAuthenticated ? token : undefined,
-    requiredCapabilities: turnRequiresVision(messages)
-      ? { vision: true }
-      : undefined,
+    requiredCapabilities:
+      Object.keys(requiredCapabilities).length > 0
+        ? requiredCapabilities
+        : undefined,
     pinnedProviderId,
     ...(platformFundingIdentity
       ? {

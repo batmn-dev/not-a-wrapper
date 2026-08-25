@@ -33,8 +33,16 @@ vi.mock("@ai-sdk/xai", () => ({
   }),
 }))
 
+vi.mock("@openrouter/ai-sdk-provider", () => ({
+  createOpenRouter: () => ({
+    tools: {
+      webSearch: () => ({ description: "openrouter-web-search" }),
+    },
+  }),
+}))
+
 describe("provider tools metadata", () => {
-  it.each(["openai", "anthropic", "google", "xai"] as const)(
+  it.each(["openai", "anthropic", "google", "xai", "openrouter"] as const)(
     "marks %s web search as open-world",
     async (providerId) => {
       const { metadata, tools } = await getProviderTools(providerId, "test_key")
