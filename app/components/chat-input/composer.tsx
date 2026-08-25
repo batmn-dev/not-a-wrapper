@@ -220,11 +220,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const { user } = useUser()
     const isUserAuthenticated = !!user?.id
     const convex = useConvex()
-    const { selectedModel, handleModelChange, enableSearch, setEnableSearch } =
-      useTurnContext()
+    const {
+      selectedModel,
+      handleModelChange,
+      enableSearch,
+      setEnableSearch,
+      searchMode,
+    } = useTurnContext()
 
     const selectModelConfig = getLogicalModelInfo(selectedModel)
-    const isSearchDisabled = selectModelConfig?.webSearch !== true
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =
@@ -236,7 +240,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       entities: composerEntities,
       handleEntitiesChange: handleComposerEntitiesChange,
       activateActionQuery: handleActivateActionQuery,
-    } = useComposerCapabilities({ enableSearch, setEnableSearch, editorRef })
+    } = useComposerCapabilities({
+      enableSearch,
+      setEnableSearch,
+      searchMode,
+      editorRef,
+    })
     const {
       connectors: menuConnectors,
       activateConnector: handleActivateConnector,
@@ -618,7 +627,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   enableSearch={enableSearch}
                   onActivateActionQuery={handleActivateActionQuery}
                   onToggleSearch={setEnableSearch}
-                  isSearchDisabled={isSearchDisabled}
+                  searchMode={searchMode}
                   connectors={menuConnectors}
                   onActivateConnector={handleActivateConnector}
                   onToggleConnector={handleToggleConnector}

@@ -48,9 +48,16 @@ describe("model catalog exposure", () => {
     )
   })
 
-  it("exposes web search for Opus 5 through its OpenRouter route", () => {
+  it("exposes optional web search for Opus 5 through its OpenRouter route", () => {
     expect(
-      getLogicalModelInfo("openrouter:anthropic/claude-opus-5")?.webSearch
-    ).toBe(true)
+      getLogicalModelInfo("openrouter:anthropic/claude-opus-5")?.searchMode
+    ).toBe("optional")
+  })
+
+  it("distinguishes inherent and unsupported web search", () => {
+    expect(getLogicalModelInfo("sonar")?.searchMode).toBe("always-on")
+    expect(getLogicalModelInfo("gemma-3-27b-it")?.searchMode).toBe(
+      "unsupported"
+    )
   })
 })

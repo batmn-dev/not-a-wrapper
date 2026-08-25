@@ -125,6 +125,7 @@ function useComposerActionMenu({
     (itemId: string) => {
       const item = itemsById.get(itemId)
       if (!item) return
+      if (item.kind === "action" && item.disabled) return
       if (item.kind === "connector") {
         if (
           actionQuery !== null &&

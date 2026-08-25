@@ -39,7 +39,6 @@ import {
   getModelDisplayName,
   getModelSnapshotDateLabel,
 } from "@/lib/models/presentation"
-import type { ModelConfig } from "@/lib/models/types"
 import {
   getModelIcon,
   getVendorIcon,
@@ -74,11 +73,16 @@ type ModelSelectorProps = {
 // Keep its color recipe shared so the mobile drawer and desktop menu cannot drift.
 const modelSelectorSurfaceClassName =
   "bg-floating-surface text-floating-surface-foreground"
+const modelSelectorSearchOverlayClassName =
+  "from-floating-surface/80 to-floating-surface/0 pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b"
+const modelSelectorSearchInputClassName =
+  "border-input-border bg-floating-surface/70 border shadow-none backdrop-blur-md focus-visible:ring-0"
 
 type LegacyProviderOption = {
   providerId: string
   providerName: string
   icon: VendorIcon
+  models: LogicalModelView[]
 }
 
 type ModelSelectorRow =
@@ -105,12 +109,16 @@ function getModelSelectorRowClassName({
 }
 
 function getLegacyProviderOptions(
-  models: readonly ModelConfig[]
+  models: readonly LogicalModelView[]
 ): LegacyProviderOption[] {
   const providers = new Map<string, LegacyProviderOption>()
 
   for (const model of models) {
-    if (providers.has(model.baseProviderId)) continue
+    const provider = providers.get(model.baseProviderId)
+    if (provider) {
+      provider.models.push(model)
+      continue
+    }
 
     providers.set(model.baseProviderId, {
       providerId: model.baseProviderId,
@@ -119,6 +127,7 @@ function getLegacyProviderOptions(
         model.baseProviderId === "anthropic"
           ? getVendorIcon("claude")
           : getModelIcon(model),
+      models: [model],
     })
   }
 
@@ -127,17 +136,33 @@ function getLegacyProviderOptions(
 
 function buildModelSelectorRows(
   models: readonly LogicalModelView[],
-  legacyProviders: readonly LegacyProviderOption[]
+  legacyProviders: readonly LegacyProviderOption[],
+  revealedLegacyProviders: ReadonlySet<string>
 ): ModelSelectorRow[] {
   const lastModelIndexByProvider = new Map<string, number>()
   models.forEach((model, index) => {
     lastModelIndexByProvider.set(model.baseProviderId, index)
   })
 
-  const legacyProviderById = new Map(
+  const legacyProviderById = new Map<string, LegacyProviderOption>(
     legacyProviders.map((provider) => [provider.providerId, provider])
   )
   const rows: ModelSelectorRow[] = []
+
+  const addLegacyRows = (provider: LegacyProviderOption) => {
+    if (revealedLegacyProviders.has(provider.providerId)) {
+      rows.push(
+        ...provider.models.map((model): ModelSelectorRow => ({
+          type: "model",
+          model,
+        }))
+      )
+    } else {
+      rows.push({ type: "show-legacy", provider })
+    }
+
+    legacyProviderById.delete(provider.providerId)
+  }
 
   models.forEach((model, index) => {
     rows.push({ type: "model", model })
@@ -146,13 +171,12 @@ function buildModelSelectorRows(
     const legacyProvider = legacyProviderById.get(model.baseProviderId)
     if (!legacyProvider) return
 
-    rows.push({ type: "show-legacy", provider: legacyProvider })
-    legacyProviderById.delete(model.baseProviderId)
+    addLegacyRows(legacyProvider)
   })
 
   for (const provider of legacyProviders) {
     if (legacyProviderById.has(provider.providerId)) {
-      rows.push({ type: "show-legacy", provider })
+      addLegacyRows(provider)
     }
   }
 
@@ -166,6 +190,7 @@ function ModelOptionLabel({
   isMobile,
   iconSlot,
   labelSlot,
+  labelClassName,
 }: {
   icon: VendorIcon
   label: string
@@ -173,6 +198,7 @@ function ModelOptionLabel({
   isMobile: boolean
   iconSlot: string
   labelSlot: string
+  labelClassName?: string
 }) {
   return (
     <div
@@ -188,7 +214,7 @@ function ModelOptionLabel({
       <div className="flex min-w-0 items-baseline gap-1.5">
         <span
           data-slot={labelSlot}
-          className={cn("truncate", isMobile ? "text-base" : "text-sm")}
+          className={cn("truncate text-base", labelClassName)}
         >
           {label}
         </span>
@@ -262,6 +288,7 @@ function ModelOptionContent({
 function ModelSelectorRows({
   models,
   legacyProviders = [],
+  revealedLegacyProviders,
   isMobile,
   isUserAuthenticated,
   selectedModelId,
@@ -270,18 +297,26 @@ function ModelSelectorRows({
 }: {
   models: LogicalModelView[]
   legacyProviders?: LegacyProviderOption[]
+  revealedLegacyProviders: ReadonlySet<string>
   isMobile: boolean
   isUserAuthenticated: boolean
   selectedModelId: string | null
   onSelect: (modelId: string, isLocked: boolean) => void
   onShowLegacy: (providerId: string) => void
 }) {
-  return buildModelSelectorRows(models, legacyProviders).map((row, index) => {
+  return buildModelSelectorRows(
+    models,
+    legacyProviders,
+    revealedLegacyProviders
+  ).map((row, index) => {
     if (row.type === "show-legacy") {
-      const className = getModelSelectorRowClassName({
-        isMobile,
-        hasDivider: index > 0,
-      })
+      const className = cn(
+        getModelSelectorRowClassName({
+          isMobile,
+          hasDivider: index > 0,
+        }),
+        "group/show-legacy justify-start text-left"
+      )
       const content = (
         <ModelOptionLabel
           icon={row.provider.icon}
@@ -289,6 +324,7 @@ function ModelSelectorRows({
           isMobile={isMobile}
           iconSlot="show-legacy-models-icon"
           labelSlot="show-legacy-models-label"
+          labelClassName="opacity-40 group-hover/show-legacy:opacity-100"
         />
       )
 
@@ -297,7 +333,6 @@ function ModelSelectorRows({
           key={`show-legacy-${row.provider.providerId}`}
           type="button"
           data-testid="show-legacy-models"
-          data-provider-id={row.provider.providerId}
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
           onClick={() => onShowLegacy(row.provider.providerId)}
@@ -310,7 +345,6 @@ function ModelSelectorRows({
           geometry="custom"
           closeOnClick={false}
           data-testid="show-legacy-models"
-          data-provider-id={row.provider.providerId}
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
           onClick={() => onShowLegacy(row.provider.providerId)}
@@ -364,6 +398,7 @@ function ModelSelectorList({
   favorites,
   others,
   legacyProviders,
+  revealedLegacyProviders,
   isLoading,
   isMobile,
   isUserAuthenticated,
@@ -374,6 +409,7 @@ function ModelSelectorList({
   favorites: LogicalModelView[]
   others: LogicalModelView[]
   legacyProviders: LegacyProviderOption[]
+  revealedLegacyProviders: ReadonlySet<string>
   isLoading: boolean
   isMobile: boolean
   isUserAuthenticated: boolean
@@ -415,6 +451,7 @@ function ModelSelectorList({
     selectedModelId,
     onSelect,
     onShowLegacy,
+    revealedLegacyProviders,
   }
   const sectionLabelClassName = cn(
     "text-muted-foreground text-xs font-medium",
@@ -593,31 +630,21 @@ export function ModelSelector({
     })
   }
 
-  const selectorModels = models.filter(
-    (model) =>
-      model.classification === "current" ||
-      revealedLegacyProviders.has(model.baseProviderId)
-  )
-
   const { favorites, others } = groupModelsForSelector(
-    selectorModels,
+    models.filter((model) => model.classification === "current"),
     isUserAuthenticated ? favoriteModels || [] : [],
     isComposerVariant ? normalizedSelectedModelId : null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
-  const { others: hiddenLegacyModels } = groupModelsForSelector(
-    models.filter(
-      (model) =>
-        model.classification === "legacy" &&
-        !revealedLegacyProviders.has(model.baseProviderId)
-    ),
+  const { others: legacyModels } = groupModelsForSelector(
+    models.filter((model) => model.classification === "legacy"),
     [],
     null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
-  const legacyProviders = getLegacyProviderOptions(hiddenLegacyModels)
+  const legacyProviders = getLegacyProviderOptions(legacyModels)
 
   const TriggerControl = isComposerVariant ? ComposerControl : Button
   const currentModelFullName = currentModel
@@ -698,7 +725,10 @@ export function ModelSelector({
             <DrawerTitle className="sr-only">Select Model</DrawerTitle>
             <div
               data-slot="model-selector-mobile-search"
-              className="from-floating-surface/80 to-floating-surface/0 pointer-events-none absolute inset-x-0 top-0 z-10 h-20 bg-gradient-to-b px-4 pt-5"
+              className={cn(
+                modelSelectorSearchOverlayClassName,
+                "h-20 px-4 pt-5"
+              )}
             >
               <div className="pointer-events-auto relative">
                 <Icon
@@ -711,7 +741,10 @@ export function ModelSelector({
                 <Input
                   ref={searchInputRef}
                   placeholder="Search models..."
-                  className="border-input-border bg-floating-surface/70 h-12 rounded-full border pl-10 shadow-none backdrop-blur-md focus-visible:ring-0"
+                  className={cn(
+                    modelSelectorSearchInputClassName,
+                    "h-12 rounded-full pl-10"
+                  )}
                   value={searchQuery}
                   onChange={handleSearchChange}
                   onClick={(e) => e.stopPropagation()}
@@ -726,6 +759,7 @@ export function ModelSelector({
                 favorites={favorites}
                 others={others}
                 legacyProviders={legacyProviders}
+                revealedLegacyProviders={revealedLegacyProviders}
                 isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
@@ -782,24 +816,33 @@ export function ModelSelector({
           geometry="custom"
           className={cn(
             modelSelectorSurfaceClassName,
-            "w-[300px] overflow-hidden rounded-(--floating-menu-radius) p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
+            "relative w-[300px] overflow-hidden rounded-(--floating-menu-radius) p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
           )}
           align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
           animated={false}
           side={isComposerVariant ? "bottom" : "top"}
         >
-          <div className="shrink-0">
-            <div className="relative">
+          <div
+            data-slot="model-selector-desktop-search"
+            className={cn(
+              modelSelectorSearchOverlayClassName,
+              "h-14 px-1.5 pt-1.5"
+            )}
+          >
+            <div className="pointer-events-auto relative">
               <Icon
                 icon={RiSearchLine}
                 slotSize={18}
-                className="text-foreground absolute top-1/2 left-2.5 -translate-y-1/2"
+                className="text-foreground absolute top-1/2 left-2.5 z-10 -translate-y-1/2"
               />
               <Input
                 ref={searchInputRef}
                 placeholder="Search models..."
-                className="border-input-border bg-input-bg h-9 rounded-xl border pl-8 shadow-none focus-visible:ring-0"
+                className={cn(
+                  modelSelectorSearchInputClassName,
+                  "h-10 rounded-xl pl-8"
+                )}
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onClick={(e) => e.stopPropagation()}
@@ -808,15 +851,16 @@ export function ModelSelector({
               />
             </div>
           </div>
-          <div className="before:from-floating-surface after:from-floating-surface relative mt-[2px] rounded-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-3 before:bg-gradient-to-b before:to-transparent before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
+          <div className="after:from-floating-surface relative rounded-xl after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
             <div
               data-scrollable-surface=""
-              className="max-h-[min(var(--model-selector-list-max-height),max(0px,calc(var(--available-height)-var(--model-selector-fixed-height))))] scroll-py-2 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain py-1 pr-1"
+              className="max-h-[min(calc(var(--model-selector-list-max-height)+var(--model-selector-fixed-height)),max(0px,calc(var(--available-height)-0.75rem)))] scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)] scroll-pb-2 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain pt-(--model-selector-fixed-height) pr-1 pb-1"
             >
               <ModelSelectorList
                 favorites={favorites}
                 others={others}
                 legacyProviders={legacyProviders}
+                revealedLegacyProviders={revealedLegacyProviders}
                 isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}

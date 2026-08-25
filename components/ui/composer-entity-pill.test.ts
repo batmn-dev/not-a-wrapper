@@ -46,4 +46,15 @@ describe("composer entity pill DOM contract", () => {
 
     expect(roundTripEntities([tool])).toEqual([tool])
   })
+
+  it("preserves locked status entities", () => {
+    const status: PromptInputEntity = {
+      id: "web-search",
+      kind: "capability",
+      label: "Web search always on",
+      removable: false,
+    }
+
+    expect(roundTripEntities([status])).toEqual([{ ...status, iconUrl: null }])
+  })
 })

@@ -167,7 +167,7 @@ function AuthModalContent({
                 aria-label="Email address"
                 autoComplete="email"
                 className={cn(
-                  "border-border placeholder:text-muted-foreground focus-visible:border-foreground focus-visible:ring-foreground h-[58px] rounded-full border px-5 text-base shadow-none focus-visible:ring-1",
+                  "border-border focus-visible:border-foreground focus-visible:ring-foreground h-[58px] rounded-full border px-5 text-base shadow-none focus-visible:ring-1",
                   state.fieldErrors?.email &&
                     "border-destructive focus-visible:border-destructive focus-visible:ring-destructive"
                 )}

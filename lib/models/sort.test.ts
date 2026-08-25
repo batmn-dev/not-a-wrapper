@@ -99,7 +99,7 @@ describe("compareModelsForProviderSection", () => {
 })
 
 describe("compareProviderSections", () => {
-  it("prioritizes the requested providers and preserves the remaining order", () => {
+  it("uses the product-defined vendor order", () => {
     const providers = [
       "openai",
       "mistral",
@@ -108,6 +108,8 @@ describe("compareProviderSections", () => {
       "deepseek",
       "perplexity",
       "xai",
+      "vendor-b",
+      "vendor-a",
     ]
 
     expect(providers.sort(compareProviderSections)).toEqual([
@@ -118,6 +120,8 @@ describe("compareProviderSections", () => {
       "perplexity",
       "mistral",
       "deepseek",
+      "vendor-a",
+      "vendor-b",
     ])
   })
 })

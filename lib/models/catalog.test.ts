@@ -5,7 +5,7 @@ import {
   compileLogicalCatalog,
   getLogicalModel,
   LOGICAL_MODELS,
-  modelRouteSupportsWebSearch,
+  resolveModelSearchMode,
   resolveModelSelection,
   resolveModelSelections,
   ROUTE_CONFIGS,
@@ -242,21 +242,21 @@ describe("compileLogicalCatalog", () => {
 
     expect(toLogicalModelView(model!)).toMatchObject({
       tools: true,
-      webSearch: true,
+      searchMode: "optional",
     })
   })
 
   it.each([
-    [{}, true],
-    [{ tools: true }, true],
-    [{ tools: false }, false],
-    [{ tools: { search: false } }, false],
-    [{ tools: false, webSearch: true }, true],
-    [{ tools: true, webSearch: false }, false],
+    [{}, "optional"],
+    [{ tools: true }, "optional"],
+    [{ tools: false }, "unsupported"],
+    [{ tools: { search: false } }, "unsupported"],
+    [{ tools: false, searchMode: "always-on" }, "always-on"],
+    [{ tools: true, searchMode: "unsupported" }, "unsupported"],
   ] as const)(
-    "derives route web search from tool support and explicit opt-outs",
+    "derives route search mode from tools and explicit behavior",
     (capabilities, expected) => {
-      expect(modelRouteSupportsWebSearch(capabilities)).toBe(expected)
+      expect(resolveModelSearchMode(capabilities)).toBe(expected)
     }
   )
 
@@ -616,20 +616,32 @@ describe("production logical catalog", () => {
     }
   )
 
-  it("reports web search when every route can provide it", () => {
+  it("reports optional search when every route can provide it", () => {
     const sonnet = getLogicalModel("claude-sonnet-5")!
 
     expect(
-      sonnet.routes.every((route) =>
-        modelRouteSupportsWebSearch(route.config)
+      sonnet.routes.every(
+        (route) => resolveModelSearchMode(route.config) === "optional"
       )
     ).toBe(true)
-    expect(toLogicalModelView(sonnet).webSearch).toBe(true)
+    expect(toLogicalModelView(sonnet).searchMode).toBe("optional")
   })
 
   it.each([
     ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
     ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],
+    ["sonar", "Perplexity Sonar", "Sonar"],
+    [
+      "sonar-reasoning-pro",
+      "Perplexity Sonar Reasoning Pro",
+      "Sonar Reasoning Pro",
+    ],
+    ["sonar-pro", "Perplexity Sonar Pro", "Sonar Pro"],
+    [
+      "sonar-deep-research",
+      "Perplexity Sonar Deep Research",
+      "Sonar Deep Research",
+    ],
   ])("exposes full and compact names for %s", (modelId, name, shortName) => {
     const model = getLogicalModel(modelId)
 

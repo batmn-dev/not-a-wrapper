@@ -99,6 +99,9 @@ export type ModelPriority = {
 
 export type ModelIdKind = "stable" | "snapshot" | "alias" | "wrapped"
 
+/** How a model route exposes web search to the product. */
+export type SearchMode = "optional" | "always-on" | "unsupported"
+
 export type ModelReasoningEffort =
   "minimal" | "low" | "medium" | "high" | "xhigh"
 
@@ -157,11 +160,11 @@ type ModelConfig = {
   audio?: boolean
   reasoningText?: boolean
   /**
-   * Explicit route-level override for the app's web-search capability.
-   * Undefined derives support from `tools`; true can expose provider-native
-   * search without general tool calling; false is a deliberate opt-out.
+   * Explicit route-level web-search behavior. Undefined derives optional
+   * search from `tools`; always-on marks inherently grounded models and
+   * unsupported is a deliberate opt-out.
    */
-  webSearch?: boolean
+  searchMode?: SearchMode
   openSource?: boolean
 
   /**

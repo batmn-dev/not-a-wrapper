@@ -22,6 +22,7 @@ function parseComposerEntityPill(node: HTMLElement | string) {
     kind,
     label,
     iconUrl: node.querySelector("img")?.getAttribute("src") ?? null,
+    ...(node.dataset.removable === "false" ? { removable: false } : {}),
   }
 }
 
@@ -47,6 +48,7 @@ function composerEntityPillToDOM(node: ProseMirrorNode): DOMOutputSpec {
       node.attrs.kind === "tool" ? "skillMention" : "ecosystemMention",
     "data-system-hint-type":
       node.attrs.id === "web-search" ? "search" : node.attrs.id,
+    ...(node.attrs.removable === false ? { "data-removable": "false" } : {}),
     dir: "auto",
   }
   const labelSpec = [

@@ -27,6 +27,8 @@ import type { Chats } from "@/lib/chat-store/types"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useModel as useModelStore } from "@/lib/model-store/provider"
 import { useSessionModel } from "@/lib/model-store/use-session-model"
+import { getLogicalModelInfo } from "@/lib/models"
+import type { SearchMode } from "@/lib/models/types"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import { useUser } from "@/lib/user-store/provider"
@@ -55,6 +57,7 @@ export type TurnContextValue = {
   handleModelChange: (modelId: string) => Promise<void> | void
   enableSearch: boolean
   setEnableSearch: (enabled: boolean) => void
+  searchMode: SearchMode
   isAuthenticated: boolean
   systemPrompt: string
   isHydrated: boolean
@@ -106,14 +109,18 @@ export function TurnContextProvider({
   // An authenticated preference is unknown until its Convex read settles.
   // Keep capability UI inactive during that window instead of briefly
   // projecting the product default as if the user selected Web search.
+  const searchMode =
+    getLogicalModelInfo(selectedModel)?.searchMode ?? "unsupported"
+  const prefersSearch =
+    !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)
   const enableSearch =
-    !preferencesLoading &&
-    resolveWebSearchEnabled(preferences.webSearchEnabled)
+    searchMode === "always-on" || (searchMode === "optional" && prefersSearch)
   const setEnableSearch = useCallback(
     (enabled: boolean) => {
+      if (searchMode !== "optional") return
       setWebSearchEnabled(enabled)
     },
-    [setWebSearchEnabled]
+    [searchMode, setWebSearchEnabled]
   )
 
   const isAuthenticated = !!user?.id
@@ -152,6 +159,7 @@ export function TurnContextProvider({
       handleModelChange,
       enableSearch,
       setEnableSearch,
+      searchMode,
       isAuthenticated,
       systemPrompt,
       isHydrated,
@@ -162,6 +170,7 @@ export function TurnContextProvider({
       handleModelChange,
       enableSearch,
       setEnableSearch,
+      searchMode,
       isAuthenticated,
       systemPrompt,
       isHydrated,

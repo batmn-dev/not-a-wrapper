@@ -6,6 +6,7 @@ import {
   type LoadToolsResult,
   type ServerInfo,
 } from "@/lib/mcp/load-tools"
+import type { SearchMode } from "@/lib/models/types"
 import { getPostHogClient } from "@/lib/posthog"
 import {
   filterMetadataMapByPolicy,
@@ -133,8 +134,8 @@ export type PrepareToolRuntimeOptions = {
   providerToolKeyMode: ToolKeyMode
   /** ModelConfig.tools — the model's declared capability switches. */
   modelTools: boolean | ToolCapabilities | undefined
-  /** Resolved route-level web-search capability from the model catalog. */
-  modelWebSearch: boolean
+  /** Resolved route-level web-search behavior from the model catalog. */
+  modelSearchMode: SearchMode
   enableSearch: boolean
   logContext: {
     requestId: string
@@ -291,7 +292,7 @@ async function buildToolRuntime(
     apiKey,
     providerToolKeyMode,
     modelTools,
-    modelWebSearch,
+    modelSearchMode,
     enableSearch,
     logContext,
     onMcpClientsOpened,
@@ -312,7 +313,7 @@ async function buildToolRuntime(
   // Capability policy — phase 1 (search injection gating)
   const effectiveModelTools = {
     ...resolveToolCapabilities(modelTools),
-    search: modelWebSearch,
+    search: modelSearchMode === "optional",
   }
   const initialCapabilityPolicy = resolveCapabilityPolicy({
     modelTools: effectiveModelTools,

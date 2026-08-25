@@ -3,6 +3,7 @@ import type {
   PromptInputEditorHandle,
   PromptInputEntity,
 } from "@/components/ui/prompt-input"
+import type { SearchMode } from "@/lib/models/types"
 import { useCallback, useMemo, type RefObject } from "react"
 import {
   getComposerAction,
@@ -20,10 +21,12 @@ const WEB_SEARCH_ACTION = getComposerAction("web-search")
 function useComposerCapabilities({
   enableSearch,
   setEnableSearch,
+  searchMode,
   editorRef,
 }: {
   enableSearch: boolean
   setEnableSearch: (enabled: boolean) => void
+  searchMode: SearchMode
   editorRef: RefObject<PromptInputEditorHandle | null>
 }) {
   const entities = useMemo<readonly PromptInputEntity[]>(
@@ -33,27 +36,32 @@ function useComposerCapabilities({
             {
               id: WEB_SEARCH_ACTION.id,
               kind: "capability",
-              label: WEB_SEARCH_ACTION.label,
+              label:
+                searchMode === "always-on"
+                  ? "Web search always on"
+                  : WEB_SEARCH_ACTION.label,
+              ...(searchMode === "always-on" ? { removable: false } : {}),
             },
           ]
         : [],
-    [enableSearch]
+    [enableSearch, searchMode]
   )
 
   const handleEntitiesChange = useCallback(
     (nextEntities: readonly PromptInputEntity[]) => {
+      if (searchMode !== "optional") return
       const hasWebSearch = nextEntities.some(
         (entity) => entity.id === WEB_SEARCH_ACTION.id
       )
       if (hasWebSearch !== enableSearch) setEnableSearch(hasWebSearch)
     },
-    [enableSearch, setEnableSearch]
+    [enableSearch, searchMode, setEnableSearch]
   )
 
   const activateActionQuery = useCallback(
     (actionId: ComposerActionId, query: PromptInputActionQuery) => {
       const editor = editorRef.current
-      if (!editor) return false
+      if (!editor || searchMode !== "optional") return false
 
       return editor.replaceActionQuery(
         query,
@@ -66,7 +74,7 @@ function useComposerCapabilities({
           : undefined
       )
     },
-    [editorRef]
+    [editorRef, searchMode]
   )
 
   return { entities, handleEntitiesChange, activateActionQuery }

@@ -14,6 +14,7 @@ import type {
   ModelRecommendationLaneId,
   ModelRecommendationPolicy,
   ModelReleaseStage,
+  SearchMode,
 } from "./types"
 
 const MODEL_SUCCESSOR_GRACE_DAYS = 30
@@ -93,18 +94,21 @@ export type LogicalModelView = ModelConfig &
     }>
   }
 
-/**
- * The one route-level rule for the app's optional web-search capability.
- * An explicit route declaration wins because provider-native search may work
- * without ordinary tool calling; otherwise support follows the search-tool
- * capability used by the Exa fallback.
- */
-export function modelRouteSupportsWebSearch(
-  config: Pick<ModelConfig, "tools" | "webSearch">
-): boolean {
+/** The one route-level rule for the app's web-search behavior. */
+export function resolveModelSearchMode(
+  config: Pick<ModelConfig, "tools" | "searchMode">
+): SearchMode {
   return (
-    config.webSearch ?? resolveToolCapabilities(config.tools).search
+    config.searchMode ??
+    (resolveToolCapabilities(config.tools).search ? "optional" : "unsupported")
   )
+}
+
+function aggregateSearchMode(routes: readonly ModelRoute[]): SearchMode {
+  const modes = routes.map((route) => resolveModelSearchMode(route.config))
+  if (modes.includes("optional")) return "optional"
+  if (modes.includes("always-on")) return "always-on"
+  return "unsupported"
 }
 
 export function toUpstreamModelId(routeId: string): string {
@@ -700,6 +704,15 @@ export function resolveModelSelection(modelId: string): ResolvedModelSelection {
   return { modelId: resolved }
 }
 
+/** Resolve any current or historical selection to its logical search state. */
+export function resolveLogicalModelSearchMode(
+  modelId: string
+): SearchMode | undefined {
+  const selection = resolveModelSelection(modelId)
+  const model = getLogicalModel(selection.modelId)
+  return model ? aggregateSearchMode(model.routes) : undefined
+}
+
 /** Normalize a list of selections to unique logical ids, preserving order. */
 export function resolveModelSelections(modelIds: readonly string[]): string[] {
   const normalized: string[] = []
@@ -725,7 +738,7 @@ export function getLogicalModelsServedByProvider(
 /**
  * Project a logical model into the client view shape: the canonical route's
  * record (whose id already equals the logical id) with capability flags
- * widened to "any route supports it" and the per-route provider summary.
+ * widened across routes, the aggregated search mode, and the provider summary.
  */
 export function toLogicalModelView(
   model: LogicalModel,
@@ -742,9 +755,7 @@ export function toLogicalModelView(
     reasoningText: model.routes.some(
       (route) => route.config.reasoningText === true
     ),
-    webSearch: model.routes.some((route) =>
-      modelRouteSupportsWebSearch(route.config)
-    ),
+    searchMode: aggregateSearchMode(model.routes),
     tools: model.routes.some((route) => Boolean(route.config.tools))
       ? true
       : canonical.tools,

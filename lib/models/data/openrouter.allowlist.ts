@@ -1038,7 +1038,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   // Free-model product policy remains separate in lib/config.ts.
   {
     slug: "google/gemma-4-26b-a4b-it:free",
-    name: "Gemma 4 26B A4B (Free)",
+    name: "Gemma 4 26B A4B",
     shortName: "Gemma 4 26B",
     description:
       "Google's open-weight Gemma 4 26B (A4B MoE) instruction-tuned model with vision, served on OpenRouter's free tier.",

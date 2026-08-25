@@ -8,7 +8,7 @@ import type { ModelConfig } from "../types"
 export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemma-4-26b-a4b-it:free",
-    name: "Gemma 4 26B A4B (Free)",
+    name: "Gemma 4 26B A4B",
     shortName: "Gemma 4 26B",
     provider: "OpenRouter",
     providerId: "openrouter",
@@ -33,7 +33,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -68,7 +68,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -104,7 +104,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -140,7 +140,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -176,7 +176,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -212,7 +212,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -248,7 +248,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -284,7 +284,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -320,7 +320,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -356,7 +356,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -392,7 +392,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -428,7 +428,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -464,7 +464,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -506,7 +506,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -549,7 +549,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -585,7 +585,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -620,7 +620,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -656,7 +656,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -691,7 +691,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -726,7 +726,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -761,7 +761,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -793,7 +793,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -825,7 +825,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -861,7 +861,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -898,7 +898,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -933,7 +933,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -968,7 +968,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -1002,7 +1002,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -1036,7 +1036,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1072,7 +1072,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -1106,7 +1106,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1147,7 +1147,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -1188,7 +1188,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -1222,7 +1222,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -1260,7 +1260,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -1295,7 +1295,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1329,7 +1329,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1364,7 +1364,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -1399,7 +1399,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -1435,7 +1435,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -1471,7 +1471,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -1506,7 +1506,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -1542,7 +1542,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -1578,7 +1578,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -1610,7 +1610,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -1646,7 +1646,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1682,7 +1682,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1717,7 +1717,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1752,7 +1752,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -1788,7 +1788,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -1830,7 +1830,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -1866,7 +1866,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -1901,7 +1901,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -1936,7 +1936,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -1972,7 +1972,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -2007,7 +2007,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -2042,7 +2042,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "High",
@@ -2077,7 +2077,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -2108,7 +2108,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -2139,7 +2139,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -2173,7 +2173,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -2207,7 +2207,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -2241,7 +2241,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -2275,7 +2275,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -2307,7 +2307,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -2340,7 +2340,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -2383,7 +2383,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -2418,7 +2418,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -2452,7 +2452,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -2486,7 +2486,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -2517,7 +2517,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -2549,7 +2549,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -2581,7 +2581,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -2613,7 +2613,7 @@ export const openrouterModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: false,
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Low",
@@ -2648,7 +2648,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -2683,7 +2683,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Medium",
@@ -2718,7 +2718,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Low",
@@ -2753,7 +2753,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -2788,7 +2788,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -2823,7 +2823,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Fast",
     intelligence: "Low",
@@ -2858,7 +2858,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -2893,7 +2893,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -2928,7 +2928,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -2963,7 +2963,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -2998,7 +2998,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Slow",
     intelligence: "High",
@@ -3039,7 +3039,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -3073,7 +3073,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -3107,7 +3107,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "Medium",
@@ -3141,7 +3141,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -3175,7 +3175,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -3209,7 +3209,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -3243,7 +3243,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Medium",
     intelligence: "High",
@@ -3284,7 +3284,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: true,
     speed: "Fast",
     intelligence: "High",
@@ -3319,7 +3319,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -3354,7 +3354,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",
@@ -3389,7 +3389,7 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
-    webSearch: true,
+    searchMode: "optional",
     openSource: false,
     speed: "Medium",
     intelligence: "High",

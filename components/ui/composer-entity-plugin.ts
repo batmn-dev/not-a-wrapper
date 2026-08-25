@@ -92,20 +92,31 @@ function deleteSelectedComposerEntities(
   if (state.selection.empty) return false
 
   const ranges: Array<{ from: number; to: number }> = []
-  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
-    if (
-      node.type === promptInputSchema.nodes.composerEntity &&
-      state.selection.from <= pos &&
-      state.selection.to >= pos + node.nodeSize
-    ) {
-      ranges.push(getEntityDeletionRange(state, pos, node))
+  let containsLockedEntity = false
+  state.doc.nodesBetween(
+    state.selection.from,
+    state.selection.to,
+    (node, pos) => {
+      if (
+        node.type === promptInputSchema.nodes.composerEntity &&
+        state.selection.from <= pos &&
+        state.selection.to >= pos + node.nodeSize
+      ) {
+        if (node.attrs.removable === false) {
+          containsLockedEntity = true
+        } else {
+          ranges.push(getEntityDeletionRange(state, pos, node))
+        }
+      }
     }
-  })
-  if (ranges.length === 0) return false
+  )
+  if (ranges.length === 0) return containsLockedEntity
 
   if (dispatch) {
     const transaction = state.tr
-    for (const range of ranges.toSorted((left, right) => right.from - left.from)) {
+    for (const range of ranges.toSorted(
+      (left, right) => right.from - left.from
+    )) {
       transaction.delete(range.from, range.to)
     }
     dispatch(transaction.scrollIntoView())
@@ -122,6 +133,7 @@ function deleteComposerEntityBackward(
 
   const entity = state.selection.$from.nodeBefore
   if (entity?.type !== promptInputSchema.nodes.composerEntity) return false
+  if (entity.attrs.removable === false) return true
   const entityPos = state.selection.from - entity.nodeSize
   const range = getEntityDeletionRange(state, entityPos, entity)
   dispatch?.(state.tr.delete(range.from, range.to).scrollIntoView())
@@ -149,6 +161,7 @@ function deleteComposerEntityForward(
   ) {
     return false
   }
+  if (entity.attrs.removable === false) return true
 
   const range = getEntityDeletionRange(state, entityPos, entity)
   dispatch?.(state.tr.delete(range.from, range.to).scrollIntoView())

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useIsMobileDeviceOs } from "@/hooks/use-mobile-device-os"
+import type { SearchMode } from "@/lib/models/types"
 import { RiPlugLine } from "@remixicon/react"
 import { useCallback, useMemo, useRef } from "react"
 import { type ComposerActionId } from "./composer-action-registry"
@@ -41,6 +42,7 @@ import {
 } from "./composer-menu-icons"
 import {
   type ComposerActionAvailability,
+  type ComposerActionMenuItem,
   type ComposerMenuConnector,
 } from "./composer-menu-items"
 import { composerMenuRow } from "./composer-menu-row"
@@ -80,11 +82,9 @@ type ButtonPlusMenuProps = {
   isFileUploadAvailable: boolean
   enableSearch: boolean
   onToggleSearch: (enabled: boolean) => void
-  isSearchDisabled: boolean
+  searchMode: SearchMode
   /** Override the default disabled tooltip for file upload */
   fileUploadDisabledMessage?: string
-  /** Override the default disabled tooltip for web search */
-  searchDisabledMessage?: string
   actionQuery?: PromptInputActionQuery | null
   onActivateActionQuery?: (
     actionId: ComposerActionId,
@@ -105,14 +105,89 @@ type ButtonPlusMenuProps = {
   onCloseActionQuery?: () => void
 }
 
+type ComposerActionMenuRowProps = {
+  item: ComposerActionMenuItem
+  highlighted: boolean
+  onActivate: (itemId: string) => void
+  onHighlight: (itemId: string) => void
+}
+
+function ComposerActionMenuRow({
+  item,
+  highlighted,
+  onActivate,
+  onHighlight,
+}: ComposerActionMenuRowProps) {
+  const primaryTextRef = useRef<HTMLSpanElement>(null)
+
+  return (
+    <div>
+      <Tooltip disabled={!item.disabled}>
+        <TooltipTrigger
+          render={composerMenuRow({
+            itemId: item.itemId,
+            disabled: item.disabled,
+            selected:
+              item.action.behavior === "toggle" ? item.selected : undefined,
+            highlighted,
+            onActivate,
+            onHighlight,
+            children: (
+              <>
+                <span className="relative flex size-5 shrink-0 items-center justify-center">
+                  <Icon
+                    icon={item.action.icon}
+                    glyphInset={0}
+                    iconClassName={item.action.iconClassName}
+                    slotSize={20}
+                  />
+                </span>
+                <span className="flex min-w-0 grow items-center gap-2.5">
+                  <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
+                    <span
+                      ref={primaryTextRef}
+                      className="text-foreground max-w-full min-w-0 shrink-0 truncate"
+                      data-composer-action-tooltip-anchor=""
+                    >
+                      {item.label}
+                    </span>
+                    <span className="min-w-0 truncate text-[var(--text-tertiary)]">
+                      {item.action.description}
+                    </span>
+                  </span>
+                  {item.selected && (
+                    <span
+                      aria-hidden="true"
+                      className="ms-auto shrink-0"
+                      data-composer-action-check=""
+                    >
+                      <Icon
+                        icon={ComposerCheckIcon}
+                        glyphInset={0}
+                        slotSize={16}
+                      />
+                    </span>
+                  )}
+                </span>
+              </>
+            ),
+          })}
+        />
+        <TooltipContent anchor={primaryTextRef} side="right" sideOffset={4}>
+          {item.disabledMessage}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  )
+}
+
 export function ButtonPlusMenu({
   isUserAuthenticated,
   isFileUploadAvailable,
   enableSearch,
   onToggleSearch,
-  isSearchDisabled,
+  searchMode,
   fileUploadDisabledMessage,
-  searchDisabledMessage,
   actionQuery = null,
   onActivateActionQuery,
   connectors,
@@ -150,19 +225,24 @@ export function ButtonPlusMenu({
           "This model doesn’t support file uploads",
       },
       "web-search": {
-        disabled: isSearchDisabled,
+        disabled: searchMode !== "optional",
         disabledMessage:
-          searchDisabledMessage ??
-          "This model doesn’t support web search",
+          searchMode === "always-on"
+            ? "Web search is always on for this model"
+            : "This model doesn’t support web search",
         selected: enableSearch,
+        ...(searchMode === "always-on"
+          ? {
+              label: "Web search always on",
+            }
+          : {}),
       },
     }),
     [
       enableSearch,
       fileUploadDisabledMessage,
       isFileUploadAvailable,
-      isSearchDisabled,
-      searchDisabledMessage,
+      searchMode,
     ]
   )
 
@@ -173,11 +253,11 @@ export function ButtonPlusMenu({
           openFilePicker()
           break
         case "web-search":
-          onToggleSearch(!enableSearch)
+          if (searchMode === "optional") onToggleSearch(!enableSearch)
           break
       }
     },
-    [enableSearch, onToggleSearch, openFilePicker]
+    [enableSearch, onToggleSearch, openFilePicker, searchMode]
   )
 
   const {
@@ -261,44 +341,13 @@ export function ButtonPlusMenu({
         className="empty:hidden [:not(:has(div:not([role=group])))]:hidden"
       >
         {actionItems.map((item) => (
-          <div key={item.itemId}>
-            <Tooltip disabled={!item.disabled}>
-              <TooltipTrigger
-                render={composerMenuRow({
-                  itemId: item.itemId,
-                  disabled: item.disabled,
-                  highlighted: item.itemId === resolvedHighlightedItemId,
-                  onActivate: activateItem,
-                  onHighlight: setHighlightedItemId,
-                  children: (
-                    <>
-                      <span className="relative flex size-5 shrink-0 items-center justify-center">
-                        <Icon
-                          icon={item.action.icon}
-                          glyphInset={0}
-                          iconClassName={item.action.iconClassName}
-                          slotSize={20}
-                        />
-                      </span>
-                      <span className="flex min-w-0 grow items-center gap-2.5">
-                        <span className="me-24 flex min-w-0 flex-1 items-baseline gap-3">
-                          <span className="text-foreground max-w-full min-w-0 shrink-0 truncate">
-                            {item.action.label}
-                          </span>
-                          <span className="min-w-0 truncate text-[var(--text-tertiary)]">
-                            {item.action.description}
-                          </span>
-                        </span>
-                      </span>
-                    </>
-                  ),
-                })}
-              />
-              <TooltipContent side="right" sideOffset={4}>
-                {item.disabledMessage}
-              </TooltipContent>
-            </Tooltip>
-          </div>
+          <ComposerActionMenuRow
+            key={item.itemId}
+            item={item}
+            highlighted={item.itemId === resolvedHighlightedItemId}
+            onActivate={activateItem}
+            onHighlight={setHighlightedItemId}
+          />
         ))}
       </div>
       {isConnectorsLoading && (
@@ -473,7 +522,7 @@ export function ButtonPlusMenu({
                     </span>
                     <span className="flex min-w-0 grow items-center gap-2.5">
                       <span className="truncate">
-                        {item.action.touchLabel ?? item.action.label}
+                        {item.action.touchLabel ?? item.label}
                       </span>
                     </span>
                   </DropdownMenuItem>
@@ -499,7 +548,7 @@ export function ButtonPlusMenu({
                       />
                     </span>
                     <span className="flex min-w-0 grow items-center gap-2.5">
-                      <span className="truncate">{item.action.label}</span>
+                      <span className="truncate">{item.label}</span>
                     </span>
                   </DropdownMenuRadioItem>
                 ))}
@@ -559,7 +608,7 @@ export function ButtonPlusMenu({
                         slotSize={20}
                       />
                       <span className="min-w-0 truncate">
-                        {item.action.label}
+                        {item.label}
                       </span>
                     </span>
                   </DropdownMenuItem>
@@ -583,7 +632,7 @@ export function ButtonPlusMenu({
                         slotSize={20}
                       />
                       <span className="min-w-0 truncate">
-                        {item.action.label}
+                        {item.label}
                       </span>
                     </span>
                   </DropdownMenuRadioItem>

@@ -21,6 +21,7 @@ const composerMenuRowClassName = cn(
 type ComposerMenuRowOptions = {
   itemId: string
   disabled: boolean
+  selected?: boolean
   highlighted: boolean
   onActivate: (itemId: string) => void
   onHighlight: (itemId: string) => void
@@ -30,6 +31,7 @@ type ComposerMenuRowOptions = {
 function composerMenuRow({
   itemId,
   disabled,
+  selected,
   highlighted,
   onActivate,
   onHighlight,
@@ -47,9 +49,11 @@ function composerMenuRow({
         }
       }}
       aria-disabled={disabled || undefined}
+      aria-checked={selected}
       data-fill=""
       data-highlighted={highlighted ? "" : undefined}
       className={composerMenuRowClassName}
+      role={selected === undefined ? undefined : "menuitemradio"}
       tabIndex={disabled ? -1 : 0}
       onClick={() => {
         if (!disabled) onActivate(itemId)

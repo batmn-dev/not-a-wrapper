@@ -280,7 +280,7 @@ export function buildModelConfig(
     reasoningText: reasoningSupported,
     ...(reasoningSupported ? { reasoning: { effort: "medium" as const } } : {}),
     // OpenRouter's server-side search plugin works with every routed model.
-    webSearch: true,
+    searchMode: "optional",
     openSource: entry.openSource,
     speed: entry.speed,
     intelligence: entry.intelligence,

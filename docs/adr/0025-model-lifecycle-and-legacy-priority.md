@@ -91,8 +91,9 @@ each maker with hidden Legacy models. Revealing one maker does not reveal any
 other maker, and the option disappears once that maker is revealed. This state
 lasts only for the current open popover; closing it hides every Legacy model
 again. It never changes catalog visibility, classification, favorites, or
-route lifecycle metadata. Anthropic's option uses the Claude product mark,
-matching its model rows.
+route lifecycle metadata. Disclosure replaces the maker's option in place with
+its Legacy rows; Current and favorite rows keep their existing order.
+Anthropic's option uses the Claude product mark, matching its model rows.
 
 Snapshot codes such as `0423`, `0731`, and `0905` do not belong in ordinary
 model names. Current rows use the stable product label. When a dated snapshot

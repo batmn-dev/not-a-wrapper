@@ -94,6 +94,24 @@ const modelSelectorMocks = {
       routes: [{ id: "gpt-4.1", providerId: "openai" }],
     },
     {
+      id: "openrouter:moonshotai/kimi-k2.6",
+      name: "Kimi K2.6",
+      provider: "OpenRouter",
+      providerId: "openrouter",
+      catalogStatus: "visible",
+      classification: "legacy",
+      idKind: "wrapped",
+      baseProviderId: "moonshotai",
+      icon: "moonshotai",
+      accessible: true,
+      routes: [
+        {
+          id: "openrouter:moonshotai/kimi-k2.6",
+          providerId: "openrouter",
+        },
+      ],
+    },
+    {
       id: "openrouter:z-ai/glm-5.2",
       name: "GLM-5.2",
       provider: "OpenRouter",
@@ -107,6 +125,24 @@ const modelSelectorMocks = {
       routes: [
         {
           id: "openrouter:z-ai/glm-5.2",
+          providerId: "openrouter",
+        },
+      ],
+    },
+    {
+      id: "openrouter:moonshotai/kimi-k3",
+      name: "Kimi K3",
+      provider: "OpenRouter",
+      providerId: "openrouter",
+      catalogStatus: "visible",
+      classification: "current",
+      idKind: "wrapped",
+      baseProviderId: "moonshotai",
+      icon: "moonshotai",
+      accessible: true,
+      routes: [
+        {
+          id: "openrouter:moonshotai/kimi-k3",
           providerId: "openrouter",
         },
       ],
@@ -187,7 +223,7 @@ vi.mock("@/lib/model-store/provider", () => ({
   useModel: () => ({
     models: modelSelectorMocks.models,
     isLoading: false,
-    favoriteModels: ["gpt-5.4"],
+    favoriteModels: ["gpt-5.4", "openrouter:moonshotai/kimi-k2.6"],
   }),
 }))
 
@@ -245,7 +281,6 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     geometry,
     closeOnClick,
     "data-testid": dataTestId,
-    "data-provider-id": dataProviderId,
     "aria-label": ariaLabel,
     onClick,
   }: {
@@ -254,13 +289,11 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     geometry?: "menu" | "custom"
     closeOnClick?: boolean
     "data-testid"?: string
-    "data-provider-id"?: string
     "aria-label"?: string
     onClick?: () => void
   }) => (
     <button
       data-testid={dataTestId ?? "model-option"}
-      data-provider-id={dataProviderId}
       data-close-on-click={closeOnClick}
       data-geometry={geometry}
       className={className}
@@ -470,10 +503,11 @@ describe("ModelSelector", () => {
       "Claude Sonnet 5",
       "GPT-5 Mini",
       "GLM-5.2",
+      "Kimi K3",
     ])
   })
 
-  it("reveals legacy models for one provider and uses the Claude logo", () => {
+  it("reveals legacy models for one provider with its logo", () => {
     renderSelector({ isUserAuthenticated: true })
 
     expect(document.body.textContent).not.toContain("GPT-4.1")
@@ -486,10 +520,11 @@ describe("ModelSelector", () => {
       )
     )
     const anthropicOption = revealOptions.find(
-      (option) => option.dataset.providerId === "anthropic"
+      (option) =>
+        option.getAttribute("aria-label") === "Show legacy models for Anthropic"
     )
 
-    expect(revealOptions).toHaveLength(2)
+    expect(revealOptions).toHaveLength(3)
     expect(anthropicOption?.textContent?.trim()).toBe("Show legacy models...")
     expect(anthropicOption?.getAttribute("aria-label")).toBe(
       "Show legacy models for Anthropic"
@@ -500,6 +535,11 @@ describe("ModelSelector", () => {
         ?.querySelector('[data-slot="show-legacy-models-icon"] svg')
         ?.getAttribute("class")
     ).toContain("text-claude-logo")
+    expect(anthropicOption?.className).toContain("group/show-legacy")
+    expect(
+      anthropicOption?.querySelector('[data-slot="show-legacy-models-label"]')
+        ?.className
+    ).toContain("opacity-40 group-hover/show-legacy:opacity-100")
 
     act(() => {
       anthropicOption?.click()
@@ -514,12 +554,12 @@ describe("ModelSelector", () => {
     expect(document.body.textContent).not.toContain("GPT-4.1")
     expect(
       document.body.querySelector(
-        '[data-testid="show-legacy-models"][data-provider-id="anthropic"]'
+        '[aria-label="Show legacy models for Anthropic"]'
       )
     ).toBeNull()
     expect(
       document.body.querySelector(
-        '[data-testid="show-legacy-models"][data-provider-id="openai"]'
+        '[aria-label="Show legacy models for OpenAI"]'
       )
     ).not.toBeNull()
 
@@ -531,9 +571,45 @@ describe("ModelSelector", () => {
     expect(document.body.textContent).not.toContain("September 2025")
     expect(
       document.body.querySelector(
-        '[data-testid="show-legacy-models"][data-provider-id="anthropic"]'
+        '[aria-label="Show legacy models for Anthropic"]'
       )
     ).not.toBeNull()
+  })
+
+  it("replaces a provider disclosure in place without reordering current models", () => {
+    renderSelector({ isUserAuthenticated: true })
+
+    const currentNamesBefore = getModelOptionNames()
+    const rowsBefore = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="model-option"], [data-testid="show-legacy-models"]'
+      )
+    )
+    const moonshotOption = rowsBefore.find(
+      (row) =>
+        row.getAttribute("aria-label") === "Show legacy models for Moonshot AI"
+    )
+    const disclosureIndex = moonshotOption
+      ? rowsBefore.indexOf(moonshotOption)
+      : -1
+
+    expect(disclosureIndex).toBeGreaterThan(-1)
+
+    act(() => {
+      moonshotOption?.click()
+    })
+
+    const currentNamesAfter = getModelOptionNames().filter(
+      (name) => name !== "Kimi K2.6"
+    )
+    const rowsAfter = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="model-option"], [data-testid="show-legacy-models"]'
+      )
+    )
+
+    expect(currentNamesAfter).toEqual(currentNamesBefore)
+    expect(rowsAfter[disclosureIndex]?.textContent).toContain("Kimi K2.6")
   })
 
   it("shows the visible catalog with locked badges for signed-out users", () => {
@@ -557,6 +633,18 @@ describe("ModelSelector", () => {
     expect(menu?.dataset.geometry).toBe("custom")
     expect(menu?.className).toContain("bg-floating-surface")
     expect(menu?.className).toContain("p-1.5")
+    expect(menu?.className).toContain("relative")
+    const searchOverlay = document.body.querySelector<HTMLElement>(
+      '[data-slot="model-selector-desktop-search"]'
+    )
+    expect(searchOverlay?.className).toContain("absolute")
+    expect(searchOverlay?.className).toContain("from-floating-surface/80")
+    expect(searchOverlay?.className).toContain("to-floating-surface/0")
+    expect(
+      document.body.querySelector<HTMLInputElement>(
+        'input[placeholder="Search models..."]'
+      )?.className
+    ).toContain("backdrop-blur-md")
     expect(option.dataset.geometry).toBe("custom")
     expect(option.className).toContain("h-9")
     expect(option.className).toContain("rounded-lg")
@@ -566,13 +654,19 @@ describe("ModelSelector", () => {
     ).toBeNull()
     expect(
       option.querySelector<HTMLElement>('[data-slot="model-name"]')?.className
-    ).toContain("text-sm")
+    ).toContain("text-base")
     expect(
       option.querySelector('[data-slot="selected-model-check"]')
     ).not.toBeNull()
-    expect(
-      document.body.querySelector("[data-scrollable-surface]")
-    ).not.toBeNull()
+    const scrollSurface = document.body.querySelector<HTMLElement>(
+      "[data-scrollable-surface]"
+    )
+    expect(scrollSurface?.className).toContain(
+      "pt-(--model-selector-fixed-height)"
+    )
+    expect(scrollSurface?.className).toContain(
+      "scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)]"
+    )
   })
 
   it("selects the anonymous model but opens auth for locked guest models", () => {

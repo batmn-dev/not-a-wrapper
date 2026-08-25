@@ -104,7 +104,7 @@ describe("generate-openrouter-catalog invariants", () => {
       vision: true,
       tools: true,
       audio: true,
-      webSearch: true,
+      searchMode: "optional",
       apiDocs: "https://openrouter.ai/vendor/reasoner",
     })
     // Textual decimal shift — no IEEE 754 dust in generated prices.
@@ -117,8 +117,8 @@ describe("generate-openrouter-catalog invariants", () => {
     expect(plain?.vision).toBe(false)
     expect(plain?.audio).toBe(false)
     // OpenRouter server-side search is independent of ordinary tool support.
-    expect(reasoner?.webSearch).toBe(true)
-    expect(plain?.webSearch).toBe(true)
+    expect(reasoner?.searchMode).toBe("optional")
+    expect(plain?.searchMode).toBe("optional")
     // Null max_completion_tokens → field omitted entirely.
     expect(plain && "maxOutput" in plain).toBe(false)
     // releasedAt derives from the snapshot `created` timestamp.

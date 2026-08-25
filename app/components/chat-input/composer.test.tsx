@@ -23,10 +23,16 @@ const promptInputMockCalls: Array<{
     id: string
     kind: "capability"
     label: string
+    removable?: boolean
   }[]
   maxHeight?: number | string
   onEntitiesChange?: (
-    entities: readonly { id: string; kind: "capability"; label: string }[]
+    entities: readonly {
+      id: string
+      kind: "capability"
+      label: string
+      removable?: boolean
+    }[]
   ) => void
   value?: string
   onValueChange?: (value: string) => void
@@ -71,6 +77,7 @@ const composerMocks = vi.hoisted(() => ({
     uploaded: null,
   })),
   enableSearch: false,
+  searchMode: "optional" as "optional" | "always-on" | "unsupported",
   setEnableSearch: vi.fn(),
 }))
 
@@ -86,6 +93,7 @@ vi.mock("@/app/components/chat/turn-context", () => ({
     selectedModel: "openai/gpt-4.1-mini",
     handleModelChange: vi.fn(),
     enableSearch: composerMocks.enableSearch,
+    searchMode: composerMocks.searchMode,
     setEnableSearch: composerMocks.setEnableSearch,
     isAuthenticated: true,
     systemPrompt: "system",
@@ -300,6 +308,7 @@ describe("Composer primary action", () => {
     composerMocks.clearDraftById.length = 0
     composerMocks.attachments = []
     composerMocks.enableSearch = false
+    composerMocks.searchMode = "optional"
     vi.clearAllMocks()
   })
 
@@ -387,6 +396,25 @@ describe("Composer primary action", () => {
 
     act(() => promptInput?.onEntitiesChange?.([]))
     expect(composerMocks.setEnableSearch).toHaveBeenCalledWith(false)
+  })
+
+  it("projects always-on search as a locked status entity", () => {
+    composerMocks.enableSearch = true
+    composerMocks.searchMode = "always-on"
+    renderComposer({})
+
+    const promptInput = promptInputMockCalls.at(-1)
+    expect(promptInput?.entities).toEqual([
+      {
+        id: "web-search",
+        kind: "capability",
+        label: "Web search always on",
+        removable: false,
+      },
+    ])
+
+    act(() => promptInput?.onEntitiesChange?.([]))
+    expect(composerMocks.setEnableSearch).not.toHaveBeenCalled()
   })
 
   it("keeps Stop actionable while streaming even with empty input", () => {

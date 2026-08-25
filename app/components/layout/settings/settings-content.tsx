@@ -123,7 +123,7 @@ export function SettingsContent() {
                 placeholder="Search"
                 aria-label="Search settings"
                 className={cn(
-                  "border-input-border bg-popover placeholder:text-muted-foreground focus-visible:ring-focus-ring h-8 w-full rounded-md border py-1 pr-2.5 pl-8 text-sm outline-none focus-visible:ring-1",
+                  "border-input-border bg-popover placeholder:text-placeholder focus-visible:ring-focus-ring h-8 w-full rounded-md border py-1 pr-2.5 pl-8 text-sm outline-none focus-visible:ring-1",
                   searchQuery && "pr-8"
                 )}
               />

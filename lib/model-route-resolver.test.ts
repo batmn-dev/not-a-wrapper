@@ -487,6 +487,41 @@ describe("resolveModelRoute", () => {
     })
   })
 
+  it("requires inherent-search routes to stay enabled", async () => {
+    const deps = makeDeps({
+      userKeys: {
+        perplexity: { key: "sk-perplexity", preference: "priority" },
+      },
+    })
+    const enabled = await resolveModelRoute(
+      {
+        modelId: "sonar",
+        ...authed,
+        requiredCapabilities: { webSearch: true },
+      },
+      deps
+    )
+    const disabled = await resolveModelRoute(
+      {
+        modelId: "sonar",
+        ...authed,
+        requiredCapabilities: { webSearch: false },
+      },
+      deps
+    )
+
+    expect(enabled).toMatchObject({
+      ok: true,
+      route: { providerId: "perplexity" },
+    })
+    expect(disabled).toEqual({
+      ok: false,
+      reason: "no_eligible_route",
+      modelId: "sonar",
+      keyProviders: [],
+    })
+  })
+
   it("pins approval continuations to the paused provider", async () => {
     const result = await resolveModelRoute(
       { modelId: "claude-sonnet-5", ...authed, pinnedProviderId: "openrouter" },

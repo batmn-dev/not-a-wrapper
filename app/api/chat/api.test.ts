@@ -201,7 +201,7 @@ describe("validateAndResolveChatCredential", () => {
       modelId: "openrouter:anthropic/claude-sonnet-5",
       isAuthenticated: true,
       token: "convex-token",
-      requiredCapabilities: undefined,
+      requiredCapabilities: { webSearch: false },
       pinnedProviderId: undefined,
     })
   })
@@ -365,7 +365,9 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     expect(resolveModelRoute).toHaveBeenCalledWith(
-      expect.objectContaining({ requiredCapabilities: { vision: true } })
+      expect.objectContaining({
+        requiredCapabilities: { vision: true, webSearch: false },
+      })
     )
   })
 
@@ -428,7 +430,7 @@ describe("validateAndResolveChatCredential", () => {
     )
   })
 
-  it("does not require vision for images from an earlier turn", async () => {
+  it("does not require vision for earlier images and forces Sonar search on", async () => {
     vi.mocked(resolveModelRoute).mockResolvedValue({
       ok: true,
       route: resolvedRoute,
@@ -467,7 +469,7 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     expect(resolveModelRoute).toHaveBeenCalledWith(
-      expect.objectContaining({ requiredCapabilities: undefined })
+      expect.objectContaining({ requiredCapabilities: { webSearch: true } })
     )
   })
 

@@ -4,6 +4,7 @@ const perplexityModels: ModelConfig[] = [
   {
     id: "sonar",
     name: "Perplexity Sonar",
+    shortName: "Sonar",
     provider: "Perplexity",
     providerId: "perplexity",
     catalogStatus: "visible",
@@ -21,6 +22,7 @@ const perplexityModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: false,
     tools: false,
+    searchMode: "always-on",
     audio: false,
     reasoningText: false,
     openSource: false,
@@ -35,6 +37,7 @@ const perplexityModels: ModelConfig[] = [
   {
     id: "sonar-reasoning-pro",
     name: "Perplexity Sonar Reasoning Pro",
+    shortName: "Sonar Reasoning Pro",
     provider: "Perplexity",
     providerId: "perplexity",
     catalogStatus: "visible",
@@ -52,6 +55,7 @@ const perplexityModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: false,
     tools: false,
+    searchMode: "always-on",
     audio: false,
     reasoningText: false,
     openSource: false,
@@ -66,6 +70,7 @@ const perplexityModels: ModelConfig[] = [
   {
     id: "sonar-pro",
     name: "Perplexity Sonar Pro",
+    shortName: "Sonar Pro",
     provider: "Perplexity",
     providerId: "perplexity",
     catalogStatus: "hidden",
@@ -82,6 +87,7 @@ const perplexityModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: false,
     tools: false,
+    searchMode: "always-on",
     audio: false,
     reasoningText: false,
     openSource: false,
@@ -96,6 +102,7 @@ const perplexityModels: ModelConfig[] = [
   {
     id: "sonar-deep-research",
     name: "Perplexity Sonar Deep Research",
+    shortName: "Sonar Deep Research",
     provider: "Perplexity",
     providerId: "perplexity",
     catalogStatus: "hidden",
@@ -112,6 +119,7 @@ const perplexityModels: ModelConfig[] = [
     priceUnit: "per 1M tokens",
     vision: false,
     tools: false,
+    searchMode: "always-on",
     audio: false,
     reasoningText: false,
     openSource: false,

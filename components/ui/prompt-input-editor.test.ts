@@ -463,6 +463,34 @@ describe("PromptInput structured document", () => {
     expect(readPromptInputDocument(state.doc)).toBe("")
   })
 
+  it("keeps locked status entities through backward and forward deletion", () => {
+    const lockedEntity: PromptInputEntity = {
+      ...webSearchEntity,
+      label: "Web search always on",
+      removable: false,
+    }
+    let state = EditorState.create({
+      doc: createPromptInputDocument("", [lockedEntity]),
+      plugins: createPromptInputPlugins(() => "Ask anything"),
+      schema: promptInputSchema,
+    })
+    const dispatch = (transaction: Parameters<typeof state.apply>[0]) => {
+      state = state.apply(transaction)
+    }
+
+    state = state.apply(
+      state.tr.setSelection(TextSelection.create(state.doc, 3))
+    )
+    expect(deleteComposerEntityBackward(state, dispatch)).toBe(true)
+    expect(readPromptInputEntities(state.doc)).toEqual([lockedEntity])
+
+    state = state.apply(
+      state.tr.setSelection(TextSelection.create(state.doc, 1))
+    )
+    expect(deleteComposerEntityForward(state, dispatch)).toBe(true)
+    expect(readPromptInputEntities(state.doc)).toEqual([lockedEntity])
+  })
+
   it("exposes a trailing cursor target before the next Backspace deletes the chip", () => {
     let state = createEditorState()
     state = state.apply(

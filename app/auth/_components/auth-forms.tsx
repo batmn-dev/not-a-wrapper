@@ -32,7 +32,7 @@ const PROVIDER_GOOGLE_MARK_SIZE = 18
 const authFieldClassName = "gap-2"
 const authLabelClassName = "px-5 text-sm font-medium text-muted-foreground"
 const authInputClassName =
-  "h-[52px] rounded-full border border-border px-5 text-base shadow-none placeholder:text-muted-foreground focus-visible:border-foreground focus-visible:ring-1 focus-visible:ring-foreground aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive"
+  "h-[52px] rounded-full border border-border px-5 text-base shadow-none focus-visible:border-foreground focus-visible:ring-1 focus-visible:ring-foreground aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive"
 const authFieldErrorClassName = "px-5"
 const authLinkClassName =
   "font-medium text-foreground underline-offset-4 hover:underline"
