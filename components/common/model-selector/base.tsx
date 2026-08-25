@@ -76,7 +76,7 @@ const modelSelectorSurfaceClassName =
 const modelSelectorSearchOverlayClassName =
   "from-floating-surface/80 to-floating-surface/0 pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b"
 const modelSelectorSearchInputClassName =
-  "border-input-border bg-floating-surface/70 border shadow-none backdrop-blur-md focus-visible:ring-0"
+  "border-input-border bg-floating-surface/70 rounded-full border shadow-none backdrop-blur-md focus-visible:ring-0"
 
 type LegacyProviderOption = {
   providerId: string
@@ -100,7 +100,7 @@ function getModelSelectorRowClassName({
 }) {
   return cn(
     "flex w-full items-center justify-between gap-2",
-    isMobile ? "relative h-14 px-4 py-3" : "h-9 rounded-lg px-2 py-1.5",
+    isMobile ? "relative h-14 px-4 py-3" : "h-10 rounded-xl px-2 py-1.5",
     isMobile &&
       hasDivider &&
       "before:bg-floating-menu-divider/60 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:content-['']",
@@ -743,7 +743,7 @@ export function ModelSelector({
                   placeholder="Search models..."
                   className={cn(
                     modelSelectorSearchInputClassName,
-                    "h-12 rounded-full pl-10"
+                    "h-12 pl-10"
                   )}
                   value={searchQuery}
                   onChange={handleSearchChange}
@@ -816,7 +816,7 @@ export function ModelSelector({
           geometry="custom"
           className={cn(
             modelSelectorSurfaceClassName,
-            "relative w-[300px] overflow-hidden rounded-(--floating-menu-radius) p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
+            "relative w-[300px] overflow-hidden rounded-3xl p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
           )}
           align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
@@ -841,7 +841,7 @@ export function ModelSelector({
                 placeholder="Search models..."
                 className={cn(
                   modelSelectorSearchInputClassName,
-                  "h-10 rounded-xl pl-8"
+                  "h-10 pl-8"
                 )}
                 value={searchQuery}
                 onChange={handleSearchChange}
@@ -854,7 +854,7 @@ export function ModelSelector({
           <div className="after:from-floating-surface relative rounded-xl after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
             <div
               data-scrollable-surface=""
-              className="max-h-[min(calc(var(--model-selector-list-max-height)+var(--model-selector-fixed-height)),max(0px,calc(var(--available-height)-0.75rem)))] scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)] scroll-pb-2 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain pt-(--model-selector-fixed-height) pr-1 pb-1"
+              className="max-h-[min(calc(var(--model-selector-list-max-height)+var(--model-selector-fixed-height)),max(0px,calc(var(--available-height)-0.75rem)))] scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)] scroll-pb-2 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain pt-(--model-selector-fixed-height)"
             >
               <ModelSelectorList
                 favorites={favorites}

@@ -634,20 +634,21 @@ describe("ModelSelector", () => {
     expect(menu?.className).toContain("bg-floating-surface")
     expect(menu?.className).toContain("p-1.5")
     expect(menu?.className).toContain("relative")
+    expect(menu?.className).toContain("rounded-3xl")
     const searchOverlay = document.body.querySelector<HTMLElement>(
       '[data-slot="model-selector-desktop-search"]'
     )
     expect(searchOverlay?.className).toContain("absolute")
     expect(searchOverlay?.className).toContain("from-floating-surface/80")
     expect(searchOverlay?.className).toContain("to-floating-surface/0")
-    expect(
-      document.body.querySelector<HTMLInputElement>(
-        'input[placeholder="Search models..."]'
-      )?.className
-    ).toContain("backdrop-blur-md")
+    const searchInput = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
+    expect(searchInput?.className).toContain("backdrop-blur-md")
+    expect(searchInput?.className).toContain("rounded-full")
     expect(option.dataset.geometry).toBe("custom")
-    expect(option.className).toContain("h-9")
-    expect(option.className).toContain("rounded-lg")
+    expect(option.className).toContain("h-10")
+    expect(option.className).toContain("rounded-xl")
     expect(option.className).not.toContain("mx-2.5")
     expect(
       document.body.querySelector('[data-slot="model-section"]')
@@ -667,6 +668,8 @@ describe("ModelSelector", () => {
     expect(scrollSurface?.className).toContain(
       "scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)]"
     )
+    expect(scrollSurface?.className).not.toContain("pr-1")
+    expect(scrollSurface?.className).not.toContain("pb-1")
   })
 
   it("selects the anonymous model but opens auth for locked guest models", () => {
