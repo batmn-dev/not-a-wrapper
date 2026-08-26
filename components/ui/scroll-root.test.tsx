@@ -544,7 +544,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
     expect(spacer.style.height).toBe("0px")
   })
 
-  it("disables native scroll anchoring while a stream is active", () => {
+  it("publishes stream state for descendant group variants", () => {
     act(() => {
       root.render(
         <ScrollRoot data-stream-active="">

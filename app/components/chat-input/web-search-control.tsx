@@ -46,7 +46,7 @@ function getWebSearchControlState({
   }
 }
 
-/** Expanded Composer search affordance. Search state never enters the draft. */
+/** Two-row Composer search affordance. Search state never enters the draft. */
 function WebSearchControl({
   enabled,
   mode,

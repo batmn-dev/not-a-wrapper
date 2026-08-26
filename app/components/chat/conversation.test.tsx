@@ -226,6 +226,17 @@ describe("Conversation recovered turn contracts", () => {
     })
   }
 
+  it("reserves the fixed composer and keyboard below thread content", () => {
+    render()
+
+    expect(
+      container?.querySelector('[data-testid="thread-scroll-edge"]')
+        ?.parentElement?.className
+    ).toContain(
+      "keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))]"
+    )
+  })
+
   it("uses the exact assistant containment guard and deep-link sentinels", () => {
     vi.stubGlobal("CSS", {
       supports: vi.fn(

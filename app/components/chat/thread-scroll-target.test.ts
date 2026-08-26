@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   alignThreadScrollTarget,
+  followThreadScrollTarget,
   THREAD_TARGET_ALIGNMENT_EPSILON_PX,
   THREAD_TARGET_HEADER_GAP_PX,
   THREAD_TARGET_MIN_TRACKING_MS,
@@ -16,6 +17,7 @@ describe("thread message target alignment", () => {
   let frame: FrameRequestCallback | null
 
   beforeEach(() => {
+    messageTop = 700
     frame = null
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       frame = callback
@@ -88,5 +90,51 @@ describe("thread message target alignment", () => {
 
     frame?.(0)
     expect(message?.style.scrollMarginTop).toBe("")
+  })
+
+  it("keeps aligning a visible target when it moves during the stability window", () => {
+    const callbacks = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 1
+    let now = 0
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      const id = nextFrameId
+      nextFrameId += 1
+      callbacks.set(id, callback)
+      return id
+    })
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => callbacks.delete(id))
+    vi.spyOn(performance, "now").mockImplementation(() => now)
+
+    const flushFrame = (timestamp: number) => {
+      now = timestamp
+      const pending = Array.from(callbacks.values())
+      callbacks.clear()
+      for (const callback of pending) callback(timestamp)
+    }
+    const message = root.querySelector<HTMLElement>("[data-message-id]")
+    if (!message) throw new Error("Expected message target")
+    message.scrollIntoView = vi.fn(() => {
+      messageTop = 68
+    })
+
+    followThreadScrollTarget(
+      root,
+      { turnId: "turn-1", messageId: "message-1" },
+      () => "smooth"
+    )
+
+    expect(message.scrollIntoView).toHaveBeenCalledOnce()
+    flushFrame(16)
+    expect(message.scrollIntoView).toHaveBeenCalledTimes(2)
+
+    messageTop = 120
+    flushFrame(32)
+    expect(message.scrollIntoView).toHaveBeenCalledTimes(3)
+    expect(messageTop).toBe(68)
+
+    flushFrame(350)
+    expect(message.scrollIntoView).toHaveBeenCalledTimes(4)
+    flushFrame(366)
+    expect(message.scrollIntoView).toHaveBeenCalledTimes(4)
   })
 })

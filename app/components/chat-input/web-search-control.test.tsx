@@ -74,7 +74,7 @@ describe("WebSearchControl", () => {
     act(() => button.dispatchEvent(event))
   }
 
-  it("shows an expanded-only grey off control that enables optional search", () => {
+  it("shows a responsive grey off control that enables optional search", () => {
     const { button, onEnabledChange } = renderControl({
       enabled: false,
       mode: "optional",

@@ -5,10 +5,9 @@
  * `group/scroll-root` contract.
  *
  * There is deliberately NO JS stick-to-bottom controller here. The thread
- * controller performs one submit-time turn pin. While the response is live,
- * CSS disables native scroll anchoring so browser corrections cannot compete
- * with that placement; outside streaming, native anchoring resumes for normal
- * reflow and manual scroll ownership.
+ * controller performs one submit-time turn pin. Native scroll anchoring stays
+ * enabled for normal reflow and manual scroll ownership; virtualized row
+ * replacement applies its own visible-edge correction in thread-scroll.tsx.
  *
  * The element owns the CSS variable system every scroll policy derives from:
  *
@@ -26,7 +25,7 @@
  * — the browser does all the math.
  *
  * Runtime state the thread writes onto this element as attributes (consumed by
- * pure CSS group variants, without React state):
+ * descendant CSS group variants, without React state):
  *   data-stream-active     while a turn is in flight
  *   data-scroll-from-end   while the bottom sentinel is out of view
  *   data-expanded-composer while the multiline composer owns the viewport

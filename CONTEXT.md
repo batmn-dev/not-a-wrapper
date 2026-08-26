@@ -213,7 +213,7 @@ _Avoid_: per-menu action arrays, keydown-only `@` parsing outside the editor tra
 _Status_: implemented 2026-08-23.
 
 **Web-search control**:
-The persistent Composer affordance that toggles optional web access for a **Chat turn**. It appears beside “Add files and more” in both on and off states only while the Composer has an expanded posture, and never becomes text or an inline entity in the draft.
+The persistent Composer affordance that toggles optional web access for a **Chat turn**. It appears beside “Add files and more” in both on and off states whenever the Composer uses its two-row posture: with `data-expanded` at wider widths, and below the `sm` viewport or 520px main-container breakpoints even without `data-expanded`. It never becomes text or an inline entity in the draft.
 _Avoid_: active-only search affordance, web-search chip, search mention, inline search entity
 
 **Chat disclosure**:

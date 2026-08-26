@@ -21,6 +21,7 @@ export const THREAD_TARGET_TIMEOUT_MS = 1500
 type AlignThreadTargetOptions = {
   allowTurnFallback?: boolean
   behavior?: ScrollBehavior
+  forceAlignment?: boolean
 }
 
 type ResolveTurnScrollBehavior = (turn: HTMLElement) => ScrollBehavior
@@ -77,7 +78,7 @@ export function alignThreadScrollTarget(
       `[data-turn-id-container="${CSS.escape(target.turnId)}"]`
     ) ?? scrollTarget
 
-  if (message && isMessageVisible(root, message)) {
+  if (message && !options.forceAlignment && isMessageVisible(root, message)) {
     return { target: "message", didScroll: false, alignmentDelta: 0 }
   }
 
@@ -109,7 +110,7 @@ export function alignThreadScrollTarget(
   return { target: "message", didScroll: true, alignmentDelta }
 }
 
-/** Follow a late-mounting message through the exact bounded stability loop. */
+/** Follow a late-mounting message through the bounded stability loop. */
 export function followThreadScrollTarget(
   root: HTMLElement,
   target: ThreadScrollTarget,
@@ -117,6 +118,7 @@ export function followThreadScrollTarget(
 ) {
   let frame: number | null = null
   let timeout: number | null = null
+  let alignmentStarted = false
   let useInstantBehavior = false
   let turnFallbackUsed = false
   let trackingStartedAt: number | null = null
@@ -136,6 +138,7 @@ export function followThreadScrollTarget(
     const result = alignThreadScrollTarget(root, target, resolveBehavior, {
       allowTurnFallback: target.messageId === undefined || !turnFallbackUsed,
       behavior: useInstantBehavior ? "instant" : undefined,
+      forceAlignment: alignmentStarted,
     })
 
     if (target.messageId === undefined) return result.target !== "none"
@@ -146,6 +149,7 @@ export function followThreadScrollTarget(
     }
     if (result.target === "message") {
       if (!result.didScroll) return true
+      alignmentStarted = true
       useInstantBehavior = true
       trackingStartedAt ??= performance.now()
       stableFrameCount =

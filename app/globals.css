@@ -14,6 +14,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@custom-variant touch (@media (pointer: coarse));
 @custom-variant pointer-coarse (@media (pointer: coarse));
 @custom-variant pointer-fine (@media (pointer: fine));
 @custom-variant can-hover (@media (hover: hover));
