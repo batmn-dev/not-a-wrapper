@@ -1115,7 +1115,6 @@ export default function ThinkingStatesTestPage() {
                 <ThreadScrollEdge
                   chatId={null}
                   streamActive={threadLifecycle.streamActive}
-                  pinTurnId={null}
                   hydrated
                   freshChat
                 />

@@ -57,6 +57,7 @@ import {
 import { flushSync } from "react-dom"
 import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
+import type { ComposerActionId } from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
@@ -67,8 +68,8 @@ import {
   type PendingAttachment,
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
-import { useComposerCapabilities } from "./use-composer-capabilities"
 import { useComposerConnectors } from "./use-composer-connectors"
+import { WebSearchControl } from "./web-search-control"
 
 export type ComposerTurnPayload = {
   text: string
@@ -236,16 +237,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleModelSelectionCommitted = useCallback(() => {
       editorRef.current?.focus({ preventScroll: true })
     }, [])
-    const {
-      entities: composerEntities,
-      handleEntitiesChange: handleComposerEntitiesChange,
-      activateActionQuery: handleActivateActionQuery,
-    } = useComposerCapabilities({
-      enableSearch,
-      setEnableSearch,
-      searchMode,
-      editorRef,
-    })
+    const handleActivateActionQuery = useCallback(
+      (actionId: ComposerActionId, query: PromptInputActionQuery) => {
+        const editor = editorRef.current
+        if (
+          !editor ||
+          actionId !== "web-search" ||
+          searchMode !== "optional" ||
+          !editor.replaceActionQuery(query)
+        ) {
+          return false
+        }
+
+        setEnableSearch(!enableSearch)
+        return true
+      },
+      [enableSearch, searchMode, setEnableSearch]
+    )
     const {
       connectors: menuConnectors,
       activateConnector: handleActivateConnector,
@@ -599,8 +607,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           >
             <PromptInput
               expanded={localValue.includes("\n")}
-              entities={composerEntities}
-              onEntitiesChange={handleComposerEntitiesChange}
               value={localValue}
               onValueChange={handleValueChange}
               onSubmit={handleComposerSubmit}
@@ -615,7 +621,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 />
               </div>
               <PromptInputActions
-                className="h-9 justify-start self-center [grid-area:leading]"
+                className="h-9 gap-1.5 justify-start self-center [grid-area:leading]"
                 data-composer-leading="true"
                 data-composer-transition-slot="leading"
                 onClick={(e) => e.stopPropagation()}
@@ -634,10 +640,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onOpenActionMenu={handleOpenActionMenu}
                   onCloseActionQuery={handleCloseActionQuery}
                 />
+                <WebSearchControl
+                  enabled={enableSearch}
+                  mode={searchMode}
+                  onEnabledChange={setEnableSearch}
+                />
               </PromptInputActions>
               <PromptInputTextarea
                 ref={editorRef}
-                placeholder={enableSearch ? "Search the web" : placeholder}
+                placeholder={placeholder}
                 aria-label={ariaLabel}
                 onActionQueryChange={setActionQuery}
                 onPaste={handlePaste}

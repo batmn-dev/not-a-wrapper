@@ -22,6 +22,12 @@ import {
 } from "./activity/activity-panel-store"
 import { MessageAssistant } from "./message-assistant"
 
+const responsive = vi.hoisted(() => ({ isMobile: false }))
+
+vi.mock("@/hooks/use-breakpoint", () => ({
+  useBreakpoint: () => responsive.isMobile,
+}))
+
 vi.mock("@/lib/user-preference-store/provider", () => ({
   useUserPreferences: () => ({
     preferences: {
@@ -80,9 +86,38 @@ describe("MessageAssistant activity trigger", () => {
   let root: Root | null = null
 
   beforeEach(() => {
+    responsive.isMobile = false
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
+  })
+
+  it("focuses a newly completed final response on mobile without scrolling", () => {
+    responsive.isMobile = true
+    const focus = vi.spyOn(HTMLElement.prototype, "focus")
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [{ type: "text", text: "Answer" }] as UIMessage["parts"]
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready")}
+            isLast
+            status="ready"
+            finishReason="length"
+          >
+            Answer
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(
+      container?.querySelector("[data-turn-start-message]")?.textContent
+    ).toContain("Response may be incomplete")
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
   })
 
   afterEach(() => {
@@ -335,7 +370,7 @@ describe("MessageAssistant activity trigger", () => {
       )
     })
 
-    const turn = container?.querySelector('[data-turn-phase="submitted"]')
+    const turn = container?.firstElementChild
     const initialSlot = container?.querySelector(
       '[data-slot="assistant-activity"]'
     )
@@ -371,7 +406,7 @@ describe("MessageAssistant activity trigger", () => {
     const disclosureSlot = container?.querySelector(
       '[data-slot="assistant-activity"]'
     )
-    expect(container?.querySelector('[data-turn-phase="thinking"]')).toBe(turn)
+    expect(container?.firstElementChild).toBe(turn)
     expect(disclosureSlot?.className).toContain("min-h-8")
     expect(disclosureSlot?.getAttribute("data-activity-presentation")).toBe(
       "disclosure"
@@ -716,14 +751,7 @@ describe("MessageAssistant activity trigger", () => {
   it("offers Copy Response only when the text is not still active or paused", async () => {
     const store = makeStore({ panelTurnId: "assistant-1" })
     const hasFooterSlot = () => {
-      const assistant = container?.querySelector(
-        '[data-message-author-role="assistant"]'
-      )
-      return Boolean(
-        assistant
-          ?.closest("[data-turn-phase]")
-          ?.querySelector(".min-h-\\[46px\\]")
-      )
+      return Boolean(container?.querySelector(".min-h-\\[46px\\]"))
     }
     const renderStatus = async (
       status:
@@ -777,7 +805,7 @@ describe("MessageAssistant activity trigger", () => {
     }
   })
 
-  it("matches reference heading, focus, and response-action semantics", () => {
+  it("leaves headings to the turn owner and matches focus/action semantics", () => {
     const store = makeStore({ panelTurnId: "assistant-current" })
 
     act(() => {
@@ -823,13 +851,7 @@ describe("MessageAssistant activity trigger", () => {
     expect(assistants).toHaveLength(2)
     expect(assistants[0]?.getAttribute("tabindex")).toBeNull()
     expect(assistants[1]?.getAttribute("tabindex")).toBe("0")
-    expect(
-      assistants.every(
-        (assistant) =>
-          assistant.closest("[data-turn-phase]")?.querySelector("h4")
-            ?.textContent === "ChatGPT said:"
-      )
-    ).toBe(true)
+    expect(container?.querySelector("h4")).toBeNull()
     expect(actionGroups).toHaveLength(2)
     expect(
       actionGroups.every((group) => group.getAttribute("tabindex") === "-1")

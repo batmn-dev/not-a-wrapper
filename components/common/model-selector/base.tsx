@@ -1,5 +1,6 @@
 "use client"
 
+import { useFavoriteModels } from "@/app/components/layout/settings/models/use-favorite-models"
 import { useKeyShortcut } from "@/app/hooks/use-key-shortcut"
 import { Button } from "@/components/ui/button"
 import { ComposerControl } from "@/components/ui/composer-control"
@@ -18,6 +19,7 @@ import {
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { PinActionGlyph } from "@/components/ui/pin-action-glyph"
 import {
   Tooltip,
   TooltipContent,
@@ -50,8 +52,8 @@ import { cn } from "@/lib/utils"
 import {
   RiArrowDownSLine,
   RiCheckLine,
+  RiLockLine,
   RiSearchLine,
-  RiStarLine,
 } from "@remixicon/react"
 import { useRef, useState } from "react"
 import { ProModelDialog } from "./pro-dialog"
@@ -88,6 +90,63 @@ type LegacyProviderOption = {
 type ModelSelectorRow =
   | { type: "model"; model: LogicalModelView }
   | { type: "show-legacy"; provider: LegacyProviderOption }
+
+type ModelListScrollSnapshot = {
+  scrollSurface: HTMLElement
+  scrollTop: number
+  anchorKey?: string
+  anchorOffset?: number
+}
+
+const modelSelectorRowSelector = "[data-model-selector-row]"
+
+function captureModelListScroll(
+  trigger: HTMLButtonElement
+): ModelListScrollSnapshot | null {
+  const scrollSurface = trigger.closest<HTMLElement>(
+    "[data-scrollable-surface]"
+  )
+  if (!scrollSurface) return null
+
+  const activeRow = trigger.closest<HTMLElement>(modelSelectorRowSelector)
+  const surfaceRect = scrollSurface.getBoundingClientRect()
+  const anchor = Array.from(
+    scrollSurface.querySelectorAll<HTMLElement>(modelSelectorRowSelector)
+  ).find((row) => {
+    if (row === activeRow) return false
+    const rect = row.getBoundingClientRect()
+    return rect.bottom > surfaceRect.top && rect.top < surfaceRect.bottom
+  })
+
+  return {
+    scrollSurface,
+    scrollTop: scrollSurface.scrollTop,
+    anchorKey: anchor?.dataset.modelSelectorRow,
+    anchorOffset: anchor
+      ? anchor.getBoundingClientRect().top - surfaceRect.top
+      : undefined,
+  }
+}
+
+function restoreModelListScroll(snapshot: ModelListScrollSnapshot) {
+  const { scrollSurface, scrollTop, anchorKey, anchorOffset } = snapshot
+  const anchor = anchorKey
+    ? Array.from(
+        scrollSurface.querySelectorAll<HTMLElement>(modelSelectorRowSelector)
+      ).find((row) => row.dataset.modelSelectorRow === anchorKey)
+    : undefined
+
+  if (!anchor || anchorOffset === undefined) {
+    scrollSurface.scrollTop = scrollTop
+    return
+  }
+
+  const nextOffset =
+    anchor.getBoundingClientRect().top -
+    scrollSurface.getBoundingClientRect().top
+  // Base UI may scroll while rows regroup, so compensate from its latest position.
+  scrollSurface.scrollTop = scrollSurface.scrollTop + nextOffset - anchorOffset
+}
 
 function getModelSelectorRowClassName({
   isMobile,
@@ -239,11 +298,17 @@ function ModelOptionContent({
   isLocked,
   isMobile,
   isSelected,
+  isPinned,
+  canPin,
+  onTogglePinned,
 }: {
   model: LogicalModelView
   isLocked: boolean
   isMobile: boolean
   isSelected: boolean
+  isPinned: boolean
+  canPin: boolean
+  onTogglePinned: (trigger: HTMLButtonElement) => void
 }) {
   const snapshotDateLabel =
     model.classification === "legacy"
@@ -263,24 +328,68 @@ function ModelOptionContent({
         iconSlot="model-option-icon"
         labelSlot="model-name"
       />
-      {isLocked || isSelected ? (
-        <div className="flex shrink-0 items-center gap-2">
-          {isLocked ? (
-            <div className="border-input-border bg-muted text-muted-foreground flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
-              <Icon icon={RiStarLine} slotSize={8} />
-              <span>Locked</span>
-            </div>
-          ) : null}
-          {isSelected ? (
-            <Icon
-              icon={RiCheckLine}
-              slotSize={isMobile ? 20 : 16}
-              glyphSize={isMobile ? 20 : 16}
-              data-slot="selected-model-check"
-            />
-          ) : null}
-        </div>
-      ) : null}
+      <div
+        data-slot="model-option-right-slot"
+        className={cn(
+          "relative flex shrink-0 items-center justify-center",
+          isMobile ? "size-6" : "size-[18px]"
+        )}
+      >
+        {isLocked ? (
+          <Icon
+            icon={RiLockLine}
+            slotSize={isMobile ? 20 : 18}
+            glyphSize={isMobile ? 20 : 18}
+            data-slot="locked-model-icon"
+            aria-label="Locked"
+            decorative={false}
+            className={cn(
+              canPin &&
+                "group-focus-within/model-option:opacity-0 group-hover/model-option:opacity-0"
+            )}
+          />
+        ) : isSelected ? (
+          <Icon
+            icon={RiCheckLine}
+            slotSize={isMobile ? 20 : 18}
+            glyphSize={isMobile ? 20 : 18}
+            data-slot="selected-model-check"
+            className={cn(
+              canPin &&
+                "group-focus-within/model-option:opacity-0 group-hover/model-option:opacity-0"
+            )}
+          />
+        ) : null}
+        {canPin ? (
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="group/pin text-muted-foreground hover:text-foreground focus-visible:text-foreground pointer-events-none absolute -inset-2 flex items-center justify-center rounded-lg opacity-0 outline-none group-focus-within/model-option:pointer-events-auto group-focus-within/model-option:opacity-100 group-hover/model-option:pointer-events-auto group-hover/model-option:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                  aria-label={`${isPinned ? "Unpin" : "Pin"} ${getModelDisplayName(model)}`}
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onTogglePinned(event.currentTarget)
+                  }}
+                />
+              }
+            >
+              <span className="relative flex size-6 items-center justify-center">
+                <PinActionGlyph pinned={isPinned} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" variant="outline">
+              {isPinned ? "Unpin model" : "Pin model"}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
     </>
   )
 }
@@ -291,8 +400,11 @@ function ModelSelectorRows({
   revealedLegacyProviders,
   isMobile,
   isUserAuthenticated,
+  canPinModels,
   selectedModelId,
+  pinnedModelIds,
   onSelect,
+  onTogglePinned,
   onShowLegacy,
 }: {
   models: LogicalModelView[]
@@ -300,8 +412,11 @@ function ModelSelectorRows({
   revealedLegacyProviders: ReadonlySet<string>
   isMobile: boolean
   isUserAuthenticated: boolean
+  canPinModels: boolean
   selectedModelId: string | null
+  pinnedModelIds: ReadonlySet<string>
   onSelect: (modelId: string, isLocked: boolean) => void
+  onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string) => void
 }) {
   return buildModelSelectorRows(
@@ -345,6 +460,7 @@ function ModelSelectorRows({
           geometry="custom"
           closeOnClick={false}
           data-testid="show-legacy-models"
+          data-model-selector-row={`legacy:${row.provider.providerId}`}
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
           onClick={() => onShowLegacy(row.provider.providerId)}
@@ -357,17 +473,23 @@ function ModelSelectorRows({
     const { model } = row
     const isLocked = !isModelSelectableForAuthState(model, isUserAuthenticated)
     const isSelected = selectedModelId === model.id
-    const className = getModelSelectorRowClassName({
-      isMobile,
-      hasDivider: index > 0,
-      isSelected,
-    })
+    const className = cn(
+      getModelSelectorRowClassName({
+        isMobile,
+        hasDivider: index > 0,
+        isSelected,
+      }),
+      "group/model-option"
+    )
     const content = (
       <ModelOptionContent
         model={model}
         isLocked={isLocked}
         isMobile={isMobile}
         isSelected={isSelected}
+        isPinned={pinnedModelIds.has(model.id)}
+        canPin={canPinModels && !isMobile}
+        onTogglePinned={(trigger) => onTogglePinned(model.id, trigger)}
       />
     )
 
@@ -376,6 +498,7 @@ function ModelSelectorRows({
         key={model.id}
         type="button"
         data-testid="model-option"
+        data-model-selector-row={`model:${model.id}`}
         className={className}
         onClick={() => onSelect(model.id, isLocked)}
       >
@@ -385,6 +508,7 @@ function ModelSelectorRows({
       <DropdownMenuItem
         key={model.id}
         geometry="custom"
+        data-model-selector-row={`model:${model.id}`}
         className={className}
         onClick={() => onSelect(model.id, isLocked)}
       >
@@ -402,8 +526,11 @@ function ModelSelectorList({
   isLoading,
   isMobile,
   isUserAuthenticated,
+  canPinModels,
   selectedModelId,
+  pinnedModelIds,
   onSelect,
+  onTogglePinned,
   onShowLegacy,
 }: {
   favorites: LogicalModelView[]
@@ -413,8 +540,11 @@ function ModelSelectorList({
   isLoading: boolean
   isMobile: boolean
   isUserAuthenticated: boolean
+  canPinModels: boolean
   selectedModelId: string | null
+  pinnedModelIds: ReadonlySet<string>
   onSelect: (modelId: string, isLocked: boolean) => void
+  onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string) => void
 }) {
   if (isLoading) {
@@ -448,8 +578,11 @@ function ModelSelectorList({
   const rowProps = {
     isMobile,
     isUserAuthenticated,
+    canPinModels,
     selectedModelId,
+    pinnedModelIds,
     onSelect,
+    onTogglePinned,
     onShowLegacy,
     revealedLegacyProviders,
   }
@@ -460,7 +593,7 @@ function ModelSelectorList({
 
   if (isMobile) {
     const sections = [
-      { label: "Favorites", models: favorites, legacyProviders: [] },
+      { label: "Pinned", models: favorites, legacyProviders: [] },
       { label: "All models", models: others, legacyProviders },
     ].filter(
       ({ models, legacyProviders: sectionLegacyProviders }) =>
@@ -511,7 +644,7 @@ function ModelSelectorList({
 
   return (
     <>
-      <div className={sectionLabelClassName}>Favorites</div>
+      <div className={sectionLabelClassName}>Pinned</div>
       <ModelSelectorRows models={favorites} {...rowProps} />
       {(others.length > 0 || legacyProviders.length > 0) && (
         <>
@@ -538,7 +671,8 @@ export function ModelSelector({
   variant = "default",
 }: ModelSelectorProps) {
   const isComposerVariant = variant === "composer"
-  const { models, isLoading: isLoadingModels, favoriteModels } = useModel()
+  const { models, isLoading: isLoadingModels } = useModel()
+  const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
 
@@ -630,6 +764,24 @@ export function ModelSelector({
     })
   }
 
+  const handleTogglePinned = (modelId: string, trigger: HTMLButtonElement) => {
+    const scrollSnapshot = captureModelListScroll(trigger)
+    const nextPinnedModels = favoriteModels.includes(modelId)
+      ? favoriteModels.filter((pinnedModelId) => pinnedModelId !== modelId)
+      : [...favoriteModels, modelId]
+
+    // The action moves with its row during regrouping. Letting it retain focus
+    // makes the menu scroll the moved row back into view.
+    trigger.blur()
+    updateFavoriteModels(nextPinnedModels)
+
+    if (scrollSnapshot) {
+      window.setTimeout(() => {
+        restoreModelListScroll(scrollSnapshot)
+      }, 0)
+    }
+  }
+
   const selectedLegacyModelId =
     isComposerVariant &&
     models.some(
@@ -642,26 +794,23 @@ export function ModelSelector({
   const { favorites, others } = groupModelsForSelector(
     models.filter(
       (model) =>
-        model.classification === "current" ||
-        model.id === selectedLegacyModelId
+        model.classification === "current" || model.id === selectedLegacyModelId
     ),
     isUserAuthenticated ? favoriteModels || [] : [],
-    isComposerVariant ? normalizedSelectedModelId : null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
   const { others: legacyModels } = groupModelsForSelector(
     models.filter(
       (model) =>
-        model.classification === "legacy" &&
-        model.id !== selectedLegacyModelId
+        model.classification === "legacy" && model.id !== selectedLegacyModelId
     ),
     [],
-    null,
     searchQuery,
     isUserAuthenticated ? isModelHidden : () => false
   )
   const legacyProviders = getLegacyProviderOptions(legacyModels)
+  const pinnedModelIds = new Set(favoriteModels)
   const effectiveRevealedLegacyProviders = searchQuery
     ? new Set(legacyProviders.map((provider) => provider.providerId))
     : revealedLegacyProviders
@@ -783,8 +932,11 @@ export function ModelSelector({
                 isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
+                canPinModels={isUserAuthenticated && !disabled}
                 selectedModelId={normalizedSelectedModelId}
+                pinnedModelIds={pinnedModelIds}
                 onSelect={handleSelect}
+                onTogglePinned={handleTogglePinned}
                 onShowLegacy={handleShowLegacy}
               />
             </div>
@@ -836,7 +988,7 @@ export function ModelSelector({
           geometry="custom"
           className={cn(
             modelSelectorSurfaceClassName,
-            "relative w-[300px] overflow-hidden rounded-3xl p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:18rem]"
+            "relative w-[300px] overflow-hidden rounded-3xl p-1.5 [--model-selector-fixed-height:3rem] [--model-selector-list-max-height:19rem]"
           )}
           align={isComposerVariant ? "end" : "start"}
           sideOffset={4}
@@ -859,10 +1011,7 @@ export function ModelSelector({
               <Input
                 ref={searchInputRef}
                 placeholder="Search models..."
-                className={cn(
-                  modelSelectorSearchInputClassName,
-                  "h-10 pl-8"
-                )}
+                className={cn(modelSelectorSearchInputClassName, "h-10 pl-8")}
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onClick={(e) => e.stopPropagation()}
@@ -874,7 +1023,7 @@ export function ModelSelector({
           <div className="after:from-floating-surface relative rounded-xl after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-10 after:h-4 after:bg-gradient-to-t after:to-transparent after:content-['']">
             <div
               data-scrollable-surface=""
-              className="max-h-[min(calc(var(--model-selector-list-max-height)+var(--model-selector-fixed-height)),max(0px,calc(var(--available-height)-0.75rem)))] scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)] scroll-pb-2 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-auto overscroll-contain pt-(--model-selector-fixed-height)"
+              className="max-h-[min(calc(var(--model-selector-list-max-height)+var(--model-selector-fixed-height)),max(0px,calc(var(--available-height)-0.75rem)))] scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)] scroll-pb-2 [scrollbar-width:none] overflow-x-hidden overflow-y-auto overscroll-contain pt-(--model-selector-fixed-height) [&::-webkit-scrollbar]:hidden"
             >
               <ModelSelectorList
                 favorites={favorites}
@@ -884,8 +1033,11 @@ export function ModelSelector({
                 isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}
+                canPinModels={isUserAuthenticated && !disabled}
                 selectedModelId={normalizedSelectedModelId}
+                pinnedModelIds={pinnedModelIds}
                 onSelect={handleSelect}
+                onTogglePinned={handleTogglePinned}
                 onShowLegacy={handleShowLegacy}
               />
             </div>

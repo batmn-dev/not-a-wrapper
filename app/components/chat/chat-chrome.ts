@@ -28,8 +28,8 @@ export type ChatChrome = {
   appHeader: boolean
   /**
    * Whether the sticky app header reserves its height in thread scroll
-   * geometry. Live ChatGPT uses `always` for home onboarding and `never` once
-   * the surface becomes a thread.
+   * geometry. The authenticated front end currently keeps the standard chat
+   * header in its default `always` mode on both onboarding and thread routes.
    */
   fixedHeader: HeaderFixedMode
 }
@@ -58,5 +58,5 @@ export function resolveChatChrome({
       fixedHeader: "always",
     }
   }
-  return { surface: "thread", appHeader: true, fixedHeader: "never" }
+  return { surface: "thread", appHeader: true, fixedHeader: "always" }
 }

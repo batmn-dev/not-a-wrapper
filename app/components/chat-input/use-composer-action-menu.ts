@@ -141,8 +141,8 @@ function useComposerActionMenu({
 
         if (handledAsActionQuery) {
           setDismissedActionQueryId(actionQuery.id)
-          // The inserted pill consumed the query; command actions still run
-          // their command (add-files opens the picker), toggles WERE the pill.
+          // The action consumed the query. Command actions still run their
+          // command; toggles were handled while consuming the query.
           if (item.action.behavior === "command") onRunAction(item.itemId)
         } else {
           onRunAction(item.itemId)

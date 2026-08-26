@@ -16,10 +16,48 @@ import {
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { Conversation } from "./conversation"
+import {
+  Conversation,
+  shouldUseAssistantContentVisibility,
+} from "./conversation"
 import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
 
 const HOUR = 60 * 60 * 1000
+const turnScrollMocks = vi.hoisted(() => {
+  const renderCallbacks = new Map<
+    string,
+    (intersecting: boolean, entry?: IntersectionObserverEntry) => void
+  >()
+  const renderObserver = {
+    observe: (
+      turn: HTMLElement,
+      onChange: (
+        intersecting: boolean,
+        entry?: IntersectionObserverEntry
+      ) => void
+    ) => {
+      const turnId = turn.dataset.turnIdContainer ?? ""
+      renderCallbacks.set(turnId, onChange)
+      return () => {
+        if (renderCallbacks.get(turnId) === onChange) {
+          renderCallbacks.delete(turnId)
+        }
+      }
+    },
+    disconnect: () => renderCallbacks.clear(),
+  }
+  const centerObserver = {
+    observe: () => () => undefined,
+    disconnect: () => undefined,
+  }
+  const onIntersectingChange = vi.fn()
+  return {
+    centerObserver,
+    onIntersectingChange,
+    renderCallbacks,
+    renderObserver,
+  }
+})
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -40,20 +78,64 @@ vi.mock("@/lib/chat-store/messages/api", () => ({
   getCachedMessages: vi.fn(async () => []),
 }))
 
+vi.mock("@/hooks/use-breakpoint", () => ({ useBreakpoint: () => false }))
+
 vi.mock("./thread-scroll", () => ({
+  CHATGPT_TURN_INTERSECTION_EXPERIMENT: {
+    id: "1841171328",
+    key: "is_enabled",
+    defaultValue: false,
+    enabled: true,
+  },
+  estimateTurnPlaceholderHeight: (
+    textParts: readonly string[],
+    charactersPerLine: number
+  ) => {
+    const characterCount = textParts.reduce(
+      (count, text) => count + text.length,
+      0
+    )
+    return characterCount === 0
+      ? null
+      : 56 + Math.max(1, Math.ceil(characterCount / charactersPerLine)) * 18
+  },
+  isTurnAlwaysRendered: (
+    index: number,
+    turnCount: number,
+    activeTurnIndex: number
+  ) =>
+    index >= turnCount - 5 ||
+    (activeTurnIndex !== -1 && Math.abs(index - activeTurnIndex) <= 5),
   ThreadScrollEdge: ({
-    pinTurnId,
     streamActive,
+    scrollTarget,
   }: {
-    pinTurnId: string | null
     streamActive: boolean
+    scrollTarget?: { turnId: string; messageId?: string } | null
   }) => (
     <div
-      data-pin-turn-id={pinTurnId ?? ""}
+      data-scroll-target={
+        scrollTarget
+          ? `${scrollTarget.turnId}:${scrollTarget.messageId ?? ""}`
+          : undefined
+      }
       data-stream-active={streamActive}
       data-testid="thread-scroll-edge"
     />
   ),
+  useSubmitTurnScrollRef: (active: boolean) => (node: HTMLElement | null) => {
+    if (node) node.dataset.submitScrollActive = String(active)
+  },
+  TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE: 88,
+  TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE: 46,
+  useConversationTurnVirtualization: () => {
+    return {
+      centerIntersectionObserver: turnScrollMocks.centerObserver,
+      markerRef: () => undefined,
+      onIntersectingChange: turnScrollMocks.onIntersectingChange,
+      renderIntersectionObserver: turnScrollMocks.renderObserver,
+    }
+  },
 }))
 
 vi.mock("@/components/ui/thinking-bar", () => ({
@@ -95,6 +177,208 @@ beforeAll(() => {
   ;(
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true
+})
+
+afterEach(() => {
+  turnScrollMocks.renderCallbacks.clear()
+  turnScrollMocks.onIntersectingChange.mockClear()
+})
+
+describe("Conversation recovered turn contracts", () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+  const messages = [
+    {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "Prompt" }],
+    },
+    {
+      id: "assistant-1",
+      role: "assistant",
+      parts: [{ type: "text", text: "Answer" }],
+    },
+  ] satisfies UIMessage[]
+
+  afterEach(() => {
+    act(() => root?.unmount())
+    container?.remove()
+    container = null
+    root = null
+    vi.unstubAllGlobals()
+  })
+
+  function render(scrollToMessageId?: string) {
+    if (!container) {
+      container = document.createElement("div")
+      document.body.append(container)
+      root = createRoot(container)
+    }
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={messages}
+          scrollToMessageId={scrollToMessageId}
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+        />
+      )
+    })
+  }
+
+  it("uses the exact assistant containment guard and deep-link sentinels", () => {
+    vi.stubGlobal("CSS", {
+      supports: vi.fn(
+        (declaration: string) => declaration === "content-visibility: auto"
+      ),
+    })
+
+    render()
+    const assistantTurn = container?.querySelector('[data-turn="assistant"]')
+    expect(assistantTurn?.className).not.toContain("[content-visibility:auto]")
+    expect(
+      shouldUseAssistantContentVisibility({
+        supported: true,
+        isUser: false,
+        experimentEnabled: false,
+      })
+    ).toBe(true)
+
+    render("finalAgentTurnStart")
+    expect(assistantTurn?.className).not.toContain("[content-visibility:auto]")
+    expect(
+      container
+        ?.querySelector('[data-testid="thread-scroll-edge"]')
+        ?.getAttribute("data-scroll-target")
+    ).toBe("assistant-turn:user-1:")
+
+    render("assistant-1")
+    expect(
+      container
+        ?.querySelector('[data-testid="thread-scroll-edge"]')
+        ?.getAttribute("data-scroll-target")
+    ).toBe("assistant-turn:user-1:assistant-1")
+  })
+
+  it("keeps the final five outer turn owners intersecting", () => {
+    const sixMessages = Array.from({ length: 6 }, (_, index) => ({
+      id: `user-${index + 1}`,
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: `Prompt ${index + 1}` }],
+    }))
+
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={sixMessages}
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+        />
+      )
+    })
+
+    const owners = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-turn-id-container][data-is-intersecting]"
+      )
+    )
+    expect(owners).toHaveLength(7)
+    expect(owners.map((owner) => owner.dataset.isIntersecting)).toEqual([
+      "false",
+      "false",
+      "true",
+      "true",
+      "true",
+      "true",
+      "true",
+    ])
+    expect(owners[0]?.querySelector("section")).toBeNull()
+    expect(owners[0]?.dataset.turnIdContainer).toBe("client-created-root")
+    expect(owners[0]?.className).toBe("")
+    expect(owners[1]?.querySelector("section")).toBeNull()
+    expect(owners[1]?.className).toContain("--last-known-height")
+    expect(owners[1]?.style.getPropertyValue("--estimated-turn-height")).toBe(
+      "74px"
+    )
+    expect(
+      owners.slice(2).every((owner) => owner.querySelector("section"))
+    ).toBe(true)
+
+    const firstOwner = owners[1]
+    const firstCallback = turnScrollMocks.renderCallbacks.get("user-1")
+    expect(firstCallback).toBeTypeOf("function")
+    act(() => {
+      firstCallback?.(true, {
+        boundingClientRect: { height: 74 } as DOMRectReadOnly,
+      } as IntersectionObserverEntry)
+    })
+    expect(firstOwner?.querySelector("section")).toBeTruthy()
+    expect(container.querySelector('[data-turn-id-container="user-1"]')).toBe(
+      firstOwner
+    )
+
+    act(() => {
+      turnScrollMocks.renderCallbacks.get("user-1")?.(false, {
+        boundingClientRect: { height: 180 } as DOMRectReadOnly,
+      } as IntersectionObserverEntry)
+    })
+    expect(firstOwner?.querySelector("section")).toBeNull()
+    expect(firstOwner?.style.getPropertyValue("--last-known-height")).toBe(
+      "180px"
+    )
+    expect(container.querySelector('[data-turn-id-container="user-1"]')).toBe(
+      firstOwner
+    )
+  })
+
+  it("keeps asset turns mounted outside the final five window", () => {
+    const messagesWithHistoricalAsset = [
+      {
+        id: "user-1",
+        role: "user" as const,
+        parts: [
+          {
+            type: "file" as const,
+            filename: "reference.pdf",
+            mediaType: "application/pdf",
+            url: "https://example.com/reference.pdf",
+          },
+        ],
+      },
+      ...Array.from({ length: 5 }, (_, index) => ({
+        id: `user-${index + 2}`,
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: `Prompt ${index + 2}` }],
+      })),
+    ] satisfies UIMessage[]
+
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+    act(() => {
+      root?.render(
+        <Conversation
+          messages={messagesWithHistoricalAsset}
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+        />
+      )
+    })
+
+    const assetOwner = container.querySelector<HTMLElement>(
+      '[data-turn-id-container="user-1"][data-is-intersecting]'
+    )
+    expect(assetOwner?.dataset.isIntersecting).toBe("true")
+    expect(assetOwner?.querySelector(":scope > section")).toBeTruthy()
+    expect(turnScrollMocks.renderCallbacks.has("user-1")).toBe(false)
+    expect(turnScrollMocks.onIntersectingChange).not.toHaveBeenCalledWith(
+      "user-1",
+      true
+    )
+  })
 })
 
 describe("Conversation regeneration availability", () => {
@@ -229,11 +513,24 @@ describe("Conversation regeneration availability", () => {
 
     expect(turns).toHaveLength(4)
     expect(turns.every((turn) => turn.tagName === "SECTION")).toBe(true)
-    expect(turns[0]?.classList.contains("pt-3")).toBe(true)
-    expect(turns[0]?.classList.contains("pt-12")).toBe(false)
-    expect(turns[2]?.classList.contains("pt-12")).toBe(true)
-    expect(turns[3]?.classList.contains("pb-8")).toBe(true)
-    expect(turns[3]?.classList.contains("pb-10")).toBe(false)
+    const padding = turns.map((turn) =>
+      turn.querySelector<HTMLElement>(":scope > div")
+    )
+    expect(turns[0]?.querySelector(":scope > h4")?.textContent).toBe(
+      "You said:"
+    )
+    expect(padding[0]?.classList.contains("pt-3")).toBe(true)
+    expect(padding[0]?.classList.contains("pt-12")).toBe(false)
+    expect(padding[2]?.classList.contains("pt-12")).toBe(true)
+    expect(padding[3]?.classList.contains("pb-8")).toBe(true)
+    expect(padding[3]?.classList.contains("pb-10")).toBe(false)
+    expect(
+      turns.every(
+        (turn) =>
+          turn.parentElement?.dataset.turnIdContainer ===
+          turn.dataset.turnIdContainer
+      )
+    ).toBe(true)
   })
 
   it("hydrates finish reasons from durable metadata for historical and last rows", () => {
@@ -416,7 +713,11 @@ describe("Conversation regeneration availability", () => {
     ) as HTMLDivElement | null
 
     expect(scrollEdge?.dataset.streamActive).toBe("true")
-    expect(scrollEdge?.dataset.pinTurnId).toBe("user-1")
+    expect(
+      container
+        ?.querySelector('[data-turn="user"]')
+        ?.getAttribute("data-submit-scroll-active")
+    ).toBe("true")
   })
 
   it("keeps the same user pin target when assistant streaming begins", () => {
@@ -452,7 +753,11 @@ describe("Conversation regeneration availability", () => {
     ) as HTMLDivElement | null
 
     expect(scrollEdge?.dataset.streamActive).toBe("true")
-    expect(scrollEdge?.dataset.pinTurnId).toBe("user-1")
+    expect(
+      container
+        ?.querySelector('[data-turn="user"]')
+        ?.getAttribute("data-submit-scroll-active")
+    ).toBe("true")
   })
 
   it("keeps historical assistant views ready while the current assistant streams", () => {
@@ -727,23 +1032,25 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     expect(user?.createdAt).toBeInstanceOf(Date)
     expect(Number.isFinite(user?.createdAt?.getTime())).toBe(true)
 
-    const wrappers = container?.querySelectorAll(
+    const wrappers = container?.querySelectorAll<HTMLElement>(
       '[data-turn-id-container="optimistic-user"]'
     )
-    expect(wrappers).toHaveLength(1)
+    expect(wrappers).toHaveLength(2)
     const wrapper = wrappers?.[0]
+    const section = wrapper?.querySelector(":scope > section")
     expect(wrapper).toBeTruthy()
-    expect(wrapper?.tagName).toBe("SECTION")
-    expect(wrapper?.getAttribute("data-turn")).toBe("user")
+    expect(wrapper?.tagName).toBe("DIV")
+    expect(wrapper?.getAttribute("data-is-intersecting")).toBe("true")
+    expect(section?.getAttribute("data-turn")).toBe("user")
     if (originalWrapper) expect(wrapper).toBe(originalWrapper)
 
     const separators = container?.querySelectorAll('[role="separator"]')
     expect(separators).toHaveLength(expectedSeparatorCount)
     if (expectedSeparatorCount === 1) {
       const separator = separators?.[0]
-      expect(wrapper?.previousElementSibling).toBe(separator)
+      expect(section?.previousElementSibling).toBe(separator)
       expect(separator?.closest("[data-turn]")).toBeNull()
-      expect(wrapper?.querySelectorAll('[role="separator"]')).toHaveLength(0)
+      expect(wrapper?.querySelectorAll('[role="separator"]')).toHaveLength(1)
     }
 
     return wrapper as Element
@@ -780,12 +1087,15 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     const originalSeparator = qualifies
       ? originalWrapper.querySelector('[role="separator"]')
       : null
-    const pendingAssistant = container?.querySelector(
-      `[data-turn-id="${PENDING_ACTIVITY_TURN_ID}"]`
+    const assistantTurns = container?.querySelectorAll(
+      '[data-turn="assistant"]'
+    )
+    const pendingAssistant = assistantTurns?.item(
+      (assistantTurns?.length ?? 1) - 1
     )
     expect(pendingAssistant).toBeTruthy()
     expect(pendingAssistant?.querySelector('[role="separator"]')).toBeNull()
-    const pendingAssistantWrapper = pendingAssistant?.closest(
+    const pendingAssistantWrapper = pendingAssistant?.parentElement?.closest(
       "[data-turn-id-container]"
     )
     expect(pendingAssistantWrapper).toBeTruthy()
@@ -846,16 +1156,16 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     assertStableDomIdentity()
     expect(
       container?.querySelectorAll(
-        '[data-turn-id-container="assistant-streaming"]'
+        '[data-turn-id-container="assistant-turn:optimistic-user"]'
       )
-    ).toHaveLength(1)
+    ).toHaveLength(2)
     const streamingAssistant = container?.querySelector(
-      '[data-turn-id="assistant-streaming"]'
+      '[data-turn-id="assistant-turn:optimistic-user"]'
     )
     expect(streamingAssistant).toBe(pendingAssistant)
-    expect(streamingAssistant?.closest("[data-turn-id-container]")).toBe(
-      pendingAssistantWrapper
-    )
+    expect(
+      streamingAssistant?.parentElement?.closest("[data-turn-id-container]")
+    ).toBe(pendingAssistantWrapper)
 
     await act(async () => {
       const writer = lifecycle.getStreamWriter()
@@ -899,7 +1209,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
     assertStableDomIdentity()
     expect(
       container?.querySelectorAll('[data-turn-id-container="optimistic-user"]')
-    ).toHaveLength(1)
+    ).toHaveLength(2)
   }
 
   it("keeps one immediate separator and one keyed turn through every send phase", async () => {

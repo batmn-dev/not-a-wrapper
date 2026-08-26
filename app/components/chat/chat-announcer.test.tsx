@@ -2,12 +2,18 @@
 
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, beforeAll, describe, expect, it } from "vitest"
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   ChatAnnouncerOutlet,
   ChatAnnouncerProvider,
   ChatStatusAnnouncer,
 } from "./chat-announcer"
+
+const responsive = vi.hoisted(() => ({ isMobile: false }))
+
+vi.mock("@/hooks/use-breakpoint", () => ({
+  useBreakpoint: () => responsive.isMobile,
+}))
 
 beforeAll(() => {
   ;(
@@ -24,6 +30,7 @@ describe("ChatStatusAnnouncer durable presentation", () => {
     container?.remove()
     container = null
     root = null
+    responsive.isMobile = false
   })
 
   function render(
@@ -45,7 +52,7 @@ describe("ChatStatusAnnouncer durable presentation", () => {
   }
 
   it.each([
-    ["local-streaming", "Generating response."],
+    ["local-streaming", "Thinking"],
     ["background-streaming", "Generating in background."],
     ["awaiting-approval", "Approval required."],
     ["stopping", "Stopping generation."],
@@ -77,5 +84,39 @@ describe("ChatStatusAnnouncer durable presentation", () => {
       document.querySelector('[role="alert"][aria-live="assertive"]')
         ?.textContent
     ).toBe("Generation failed.")
+  })
+
+  it("announces completion on desktop and leaves mobile focus ownership to the turn", () => {
+    const renderCompletion = () => {
+      container = document.createElement("div")
+      document.body.appendChild(container)
+      root = createRoot(container)
+      act(() => {
+        root?.render(
+          <ChatAnnouncerProvider>
+            <ChatAnnouncerOutlet />
+            <ChatStatusAnnouncer
+              presentationState="completed"
+              completionAvailable
+            />
+          </ChatAnnouncerProvider>
+        )
+      })
+    }
+
+    renderCompletion()
+    expect(
+      document.querySelector('[role="status"][aria-live="polite"]')
+        ?.textContent
+    ).toBe("Response complete")
+
+    act(() => root?.unmount())
+    container?.remove()
+    responsive.isMobile = true
+    renderCompletion()
+    expect(
+      document.querySelector('[role="status"][aria-live="polite"]')
+        ?.textContent
+    ).toBe("")
   })
 })

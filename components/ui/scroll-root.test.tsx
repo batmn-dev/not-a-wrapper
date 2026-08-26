@@ -559,7 +559,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
 
     expect(scrollRoot.hasAttribute("data-stream-active")).toBe(true)
     expect(scrollRoot.className).toContain(
-      "data-stream-active:[overflow-anchor:none]"
+      "group-data-stream-active/scroll-root:[overflow-anchor:none]"
     )
   })
 
@@ -606,13 +606,17 @@ describe("ScrollRoot viewport and footer measurement", () => {
       "has-data-[fixed-header=never]:[--sticky-padding-top:0px]"
     )
     expect(scrollRoot.className).toContain(
-      "[--keyboard-safe-area-bottom:max(var(--screen-keyboard-height,0px),env(keyboard-inset-height,0px))]"
+      "has-data-[fixed-header=less-than-md]:md:[--sticky-padding-top:0px]"
     )
     expect(scrollRoot.className).toContain(
-      "keyboard-open:[--keyboard-composer-safe-area:var(--composer-height,0px)]"
+      "has-data-[fixed-header=less-than-xl]:@w-xl/main:[--sticky-padding-top:0px]"
     )
     expect(scrollRoot.className).toContain(
-      "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--keyboard-composer-safe-area)+var(--keyboard-safe-area-bottom)+env(safe-area-inset-bottom,0px))]"
+      "has-data-[fixed-header=less-than-xxl]:@w-2xl/main:[--sticky-padding-top:0px]"
     )
+    expect(scrollRoot.className).toContain(
+      "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]"
+    )
+    expect(scrollRoot.className).toContain("touch:[scrollbar-width:none]")
   })
 })

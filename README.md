@@ -30,7 +30,7 @@ Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, Wor
 
 - **Light / Dark / System themes** — Automatic or manual theme switching
 - **Layout options** — Sidebar or fullscreen modes
-- **Favorite & hidden models** — Curate your model list
+- **Pinned & hidden models** — Curate your model list
 - **Custom system prompts** — Set default instructions for AI behavior
 
 ## Supported AI Providers

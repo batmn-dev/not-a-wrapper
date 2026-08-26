@@ -1,11 +1,11 @@
 "use client"
 
+import { PinActionGlyph } from "@/components/ui/pin-action-glyph"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Pin, PinFilled, PinOff, PinOffOutline } from "@/lib/icons"
 import type { ReactNode } from "react"
 
 /**
@@ -76,29 +76,7 @@ export function SidebarPinAction({
         }
       >
         <TrailingIconChip>
-          {pinned ? (
-            <>
-              <PinOffOutline
-                slotSize={20}
-                className="absolute group-hover/pin:opacity-0 group-focus-visible/pin:opacity-0"
-              />
-              <PinOff
-                slotSize={20}
-                className="absolute opacity-0 group-hover/pin:opacity-100 group-focus-visible/pin:opacity-100"
-              />
-            </>
-          ) : (
-            <>
-              <Pin
-                slotSize={20}
-                className="absolute group-hover/pin:opacity-0 group-focus-visible/pin:opacity-0"
-              />
-              <PinFilled
-                slotSize={20}
-                className="absolute opacity-0 group-hover/pin:opacity-100 group-focus-visible/pin:opacity-100"
-              />
-            </>
-          )}
+          <PinActionGlyph pinned={pinned} />
         </TrailingIconChip>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={-6} variant="outline">

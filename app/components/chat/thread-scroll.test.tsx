@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, StrictMode, type ComponentProps } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
   afterEach,
@@ -11,20 +11,40 @@ import {
   it,
   vi,
 } from "vitest"
-import { ThreadScrollEdge } from "./thread-scroll"
 import {
-  resetThreadAnchorsForTest,
-  saveThreadAnchor,
-} from "./thread-scroll-anchors"
+  captureTurnReflowAnchor,
+  createTurnCenterIntersectionObserver,
+  createTurnRenderIntersectionObserver,
+  estimateTurnPlaceholderHeight,
+  isTurnAlwaysRendered,
+  resolveSubmitTurnScrollBehavior,
+  restoreTurnReflowAnchor,
+  ThreadScrollEdge,
+  TURN_ACTIVE_RENDER_RADIUS,
+  TURN_ALWAYS_RENDER_COUNT,
+  TURN_CENTER_INTERSECTION_ROOT_MARGIN,
+  TURN_CENTER_INTERSECTION_THRESHOLD,
+  TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE,
+  TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE,
+  TURN_REFLOW_EDGE_INSET_PX,
+  TURN_RENDER_INTERSECTION_ROOT_MARGIN,
+  TURN_RENDER_INTERSECTION_THRESHOLD,
+  useSubmitTurnScrollRef,
+  useTurnIntersectionRef,
+} from "./thread-scroll"
+import { resetThreadAnchorsForTest } from "./thread-scroll-anchors"
 
-let intersectionObservers: IntersectionObserverStub[] = []
+type FrameCallback = (time: number) => void
 
-class IntersectionObserverStub {
-  readonly callback: IntersectionObserverCallback
+class IntersectionObserverStub implements IntersectionObserver {
+  static instances: IntersectionObserverStub[] = []
+
   readonly root: Element | Document | null
   readonly rootMargin: string
   readonly thresholds: readonly number[]
   readonly observed = new Set<Element>()
+  readonly callback: IntersectionObserverCallback
+
   disconnect = vi.fn()
   observe = vi.fn((element: Element) => this.observed.add(element))
   takeRecords = vi.fn(() => [])
@@ -40,37 +60,55 @@ class IntersectionObserverStub {
     this.thresholds = Array.isArray(options.threshold)
       ? options.threshold
       : [options.threshold ?? 0]
-    intersectionObservers.push(this)
+    IntersectionObserverStub.instances.push(this)
+  }
+
+  trigger(entry: Partial<IntersectionObserverEntry>) {
+    this.callback(
+      [
+        {
+          boundingClientRect: {} as DOMRectReadOnly,
+          intersectionRatio: entry.isIntersecting ? 1 : 0,
+          intersectionRect: {} as DOMRectReadOnly,
+          isIntersecting: false,
+          rootBounds: null,
+          target: [...this.observed][0] ?? document.body,
+          time: 0,
+          ...entry,
+        },
+      ],
+      this
+    )
   }
 }
 
-let resizeObservers: ResizeObserverStub[] = []
-
-class ResizeObserverStub {
-  readonly callback: ResizeObserverCallback
-  readonly observed = new Set<Element>()
-
-  disconnect = vi.fn()
-  observe = vi.fn((element: Element) => this.observed.add(element))
-  unobserve = vi.fn((element: Element) => this.observed.delete(element))
-
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback
-    resizeObservers.push(this)
-  }
-
-  trigger() {
-    this.callback([], this as unknown as ResizeObserver)
-  }
+function SubmitTarget({ active }: { active: boolean }) {
+  const ref = useSubmitTurnScrollRef(active)
+  return (
+    <div data-is-intersecting="true" data-turn-id-container="user-1">
+      <section ref={ref} data-turn-id-container="user-1" />
+    </div>
+  )
 }
 
-type FrameCallback = (time: number) => void
+function IntersectionTarget({
+  onChange,
+}: {
+  onChange: (intersecting: boolean) => void
+}) {
+  const ref = useTurnIntersectionRef(onChange)
+  return (
+    <div data-is-intersecting="true" data-turn-id-container="turn-1">
+      <section ref={ref} data-turn-id-container="turn-1" />
+    </div>
+  )
+}
 
-describe("ThreadScrollEdge", () => {
+describe("thread scroll contract", () => {
   let container: HTMLDivElement
   let root: Root
-  let nextFrameId: number
   let frames: Map<number, FrameCallback>
+  let nextFrameId: number
   let scrollIntoView: ReturnType<typeof vi.fn>
   let scrollTo: ReturnType<typeof vi.fn>
   let originalScrollIntoView: PropertyDescriptor | undefined
@@ -83,13 +121,12 @@ describe("ThreadScrollEdge", () => {
   })
 
   beforeEach(() => {
-    intersectionObservers = []
-    resizeObservers = []
-    nextFrameId = 0
+    IntersectionObserverStub.instances = []
+    resetThreadAnchorsForTest()
     frames = new Map()
+    nextFrameId = 0
     scrollIntoView = vi.fn()
     scrollTo = vi.fn()
-    resetThreadAnchorsForTest()
     originalScrollIntoView = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       "scrollIntoView"
@@ -98,9 +135,8 @@ describe("ThreadScrollEdge", () => {
       HTMLElement.prototype,
       "scrollTo"
     )
-
     vi.stubGlobal("IntersectionObserver", IntersectionObserverStub)
-    vi.stubGlobal("ResizeObserver", ResizeObserverStub)
+    vi.stubGlobal("CSS", { escape: (value: string) => value })
     vi.stubGlobal(
       "requestAnimationFrame",
       vi.fn((callback: FrameCallback) => {
@@ -113,7 +149,6 @@ describe("ThreadScrollEdge", () => {
       "cancelAnimationFrame",
       vi.fn((id: number) => frames.delete(id))
     )
-    vi.stubGlobal("CSS", { escape: (value: string) => value })
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: scrollIntoView,
@@ -143,43 +178,126 @@ describe("ThreadScrollEdge", () => {
         originalScrollIntoView
       )
     } else {
-      delete (HTMLElement.prototype as { scrollIntoView?: unknown })
-        .scrollIntoView
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView")
     }
     if (originalScrollTo) {
       Object.defineProperty(HTMLElement.prototype, "scrollTo", originalScrollTo)
     } else {
-      delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollTo")
     }
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  function render(
-    pinTurnId: string | null,
-    strict = false,
-    overrides: Partial<ComponentProps<typeof ThreadScrollEdge>> = {}
-  ) {
-    const edge = (
-      <>
-        <div data-turn-id="user-1" />
-        <ThreadScrollEdge
-          chatId="chat-1"
-          streamActive={pinTurnId !== null}
-          pinTurnId={pinTurnId}
-          hydrated
-          freshChat
-          {...overrides}
-        />
-      </>
-    )
+  it("shares the exact render-intersection observer values per scroll root", () => {
+    const turn = document.createElement("div")
+    container.appendChild(turn)
+    const onChange = vi.fn()
+    const observer = createTurnRenderIntersectionObserver()
 
-    act(() => {
-      root.render(strict ? <StrictMode>{edge}</StrictMode> : edge)
+    const cleanup = observer.observe(turn, onChange)
+    const instance = IntersectionObserverStub.instances[0]
+    expect(instance?.root).toBe(container)
+    expect(instance?.rootMargin).toBe(TURN_RENDER_INTERSECTION_ROOT_MARGIN)
+    expect(instance?.thresholds).toEqual([TURN_RENDER_INTERSECTION_THRESHOLD])
+
+    instance?.trigger({
+      intersectionRatio: TURN_RENDER_INTERSECTION_THRESHOLD - 0.001,
+      isIntersecting: true,
+      target: turn,
     })
-  }
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe(false)
+    instance?.trigger({
+      intersectionRatio: TURN_RENDER_INTERSECTION_THRESHOLD,
+      isIntersecting: true,
+      target: turn,
+    })
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe(true)
 
-  function flushFrames() {
+    cleanup()
+    expect(instance?.unobserve).toHaveBeenCalledWith(turn)
+    expect(instance?.disconnect).toHaveBeenCalledOnce()
+  })
+
+  it("shares the exact center-band observer per scroll root", () => {
+    const first = document.createElement("div")
+    const second = document.createElement("div")
+    container.append(first, second)
+    const observer = createTurnCenterIntersectionObserver()
+
+    const cleanupFirst = observer.observe(first, vi.fn())
+    const cleanupSecond = observer.observe(second, vi.fn())
+    const instance = IntersectionObserverStub.instances[0]
+
+    expect(IntersectionObserverStub.instances).toHaveLength(1)
+    expect(instance?.root).toBe(container)
+    expect(instance?.rootMargin).toBe(TURN_CENTER_INTERSECTION_ROOT_MARGIN)
+    expect(instance?.thresholds).toEqual([TURN_CENTER_INTERSECTION_THRESHOLD])
+    expect(instance?.observed).toEqual(new Set([first, second]))
+
+    cleanupFirst()
+    expect(instance?.disconnect).not.toHaveBeenCalled()
+    cleanupSecond()
+    expect(instance?.disconnect).toHaveBeenCalledOnce()
+  })
+
+  it("uses the recovered turn window and text-height estimator", () => {
+    expect(TURN_ALWAYS_RENDER_COUNT).toBe(5)
+    expect(TURN_ACTIVE_RENDER_RADIUS).toBe(5)
+    expect(isTurnAlwaysRendered(14, 20, -1)).toBe(false)
+    expect(isTurnAlwaysRendered(15, 20, -1)).toBe(true)
+    expect(isTurnAlwaysRendered(7, 20, 2)).toBe(true)
+    expect(isTurnAlwaysRendered(8, 20, 2)).toBe(false)
+
+    expect(
+      estimateTurnPlaceholderHeight(
+        ["a".repeat(TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE + 1)],
+        TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE
+      )
+    ).toBe(92)
+    expect(
+      estimateTurnPlaceholderHeight(
+        ["one\r\ntwo\n"],
+        TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE
+      )
+    ).toBe(110)
+    expect(estimateTurnPlaceholderHeight([], 88)).toBeNull()
+  })
+
+  it("restores the captured visible edge after a virtualized turn reflow", () => {
+    expect(TURN_REFLOW_EDGE_INSET_PX).toBe(4)
+    let turnRect = { top: 140, bottom: 260 }
+    const turn = document.createElement("div")
+    turn.dataset.turnIdContainer = "turn-1"
+    turn.dataset.isIntersecting = "true"
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+      bottom: 600,
+    } as DOMRect)
+    vi.spyOn(turn, "getBoundingClientRect").mockImplementation(
+      () => turnRect as DOMRect
+    )
+    container.appendChild(turn)
+    container.scrollTop = 300
+
+    const anchor = captureTurnReflowAnchor(container)
+    expect(anchor).toMatchObject({
+      turnId: "turn-1",
+      edge: "top",
+      edgePosition: 140,
+    })
+
+    turnRect = { top: 176, bottom: 296 }
+    if (anchor) restoreTurnReflowAnchor(anchor)
+    expect(container.scrollTop).toBe(336)
+
+    const secondAnchor = captureTurnReflowAnchor(container)
+    turnRect = { top: 150, bottom: 270 }
+    if (secondAnchor) restoreTurnReflowAnchor(secondAnchor)
+    expect(container.scrollTop).toBe(336)
+  })
+
+  function flushOneFrame() {
     const pending = [...frames.values()]
     frames.clear()
     act(() => {
@@ -187,351 +305,171 @@ describe("ThreadScrollEdge", () => {
     })
   }
 
-  it("pins before the next animation frame in Strict Mode", () => {
-    render("user-1", true)
+  it("lets the active user turn scroll smoothly after exactly two frames", () => {
+    container.setAttribute("data-scroll-from-end", "")
+    act(() => root.render(<SubmitTarget active />))
 
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    flushOneFrame()
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    flushOneFrame()
+
+    expect(container.hasAttribute("data-scroll-from-end")).toBe(false)
     expect(scrollIntoView).toHaveBeenCalledOnce()
     expect(scrollIntoView).toHaveBeenCalledWith({
-      behavior: "instant",
+      behavior: "smooth",
       block: "end",
     })
   })
 
-  it("pins a reused turn id in a later pin cycle", () => {
-    render("user-1")
-    flushFrames()
-
-    render(null)
-    render("user-1")
-    flushFrames()
-
-    expect(scrollIntoView).toHaveBeenCalledTimes(2)
-  })
-
-  it("does not repin during optimistic-to-streaming reconciliation or response growth", () => {
-    act(() => {
-      root.render(
+  it("does not issue a second command as pending content becomes streamed content", () => {
+    function Harness() {
+      const [content, setContent] = useState("pending")
+      return (
         <>
-          <div data-turn-id="user-1" />
-          <div data-turn-id="pending-assistant" />
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive
-            pinTurnId="user-1"
-            hydrated
-            freshChat
-          />
+          <SubmitTarget active />
+          <button onClick={() => setContent("streaming")}>{content}</button>
         </>
       )
-    })
-    flushFrames()
+    }
 
-    act(() => {
-      root.render(
-        <>
-          <div data-turn-id="user-1" />
-          <div data-turn-id="assistant-1">first content</div>
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive
-            pinTurnId="user-1"
-            hydrated
-            freshChat
-          />
-        </>
-      )
-    })
-    flushFrames()
-
-    act(() => {
-      root.render(
-        <>
-          <div data-turn-id="user-1" />
-          <div data-turn-id="assistant-1">a much taller streamed response</div>
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive
-            pinTurnId="user-1"
-            hydrated
-            freshChat
-          />
-        </>
-      )
-    })
-    flushFrames()
+    act(() => root.render(<Harness />))
+    flushOneFrame()
+    flushOneFrame()
+    act(() => container.querySelector("button")?.click())
+    flushOneFrame()
+    flushOneFrame()
 
     expect(scrollIntoView).toHaveBeenCalledOnce()
   })
 
-  it("does not schedule a second pin when optimistic insertion already reached the edge", () => {
-    container.scrollTop = 1000
-
-    render("user-1")
-    Object.defineProperty(container, "scrollHeight", {
-      configurable: true,
-      value: 3200,
-    })
-    flushFrames()
-
-    expect(scrollIntoView).not.toHaveBeenCalled()
-    expect(container.hasAttribute("data-scroll-from-end")).toBe(false)
-  })
-
-  it("leaves manual scroll ownership released without threshold reactivation", () => {
-    render("user-1")
-    flushFrames()
-    container.scrollTop = 640
-
+  it("gates center-band behavior behind the recovered experiment default", () => {
     act(() => {
-      container.dispatchEvent(new Event("scroll"))
       root.render(
         <>
-          <div data-turn-id="user-1" />
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive
-            pinTurnId="user-1"
-            hydrated
-            freshChat
-          />
+          <div data-is-intersecting="true" data-turn-id-container="turn-1" />
+          <div data-is-intersecting="false" data-turn-id-container="turn-2" />
+          <div data-is-intersecting="true" data-turn-id-container="turn-3">
+            <section data-turn-id-container="turn-3" />
+          </div>
         </>
       )
     })
-    flushFrames()
-
-    container.scrollTop = 12
-    act(() => container.dispatchEvent(new Event("scroll")))
-    flushFrames()
-
-    expect(container.scrollTop).toBe(12)
-    expect(scrollIntoView).toHaveBeenCalledOnce()
-  })
-
-  it("recalculates the gutter when the scroll root resizes", () => {
-    render("user-1")
-    flushFrames()
-    const gutter = container.querySelector(
-      ".threadScrollVars"
-    ) as HTMLDivElement
-    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
-      bottom: 500,
-    } as DOMRect)
-    vi.spyOn(gutter, "getBoundingClientRect").mockReturnValue({
-      top: 200,
-    } as DOMRect)
-
-    act(() => {
-      for (const observer of resizeObservers) observer.trigger()
-    })
-
-    expect(
-      resizeObservers.some((observer) => observer.observed.has(container))
-    ).toBe(true)
-    expect(gutter.style.getPropertyValue("--gutter-remaining-height")).toBe(
-      "300px"
+    const target = container.querySelector<HTMLElement>(
+      'section[data-turn-id-container="turn-3"]'
     )
-    expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(target && resolveSubmitTurnScrollBehavior(target)).toBe("instant")
+    expect(target && resolveSubmitTurnScrollBehavior(target, false)).toBe(
+      "smooth"
+    )
+    expect(target && resolveSubmitTurnScrollBehavior(target, true)).toBe(
+      "instant"
+    )
+  })
+
+  it("observes the turn section through the exact center band", () => {
+    const onChange = vi.fn()
+    act(() => root.render(<IntersectionTarget onChange={onChange} />))
+
+    const section = container.querySelector("section")
+    const owner = section?.parentElement
+    const observer = IntersectionObserverStub.instances[0]
+
+    expect(observer?.root).toBe(container)
+    expect(observer?.rootMargin).toBe("-49% 0px -49% 0px")
+    expect(observer?.thresholds).toEqual([0])
+    expect(observer?.observed.has(section as Element)).toBe(true)
+
+    act(() => observer?.trigger({ isIntersecting: false }))
+    expect(onChange).toHaveBeenCalledWith(false)
+    expect(owner?.dataset.isIntersecting).toBe("true")
+  })
+
+  it("matches the fixed sentinel and entry-owned gutter observers", () => {
+    act(() => {
+      root.render(
+        <ThreadScrollEdge
+          chatId="chat-1"
+          streamActive={false}
+          hydrated
+          freshChat
+        />
+      )
+    })
+
+    const sentinelObserver = IntersectionObserverStub.instances.find(
+      (observer) => observer.rootMargin === "0px 0px 96px"
+    )
+    const gutterObserver = IntersectionObserverStub.instances.find(
+      (observer) => observer.thresholds.length === 101
+    )
+    const gutter = container.querySelector<HTMLElement>(".threadScrollVars")
+
+    expect(sentinelObserver).toBeTruthy()
+    expect(gutterObserver).toBeTruthy()
+    expect(gutter?.hasAttribute("aria-hidden")).toBe(false)
+
+    act(() => {
+      sentinelObserver?.trigger({ isIntersecting: false })
+      gutterObserver?.trigger({
+        boundingClientRect: { top: 240 } as DOMRectReadOnly,
+        rootBounds: { bottom: 600 } as DOMRectReadOnly,
+      })
+    })
+
+    expect(container.hasAttribute("data-scroll-from-end")).toBe(true)
+    expect(gutter?.style.getPropertyValue("--gutter-remaining-height")).toBe(
+      "360px"
+    )
+  })
+
+  it("restores an unsaved thread with the exact two-frame bottom fallback", () => {
+    act(() => {
+      root.render(
+        <ThreadScrollEdge
+          chatId="chat-1"
+          streamActive={false}
+          hydrated
+          freshChat={false}
+        />
+      )
+    })
+
+    expect(container.scrollTop).toBe(0)
     expect(scrollTo).not.toHaveBeenCalled()
-  })
 
-  it("does not repin when streaming completes", () => {
-    render("user-1")
-    flushFrames()
+    const firstFrame = frames.entries().next().value
+    expect(firstFrame).toBeTruthy()
+    if (firstFrame) {
+      frames.delete(firstFrame[0])
+      act(() => firstFrame[1](0))
+    }
+    expect(container.scrollTop).toBe(container.scrollHeight)
 
-    render(null, false, { streamActive: false })
-    flushFrames()
-
-    expect(container.hasAttribute("data-stream-active")).toBe(false)
-    expect(scrollIntoView).toHaveBeenCalledOnce()
-  })
-
-  it("tracks the complete root-owned bottom safe area for scroll-button visibility", () => {
-    container.style.setProperty(
-      "--scroll-root-safe-area-inset-bottom",
-      "184px"
-    )
-
-    act(() => {
-      root.render(
-        <>
-          <div id="thread-bottom-container" />
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive={false}
-            pinTurnId={null}
-            hydrated
-            freshChat
-          />
-        </>
-      )
-    })
-
-    expect(
-      intersectionObservers.some(
-        (observer) => observer.rootMargin === "0px 0px 184px"
-      )
-    ).toBe(true)
-
-    container.style.setProperty(
-      "--scroll-root-safe-area-inset-bottom",
-      "316px"
-    )
-    act(() => {
-      for (const observer of resizeObservers) observer.trigger()
-    })
-
-    expect(intersectionObservers.at(-1)?.rootMargin).toBe("0px 0px 316px")
-  })
-
-  it("coalesces streamed child mutations without reading footer geometry", async () => {
-    const measureFooter = vi.fn(() => ({ height: 108 }) as DOMRect)
-
-    act(() => {
-      root.render(
-        <>
-          <div data-turn-id="assistant-1" />
-          <div
-            id="thread-bottom-container"
-            ref={(element) => {
-              if (element) element.getBoundingClientRect = measureFooter
-            }}
-          />
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive
-            pinTurnId={null}
-            hydrated
-            freshChat
-          />
-        </>
-      )
-    })
-    flushFrames()
-    expect(measureFooter).not.toHaveBeenCalled()
-
-    const streamedTurn = container.querySelector(
-      '[data-turn-id="assistant-1"]'
-    ) as HTMLElement
-    const queryRoot = vi.spyOn(container, "querySelector")
-    await act(async () => {
-      streamedTurn.appendChild(document.createElement("span"))
-      await Promise.resolve()
-      streamedTurn.appendChild(document.createElement("span"))
-      await Promise.resolve()
-    })
-
-    expect(frames.size).toBe(1)
-    expect(measureFooter).not.toHaveBeenCalled()
-    expect(
-      queryRoot.mock.calls.filter(
-        ([selector]) => selector === "#thread-bottom-container"
-      )
-    ).toHaveLength(0)
-
-    flushFrames()
-    expect(
-      queryRoot.mock.calls.filter(
-        ([selector]) => selector === "#thread-bottom-container"
-      )
-    ).toHaveLength(1)
-    expect(measureFooter).not.toHaveBeenCalled()
-  })
-
-  it("cancels a pending footer refresh during cleanup", async () => {
-    render(null)
-    const turn = container.querySelector(
-      '[data-turn-id="user-1"]'
-    ) as HTMLElement
-
-    await act(async () => {
-      turn.appendChild(document.createElement("span"))
-      await Promise.resolve()
-    })
-    expect(frames.size).toBe(1)
-
-    act(() => root.render(<></>))
-
+    const secondFrame = frames.entries().next().value
+    expect(secondFrame).toBeTruthy()
+    if (secondFrame) {
+      frames.delete(secondFrame[0])
+      act(() => secondFrame[1](16))
+    }
+    expect(container.scrollTop).toBe(container.scrollHeight)
     expect(frames.size).toBe(0)
   })
 
   it("keeps the disclaimer in the conversation tail outside the footer", () => {
-    render(null)
-
-    const tail = container.querySelector("[data-thread-tail]")
-    const disclaimer = container.querySelector("[data-thread-disclaimer]")
-
-    expect(tail).not.toBeNull()
-    expect(disclaimer).not.toBeNull()
-    expect(tail?.contains(disclaimer)).toBe(true)
-    expect(disclaimer?.closest("#thread-bottom-container")).toBeNull()
-  })
-
-  it("restores a saved anchor instead of jumping to the bottom", () => {
-    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
-      top: 100,
-      bottom: 600,
-    } as DOMRect)
-    const savedTurn = document.createElement("div")
-    savedTurn.setAttribute("data-turn-id-container", "m1")
-    vi.spyOn(savedTurn, "getBoundingClientRect").mockReturnValue({
-      top: 60,
-      bottom: 160,
-    } as DOMRect)
-    container.appendChild(savedTurn)
-    saveThreadAnchor("chat-1", container)
-    savedTurn.remove()
-    container.scrollTop = 0
-
     act(() => {
       root.render(
-        <>
-          <div
-            ref={(element) => {
-              if (!element) return
-              vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
-                top: 260,
-                bottom: 360,
-              } as DOMRect)
-            }}
-            data-turn-id-container="m1"
-          />
-          <ThreadScrollEdge
-            chatId="chat-1"
-            streamActive={false}
-            pinTurnId={null}
-            hydrated
-            freshChat={false}
-          />
-        </>
+        <ThreadScrollEdge
+          chatId="chat-1"
+          streamActive={false}
+          hydrated
+          freshChat
+        />
       )
     })
-
-    expect(scrollTo).not.toHaveBeenCalled()
-    expect(container.scrollTop).toBe(200)
-  })
-
-  it("repeats the bottom fallback across two animation frames", () => {
-    Object.defineProperty(container, "scrollHeight", {
-      configurable: true,
-      value: 1200,
-    })
-
-    render(null, false, { freshChat: false })
-
-    expect(scrollTo).toHaveBeenCalledOnce()
-    expect(scrollTo).toHaveBeenLastCalledWith({
-      top: 1200,
-      behavior: "instant",
-    })
-
-    flushFrames()
-    expect(scrollTo).toHaveBeenCalledTimes(2)
-
-    flushFrames()
-    expect(scrollTo).toHaveBeenCalledTimes(3)
-    expect(scrollTo).toHaveBeenLastCalledWith({
-      top: 1200,
-      behavior: "instant",
-    })
+    const tail = container.querySelector("[data-thread-tail]")
+    const disclaimer = container.querySelector("[data-thread-disclaimer]")
+    expect(tail?.contains(disclaimer)).toBe(true)
+    expect(disclaimer?.closest("#thread-bottom-container")).toBeNull()
   })
 })

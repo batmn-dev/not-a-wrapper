@@ -57,6 +57,7 @@ export function AssistantActivityIndicator({
             className
           )}
           data-activity-presentation="live-status"
+          data-dotball-loading-indicator=""
           data-slot="assistant-activity"
         >
           <StatusText

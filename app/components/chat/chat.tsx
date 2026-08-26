@@ -160,6 +160,7 @@ function ChatInner({
     hasSentFirstMessage,
     isSubmitting,
     lastFinishReason,
+    scrollToMessageId,
     submit,
     handleSuggestion,
     handleReload,
@@ -295,6 +296,7 @@ function ChatInner({
       onSelectBranch: selectMessageBranch,
       isDurableChat,
       lastFinishReason,
+      scrollToMessageId,
     }),
     [
       messages,
@@ -309,6 +311,7 @@ function ChatInner({
       selectMessageBranch,
       isDurableChat,
       lastFinishReason,
+      scrollToMessageId,
     ]
   )
 
@@ -420,6 +423,7 @@ function ChatInner({
           status={effectiveStatus}
           isSubmitting={isSubmitting}
           presentationState={presentation.state}
+          completionAvailable={lastFinishReason !== undefined}
         />
         <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 

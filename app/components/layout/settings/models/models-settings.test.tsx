@@ -154,6 +154,9 @@ describe("ModelsSettings", () => {
 
     expect(favoriteItem?.textContent).toContain("Claude Sonnet 5")
     expect(favoriteItem?.querySelector("svg.text-claude-logo")).not.toBeNull()
+    expect(rendered.textContent).toContain("Pinned (1)")
+    expect(rendered.textContent).toContain("Choose models to pin.")
+    expect(rendered.querySelector('[title="Unpin model"]')).not.toBeNull()
     expect(anthropicHeading).toBeTruthy()
     expect(
       anthropicHeading?.parentElement?.querySelector("svg.text-claude-logo")
@@ -185,7 +188,7 @@ describe("ModelsSettings", () => {
     const rendered = renderSettings()
     const availableModelNames = Array.from(
       rendered.querySelectorAll<HTMLButtonElement>(
-        'button[title="Add to favorites"]'
+        'button[title="Pin model"]'
       )
     ).map((button) =>
       button.parentElement?.querySelector("span")?.textContent?.trim()
