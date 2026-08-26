@@ -55,6 +55,7 @@ import {
   RiLockLine,
   RiSearchLine,
 } from "@remixicon/react"
+import { useReducedMotion } from "motion/react"
 import { useRef, useState } from "react"
 import { ProModelDialog } from "./pro-dialog"
 
@@ -79,6 +80,15 @@ const modelSelectorSearchOverlayClassName =
   "from-floating-surface/80 to-floating-surface/0 pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b"
 const modelSelectorSearchInputClassName =
   "border-input-border bg-floating-surface/70 rounded-full border shadow-none backdrop-blur-md focus-visible:ring-0"
+const modelSelectorPressKeyframes: Keyframe[] = [
+  { transform: "scale(1)" },
+  { transform: "scale(0.96)" },
+]
+const modelSelectorPressTiming: KeyframeAnimationOptions = {
+  duration: 75,
+  easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+  fill: "forwards",
+}
 
 type LegacyProviderOption = {
   providerId: string
@@ -675,6 +685,7 @@ export function ModelSelector({
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
+  const shouldReduceMotion = useReducedMotion()
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -685,6 +696,9 @@ export function ModelSelector({
     () => new Set<string>()
   )
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const desktopAnchorRef = useRef<HTMLDivElement>(null)
+  const pressAnimationRef = useRef<Animation | null>(null)
+  const pressEndCleanupRef = useRef<(() => void) | null>(null)
   const selectionCommittedRef = useRef(false)
 
   const resetModelList = () => {
@@ -764,6 +778,77 @@ export function ModelSelector({
     })
   }
 
+  const handlePressPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (event.button !== 0 || !event.isPrimary) return
+
+    pressEndCleanupRef.current?.()
+    pressAnimationRef.current?.cancel()
+    pressAnimationRef.current = null
+
+    if (shouldReduceMotion) return
+
+    // Start before Base UI's mousedown open so menu work cannot delay the press.
+    const pressSurface = event.currentTarget
+    const animation = pressSurface.animate(
+      modelSelectorPressKeyframes,
+      modelSelectorPressTiming
+    )
+    pressAnimationRef.current = animation
+
+    let isReleased = false
+    let hasReachedPressedScale = false
+    let isReturning = false
+
+    const startReturnAnimation = () => {
+      if (isReturning || pressAnimationRef.current !== animation) return
+      isReturning = true
+
+      const returnAnimation = pressSurface.animate(
+        [...modelSelectorPressKeyframes].reverse(),
+        modelSelectorPressTiming
+      )
+      animation.cancel()
+      pressAnimationRef.current = returnAnimation
+      returnAnimation.onfinish = () => {
+        if (pressAnimationRef.current !== returnAnimation) return
+        returnAnimation.cancel()
+        pressAnimationRef.current = null
+      }
+    }
+
+    animation.onfinish = () => {
+      if (pressAnimationRef.current !== animation) return
+      hasReachedPressedScale = true
+      if (isReleased) startReturnAnimation()
+    }
+
+    const ownerWindow = pressSurface.ownerDocument.defaultView
+    if (!ownerWindow) return
+
+    const pointerId = event.pointerId
+
+    function cleanupPointerEnd() {
+      ownerWindow?.removeEventListener("pointerup", handlePointerEnd, true)
+      ownerWindow?.removeEventListener("pointercancel", handlePointerEnd, true)
+      if (pressEndCleanupRef.current === cleanupPointerEnd) {
+        pressEndCleanupRef.current = null
+      }
+    }
+
+    function handlePointerEnd(endEvent: PointerEvent) {
+      if (endEvent.pointerId !== pointerId) return
+      cleanupPointerEnd()
+      isReleased = true
+      if (hasReachedPressedScale) startReturnAnimation()
+    }
+
+    pressEndCleanupRef.current = cleanupPointerEnd
+    ownerWindow.addEventListener("pointerup", handlePointerEnd, true)
+    ownerWindow.addEventListener("pointercancel", handlePointerEnd, true)
+  }
+
   const handleTogglePinned = (modelId: string, trigger: HTMLButtonElement) => {
     const scrollSnapshot = captureModelListScroll(trigger)
     const nextPinnedModels = favoriteModels.includes(modelId)
@@ -811,6 +896,7 @@ export function ModelSelector({
   )
   const legacyProviders = getLegacyProviderOptions(legacyModels)
   const pinnedModelIds = new Set(favoriteModels)
+  const usesGesturePress = isComposerVariant && !isMobile
   const effectiveRevealedLegacyProviders = searchQuery
     ? new Set(legacyProviders.map((provider) => provider.providerId))
     : revealedLegacyProviders
@@ -825,8 +911,9 @@ export function ModelSelector({
       className={cn(
         "min-w-0 shrink font-normal",
         isComposerVariant
-          ? "text-muted-foreground can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-none justify-start gap-1.5 overflow-visible rounded-full py-0 ps-3.5 pe-3 text-base leading-[26px]"
+          ? "text-muted-foreground can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-full justify-start gap-1.5 overflow-visible rounded-full py-0 ps-3.5 pe-3 text-base leading-[26px]"
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
+        usesGesturePress && "transition-none active:scale-100",
         className
       )}
       disabled={disabled || isLoadingModels}
@@ -844,7 +931,7 @@ export function ModelSelector({
       <span
         className={cn(
           "min-w-0 truncate",
-          isComposerVariant && "text-foreground max-w-40"
+          isComposerVariant && "text-foreground"
         )}
       >
         {currentModel
@@ -947,7 +1034,7 @@ export function ModelSelector({
   }
 
   return (
-    <div>
+    <div ref={desktopAnchorRef} data-slot="model-selector-desktop-anchor">
       {isUserAuthenticated ? (
         <ProModelDialog
           isOpen={isProDialogOpen}
@@ -971,20 +1058,30 @@ export function ModelSelector({
         }}
       >
         {isComposerVariant ? (
-          <Tooltip disableHoverablePopup disabled={isDropdownOpen}>
-            <TooltipTrigger render={<DropdownMenuTrigger render={trigger} />} />
-            <TooltipContent side="bottom" hideArrow>
-              <TooltipShortcut label="Select model">
-                <Kbd label="Control">⌃</Kbd>
-                <Kbd label="Shift">⇧</Kbd>
-                <Kbd>M</Kbd>
-              </TooltipShortcut>
-            </TooltipContent>
-          </Tooltip>
+          <div
+            data-slot="model-selector-press-surface"
+            className="inline-flex"
+            tabIndex={-1}
+            onPointerDown={handlePressPointerDown}
+          >
+            <Tooltip disableHoverablePopup disabled={isDropdownOpen}>
+              <TooltipTrigger
+                render={<DropdownMenuTrigger render={trigger} />}
+              />
+              <TooltipContent side="bottom" hideArrow>
+                <TooltipShortcut label="Select model">
+                  <Kbd label="Control">⌃</Kbd>
+                  <Kbd label="Shift">⇧</Kbd>
+                  <Kbd>M</Kbd>
+                </TooltipShortcut>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         ) : (
           <DropdownMenuTrigger render={trigger} />
         )}
         <DropdownMenuContent
+          anchor={isComposerVariant ? desktopAnchorRef : undefined}
           geometry="custom"
           className={cn(
             modelSelectorSurfaceClassName,

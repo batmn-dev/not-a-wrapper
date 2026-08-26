@@ -25,6 +25,7 @@ let ModelSelector: typeof import("./base").ModelSelector
 let testDom: JSDOM | null = null
 let changeDropdownOpen: ((open: boolean) => void) | undefined
 let completeDropdownOpenChange: ((open: boolean) => void) | undefined
+let dropdownAnchor: React.RefObject<Element | null> | undefined
 
 function installDomIfNeeded() {
   if (typeof document !== "undefined") return
@@ -282,22 +283,27 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   } & Record<string, unknown>) =>
     React.cloneElement(render, { ...props, "data-testid": "model-trigger" }),
   DropdownMenuContent: ({
+    anchor,
     children,
     className,
     geometry,
   }: {
+    anchor?: React.RefObject<Element | null>
     children: React.ReactNode
     className?: string
     geometry?: "menu" | "custom"
-  }) => (
-    <div
-      data-testid="model-menu"
-      data-geometry={geometry}
-      className={className}
-    >
-      {children}
-    </div>
-  ),
+  }) => {
+    dropdownAnchor = anchor
+    return (
+      <div
+        data-testid="model-menu"
+        data-geometry={geometry}
+        className={className}
+      >
+        {children}
+      </div>
+    )
+  },
   DropdownMenuItem: ({
     children,
     className,
@@ -413,6 +419,7 @@ describe("ModelSelector", () => {
     useKeyShortcutMock.mockClear()
     changeDropdownOpen = undefined
     completeDropdownOpenChange = undefined
+    dropdownAnchor = undefined
   })
 
   function renderSelector({
@@ -1214,7 +1221,8 @@ describe("ModelSelector", () => {
     expect(trigger?.className).toContain("composer-btn")
     expect(trigger?.className).not.toContain("hover:bg-interactive-hover")
     expect(trigger?.className).not.toContain("active:bg-interactive-pressed")
-    expect(trigger?.className).toContain("active:scale-[0.96]")
+    expect(trigger?.className).toContain("active:scale-100")
+    expect(trigger?.className).toContain("transition-none")
     expect(trigger?.className).toContain("can-hover:relative")
     expect(trigger?.className).toContain("can-hover:after:absolute")
     expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
@@ -1224,6 +1232,8 @@ describe("ModelSelector", () => {
     expect(trigger?.className).toContain("pe-3")
     expect(trigger?.className).toContain("text-base")
     expect(trigger?.className).toContain("leading-[26px]")
+    expect(trigger?.className).toContain("max-w-full")
+    expect(trigger?.className).not.toContain("max-w-none")
     expect(trigger?.className).not.toContain("overflow-hidden")
 
     const selectedModelIcon = trigger?.querySelector<HTMLElement>(
@@ -1236,6 +1246,90 @@ describe("ModelSelector", () => {
       "16px"
     )
     expect(trigger?.lastElementChild?.className).toContain("text-foreground")
+    expect(trigger?.lastElementChild?.className).toContain("min-w-0")
+    expect(trigger?.lastElementChild?.className).toContain("truncate")
+    expect(trigger?.lastElementChild?.className).not.toContain("max-w-40")
+    const pressSurface = document.body.querySelector(
+      '[data-slot="model-selector-press-surface"]'
+    )
+    expect(pressSurface?.contains(trigger ?? null)).toBe(true)
+    expect(dropdownAnchor?.current).toBe(
+      document.body.querySelector('[data-slot="model-selector-desktop-anchor"]')
+    )
+    expect(dropdownAnchor?.current?.contains(pressSurface ?? null)).toBe(true)
+    expect(dropdownAnchor?.current).not.toBe(trigger)
+  })
+
+  it("runs the composer press on the visual surface until pointer release", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "gpt-5-mini",
+      variant: "composer",
+    })
+
+    const pressSurface = document.body.querySelector<HTMLDivElement>(
+      '[data-slot="model-selector-press-surface"]'
+    )
+    expect(pressSurface).not.toBeNull()
+    if (!pressSurface) return
+
+    const pressAnimation = {
+      cancel: vi.fn(),
+      onfinish: null,
+    } as unknown as Animation
+    const returnAnimation = {
+      cancel: vi.fn(),
+      onfinish: null,
+    } as unknown as Animation
+    const animate = vi
+      .fn<() => Animation>()
+      .mockReturnValueOnce(pressAnimation)
+      .mockReturnValueOnce(returnAnimation)
+    Object.defineProperty(pressSurface, "animate", {
+      configurable: true,
+      value: animate,
+    })
+
+    const pointerDown = new Event("pointerdown", { bubbles: true })
+    Object.defineProperties(pointerDown, {
+      button: { value: 0 },
+      isPrimary: { value: true },
+      pointerId: { value: 7 },
+    })
+    act(() => pressSurface?.dispatchEvent(pointerDown))
+
+    expect(animate).toHaveBeenCalledWith(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }],
+      {
+        duration: 75,
+        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+        fill: "forwards",
+      }
+    )
+
+    const pointerUp = new Event("pointerup")
+    Object.defineProperty(pointerUp, "pointerId", { value: 7 })
+    act(() => window.dispatchEvent(pointerUp))
+
+    expect(animate).toHaveBeenCalledOnce()
+
+    act(() => {
+      pressAnimation.onfinish?.call(
+        pressAnimation,
+        new Event("finish") as AnimationPlaybackEvent
+      )
+    })
+
+    expect(animate).toHaveBeenNthCalledWith(
+      2,
+      [{ transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      {
+        duration: 75,
+        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+        fill: "forwards",
+      }
+    )
+    expect(pressAnimation.cancel).toHaveBeenCalledOnce()
   })
 
   it("keeps the hover bridge scoped to the composer trigger", () => {

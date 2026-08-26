@@ -656,12 +656,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               />
               <PromptInputFooter aria-hidden="true" />
               <PromptInputActions
-                className="h-9 gap-1 self-center [grid-area:trailing]"
+                className="h-9 max-w-full min-w-0 gap-1 self-center [grid-area:trailing]"
                 data-composer-trailing="true"
                 data-composer-transition-slot="trailing"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="relative ms-1 flex items-center gap-1.5">
+                <div className="relative ms-1 flex min-w-0 shrink items-center gap-1.5">
                   <ModelSelector
                     variant="composer"
                     selectedModelId={selectedModel}
@@ -671,7 +671,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>
-                <div className="ms-auto flex items-center gap-2">
+                <div className="ms-auto flex shrink-0 items-center gap-2">
                   <PromptInputAction
                     tooltip={
                       primaryAction.mode === "send" &&

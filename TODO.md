@@ -1,10 +1,13 @@
 # To Do
 
 - **Model presentation: Improve how models display across the UI**
-  - Add "Legacy" classifier to better prioritize models in UI
   - Make model logos appear during thinking states to make assistant output ownership clear
 - **Effort levels:** Show dynamic "thinking" or effort options for various models
-- **Fix Web Search UX:** Fix confusing web search UX on chat composer and expose fine-tuned search controls in UI. Is it on or off? Why does a chip show in the chat composer?
+- **Web Search modes and quantity controls:** Think through how the Composer
+should expose an **Always** option that lets users force `web_search`, alongside
+the existing Off and Auto behavior where the model decides whether to search.
+Research and implement the multiple search-quantity controls exposed by
+t3.chat, including their interaction model and request-level mapping.
 - **Update Activity UX:** Make activity appear more progressive like ChatGPT, Claude and other modern AI chat platforms. Currently all activity get's logged into the right panel. However, modern AI chat apps show thinking activity, some text below it, more activty, etc... We should still be able to see the right panel, we just need to update our UX in the chat thread view itself.
 - **Chat composer text editing:** Add chat composer text / markdown editing (link, bold, italic, headings, etc...)
 - **Dictation:** Add chat-composer dictation

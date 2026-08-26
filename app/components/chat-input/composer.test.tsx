@@ -394,10 +394,15 @@ describe("Composer primary action", () => {
     const [modelGroup, actionGroup] = Array.from(trailing?.children ?? [])
 
     expect(trailing?.className).toContain("gap-1")
+    expect(trailing?.className).toContain("min-w-0")
+    expect(trailing?.className).toContain("max-w-full")
     expect(trailing?.className).not.toContain("cant-hover:")
     expect(modelGroup?.className).toContain("gap-1.5")
+    expect(modelGroup?.className).toContain("min-w-0")
+    expect(modelGroup?.className).toContain("shrink")
     expect(modelGroup?.className).not.toContain("cant-hover:")
     expect(actionGroup?.className).toContain("gap-2")
+    expect(actionGroup?.className).toContain("shrink-0")
     expect(actionGroup?.className).not.toContain("cant-hover:")
   })
 

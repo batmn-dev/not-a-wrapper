@@ -557,7 +557,9 @@
   --floating-menu-leading-slot-size: 1.25rem;
   --composer-capability-accent: oklch(0.626 0.188 259.456);
   --composer-capability-accent-hover: oklch(0.528 0.173 255.046);
-  --composer-capability-accent-hover-surface: oklch(0.959 0.022 243.277);
+  --composer-capability-accent-hover-surface: color(
+    display-p3 0.909804 0.952941 0.996078
+  );
   --composer-selection-background: oklch(0.684 0.157 256.21 / 0.35);
   /* Two-tone Web search glyph shared by the action row and editor entity. */
   --web-search-icon-surface: oklch(0.941 0.043 218.859);
@@ -767,7 +769,9 @@
   --floating-menu-touch-tertiary: #414141;
   --composer-capability-accent: oklch(0.72 0.137 253.307);
   --composer-capability-accent-hover: oklch(0.8 0.12 253.307);
-  --composer-capability-accent-hover-surface: oklch(0.35 0.04 253.307);
+  --composer-capability-accent-hover-surface: color(
+    display-p3 0.07451 0.203922 0.388235
+  );
   --web-search-icon-surface: oklch(0.334 0.02 221.692);
   --web-search-icon-foreground: oklch(0.801 0.131 222.79);
   --modal-centered-surface: #212121;
@@ -1631,16 +1635,6 @@
       ):hover {
       color: var(--composer-capability-accent-hover);
       background-color: var(--composer-capability-accent-hover-surface);
-    }
-
-    .web-search-control[data-search-toggleable][aria-pressed="true"]:hover
-      [data-search-enabled-icon] {
-      display: none;
-    }
-
-    .web-search-control[data-search-toggleable][aria-pressed="true"]:hover
-      [data-search-disable-icon] {
-      display: inline-flex;
     }
   }
 
