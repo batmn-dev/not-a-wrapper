@@ -331,6 +331,7 @@ describe("PromptInput responsive expansion", () => {
     expect(overlayHost.className).toContain("inset-0")
     expect(layout.hasAttribute("data-composer-body")).toBe(true)
     expect(layout.hasAttribute("data-composer-grid")).toBe(true)
+    expect(layout.className).toContain("min-w-0")
     expect(layout.className).toContain(
       "@max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
     )

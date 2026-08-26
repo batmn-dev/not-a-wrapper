@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import type { GenerationPresentationState } from "@/lib/chat-runs/run-presentation"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { createPortal } from "react-dom"
 
 type Politeness = "polite" | "assertive"
@@ -89,28 +90,30 @@ type ChatStatus = "streaming" | "ready" | "submitted" | "error"
  * changes, so assistive tech announces each transition exactly once — no effect
  * and no transition tracking. Renders nothing visible.
  *
- * MVP scope: announces generation start (polite) and errors (assertive).
- * Completion announcement is intentionally omitted — distinguishing "just
- * finished" from "idle / opened an existing chat" requires transition state
- * (an effect), which we avoid here. Empty text never re-announces.
+ * Attached-stream finish evidence distinguishes a completed request from an
+ * idle or newly opened chat. Desktop announces completion; mobile moves focus
+ * to the final response in MessageAssistant. Empty text never re-announces.
  */
 export function ChatStatusAnnouncer({
   status,
   isSubmitting,
   presentationState,
+  completionAvailable = false,
 }: {
   status?: ChatStatus
   isSubmitting?: boolean
   presentationState?: GenerationPresentationState
+  completionAvailable?: boolean
 }) {
   const ctx = useContext(AnnouncerContext)
+  const isMobile = useBreakpoint(768)
   const generating =
     isSubmitting === true || status === "submitted" || status === "streaming"
   const presentationAnnouncement = (() => {
     switch (presentationState) {
       case "local-submitted":
       case "local-streaming":
-        return { polite: "Generating response.", assertive: "" }
+        return { polite: "Thinking", assertive: "" }
       case "background-streaming":
         return { polite: "Generating in background.", assertive: "" }
       case "awaiting-approval":
@@ -135,7 +138,11 @@ export function ChatStatusAnnouncer({
   })()
   const polite =
     presentationAnnouncement?.polite ??
-    (generating ? "Generating response." : "")
+    (generating
+      ? "Thinking"
+      : completionAvailable && !isMobile
+        ? "Response complete"
+        : "")
   const assertive =
     presentationAnnouncement?.assertive ??
     (status === "error"

@@ -64,6 +64,7 @@ I want to share some of my preferences here so we can be more aligned when worki
 - If there is a opportunity to centralize front-end changes to prevent UI drift between two or more obvious UI surfaces, then take that opportunity and tell me about it so I can review it.
 - Information-dense, no decorative card/pill chrome, no light-gray subtitle lines above sections. Minimal copy. No em dashes.
 - Avoid continuously repainting CSS animations (pulse, shimmer, blur, spinners); they peg the GPU on high-refresh displays.
+- Don't use Computer Use and hijack my computer unless absolutely necessary. Prefer using my authenticated sessions on chrome, using dev tools, etc...
 
 
 

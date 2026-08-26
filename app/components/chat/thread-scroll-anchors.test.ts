@@ -10,13 +10,25 @@ import {
 
 function makeRoot(
   rootRect: { top: number; bottom: number },
-  turns: Array<{ id: string; top: number; bottom: number }>
+  turns: Array<{
+    id: string
+    top: number
+    bottom: number
+    intersecting?: boolean
+  }>
 ): HTMLElement {
   const root = document.createElement("div")
   vi.spyOn(root, "getBoundingClientRect").mockReturnValue(rootRect as DOMRect)
+  Object.defineProperties(root, {
+    clientHeight: { configurable: true, value: 500 },
+    scrollHeight: { configurable: true, value: 2_000 },
+  })
   for (const t of turns) {
     const el = document.createElement("div")
     el.setAttribute("data-turn-id-container", t.id)
+    if (t.intersecting !== undefined) {
+      el.dataset.isIntersecting = String(t.intersecting)
+    }
     vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
       top: t.top,
       bottom: t.bottom,
@@ -38,30 +50,23 @@ describe("thread scroll anchors", () => {
   })
 
   it("prefers a crossing turn and excludes one ending at the top edge", () => {
-    const root = makeRoot(
-      { top: 100, bottom: 600 },
-      [
-        { id: "boundary", top: 0, bottom: 100 },
-        { id: "a", top: 40, bottom: 140 },
-        { id: "b", top: 140, bottom: 300 },
-      ]
-    )
+    const root = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "boundary", top: 0, bottom: 100 },
+      { id: "a", top: 40, bottom: 140 },
+      { id: "b", top: 140, bottom: 300 },
+    ])
 
     expect(selectAnchorTurn(root)).toBe(root.children[1])
   })
 
   it("falls back to the first turn starting inside the viewport", () => {
-    const root = makeRoot(
-      { top: 100, bottom: 600 },
-      [
-        { id: "a", top: 150, bottom: 300 },
-        { id: "b", top: 300, bottom: 450 },
-      ]
-    )
-    const fullyAbove = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "a", top: 0, bottom: 80 }]
-    )
+    const root = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "a", top: 150, bottom: 300 },
+      { id: "b", top: 300, bottom: 450 },
+    ])
+    const fullyAbove = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "a", top: 0, bottom: 80 },
+    ])
     const empty = makeRoot({ top: 100, bottom: 600 }, [])
 
     expect(selectAnchorTurn(root)).toBe(root.children[0])
@@ -69,17 +74,25 @@ describe("thread scroll anchors", () => {
     expect(selectAnchorTurn(empty)).toBeNull()
   })
 
+  it("binary-searches the sibling turn wrappers carrying intersection state", () => {
+    const root = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "above", top: 0, bottom: 100, intersecting: false },
+      { id: "visible", top: 100, bottom: 240, intersecting: true },
+      { id: "below", top: 240, bottom: 380, intersecting: false },
+    ])
+
+    expect(selectAnchorTurn(root)).toBe(root.children[1])
+  })
+
   it("restores the signed turn offset after content above changes height", () => {
-    const savedRoot = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "m2", top: 60, bottom: 180 }]
-    )
+    const savedRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 60, bottom: 180 },
+    ])
     saveThreadAnchor("chat-1", savedRoot)
 
-    const restoredRoot = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "m2", top: 260, bottom: 400 }]
-    )
+    const restoredRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 260, bottom: 400 },
+    ])
     restoredRoot.scrollTop = 500
 
     expect(restoreThreadAnchor("chat-1", restoredRoot)).toBe(true)
@@ -88,19 +101,17 @@ describe("thread scroll anchors", () => {
   })
 
   it("returns false without a saved chat or when its turn is absent", () => {
-    const targetRoot = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "other", top: 80, bottom: 180 }]
-    )
+    const targetRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "other", top: 80, bottom: 180 },
+    ])
     targetRoot.scrollTop = 25
 
     expect(restoreThreadAnchor("unknown", targetRoot)).toBe(false)
     expect(targetRoot.scrollTop).toBe(25)
 
-    const savedRoot = makeRoot(
-      { top: 100, bottom: 600 },
-      [{ id: "m2", top: 80, bottom: 180 }]
-    )
+    const savedRoot = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 80, bottom: 180 },
+    ])
     saveThreadAnchor("chat-1", savedRoot)
     targetRoot.scrollTop = 75
 
@@ -129,6 +140,18 @@ describe("thread scroll anchors", () => {
     expect(restoredRoot.scrollTop).toBe(400)
   })
 
+  it("deletes the saved anchor when the thread is within two pixels of bottom", () => {
+    const root = makeRoot({ top: 100, bottom: 600 }, [
+      { id: "m2", top: 80, bottom: 180 },
+    ])
+    saveThreadAnchor("chat-1", root)
+    root.scrollTop = 1_498
+
+    saveThreadAnchor("chat-1", root)
+
+    expect(restoreThreadAnchor("chat-1", root)).toBe(false)
+  })
+
   it("does not replace a valid anchor with a non-finite measurement", () => {
     const settledRoot = makeRoot({ top: 100, bottom: 600 }, [
       { id: "settled", top: 80, bottom: 180 },
@@ -140,6 +163,10 @@ describe("thread scroll anchors", () => {
       top: 100,
       bottom: 600,
     } as DOMRect)
+    Object.defineProperties(root, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 2_000 },
+    })
     const turn = document.createElement("div")
     turn.setAttribute("data-turn-id-container", "unstable")
     vi.spyOn(turn, "getBoundingClientRect")

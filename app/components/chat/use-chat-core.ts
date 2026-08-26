@@ -206,6 +206,7 @@ export function useChatCore({
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
+  const scrollToMessageId = searchParams.get("messageId")
 
   const { updateTitle, applyGeneratedTitle } = useChats()
 
@@ -903,6 +904,7 @@ export function useChatCore({
     hasDialogAuth,
     setHasDialogAuth,
     lastFinishReason,
+    scrollToMessageId,
 
     submit,
     handleSuggestion,

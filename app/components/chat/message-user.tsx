@@ -1,5 +1,12 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+import { Icon } from "@/components/ui/icon"
+import {
+  MessageActions,
+  MessageContent,
+  userMessageFooterRevealClassName,
+} from "@/components/ui/message"
 import {
   MorphingDialog,
   MorphingDialogClose,
@@ -8,14 +15,6 @@ import {
   MorphingDialogImage,
   MorphingDialogTrigger,
 } from "@/components/ui/morphing-dialog"
-import { Button } from "@/components/ui/button"
-import { Icon } from "@/components/ui/icon"
-import {
-  MessageActions,
-  Message as MessageContainer,
-  MessageContent,
-  userMessageFooterRevealClassName,
-} from "@/components/ui/message"
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
@@ -179,16 +178,12 @@ export function MessageUser({
   }, [isEditing])
 
   return (
-    <MessageContainer
-      as="div"
-      className={cn("flex max-w-full flex-col gap-0", className)}
-    >
-      <h4 className="sr-only">You said:</h4>
+    <>
       {/* Captured turn anatomy (box-chain verified 2026-07-11): a gap-4 content
           wrapper groups the `text-message` block(s); the action row is a
           ZERO-GAP column-level sibling, so the buttons sit p-1 (4px) under
           the bubble. */}
-      <div className="flex max-w-full grow flex-col gap-4">
+      <div className={cn("flex max-w-full grow flex-col gap-4", className)}>
         <div
           className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal"
           data-message-id={id}
@@ -350,6 +345,6 @@ export function MessageUser({
           />
         </MessageActions>
       </div>
-    </MessageContainer>
+    </>
   )
 }

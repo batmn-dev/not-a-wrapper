@@ -1,3 +1,5 @@
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import {
   deriveAssistantTurnView,
   type AssistantTurnView,
@@ -13,7 +15,16 @@ import type { TurnRowModel } from "@/lib/chat-messages/turn-row"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
-import { Fragment, type ReactNode } from "react"
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
 import {
   ConversationTimestamp,
   deriveConversationTimestampHeaders,
@@ -24,7 +35,18 @@ import {
   THREAD_MAXWIDTH_VARS,
   TURN_SCROLL_MARGIN_BOTTOM,
 } from "./thread-bounds"
-import { ThreadScrollEdge } from "./thread-scroll"
+import {
+  CHATGPT_TURN_INTERSECTION_EXPERIMENT,
+  estimateTurnPlaceholderHeight,
+  isTurnAlwaysRendered,
+  ThreadScrollEdge,
+  TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE,
+  TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE,
+  useConversationTurnVirtualization,
+  useSubmitTurnScrollRef,
+  type TurnIntersectionObserver,
+} from "./thread-scroll"
+import type { ThreadScrollTarget } from "./thread-scroll-target"
 import {
   isGenerationActive,
   PENDING_ACTIVITY_TURN_ID,
@@ -32,6 +54,23 @@ import {
 } from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
+
+const subscribeToBrowser = () => () => undefined
+const getBrowserSnapshot = () => true
+const getServerSnapshot = () => false
+
+function useContentVisibilitySupport() {
+  const browser = useSyncExternalStore(
+    subscribeToBrowser,
+    getBrowserSnapshot,
+    getServerSnapshot
+  )
+  return (
+    browser &&
+    typeof CSS !== "undefined" &&
+    CSS.supports("content-visibility: auto")
+  )
+}
 
 type ConversationMessage = MessageType & {
   createdAt?: Date
@@ -46,6 +85,18 @@ function isMessageRenderStatus(value: unknown): value is MessageRenderStatus {
 // steps; using only the first part makes responses appear truncated.
 function getMessageText(message: MessageType): string {
   return extractTextFromMessageParts(message.parts)
+}
+
+function getMessageTextParts(message: MessageType): string[] {
+  const textParts: string[] = []
+  for (const part of message.parts ?? []) {
+    if (part.type === "text" && part.text.length > 0) textParts.push(part.text)
+  }
+  return textParts
+}
+
+function hasTurnAssetContent(message: MessageType): boolean {
+  return message.parts?.some((part) => part.type === "file") ?? false
 }
 
 // Extract file attachments from parts array (user rows; assistant rows render
@@ -73,33 +124,204 @@ function TurnRow({
   dataTurn,
   dataTurnId,
   dataTestId,
+  beforeTurn,
+  alwaysShow,
+  contentVisibility = false,
+  centerIntersectionObserver,
+  estimatedTextParts,
+  forceRender = false,
+  hasDisplayableContent = true,
+  hasTurnAssets = false,
+  onRenderIntersectingChange,
+  renderIntersectionObserver,
+  onCenterIntersectionChange,
+  scrollOnSubmit = false,
+  verticalPadding = "none",
   children,
 }: {
   className: string
   dataTurn: string
-  dataTurnId?: string
+  dataTurnId: string
   dataTestId?: string
+  beforeTurn?: ReactNode
+  alwaysShow: boolean
+  contentVisibility?: boolean
+  centerIntersectionObserver: TurnIntersectionObserver
+  estimatedTextParts: readonly string[]
+  forceRender?: boolean
+  hasDisplayableContent?: boolean
+  hasTurnAssets?: boolean
+  onRenderIntersectingChange: (
+    turnId: string,
+    intersecting: boolean,
+    entry?: IntersectionObserverEntry
+  ) => void
+  renderIntersectionObserver: TurnIntersectionObserver
+  onCenterIntersectionChange?: (turnId: string, intersecting: boolean) => void
+  scrollOnSubmit?: boolean
+  verticalPadding?: "none" | "first" | "large" | "last"
   children: ReactNode
 }) {
+  const compactEstimate = useBreakpoint(640)
+  const [renderIntersecting, setRenderIntersecting] = useState(false)
+  const turnRef = useRef<HTMLDivElement | null>(null)
+  const wasRenderIntersectingRef = useRef(false)
+  const charactersPerLine = compactEstimate
+    ? TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE
+    : TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE
+  const shouldAlwaysRender = alwaysShow || hasTurnAssets
+  const shouldRender = shouldAlwaysRender || renderIntersecting || forceRender
+  const shouldRenderContent = hasDisplayableContent && shouldRender
+  const isIntersecting = shouldAlwaysRender || renderIntersecting
+  const estimatedHeight = useMemo(
+    () =>
+      shouldRender || !hasDisplayableContent
+        ? null
+        : estimateTurnPlaceholderHeight(estimatedTextParts, charactersPerLine),
+    [charactersPerLine, estimatedTextParts, hasDisplayableContent, shouldRender]
+  )
+
+  const rememberHeight = useCallback((height: number) => {
+    if (height > 10) {
+      turnRef.current?.style.setProperty("--last-known-height", `${height}px`)
+    }
+  }, [])
+
+  useBrowserLayoutEffect(() => {
+    if (!alwaysShow || renderIntersecting) return
+    wasRenderIntersectingRef.current = true
+    setRenderIntersecting(true)
+    onRenderIntersectingChange(dataTurnId, true)
+  }, [alwaysShow, dataTurnId, onRenderIntersectingChange, renderIntersecting])
+
+  useBrowserLayoutEffect(() => {
+    if (!forceRender || renderIntersecting || shouldAlwaysRender) return
+    const turn = turnRef.current
+    if (turn) rememberHeight(turn.getBoundingClientRect().height)
+  }, [forceRender, rememberHeight, renderIntersecting, shouldAlwaysRender])
+
+  const turnRefCallback = useCallback(
+    (turn: HTMLElement | null) => {
+      turnRef.current = turn as HTMLDivElement | null
+      if (!turn) return
+      const cleanups: Array<() => void> = []
+
+      if (!shouldAlwaysRender) {
+        cleanups.push(
+          renderIntersectionObserver.observe(turn, (intersecting, entry) => {
+            const wasIntersecting = wasRenderIntersectingRef.current
+            if (wasIntersecting && !intersecting && entry) {
+              rememberHeight(entry.boundingClientRect.height)
+            }
+            if (wasIntersecting === intersecting) return
+            wasRenderIntersectingRef.current = intersecting
+            onRenderIntersectingChange(dataTurnId, intersecting, entry)
+            setRenderIntersecting(intersecting)
+          })
+        )
+      }
+
+      if (onCenterIntersectionChange) {
+        cleanups.push(
+          centerIntersectionObserver.observe(turn, (intersecting) => {
+            onCenterIntersectionChange(dataTurnId, intersecting)
+          })
+        )
+      }
+
+      return () => {
+        for (const cleanup of cleanups) cleanup()
+        onCenterIntersectionChange?.(dataTurnId, false)
+        if (turnRef.current === turn) turnRef.current = null
+      }
+    },
+    [
+      centerIntersectionObserver,
+      dataTurnId,
+      onCenterIntersectionChange,
+      onRenderIntersectingChange,
+      rememberHeight,
+      renderIntersectionObserver,
+      shouldAlwaysRender,
+    ]
+  )
+  const submitScrollRef = useSubmitTurnScrollRef(scrollOnSubmit)
+  const placeholderStyle:
+    | (CSSProperties & {
+        "--estimated-turn-height"?: string
+      })
+    | undefined = estimatedHeight
+    ? { "--estimated-turn-height": `${estimatedHeight}px` }
+    : undefined
+
   return (
-    <section
-      className={className}
+    <div
+      ref={
+        shouldAlwaysRender && !onCenterIntersectionChange
+          ? undefined
+          : turnRefCallback
+      }
+      className={cn(
+        hasDisplayableContent &&
+          !shouldRender &&
+          "h-[var(--last-known-height,var(--estimated-turn-height,50vh))] min-h-14"
+      )}
+      data-is-intersecting={isIntersecting}
       data-turn-id-container={dataTurnId}
-      data-turn={dataTurn}
-      data-turn-id={dataTurnId}
-      data-testid={dataTestId}
-      dir="auto"
+      style={placeholderStyle}
     >
-      <div
-        className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col ${THREAD_MAXWIDTH_VARS}`}
-      >
-        {children}
-      </div>
-    </section>
+      {shouldRenderContent ? (
+        <>
+          {beforeTurn}
+          <section
+            ref={submitScrollRef}
+            className={cn(
+              "text-foreground w-full focus:outline-none has-data-writing-block:pointer-events-none [&:has([data-writing-block])>*]:pointer-events-auto",
+              contentVisibility &&
+                "[content-visibility:auto] has-[[data-dotball-loading-indicator]]:[content-visibility:visible]! supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
+              className
+            )}
+            data-turn-id-container={dataTurnId}
+            data-turn={dataTurn}
+            data-turn-id={dataTurnId}
+            data-testid={dataTestId}
+            dir="auto"
+          >
+            <h4 className="sr-only select-none">
+              {dataTurn === "user" ? "You said:" : "ChatGPT said:"}
+            </h4>
+            <div
+              className={cn(
+                `mx-auto my-auto px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
+                verticalPadding === "first" && "pt-3",
+                verticalPadding === "large" && "pt-12",
+                verticalPadding === "last" && "pb-8"
+              )}
+            >
+              <div
+                data-conversation-screenshot-content=""
+                className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col focus-visible:outline-hidden ${THREAD_MAXWIDTH_VARS} ${dataTurn === "assistant" ? "agent-turn" : ""}`}
+              >
+                {children}
+              </div>
+              {dataTurn === "assistant" ? (
+                <div
+                  data-conversation-screenshot-content=""
+                  className={`mx-auto max-w-[var(--thread-content-max-width,40rem)] flex-1 ${THREAD_MAXWIDTH_VARS}`}
+                >
+                  <div />
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </>
+      ) : null}
+    </div>
   )
 }
 
 type ConversationRenderRow =
+  | { kind: "root"; key: "client-created-root" }
   | {
       kind: "message"
       key: string
@@ -126,6 +348,24 @@ function messageTurnRowKey(
   return `message:${message.id}`
 }
 
+function messageTurnRowId(
+  messages: ConversationMessage[],
+  index: number
+): string {
+  const message = messages[index]
+  return message.role === "assistant"
+    ? messageTurnRowKey(messages, index)
+    : message.id
+}
+
+function renderRowTurnId(row: ConversationRenderRow): string {
+  return row.kind === "root" || row.kind === "pending"
+    ? row.key
+    : row.message.role === "assistant"
+      ? row.key
+      : row.message.id
+}
+
 type ConversationProps = {
   messages: ConversationMessage[]
   /** Stable observation time for one render; injectable by deterministic
@@ -148,6 +388,63 @@ type ConversationProps = {
   onSelectBranch?: (messageId: string) => void
   isDurableChat?: boolean
   lastFinishReason?: string
+  /** Message deep-link value from the route. The two final-turn sentinels
+   * target the final assistant turn rather than a particular message node. */
+  scrollToMessageId?: string | null
+  /** Optional table-of-contents observer. Its center-band state is separate
+   * from the outer turn's render/virtualization intersection. */
+  onCenterIntersectionChange?: (turnId: string, intersecting: boolean) => void
+}
+
+export function shouldUseAssistantContentVisibility({
+  supported,
+  isUser,
+  audioSurfaceActive = false,
+  hasHtmlWidget = false,
+  scrollToMessageId,
+  experimentEnabled = CHATGPT_TURN_INTERSECTION_EXPERIMENT.enabled,
+}: {
+  supported: boolean
+  isUser: boolean
+  audioSurfaceActive?: boolean
+  hasHtmlWidget?: boolean
+  scrollToMessageId?: string | null
+  experimentEnabled?: boolean
+}) {
+  return (
+    supported &&
+    !isUser &&
+    !audioSurfaceActive &&
+    (scrollToMessageId == null || scrollToMessageId === "finalAgentTurn") &&
+    !hasHtmlWidget &&
+    !experimentEnabled
+  )
+}
+
+function resolveConversationScrollTarget(
+  messages: ConversationMessage[],
+  scrollToMessageId: string | null | undefined
+): ThreadScrollTarget | null {
+  if (!scrollToMessageId) return null
+
+  if (
+    scrollToMessageId === "finalAgentTurn" ||
+    scrollToMessageId === "finalAgentTurnStart"
+  ) {
+    let index = messages.length - 1
+    while (index >= 0 && messages[index]?.role !== "assistant") index -= 1
+    if (index === -1) return null
+    return { turnId: messageTurnRowId(messages, index) }
+  }
+
+  const index = messages.findIndex(
+    (message) => message.id === scrollToMessageId
+  )
+  if (index === -1) return null
+  return {
+    turnId: messageTurnRowId(messages, index),
+    messageId: scrollToMessageId,
+  }
 }
 
 /** The pending placeholder's view: no parts yet, generation submitted. Module
@@ -171,7 +468,20 @@ export function Conversation({
   onSelectBranch,
   isDurableChat,
   lastFinishReason,
+  scrollToMessageId,
+  onCenterIntersectionChange,
 }: ConversationProps) {
+  const contentVisibilitySupported = useContentVisibilitySupport()
+  const scrollTarget = resolveConversationScrollTarget(
+    messages,
+    scrollToMessageId
+  )
+  // The reference captures this once at mount and renders the whole thread
+  // for a finalAgentTurnStart arrival instead of virtualizing it.
+  const [renderAllTurns] = useState(
+    () => scrollToMessageId === "finalAgentTurnStart"
+  )
+  const virtualization = useConversationTurnVirtualization(scrollTarget?.turnId)
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
 
@@ -190,14 +500,9 @@ export function Conversation({
     hasPendingAssistantTurn && lastMessage?.role === "assistant"
       ? messages.slice(0, -1)
       : messages
-  // Pin the active user turn as soon as its optimistic row is rendered. The
-  // pending assistant row and response gutter already exist at that point, so
-  // scrollIntoView can reserve the response area before first text arrives.
-  // Once the assistant row replaces the pending row, keep the same user target;
-  // ThreadScrollEdge deduplicates the pin for the rest of the active turn.
-  // Branch switches and load hydration never satisfy this (no active turn), so
-  // they never scroll.
-  const pinTurnId = !generationActive
+  // The active final user turn owns submit placement. Branch switches and load
+  // hydration never satisfy this, so they never issue a scroll command.
+  const submitScrollTurnId = !generationActive
     ? null
     : lastMessage?.role === "user"
       ? lastMessage.id
@@ -208,14 +513,22 @@ export function Conversation({
     renderedMessages,
     now
   )
-  const renderRows: ConversationRenderRow[] = renderedMessages.map(
-    (message, index) => ({
-      kind: "message",
+  const renderRows: ConversationRenderRow[] = [
+    { kind: "root", key: "client-created-root" },
+    ...renderedMessages.map((message, index) => ({
+      kind: "message" as const,
       key: messageTurnRowKey(renderedMessages, index),
       message,
       index,
-    })
-  )
+    })),
+  ]
+  // Local chat has no audio-paragen or HTML SDK widget surface, so those two
+  // recovered guards are vacuously false.
+  const contentVisibilityEnabled = shouldUseAssistantContentVisibility({
+    supported: contentVisibilitySupported,
+    isUser: false,
+    scrollToMessageId,
+  })
 
   if (hasPendingAssistantTurn) {
     const activeUserMessage =
@@ -234,23 +547,72 @@ export function Conversation({
     })
   }
 
+  const activeTurnIndex = scrollTarget
+    ? renderRows.findIndex(
+        (row) => renderRowTurnId(row) === scrollTarget.turnId
+      )
+    : -1
+
   return (
     <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
-      <div className="flex w-full flex-col text-sm">
-        {renderRows.map((row) => {
+      <div className="keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))] flex w-full flex-col text-sm">
+        <span ref={virtualization.markerRef} style={{ display: "none" }} />
+        {renderRows.map((row, renderIndex) => {
+          const rowTurnId = renderRowTurnId(row)
+          const alwaysShow =
+            renderAllTurns ||
+            isTurnAlwaysRendered(renderIndex, renderRows.length, activeTurnIndex)
+          const forceRender = rowTurnId === scrollTarget?.turnId
+          if (row.kind === "root") {
+            return (
+              <TurnRow
+                key={row.key}
+                className=""
+                dataTurn="assistant"
+                dataTurnId={rowTurnId}
+                alwaysShow={alwaysShow}
+                centerIntersectionObserver={
+                  virtualization.centerIntersectionObserver
+                }
+                estimatedTextParts={[]}
+                forceRender={false}
+                hasDisplayableContent={false}
+                onRenderIntersectingChange={virtualization.onIntersectingChange}
+                renderIntersectionObserver={
+                  virtualization.renderIntersectionObserver
+                }
+              >
+                {null}
+              </TurnRow>
+            )
+          }
           if (row.kind === "pending") {
             return (
               <Fragment key={row.key}>
                 <TurnRow
                   key="turn"
                   className={cn(
-                    `mx-auto w-full scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))] px-[var(--thread-content-margin,1rem)] pb-8 text-base ${THREAD_GUTTER_VARS}`,
-                    TURN_SCROLL_MARGIN_BOTTOM,
-                    row.index === 0 && "pt-3"
+                    "scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))]",
+                    TURN_SCROLL_MARGIN_BOTTOM
                   )}
                   dataTurn="assistant"
-                  dataTurnId={PENDING_ACTIVITY_TURN_ID}
+                  dataTurnId={rowTurnId}
                   dataTestId={`conversation-turn-${row.index + 1}`}
+                  alwaysShow={alwaysShow}
+                  centerIntersectionObserver={
+                    virtualization.centerIntersectionObserver
+                  }
+                  contentVisibility={contentVisibilityEnabled}
+                  estimatedTextParts={[]}
+                  forceRender={forceRender}
+                  onCenterIntersectionChange={onCenterIntersectionChange}
+                  onRenderIntersectingChange={
+                    virtualization.onIntersectingChange
+                  }
+                  renderIntersectionObserver={
+                    virtualization.renderIntersectionObserver
+                  }
+                  verticalPadding="last"
                 >
                   <Message
                     model={{
@@ -370,27 +732,46 @@ export function Conversation({
 
           return (
             <Fragment key={row.key}>
-              {timestampHeader && (
-                <ConversationTimestamp header={timestampHeader} now={now} />
-              )}
               <TurnRow
                 key="turn"
                 className={cn(
-                  `mx-auto w-full px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
                   TURN_SCROLL_MARGIN_BOTTOM,
                   isUser &&
                     "scroll-mt-[var(--sticky-padding-top,var(--spacing-app-header))]",
                   isAssistant &&
-                    "scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))]",
-                  // ChatGPT keeps the first turn 12px from the thread edge and
-                  // gives every later user prompt a 48px inter-turn lead-in.
-                  index === 0 && "pt-3",
-                  isUser && index > 0 && "pt-12",
-                  isLastTurnRow && "pb-8"
+                    "scroll-mt-[calc(var(--header-height)+min(200px,max(70px,20svh)))]"
                 )}
                 dataTurn={message.role}
-                dataTurnId={message.id}
+                dataTurnId={rowTurnId}
                 dataTestId={`conversation-turn-${index + 1}`}
+                alwaysShow={alwaysShow}
+                centerIntersectionObserver={
+                  virtualization.centerIntersectionObserver
+                }
+                contentVisibility={isAssistant && contentVisibilityEnabled}
+                estimatedTextParts={getMessageTextParts(message)}
+                forceRender={forceRender}
+                hasTurnAssets={hasTurnAssetContent(message)}
+                onCenterIntersectionChange={onCenterIntersectionChange}
+                onRenderIntersectingChange={virtualization.onIntersectingChange}
+                renderIntersectionObserver={
+                  virtualization.renderIntersectionObserver
+                }
+                beforeTurn={
+                  timestampHeader ? (
+                    <ConversationTimestamp header={timestampHeader} now={now} />
+                  ) : undefined
+                }
+                scrollOnSubmit={isUser && message.id === submitScrollTurnId}
+                verticalPadding={
+                  index === 0
+                    ? "first"
+                    : isUser
+                      ? "large"
+                      : isLastTurnRow
+                        ? "last"
+                        : "none"
+                }
               >
                 {messageContent}
               </TurnRow>
@@ -400,9 +781,9 @@ export function Conversation({
         <ThreadScrollEdge
           chatId={chatId}
           streamActive={generationActive}
-          pinTurnId={pinTurnId}
           hydrated={messages.length > 0}
           freshChat={hasSentFirstMessage}
+          scrollTarget={scrollTarget}
         />
       </div>
     </div>

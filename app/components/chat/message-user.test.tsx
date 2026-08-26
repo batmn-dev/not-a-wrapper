@@ -71,11 +71,10 @@ describe("MessageUser attachments", () => {
     ).toBeTruthy()
   })
 
-  it("uses the reference turn heading level", () => {
+  it("leaves the role heading to the owning turn section", () => {
     renderMessage(undefined)
 
-    expect(container?.querySelector("h4")?.textContent).toBe("You said:")
-    expect(container?.querySelector("h5")).toBeNull()
+    expect(container?.querySelector("h4")).toBeNull()
   })
 })
 

@@ -266,7 +266,7 @@ function PromptInput({
               data-composer-body=""
               data-composer-grid=""
               data-composer-layout="true"
-              className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] px-2 py-[9px] [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-expanded/composer:py-[5px] group-data-expanded/composer:grid-rows-[auto_minmax(0,1fr)_auto] group-data-expanded/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:group-not-data-expanded/composer:pb-2 @max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
+              className="grid min-h-0 min-w-0 flex-1 grid-cols-[auto_1fr_auto] px-2 py-[9px] [--composer-compact-editor-padding-end:6px] [--composer-compact-editor-padding-start:7px] [grid-template-areas:'header_header_header'_'leading_primary_trailing'_'._footer_.'] group-not-data-expanded/composer:py-[5px] group-data-expanded/composer:grid-rows-[auto_minmax(0,1fr)_auto] group-data-expanded/composer:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing'] max-sm:group-not-data-expanded/composer:pb-2 @max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
             >
               {children}
             </div>

@@ -32,7 +32,7 @@ export function useFavoriteModels() {
       )
 
       if (!response.ok) {
-        throw new Error("Failed to fetch favorite models")
+        throw new Error("Failed to fetch pinned models")
       }
 
       const data: FavoriteModelsResponse = await response.json()
@@ -65,7 +65,7 @@ export function useFavoriteModels() {
           .catch(() => ({ error: "Unknown error" }))
         throw new Error(
           errorData.error ||
-            `Failed to save favorite models: ${response.statusText}`
+            `Failed to save pinned models: ${response.statusText}`
         )
       }
 
@@ -104,7 +104,7 @@ export function useFavoriteModels() {
       console.error("❌ Error saving favorite models:", error)
 
       toast({
-        title: "Failed to save favorite models",
+        title: "Failed to save pinned models",
         description: error.message || "Please try again.",
       })
 

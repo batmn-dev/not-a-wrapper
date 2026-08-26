@@ -18,6 +18,9 @@ type SavedThreadAnchor = {
 }
 
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]"
+const INTERSECTING_TURN_SELECTOR =
+  "[data-turn-id-container][data-is-intersecting]"
+const BOTTOM_EPSILON_PX = 2
 
 const savedThreadAnchors = new Map<string, SavedThreadAnchor>()
 
@@ -27,15 +30,47 @@ const savedThreadAnchors = new Map<string, SavedThreadAnchor>()
  * header edge): save and restore share the same reference edge, so header
  * occlusion cancels out.
  *
- * Containers are flat siblings (conversation.tsx renders one per mapped
- * message; the pending-assistant placeholder has no container), so no
- * nested-duplicate filtering is needed.
+ * The turn-list owner and the section both expose the turn id. Keep only the
+ * outer owner, exactly as the runtime anchor path does, so one turn contributes
+ * one geometry candidate.
  */
 export function selectAnchorTurn(root: HTMLElement): HTMLElement | null {
   const rootRect = root.getBoundingClientRect()
+  const intersectingTurns = Array.from(
+    root.querySelectorAll<HTMLElement>(INTERSECTING_TURN_SELECTOR)
+  )
+  if (
+    intersectingTurns.length > 0 &&
+    intersectingTurns.every(
+      (turn) => turn.parentElement === intersectingTurns[0]?.parentElement
+    )
+  ) {
+    let start = 0
+    let end = intersectingTurns.length
+    while (start < end) {
+      const middle = (start + end) >>> 1
+      const turn = intersectingTurns[middle]
+      if (turn && turn.getBoundingClientRect().bottom <= rootRect.top) {
+        start = middle + 1
+      } else {
+        end = middle
+      }
+    }
+    const candidate = intersectingTurns[start]
+    return candidate && candidate.getBoundingClientRect().top < rootRect.bottom
+      ? candidate
+      : null
+  }
+
   const turns = Array.from(
     root.querySelectorAll<HTMLElement>(TURN_CONTAINER_SELECTOR)
-  )
+  ).filter((turn) => {
+    const turnId = turn.dataset.turnIdContainer
+    return turnId
+      ? turn.parentElement?.closest<HTMLElement>(TURN_CONTAINER_SELECTOR)
+          ?.dataset.turnIdContainer !== turnId
+      : false
+  })
   return (
     turns.find((turn) => {
       const rect = turn.getBoundingClientRect()
@@ -50,6 +85,14 @@ export function selectAnchorTurn(root: HTMLElement): HTMLElement | null {
 }
 
 export function saveThreadAnchor(chatId: string, root: HTMLElement): void {
+  if (
+    root.scrollTop + root.clientHeight >=
+    root.scrollHeight - BOTTOM_EPSILON_PX
+  ) {
+    savedThreadAnchors.delete(chatId)
+    return
+  }
+
   const turn = selectAnchorTurn(root)
   const turnId = turn?.dataset.turnIdContainer
   if (!turn || !turnId) return

@@ -12,7 +12,12 @@ import Link from "next/link"
 import { DialogPublish } from "./dialog-publish"
 import { HeaderSidebarTrigger } from "./header-sidebar-trigger"
 
-export type HeaderFixedMode = "always" | "never"
+export type HeaderFixedMode =
+  | "always"
+  | "less-than-md"
+  | "less-than-xl"
+  | "less-than-xxl"
+  | "never"
 
 export function Header({
   hasSidebar,

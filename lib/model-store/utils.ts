@@ -35,21 +35,19 @@ export function isModelSelectableForAuthState(
 export type SelectorModelGroups<M extends ModelConfig = ModelConfig> = {
   /** The user's favorites, in the user's order. Ranking, not a filter. */
   favorites: M[]
-  /** Every other visible model in shared display order, optionally promoted. */
+  /** Every other visible model in shared display order. */
   others: M[]
 }
 
 /**
  * Group the visible catalog for the selector. Favorites RANK models in the
- * user's order. The remaining models use the shared canonical order; a
- * surface may additionally promote one model (the chat composer uses this for
- * its current selection). Search always covers the whole logical catalog.
- * Only explicit user-hidden models are excluded.
+ * user's order. The remaining models use the shared canonical order. Search
+ * always covers the whole logical catalog. Only explicit user-hidden models
+ * are excluded.
  */
 export function groupModelsForSelector<M extends ModelConfig>(
   models: M[],
   favoriteModels: string[],
-  promotedModelId: string | null,
   searchQuery: string,
   isModelHidden: (modelId: string) => boolean
 ): SelectorModelGroups<M> {
@@ -72,20 +70,9 @@ export function groupModelsForSelector<M extends ModelConfig>(
     .sort(
       (a, b) => (favoriteRank.get(a.id) ?? 0) - (favoriteRank.get(b.id) ?? 0)
     )
-  const orderedOthers = getOrderedModelSections(
+  const others = getOrderedModelSections(
     selectorModels.filter((model) => !favoriteRank.has(model.id))
   ).flatMap(({ models: sectionModels }) => sectionModels)
-  const promotedIndex = promotedModelId
-    ? orderedOthers.findIndex((model) => model.id === promotedModelId)
-    : -1
-  const others =
-    promotedIndex > 0
-      ? [
-          orderedOthers[promotedIndex]!,
-          ...orderedOthers.slice(0, promotedIndex),
-          ...orderedOthers.slice(promotedIndex + 1),
-        ]
-      : orderedOthers
 
   return { favorites, others }
 }

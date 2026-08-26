@@ -1,9 +1,6 @@
 import { Icon } from "@/components/ui/icon"
-import {
-  Message,
-  MessageActions,
-  MessageContent,
-} from "@/components/ui/message"
+import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { MessageActions, MessageContent } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
 import { TooltipMultiline } from "@/components/ui/tooltip"
 import { deriveAssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
@@ -16,8 +13,9 @@ import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { getDurableError } from "@/lib/chat-messages/metadata"
 import { getModelInfo } from "@/lib/models"
 import { cn } from "@/lib/utils"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
-import { useCallback } from "react"
+import { useCallback, useRef } from "react"
 import {
   useActivityPanelActions,
   useActivityPanelId,
@@ -131,6 +129,33 @@ export function MessageAssistant({
 
   const { selectionInfo, clearSelection, messageRef } =
     useAssistantMessageSelection(true)
+  const isMobile = useBreakpoint(768)
+  const focusCompletedResponse =
+    isMobile &&
+    Boolean(isLast) &&
+    finishReason !== undefined &&
+    !turnActive &&
+    showMessageSlot &&
+    !showInlineBusyPlaceholder
+  const completedMessageNodeRef = useRef<HTMLDivElement | null>(null)
+  const completedMessageRef = useCallback(
+    (message: HTMLDivElement | null) => {
+      completedMessageNodeRef.current = message
+      const cleanup = messageRef(message)
+      return () => {
+        if (completedMessageNodeRef.current === message)
+          completedMessageNodeRef.current = null
+        cleanup?.()
+      }
+    },
+    [messageRef]
+  )
+  useBrowserLayoutEffect(() => {
+    const message = completedMessageNodeRef.current
+    if (message && focusCompletedResponse && message.textContent?.trim()) {
+      message.focus({ preventScroll: true })
+    }
+  }, [focusCompletedResponse])
   const handleQuoteBtnClick = useCallback(() => {
     if (selectionInfo && onQuote) {
       onQuote(selectionInfo.text, selectionInfo.messageId)
@@ -164,19 +189,16 @@ export function MessageAssistant({
   const showFooterActions = hasContent && copyableStatus
 
   return (
-    <Message
-      as="div"
-      className={cn("flex max-w-full flex-col gap-0", className)}
-      data-turn-phase={phase.kind}
-    >
-      <h4 className="sr-only">ChatGPT said:</h4>
+    <>
       {/* Captured turn anatomy (box-chain verified 2026-07-14 and 2026-08-21):
           inspectable activity and the `text-message` block are gap-4 siblings.
           A bare Thinking placeholder instead occupies that same message slot,
           so first content replaces it without a vertical handoff. The action
           row mounts only after the response settles; message parts flow in a
           gap-1 column. */}
-      <div className="flex max-w-full grow flex-col gap-4">
+      <div
+        className={cn("flex max-w-full grow flex-col gap-4", className)}
+      >
         {isBareThinkingStatus ? null : (
           <AssistantActivityIndicator
             presentation={activityPresentation}
@@ -190,7 +212,7 @@ export function MessageAssistant({
 
         {showMessageSlot ? (
           <div
-            ref={messageRef}
+            ref={completedMessageRef}
             className="text-message relative flex min-h-8 w-full flex-col items-end gap-2 text-start break-words whitespace-normal outline-none"
             // Inner data-message-id for quote selection — closest() finds this before the outer section
             data-message-id={messageId}
@@ -384,6 +406,6 @@ export function MessageAssistant({
           </MessageActions>
         </div>
       )}
-    </Message>
+    </>
   )
 }

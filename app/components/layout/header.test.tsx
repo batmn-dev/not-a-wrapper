@@ -67,7 +67,7 @@ describe("Header", () => {
     expect(header?.className).toContain("sticky")
   })
 
-  it("removes thread headers from the scroll root safe-area calculation", () => {
+  it("supports transparent headers outside the chat route contract", () => {
     act(() => root.render(<Header hasSidebar fixedHeader="never" />))
 
     expect(

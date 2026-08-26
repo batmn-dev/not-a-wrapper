@@ -5,10 +5,9 @@
  * `group/scroll-root` contract.
  *
  * There is deliberately NO JS stick-to-bottom controller here. The thread
- * controller performs one submit-time turn pin. While the response is live,
- * CSS disables native scroll anchoring so browser corrections cannot compete
- * with that placement; outside streaming, native anchoring resumes for normal
- * reflow and manual scroll ownership.
+ * controller performs one submit-time turn pin. Native scroll anchoring stays
+ * enabled for normal reflow and manual scroll ownership; virtualized row
+ * replacement applies its own visible-edge correction in thread-scroll.tsx.
  *
  * The element owns the CSS variable system every scroll policy derives from:
  *
@@ -16,8 +15,6 @@
  *                                        header goes fixed/transparent)
  *   --sticky-padding-bottom              JS-measured composer-stack footprint,
  *                                        written by useThreadViewportInsets
- *   --keyboard-safe-area-bottom          max of measured keyboard geometry and
- *                                        the browser keyboard-inset environment
  *   --scroll-root-safe-area-inset-*      paddings + keyboard + env(safe-area)
  *   --scroll-root-safe-area-height       100lvh minus both insets — the usable
  *                                        thread viewport every `.threadScrollVars`
@@ -28,7 +25,7 @@
  * — the browser does all the math.
  *
  * Runtime state the thread writes onto this element as attributes (consumed by
- * pure CSS group variants, without React state):
+ * descendant CSS group variants, without React state):
  *   data-stream-active     while a turn is in flight
  *   data-scroll-from-end   while the bottom sentinel is out of view
  *   data-expanded-composer while the multiline composer owns the viewport
@@ -94,14 +91,15 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
         data-scroll-root=""
         data-scrollable-surface=""
         className={cn(
-          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto not-print:data-expanded-composer:overflow-y-hidden! data-stream-active:[overflow-anchor:none] not-print:data-voice-focus-mode:overflow-y-hidden! pointer-coarse:[scrollbar-width:none]",
+          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] touch:[scrollbar-width:none] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto group-data-stream-active/scroll-root:[overflow-anchor:none] not-print:data-expanded-composer:overflow-y-hidden! not-print:data-voice-focus-mode:overflow-y-hidden!",
           "scroll-pt-(--header-height) [--sticky-padding-bottom:0px] [--sticky-padding-top:var(--header-height)]",
-          "keyboard-open:[--keyboard-composer-safe-area:var(--composer-height,0px)] [--keyboard-composer-safe-area:0px]",
-          "[--keyboard-safe-area-bottom:max(var(--screen-keyboard-height,0px),env(keyboard-inset-height,0px))]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
-          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--keyboard-composer-safe-area)+var(--keyboard-safe-area-bottom)+env(safe-area-inset-bottom,0px))]",
+          "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]",
           "[--scroll-root-safe-area-height:calc(100lvh-var(--scroll-root-safe-area-inset-top)-var(--scroll-root-safe-area-inset-bottom))]",
+          "has-data-[fixed-header=less-than-md]:md:scroll-pt-0 has-data-[fixed-header=less-than-md]:md:[--sticky-padding-top:0px]",
           "has-data-[fixed-header=never]:scroll-pt-0 has-data-[fixed-header=never]:[--sticky-padding-top:0px]",
+          "has-data-[fixed-header=less-than-xl]:@w-xl/main:scroll-pt-0 has-data-[fixed-header=less-than-xl]:@w-xl/main:[--sticky-padding-top:0px]",
+          "has-data-[fixed-header=less-than-xxl]:@w-2xl/main:scroll-pt-0 has-data-[fixed-header=less-than-xxl]:@w-2xl/main:[--sticky-padding-top:0px]",
           className
         )}
         {...props}

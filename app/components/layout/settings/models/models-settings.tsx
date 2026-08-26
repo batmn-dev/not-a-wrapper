@@ -101,7 +101,7 @@ export function ModelsSettings() {
     <div className="space-y-6">
       <div>
         <h4 className="mb-3 text-sm font-medium text-balance">
-          Your favorites ({favoriteModels.length})
+          Pinned ({favoriteModels.length})
         </h4>
         {favoriteModels.length > 0 ? (
           <Reorder.Group
@@ -137,7 +137,7 @@ export function ModelsSettings() {
                       onClick={() => removeFavorite(model.id)}
                       type="button"
                       className="text-muted-foreground focus-visible:ring-focus-ring rounded-md border p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2"
-                      title="Remove from favorites"
+                      title="Unpin model"
                     >
                       <Icon icon={RiSubtractLine} slotSize={16} />
                     </button>
@@ -154,7 +154,7 @@ export function ModelsSettings() {
                 slotSize={32}
                 className="mx-auto mb-2 opacity-50"
               />
-              <p className="text-sm">No favorite models yet</p>
+              <p className="text-sm">No pinned models yet</p>
               <p className="text-xs">Add models from the list below</p>
             </div>
           </div>
@@ -166,7 +166,7 @@ export function ModelsSettings() {
           Available models
         </h4>
         <p className="text-muted-foreground mb-4 text-sm text-pretty">
-          Choose models to add to your favorites.
+          Choose models to pin.
         </p>
 
         <div className="mb-4">
@@ -212,7 +212,7 @@ export function ModelsSettings() {
                         onClick={() => toggleFavorite(model.id)}
                         type="button"
                         className="text-muted-foreground hover:text-foreground border-border rounded-md border p-1 transition-colors"
-                        title="Add to favorites"
+                        title="Pin model"
                       >
                         <Icon icon={RiAddLine} slotSize={16} />
                       </button>

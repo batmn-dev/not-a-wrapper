@@ -31,7 +31,6 @@ export type MessageProps = {
   className?: string
   as?: "article" | "div"
   "data-turn"?: "user" | "assistant"
-  "data-turn-phase"?: string
   "data-message-id"?: string
   "data-message-author-role"?: "user" | "assistant"
 } & React.HTMLProps<HTMLElement>

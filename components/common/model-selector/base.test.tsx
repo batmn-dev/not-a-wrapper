@@ -25,6 +25,7 @@ let ModelSelector: typeof import("./base").ModelSelector
 let testDom: JSDOM | null = null
 let changeDropdownOpen: ((open: boolean) => void) | undefined
 let completeDropdownOpenChange: ((open: boolean) => void) | undefined
+let dropdownAnchor: React.RefObject<Element | null> | undefined
 
 function installDomIfNeeded() {
   if (typeof document !== "undefined") return
@@ -224,6 +225,12 @@ const modelSelectorMocks = {
   ] satisfies LogicalModelView[],
 }
 
+const defaultFavoriteModels = ["gpt-5.4", "openrouter:moonshotai/kimi-k2.6"]
+const favoriteModelMocks = {
+  favoriteModels: [...defaultFavoriteModels],
+  updateFavoriteModels: vi.fn(),
+}
+
 vi.mock("@/hooks/use-breakpoint", () => ({
   useBreakpoint: () => breakpointMocks.isMobile,
 }))
@@ -238,6 +245,10 @@ vi.mock("@/lib/model-store/provider", () => ({
     isLoading: false,
     favoriteModels: ["gpt-5.4", "openrouter:moonshotai/kimi-k2.6"],
   }),
+}))
+
+vi.mock("@/app/components/layout/settings/models/use-favorite-models", () => ({
+  useFavoriteModels: () => favoriteModelMocks,
 }))
 
 vi.mock("@/lib/user-preference-store/provider", () => ({
@@ -272,28 +283,34 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   } & Record<string, unknown>) =>
     React.cloneElement(render, { ...props, "data-testid": "model-trigger" }),
   DropdownMenuContent: ({
+    anchor,
     children,
     className,
     geometry,
   }: {
+    anchor?: React.RefObject<Element | null>
     children: React.ReactNode
     className?: string
     geometry?: "menu" | "custom"
-  }) => (
-    <div
-      data-testid="model-menu"
-      data-geometry={geometry}
-      className={className}
-    >
-      {children}
-    </div>
-  ),
+  }) => {
+    dropdownAnchor = anchor
+    return (
+      <div
+        data-testid="model-menu"
+        data-geometry={geometry}
+        className={className}
+      >
+        {children}
+      </div>
+    )
+  },
   DropdownMenuItem: ({
     children,
     className,
     geometry,
     closeOnClick,
     "data-testid": dataTestId,
+    "data-model-selector-row": dataModelSelectorRow,
     "aria-label": ariaLabel,
     onClick,
   }: {
@@ -302,20 +319,23 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     geometry?: "menu" | "custom"
     closeOnClick?: boolean
     "data-testid"?: string
+    "data-model-selector-row"?: string
     "aria-label"?: string
     onClick?: () => void
   }) => (
-    <button
+    <div
       data-testid={dataTestId ?? "model-option"}
+      data-model-selector-row={dataModelSelectorRow}
       data-close-on-click={closeOnClick}
       data-geometry={geometry}
       className={className}
-      type="button"
+      role="menuitem"
+      tabIndex={0}
       aria-label={ariaLabel}
       onClick={onClick}
     >
       {children}
-    </button>
+    </div>
   ),
 }))
 
@@ -393,10 +413,13 @@ describe("ModelSelector", () => {
     container = null
     root = null
     modelSelectorMocks.isModelHidden.mockClear()
+    favoriteModelMocks.favoriteModels = [...defaultFavoriteModels]
+    favoriteModelMocks.updateFavoriteModels.mockClear()
     breakpointMocks.isMobile = false
     useKeyShortcutMock.mockClear()
     changeDropdownOpen = undefined
     completeDropdownOpenChange = undefined
+    dropdownAnchor = undefined
   })
 
   function renderSelector({
@@ -533,7 +556,7 @@ describe("ModelSelector", () => {
     })
   }
 
-  it("uses the shared provider order without promoting a default selection", () => {
+  it("uses the shared provider order", () => {
     renderSelector({ isUserAuthenticated: true })
 
     expect(getModelOptionNames()).toEqual([
@@ -695,14 +718,159 @@ describe("ModelSelector", () => {
     expect(rowsAfter[disclosureIndex]?.textContent).toContain("Kimi K2.6")
   })
 
-  it("shows the visible catalog with locked badges for signed-out users", () => {
+  it("uses a lock icon instead of the locked badge for signed-out users", () => {
     renderSelector({ isUserAuthenticated: false })
 
     expect(document.body.textContent).toContain("GPT-5 Mini")
     expect(document.body.textContent).toContain("GPT-5.4")
     expect(document.body.textContent).toContain("Claude Haiku 4.5")
     expect(document.body.textContent).not.toContain("October 2025")
-    expect(document.body.textContent).toContain("Locked")
+    expect(document.body.textContent).not.toContain("Locked")
+    const lockedIcons = document.body.querySelectorAll(
+      '[data-slot="locked-model-icon"]'
+    )
+    expect(lockedIcons.length).toBeGreaterThan(0)
+    expect(lockedIcons[0]?.getAttribute("aria-label")).toBe("Locked")
+    expect(document.body.querySelector('[aria-label^="Pin "]')).toBeNull()
+  })
+
+  it("swaps resting check and lock states for pin actions without selecting", () => {
+    const onSelect = renderSelector({ isUserAuthenticated: true })
+    const selectedOption = getModelOption("GPT-5 Mini")
+    const selectedCheck = selectedOption.querySelector<HTMLElement>(
+      '[data-slot="selected-model-check"]'
+    )
+    const rightSlot = selectedOption.querySelector<HTMLElement>(
+      '[data-slot="model-option-right-slot"]'
+    )
+    const pinAction = selectedOption.querySelector<HTMLButtonElement>(
+      '[aria-label="Pin GPT-5 Mini"]'
+    )
+
+    expect(selectedCheck?.className).toContain(
+      "group-hover/model-option:opacity-0"
+    )
+    expect(rightSlot?.className).toContain("size-[18px]")
+    expect(selectedCheck?.style.getPropertyValue("--icon-slot-size")).toBe(
+      "18px"
+    )
+    expect(selectedCheck?.style.getPropertyValue("--icon-glyph-size")).toBe(
+      "18px"
+    )
+    expect(pinAction?.className).toContain(
+      "group-hover/model-option:opacity-100"
+    )
+    expect(pinAction?.className).toContain("pointer-events-none")
+    expect(pinAction?.className).toContain(
+      "group-hover/model-option:pointer-events-auto"
+    )
+
+    act(() => {
+      pinAction?.click()
+    })
+
+    expect(favoriteModelMocks.updateFavoriteModels).toHaveBeenCalledWith([
+      "gpt-5.4",
+      "openrouter:moonshotai/kimi-k2.6",
+      "gpt-5-mini",
+    ])
+    expect(onSelect).not.toHaveBeenCalled()
+
+    const lockedPinnedOption = getModelOption("GPT-5.4")
+    expect(
+      lockedPinnedOption.querySelector('[data-slot="locked-model-icon"]')
+    ).not.toBeNull()
+    expect(
+      lockedPinnedOption.querySelector('[aria-label="Unpin GPT-5.4"]')
+    ).not.toBeNull()
+    const lockedIcon = lockedPinnedOption.querySelector<HTMLElement>(
+      '[data-slot="locked-model-icon"]'
+    )
+    expect(lockedIcon?.style.getPropertyValue("--icon-slot-size")).toBe("18px")
+    expect(lockedIcon?.style.getPropertyValue("--icon-glyph-size")).toBe("18px")
+  })
+
+  it("preserves the model list scroll position when pinning reorders a row", () => {
+    renderSelector({ isUserAuthenticated: true })
+    const scrollSurface = document.body.querySelector<HTMLElement>(
+      "[data-scrollable-surface]"
+    )
+    const pinAction = getModelOption(
+      "GPT-5 Mini"
+    ).querySelector<HTMLButtonElement>('[aria-label="Pin GPT-5 Mini"]')
+
+    expect(scrollSurface).not.toBeNull()
+    expect(pinAction).not.toBeNull()
+
+    scrollSurface!.scrollTop = 137
+    pinAction!.focus()
+    favoriteModelMocks.updateFavoriteModels.mockImplementationOnce(() => {
+      scrollSurface!.scrollTop = 999
+    })
+    vi.useFakeTimers()
+
+    try {
+      act(() => {
+        pinAction!.click()
+      })
+
+      expect(document.activeElement).not.toBe(pinAction)
+      expect(scrollSurface!.scrollTop).toBe(999)
+
+      act(() => {
+        vi.runAllTimers()
+      })
+
+      expect(scrollSurface!.scrollTop).toBe(137)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps a visible row anchored when the first pin adds section labels", () => {
+    favoriteModelMocks.favoriteModels = []
+    renderSelector({ isUserAuthenticated: true })
+    const scrollSurface = document.body.querySelector<HTMLElement>(
+      "[data-scrollable-surface]"
+    )
+    const anchorRow = getModelOption("GPT-5.4")
+    const pinAction = getModelOption(
+      "GPT-5 Mini"
+    ).querySelector<HTMLButtonElement>('[aria-label="Pin GPT-5 Mini"]')
+    let anchorTop = 48
+
+    expect(scrollSurface).not.toBeNull()
+    expect(pinAction).not.toBeNull()
+
+    vi.spyOn(scrollSurface!, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 300,
+    } as DOMRect)
+    vi.spyOn(anchorRow, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          top: anchorTop,
+          bottom: anchorTop + 40,
+        }) as DOMRect
+    )
+    scrollSurface!.scrollTop = 137
+    favoriteModelMocks.updateFavoriteModels.mockImplementationOnce(() => {
+      anchorTop = 96
+      // Base UI may scroll while its menu items regroup.
+      scrollSurface!.scrollTop = 999
+    })
+    vi.useFakeTimers()
+
+    try {
+      act(() => {
+        pinAction!.click()
+        vi.runAllTimers()
+      })
+
+      expect(scrollSurface!.scrollTop).toBe(1047)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("owns its composite menu inset and row geometry", () => {
@@ -718,6 +886,9 @@ describe("ModelSelector", () => {
     expect(menu?.className).toContain("p-1.5")
     expect(menu?.className).toContain("relative")
     expect(menu?.className).toContain("rounded-3xl")
+    expect(menu?.className).toContain(
+      "[--model-selector-list-max-height:19rem]"
+    )
     const searchOverlay = document.body.querySelector<HTMLElement>(
       '[data-slot="model-selector-desktop-search"]'
     )
@@ -751,6 +922,9 @@ describe("ModelSelector", () => {
     expect(scrollSurface?.className).toContain(
       "scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)]"
     )
+    expect(scrollSurface?.className).toContain("[scrollbar-width:none]")
+    expect(scrollSurface?.className).toContain("[&::-webkit-scrollbar]:hidden")
+    expect(scrollSurface?.className).not.toContain("scrollbar-gutter")
     expect(scrollSurface?.className).not.toContain("pr-1")
     expect(scrollSurface?.className).not.toContain("pb-1")
   })
@@ -921,14 +1095,11 @@ describe("ModelSelector", () => {
           .querySelector('[data-slot="model-section-label"]')
           ?.textContent?.trim()
       )
-    ).toEqual(["Favorites", "All models"])
+    ).toEqual(["Pinned", "All models"])
     const allModelsSection = sections.find(
       (section) => section.getAttribute("aria-label") === "All models"
     )
-    expect(
-      allModelsSection?.querySelector('[data-testid="model-option"]')
-        ?.textContent
-    ).toContain("GPT-5 Mini")
+    expect(allModelsSection?.textContent).toContain("GPT-5 Mini")
     for (const section of sections) {
       const label = section.querySelector('[data-slot="model-section-label"]')
       const container = section.querySelector<HTMLElement>(
@@ -1050,7 +1221,8 @@ describe("ModelSelector", () => {
     expect(trigger?.className).toContain("composer-btn")
     expect(trigger?.className).not.toContain("hover:bg-interactive-hover")
     expect(trigger?.className).not.toContain("active:bg-interactive-pressed")
-    expect(trigger?.className).toContain("active:scale-[0.96]")
+    expect(trigger?.className).toContain("active:scale-100")
+    expect(trigger?.className).toContain("transition-none")
     expect(trigger?.className).toContain("can-hover:relative")
     expect(trigger?.className).toContain("can-hover:after:absolute")
     expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
@@ -1060,6 +1232,8 @@ describe("ModelSelector", () => {
     expect(trigger?.className).toContain("pe-3")
     expect(trigger?.className).toContain("text-base")
     expect(trigger?.className).toContain("leading-[26px]")
+    expect(trigger?.className).toContain("max-w-full")
+    expect(trigger?.className).not.toContain("max-w-none")
     expect(trigger?.className).not.toContain("overflow-hidden")
 
     const selectedModelIcon = trigger?.querySelector<HTMLElement>(
@@ -1072,6 +1246,90 @@ describe("ModelSelector", () => {
       "16px"
     )
     expect(trigger?.lastElementChild?.className).toContain("text-foreground")
+    expect(trigger?.lastElementChild?.className).toContain("min-w-0")
+    expect(trigger?.lastElementChild?.className).toContain("truncate")
+    expect(trigger?.lastElementChild?.className).not.toContain("max-w-40")
+    const pressSurface = document.body.querySelector(
+      '[data-slot="model-selector-press-surface"]'
+    )
+    expect(pressSurface?.contains(trigger ?? null)).toBe(true)
+    expect(dropdownAnchor?.current).toBe(
+      document.body.querySelector('[data-slot="model-selector-desktop-anchor"]')
+    )
+    expect(dropdownAnchor?.current?.contains(pressSurface ?? null)).toBe(true)
+    expect(dropdownAnchor?.current).not.toBe(trigger)
+  })
+
+  it("runs the composer press on the visual surface until pointer release", () => {
+    renderSelector({
+      isUserAuthenticated: false,
+      selectedModelId: "gpt-5-mini",
+      variant: "composer",
+    })
+
+    const pressSurface = document.body.querySelector<HTMLDivElement>(
+      '[data-slot="model-selector-press-surface"]'
+    )
+    expect(pressSurface).not.toBeNull()
+    if (!pressSurface) return
+
+    const pressAnimation = {
+      cancel: vi.fn(),
+      onfinish: null,
+    } as unknown as Animation
+    const returnAnimation = {
+      cancel: vi.fn(),
+      onfinish: null,
+    } as unknown as Animation
+    const animate = vi
+      .fn<() => Animation>()
+      .mockReturnValueOnce(pressAnimation)
+      .mockReturnValueOnce(returnAnimation)
+    Object.defineProperty(pressSurface, "animate", {
+      configurable: true,
+      value: animate,
+    })
+
+    const pointerDown = new Event("pointerdown", { bubbles: true })
+    Object.defineProperties(pointerDown, {
+      button: { value: 0 },
+      isPrimary: { value: true },
+      pointerId: { value: 7 },
+    })
+    act(() => pressSurface?.dispatchEvent(pointerDown))
+
+    expect(animate).toHaveBeenCalledWith(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }],
+      {
+        duration: 75,
+        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+        fill: "forwards",
+      }
+    )
+
+    const pointerUp = new Event("pointerup")
+    Object.defineProperty(pointerUp, "pointerId", { value: 7 })
+    act(() => window.dispatchEvent(pointerUp))
+
+    expect(animate).toHaveBeenCalledOnce()
+
+    act(() => {
+      pressAnimation.onfinish?.call(
+        pressAnimation,
+        new Event("finish") as AnimationPlaybackEvent
+      )
+    })
+
+    expect(animate).toHaveBeenNthCalledWith(
+      2,
+      [{ transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      {
+        duration: 75,
+        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+        fill: "forwards",
+      }
+    )
+    expect(pressAnimation.cancel).toHaveBeenCalledOnce()
   })
 
   it("keeps the hover bridge scoped to the composer trigger", () => {
@@ -1105,33 +1363,5 @@ describe("ModelSelector", () => {
     })
 
     expect(onSelect).not.toHaveBeenCalled()
-  })
-
-  it("promotes a selected non-favorite within All models", () => {
-    renderSelector({
-      isUserAuthenticated: true,
-      selectedModelId: "openrouter:z-ai/glm-5.2",
-      variant: "composer",
-    })
-
-    const optionText = Array.from(
-      document.body.querySelectorAll<HTMLButtonElement>(
-        '[data-testid="model-option"]'
-      )
-    ).map((button) => button.textContent ?? "")
-
-    // Favorites remain first; the selection leads within All models.
-    expect(optionText[0]).toContain("GPT-5.4")
-    expect(optionText[1]).toContain("GLM-5.2")
-    expect(optionText.filter((text) => text.includes("GLM-5.2"))).toHaveLength(
-      1
-    )
-    expect(optionText.join(" ")).toContain("GPT-5 Mini")
-    expect(optionText.join(" ")).toContain("GLM-5.2")
-    // Explicit user-hidden models stay hidden.
-    expect(optionText.join(" ")).not.toContain("Claude Opus 4.6")
-    // Sections label the ranking.
-    expect(document.body.textContent).toContain("Favorites")
-    expect(document.body.textContent).toContain("All models")
   })
 })

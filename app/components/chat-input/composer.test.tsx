@@ -17,6 +17,9 @@ import {
 let Composer: (typeof import("./composer"))["Composer"]
 type ComposerHandle = import("./composer").ComposerHandle
 type PendingAttachment = import("./pending-attachment").PendingAttachment
+type ButtonPlusMenuProps = React.ComponentProps<
+  (typeof import("./button-plus-menu"))["ButtonPlusMenu"]
+>
 const promptInputMockCalls: Array<{
   expanded?: boolean
   entities?: readonly {
@@ -45,6 +48,7 @@ const promptInputActionMockCalls: Array<{
 const modelSelectorMockCalls: Array<{
   onSelectionCommitted?: () => void
 }> = []
+const buttonPlusMenuMockCalls: ButtonPlusMenuProps[] = []
 
 // Controllable module state for the Composer's internal seams.
 const composerMocks = vi.hoisted(() => ({
@@ -79,6 +83,9 @@ const composerMocks = vi.hoisted(() => ({
   enableSearch: false,
   searchMode: "optional" as "optional" | "always-on" | "unsupported",
   setEnableSearch: vi.fn(),
+  replaceActionQuery: vi.fn(() => true),
+  toggleSyntheticActionQuery: vi.fn(),
+  endActionQuery: vi.fn(),
 }))
 
 beforeAll(async () => {
@@ -249,6 +256,11 @@ vi.mock("@/components/ui/prompt-input", () => ({
   PromptInputTextarea: React.forwardRef<
     {
       focus: (options?: FocusOptions) => void
+      replaceActionQuery: (
+        query: import("@/components/ui/prompt-input").PromptInputActionQuery
+      ) => boolean
+      toggleSyntheticActionQuery: () => void
+      endActionQuery: () => void
       setSelectionRange: (start: number, end: number) => void
     },
     Omit<
@@ -266,6 +278,9 @@ vi.mock("@/components/ui/prompt-input", () => ({
     const textareaRef = React.useRef<HTMLTextAreaElement>(null)
     React.useImperativeHandle(ref, () => ({
       focus: (options) => textareaRef.current?.focus(options),
+      replaceActionQuery: composerMocks.replaceActionQuery,
+      toggleSyntheticActionQuery: composerMocks.toggleSyntheticActionQuery,
+      endActionQuery: composerMocks.endActionQuery,
       setSelectionRange: (start, end) =>
         textareaRef.current?.setSelectionRange(start, end),
     }))
@@ -285,7 +300,10 @@ vi.mock("../suggestions/prompt-system", () => ({
 }))
 
 vi.mock("./button-plus-menu", () => ({
-  ButtonPlusMenu: () => null,
+  ButtonPlusMenu: (props: ButtonPlusMenuProps) => {
+    buttonPlusMenuMockCalls.push(props)
+    return null
+  },
 }))
 
 vi.mock("./file-list", () => ({
@@ -300,6 +318,7 @@ describe("Composer primary action", () => {
     promptInputMockCalls.length = 0
     promptInputActionMockCalls.length = 0
     modelSelectorMockCalls.length = 0
+    buttonPlusMenuMockCalls.length = 0
     composerMocks.draftValue = ""
     composerMocks.draftById.clear()
     composerMocks.setDraftFns.clear()
@@ -375,46 +394,48 @@ describe("Composer primary action", () => {
     const [modelGroup, actionGroup] = Array.from(trailing?.children ?? [])
 
     expect(trailing?.className).toContain("gap-1")
+    expect(trailing?.className).toContain("min-w-0")
+    expect(trailing?.className).toContain("max-w-full")
     expect(trailing?.className).not.toContain("cant-hover:")
     expect(modelGroup?.className).toContain("gap-1.5")
+    expect(modelGroup?.className).toContain("min-w-0")
+    expect(modelGroup?.className).toContain("shrink")
     expect(modelGroup?.className).not.toContain("cant-hover:")
     expect(actionGroup?.className).toContain("gap-2")
+    expect(actionGroup?.className).toContain("shrink-0")
     expect(actionGroup?.className).not.toContain("cant-hover:")
   })
 
-  it("projects Web Search into a typed entity and writes entity removal back", () => {
+  it("keeps search outside the editor document and preserves the surface placeholder", () => {
     composerMocks.enableSearch = true
-    renderComposer({})
+    renderComposer({ placeholder: "Message this project" })
 
     const promptInput = promptInputMockCalls.at(-1)
-    expect(promptInput?.entities).toEqual([
-      { id: "web-search", kind: "capability", label: "Web search" },
-    ])
+    expect(promptInput?.entities).toBeUndefined()
+    expect(promptInput?.onEntitiesChange).toBeUndefined()
     expect(container?.querySelector("textarea")?.placeholder).toBe(
-      "Search the web"
+      "Message this project"
     )
-
-    act(() => promptInput?.onEntitiesChange?.([]))
-    expect(composerMocks.setEnableSearch).toHaveBeenCalledWith(false)
   })
 
-  it("projects always-on search as a locked status entity", () => {
-    composerMocks.enableSearch = true
-    composerMocks.searchMode = "always-on"
+  it("consumes a typed Web Search query without inserting an entity", () => {
     renderComposer({})
 
-    const promptInput = promptInputMockCalls.at(-1)
-    expect(promptInput?.entities).toEqual([
-      {
-        id: "web-search",
-        kind: "capability",
-        label: "Web search always on",
-        removable: false,
-      },
-    ])
+    const query = {
+      id: 1,
+      from: 1,
+      query: "web",
+      to: 5,
+      trigger: "@" as const,
+      isSynthetic: false,
+    }
+    const handled = buttonPlusMenuMockCalls
+      .at(-1)
+      ?.onActivateActionQuery?.("web-search", query)
 
-    act(() => promptInput?.onEntitiesChange?.([]))
-    expect(composerMocks.setEnableSearch).not.toHaveBeenCalled()
+    expect(handled).toBe(true)
+    expect(composerMocks.replaceActionQuery).toHaveBeenCalledWith(query)
+    expect(composerMocks.setEnableSearch).toHaveBeenCalledWith(true)
   })
 
   it("keeps Stop actionable while streaming even with empty input", () => {

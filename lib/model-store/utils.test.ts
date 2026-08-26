@@ -141,7 +141,6 @@ describe("groupModelsForSelector", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       [],
-      "gpt-5-mini",
       "",
       isModelHidden
     )
@@ -149,29 +148,10 @@ describe("groupModelsForSelector", () => {
     expect(ids).not.toContain("gpt-4.1")
   })
 
-  it("promotes a selected non-favorite within the All models group", () => {
-    const { favorites, others } = groupModelsForSelector(
-      MODELS,
-      ["claude-haiku-4-5-20251001"],
-      "gpt-5-mini",
-      "",
-      isModelHidden
-    )
-
-    expect(favorites.map((model) => model.id)).toEqual([
-      "claude-haiku-4-5-20251001",
-    ])
-    expect(others.map((model) => model.id)).toEqual([
-      "gpt-5-mini",
-      "gpt-5.4",
-    ])
-  })
-
-  it("preserves manual favorite order when the selected model is a favorite", () => {
+  it("ranks favorites without hiding the rest of the catalog", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       ["gpt-5-mini", "claude-haiku-4-5-20251001"],
-      "claude-haiku-4-5-20251001",
       "",
       isModelHidden
     )
@@ -187,7 +167,6 @@ describe("groupModelsForSelector", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       ["gpt-5-mini"],
-      "gpt-5-mini",
       "gpt-5.4",
       isModelHidden
     )
@@ -200,7 +179,6 @@ describe("groupModelsForSelector", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       [],
-      "gpt-5.4",
       "Mini compact",
       isModelHidden
     )
@@ -213,18 +191,16 @@ describe("groupModelsForSelector", () => {
     const { others } = groupModelsForSelector(
       MODELS,
       [],
-      "gpt-5.4",
       "",
       isModelHidden
     )
-    expect(others[0]?.id).toBe("gpt-5.4")
+    expect(others.some((model) => model.id === "gpt-5.4")).toBe(true)
   })
 
   it("still honors explicit user-hidden models", () => {
     const { favorites, others } = groupModelsForSelector(
       MODELS,
       ["gpt-5-mini"],
-      "gpt-5-mini",
       "",
       (modelId) => modelId === "gpt-5-mini"
     )
