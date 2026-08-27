@@ -31,6 +31,7 @@ import { getLogicalModelInfo } from "@/lib/models"
 import type { ModelReasoningEffort, SearchMode } from "@/lib/models/types"
 import {
   readStoredEffortForModel,
+  subscribeToStoredEffort,
   writeStoredEffortForModel,
 } from "@/lib/reasoning-effort"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
@@ -40,10 +41,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useInsertionEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
 
@@ -148,12 +149,17 @@ export function TurnContextProvider({
   const [lastTurnEffort, reportLastTurnEffort] = useState<
     ModelReasoningEffort | undefined
   >(undefined)
-  const [storedEffort, setStoredEffort] = useState<
-    ModelReasoningEffort | undefined
-  >(undefined)
-  useEffect(() => {
-    setStoredEffort(readStoredEffortForModel(selectedModel))
-  }, [selectedModel])
+  // Device memory read synchronously during render: a model switch sees the
+  // new model's stored level in the SAME render, so a snapshot taken between
+  // switch and paint can never carry the previous model's value. The server
+  // snapshot is undefined (hydration-safe — the stored value appears on the
+  // post-hydration re-read); the 'storage' subscription folds in cross-tab
+  // writes, and same-tab writes re-render via the override state.
+  const storedEffort = useSyncExternalStore(
+    subscribeToStoredEffort,
+    () => readStoredEffortForModel(selectedModel),
+    () => undefined
+  )
   const effortCandidate =
     effortOverride === "default"
       ? undefined
@@ -165,10 +171,9 @@ export function TurnContextProvider({
   const setReasoningEffort = useCallback(
     (effort: ModelReasoningEffort | undefined) => {
       setEffortOverride(effort ?? "default")
-      setStoredEffort(effort)
       writeStoredEffortForModel(selectedModel, effort)
     },
-    [selectedModel]
+    [selectedModel, setEffortOverride]
   )
   const prefersSearch =
     !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)

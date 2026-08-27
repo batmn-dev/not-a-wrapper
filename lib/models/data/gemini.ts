@@ -30,6 +30,8 @@ const geminiModels: ModelConfig[] = [
     reasoningText: true,
     // thinking_level per the Gemini thinking docs (Gemini 3.x takes levels;
     // 2.5 models keep numeric budgets and stay off the effort control).
+    // "medium" verified live against generateContent 2026-08-26 (200 OK) —
+    // wider than the older Gemini 3 Pro's low|high pair.
     effortLevels: ["low", "medium", "high"],
     defaultEffort: "high",
     searchMode: "optional",

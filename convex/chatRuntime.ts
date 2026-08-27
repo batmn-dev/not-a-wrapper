@@ -67,6 +67,10 @@ import {
   vToolInvocationStreamMetadata,
   type PersistedMessageMetadata,
 } from "./lib/messageMetadata"
+import {
+  vReasoningEffort,
+  type PersistedReasoningEffort,
+} from "./lib/reasoningEffort"
 import { sha256Hex, timingSafeEqualHex } from "./lib/sha256"
 import {
   attachReservationToRun,
@@ -1790,7 +1794,10 @@ type PrepareGenerationForChatArgs = {
   /** Route-resolution receipt (ADR-0020); absent only for legacy callers. */
   route?: GenerationRouteReceipt
   /** Per-turn effort receipt (ADR-0026), verified by the admission proof. */
-  reasoningEffort?: { requested?: string; applied?: string }
+  reasoningEffort?: {
+    requested?: PersistedReasoningEffort
+    applied?: PersistedReasoningEffort
+  }
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -2164,8 +2171,8 @@ export const prepareGeneration = mutation({
     ),
     reasoningEffort: v.optional(
       v.object({
-        requested: v.optional(v.string()),
-        applied: v.optional(v.string()),
+        requested: v.optional(vReasoningEffort),
+        applied: v.optional(vReasoningEffort),
       })
     ),
     expectedVisibleMessageCount: v.optional(v.number()),

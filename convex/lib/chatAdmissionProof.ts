@@ -1,3 +1,4 @@
+import type { PersistedReasoningEffort } from "./reasoningEffort"
 import { hmacSha256Hex, timingSafeEqualHex } from "./sha256"
 
 export const CHAT_ADMISSION_PROOF_MAX_AGE_MS = 60_000
@@ -18,7 +19,10 @@ export type ChatAdmissionProofPayload = {
   route?: ChatAdmissionRouteReceipt
   /** Per-turn effort receipt (ADR-0026). Signing it makes a forged effort
    * receipt on the run row unrepresentable. */
-  reasoningEffort?: { requested?: string; applied?: string }
+  reasoningEffort?: {
+    requested?: PersistedReasoningEffort
+    applied?: PersistedReasoningEffort
+  }
   grantDigest?: string
   /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
    * makes a forged or swapped reservation attach unrepresentable. */

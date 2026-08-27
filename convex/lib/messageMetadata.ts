@@ -1,4 +1,5 @@
 import { v, type Infer } from "convex/values"
+import { REASONING_EFFORTS, vReasoningEffort } from "./reasoningEffort"
 
 /**
  * The named shape of a persisted assistant message's `metadata` blob.
@@ -45,20 +46,8 @@ export const vToolInvocationStreamMetadata = v.object({
   reasoningDurationMs: v.optional(v.number()),
   // Optional while production may contain rows written before work timing.
   workDurationMs: v.optional(v.number()),
-  // Applied per-turn reasoning effort (ADR-0026). Mirrors the canonical
-  // REASONING_EFFORT_LEVELS vocabulary (lib/models/types.ts) — kept in
-  // lockstep by the ToolInvocationStreamMetadata type assertion.
-  reasoningEffort: v.optional(
-    v.union(
-      v.literal("none"),
-      v.literal("minimal"),
-      v.literal("low"),
-      v.literal("medium"),
-      v.literal("high"),
-      v.literal("xhigh"),
-      v.literal("max")
-    )
-  ),
+  // Applied per-turn reasoning effort (ADR-0026); shared vocabulary mirror.
+  reasoningEffort: v.optional(vReasoningEffort),
   toolMetadataByName: v.optional(
     v.record(v.string(), vToolInvocationDisplayMetadata)
   ),
@@ -74,15 +63,6 @@ type DisplayMetadata = Infer<typeof vToolInvocationDisplayMetadata>
 
 const TOOL_SOURCES = new Set(["builtin", "third-party", "mcp", "platform"])
 const TOOL_ICONS = new Set(["search", "code", "image", "extract", "wrench"])
-const REASONING_EFFORTS = new Set([
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-])
 const POISON_METADATA_KEYS = new Set(["__proto__", "constructor", "prototype"])
 
 function isRecord(value: unknown): value is Record<string, unknown> {

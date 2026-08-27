@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
+import { vReasoningEffort } from "./lib/reasoningEffort"
 import {
   vLedgerEntryType,
   vPricingSnapshot,
@@ -228,8 +229,8 @@ export default defineSchema({
     // Per-turn effort receipt (ADR-0026): what the user requested and what
     // the runtime applied after route clamping (platform turns run Default).
     // Verified by the signed admission proof at prepare; display/audit only.
-    reasoningEffort: v.optional(v.string()),
-    appliedReasoningEffort: v.optional(v.string()),
+    reasoningEffort: v.optional(vReasoningEffort),
+    appliedReasoningEffort: v.optional(vReasoningEffort),
     status: generationRunStatus,
     // Compatibility field: no longer written, but production may still contain
     // older run docs. Drop only after preflight proves zero legacy documents.

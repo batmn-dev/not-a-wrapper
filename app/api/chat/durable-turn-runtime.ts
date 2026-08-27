@@ -14,6 +14,7 @@ import {
   type ChatAdmissionProofPayload,
 } from "@/convex/lib/chatAdmissionProof"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
@@ -383,8 +384,8 @@ export type DurableTurnRuntime = {
      * and persisted on the run row: what the user requested and what the
      * runtime actually applied after route clamping. */
     reasoningEffort?: {
-      requested?: string
-      applied?: string
+      requested?: ModelReasoningEffort
+      applied?: ModelReasoningEffort
     }
   }): Promise<MessageAISDK[]>
 

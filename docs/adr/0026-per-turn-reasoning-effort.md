@@ -15,8 +15,10 @@ control, and every provider exposes a different level vocabulary:
   (gpt-5 takes `minimal` but not `none`; gpt-5.1+ the reverse; `max` from 5.6).
 - Anthropic: `output_config.effort` `low|medium|high|xhigh|max` on 4.7+/5
   (`xhigh` absent on 4.6); older models take only `budget_tokens`.
-- Google: `thinkingLevel` subsets per Gemini 3 model (3 Pro: `low|high` only);
-  Gemini 2.5 takes numeric budgets instead.
+- Google: `thinkingLevel` subsets per Gemini 3 model (the retired 3 Pro took
+  `low|high` only; 3.1 Pro takes `low|medium|high` — `medium` verified live
+  against `generateContent` 2026-08-26); Gemini 2.5 takes numeric budgets
+  instead.
 - xAI: `low|medium|high(|xhigh)` on Grok 4.5/4.6; Grok 4 reasons
   unconditionally.
 - OpenRouter: one normalized `reasoning.effort` enum, clamped to the nearest
@@ -85,9 +87,11 @@ level. An effort selection never fails a turn.
 
 `RequestShapingContext` gains `reasoningEffort?`; `shapeRequest` maps it per
 provider (Anthropic `thinking` + `effort`, OpenAI `reasoningEffort`, Google
-`thinkingLevel`, xAI `reasoningEffort`, OpenRouter per-call
-`providerOptions.openrouter.reasoning`), falling back to today's defaults when
-absent. The applied effort is recorded twice:
+`thinkingLevel`, xAI `reasoningEffort`), falling back to today's defaults when
+absent. OpenRouter's reasoning knob is construction-time provider state in the
+installed provider package, so the applied effort threads into
+`createLanguageModel` there instead of per-call provider options. The applied
+effort is recorded twice:
 
 - `generationRuns.reasoningEffort` (requested) and `.appliedReasoningEffort`
   — the execution receipt, carried through the signed admission proof so the
@@ -111,9 +115,11 @@ The composer's effective effort for the next turn resolves, first hit wins:
 4. Default (`undefined`).
 
 On model switch the level carries over when the new model's aggregated levels
-contain it, otherwise it snaps to Default — and the snap is written back to
-state, not merely displayed. Unsupported levels are hidden, never disabled;
-the whole control unmounts for models without `effortLevels`.
+contain it, otherwise the effective value visibly snaps to Default. The raw
+selection is retained rather than erased by the snap, so switching back to a
+model that supports the level restores it — the clamp at derivation is what
+guarantees an unsupported level is never sent. Unsupported levels are hidden,
+never disabled; the whole control unmounts for models without `effortLevels`.
 
 ### Gating
 
@@ -126,9 +132,11 @@ capability gating separate.
 - The effort menu is provider-truth: it can differ per model and silently
   gains levels when catalog data (or the OpenRouter snapshot) updates.
 - OpenRouter's construction-time `reasoning: { effort: "medium" }` remains the
-  no-selection default; a per-call selection overrides it via provider
-  options. If a future provider version drops per-call override, the effort
-  must thread into `createLanguageModel` instead.
+  no-selection default; a per-turn selection overrides it at model
+  construction (the installed provider has no per-call reasoning override).
+  Its wire enum stops at `xhigh`, so wrapped routes never offer `max` — a
+  route must not offer a level its wire path cannot send, or the applied
+  receipt would overstate what ran.
 - Clamping means a receipt can differ from the request; the message badge and
   `generationRuns` keep both honest.
 - Later work (not in scope): syncing the per-model map to `userPreferences`,

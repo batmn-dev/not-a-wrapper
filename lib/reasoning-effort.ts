@@ -53,6 +53,17 @@ export function readStoredEffortForModel(
   return readStoredEffortMap()[modelId]
 }
 
+/**
+ * Subscription half of the `useSyncExternalStore` pair over the stored map.
+ * The 'storage' event only fires in OTHER tabs; same-tab writes re-render
+ * through the selection state that accompanies them, and the read half
+ * re-reads on every render.
+ */
+export function subscribeToStoredEffort(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange)
+  return () => window.removeEventListener("storage", onChange)
+}
+
 /** Persist an explicit selection; explicit Default (undefined) clears it. */
 export function writeStoredEffortForModel(
   modelId: string,

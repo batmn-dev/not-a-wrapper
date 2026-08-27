@@ -2,7 +2,17 @@
 
 - **Model presentation: Improve how models display across the UI**
   - Make model logos appear during thinking states to make assistant output ownership clear
-- **Effort levels:** Show dynamic "thinking" or effort options for various models
+- **Per-turn effort, platform-funded UX (ADR-0026 v1 follow-up):** two accepted
+nuances to review and tackle: (1) platform-funded turns silently run at the
+provider default even when the resolved route supports the requested level —
+requested is recorded but applied stays Default so ADR-0021 reservation math
+holds, and the composer gives no hint (the user only notices the missing
+badge). Decide between surfacing an affordance ("effort applies on your own
+key / paid usage") and implementing effort-scaled reservations. (2) An effort
+selection can steer resolution off a platform-entitled route onto the user's
+own BYOK key when only that route serves the level — capability-correct, but
+it silently shifts cost onto the user's key; decide whether that needs
+disclosure in the composer or a funding-tier preference in the resolver.
 - **Web Search modes and quantity controls:** Think through how the Composer
 should expose an **Always** option that lets users force `web_search`, alongside
 the existing Off and Auto behavior where the model decides whether to search.
