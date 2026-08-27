@@ -669,6 +669,27 @@ describe("production logical catalog", () => {
     }
   })
 
+  it("every logical view with an effort menu carries a default in it (ADR-0026)", () => {
+    // The menu consumes the VIEW, whose default aggregates across routes —
+    // the canonical route alone may have no effort knob (e.g. Gemini 2.5)
+    // while a wrapped route supplies the level union.
+    for (const model of LOGICAL_MODELS) {
+      const view = toLogicalModelView(model)
+      if (!view.effortLevels || view.effortLevels.length === 0) continue
+      expect
+        .soft(view.defaultEffort, `view ${model.id} has a menu but no default`)
+        .toBeDefined()
+      if (view.defaultEffort !== undefined) {
+        expect
+          .soft(
+            view.effortLevels,
+            `view ${model.id} defaultEffort outside its menu`
+          )
+          .toContain(view.defaultEffort)
+      }
+    }
+  })
+
   it.each([
     ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
     ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],

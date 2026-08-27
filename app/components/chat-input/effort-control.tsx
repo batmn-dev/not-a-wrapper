@@ -27,7 +27,8 @@ type EffortControlProps = {
   levels: readonly ModelReasoningEffort[]
   /** Effective per-turn effort; undefined = Default. */
   value: ModelReasoningEffort | undefined
-  /** The model's own default level, shown on the Default row when known. */
+  /** The model's default level: reads as selected while the user has no
+   * override, and picking it clears the override. */
   defaultLevel?: ModelReasoningEffort
   onChange: (effort: ModelReasoningEffort | undefined) => void
   onSelectionCommitted?: () => void

@@ -129,6 +129,28 @@ function aggregateEffortLevels(
   return REASONING_EFFORT_LEVELS.filter((level) => available.has(level))
 }
 
+/**
+ * The default level the effort menu shows as implicitly selected (ADR-0026):
+ * the first effort-capable route's default in route-precedence order. The
+ * canonical route alone is not enough — a model whose direct route has no
+ * effort knob (e.g. Gemini 2.5 budgets) still gets a menu from its wrapped
+ * route, and a menu without a default would leave no path back to the
+ * no-override state.
+ */
+function aggregateDefaultEffort(
+  routes: readonly ModelRoute[]
+): ModelReasoningEffort | undefined {
+  for (const route of routes) {
+    if (
+      route.config.effortLevels?.length &&
+      route.config.defaultEffort !== undefined
+    ) {
+      return route.config.defaultEffort
+    }
+  }
+  return undefined
+}
+
 export function toUpstreamModelId(routeId: string): string {
   return routeId.startsWith("openrouter:")
     ? routeId.slice("openrouter:".length)
@@ -786,7 +808,12 @@ export function toLogicalModelView(
     reasoningText: model.routes.some(
       (route) => route.config.reasoningText === true
     ),
-    ...(effortLevels.length === 0 ? {} : { effortLevels }),
+    ...(effortLevels.length === 0
+      ? {}
+      : {
+          effortLevels,
+          defaultEffort: aggregateDefaultEffort(model.routes),
+        }),
     searchMode: aggregateSearchMode(model.routes),
     tools: model.routes.some((route) => Boolean(route.config.tools))
       ? true
