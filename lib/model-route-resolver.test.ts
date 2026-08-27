@@ -179,6 +179,52 @@ describe("resolveModelRoute", () => {
     })
   })
 
+  it("steers to the route serving the requested effort level (ADR-0026)", async () => {
+    // claude-sonnet-4-6: the direct anthropic route has no "xhigh"; its
+    // OpenRouter wrap serves the gateway set. With keys for both, the effort
+    // preference must beat the direct-before-aggregator tier ordering.
+    const deps = makeDeps({
+      userKeys: {
+        anthropic: { key: "sk-ant", preference: "priority" },
+        openrouter: { key: "sk-or", preference: "priority" },
+      },
+    })
+    const result = await resolveModelRoute(
+      {
+        modelId: "claude-sonnet-4-6",
+        ...authed,
+        requiredCapabilities: { webSearch: false, reasoningEffort: "xhigh" },
+      },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      route: { providerId: "openrouter" },
+    })
+  })
+
+  it("keeps the effort preference soft under a provider pin (ADR-0026)", async () => {
+    // A continuation pinned to anthropic excludes every xhigh-capable route;
+    // resolution must fall back to the pinned route (shaping clamps) rather
+    // than fail the turn with no_eligible_route.
+    const deps = makeDeps({
+      userKeys: { anthropic: { key: "sk-ant", preference: "priority" } },
+    })
+    const result = await resolveModelRoute(
+      {
+        modelId: "claude-sonnet-4-6",
+        ...authed,
+        pinnedProviderId: "anthropic",
+        requiredCapabilities: { webSearch: false, reasoningEffort: "xhigh" },
+      },
+      deps
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      route: { providerId: "anthropic", routeId: "claude-sonnet-4-6" },
+    })
+  })
+
   it("prefers platform entitlement over fallback BYOK and reserves allowance", async () => {
     const deps = makeDeps({
       userKeys: { openai: { key: "sk-user", preference: "fallback" } },

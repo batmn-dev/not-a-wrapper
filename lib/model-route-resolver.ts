@@ -98,10 +98,11 @@ export type RequiredRouteCapabilities = {
   /** Enabled excludes unsupported routes; disabled excludes always-on routes. */
   webSearch?: boolean
   /**
-   * Per-turn effort preference (ADR-0026): only routes offering this level
-   * are candidates. Soft by construction — the admission caller sets it only
-   * when at least one route of the logical model supports the level, so an
-   * effort selection steers routing but never empties the candidate set.
+   * Per-turn effort preference (ADR-0026): routes offering this level are
+   * preferred. Soft inside the resolver itself — when a provider pin or a
+   * hard capability excludes every effort-capable route, resolution falls
+   * back to the hard-filtered set and Request shaping clamps the level, so
+   * an effort selection steers routing but never empties the candidate set.
    */
   reasoningEffort?: ModelReasoningEffort
 }
@@ -225,13 +226,25 @@ function routeMeetsCapabilities(
     if (required.webSearch && searchMode === "unsupported") return false
     if (!required.webSearch && searchMode === "always-on") return false
   }
-  if (
-    required?.reasoningEffort !== undefined &&
-    !route.config.effortLevels?.includes(required.reasoningEffort)
-  ) {
-    return false
-  }
   return true
+}
+
+/**
+ * Soft effort preference (ADR-0026): keep only routes serving the requested
+ * level — unless that would empty the candidate set (a provider pin or a
+ * hard capability can exclude every effort-capable route), in which case the
+ * hard-filtered set stands and Request shaping clamps instead. An effort
+ * selection steers routing but never fails a turn.
+ */
+function preferEffortCapableRoutes(
+  routes: ModelRoute[],
+  reasoningEffort: ModelReasoningEffort | undefined
+): ModelRoute[] {
+  if (reasoningEffort === undefined) return routes
+  const effortCapable = routes.filter((route) =>
+    route.config.effortLevels?.includes(reasoningEffort)
+  )
+  return effortCapable.length > 0 ? effortCapable : routes
 }
 
 /** Direct-provider routes before aggregator routes; catalog order after. */
@@ -273,11 +286,14 @@ export async function resolveModelRoute(
     }
   }
 
-  const capableRoutes = model.routes.filter(
-    (route) =>
-      routeMeetsCapabilities(route, args.requiredCapabilities) &&
-      (args.pinnedProviderId === undefined ||
-        route.providerId === args.pinnedProviderId)
+  const capableRoutes = preferEffortCapableRoutes(
+    model.routes.filter(
+      (route) =>
+        routeMeetsCapabilities(route, args.requiredCapabilities) &&
+        (args.pinnedProviderId === undefined ||
+          route.providerId === args.pinnedProviderId)
+    ),
+    args.requiredCapabilities?.reasoningEffort
   )
   const keyProviders = [
     ...new Set(capableRoutes.map((route) => route.providerId)),
