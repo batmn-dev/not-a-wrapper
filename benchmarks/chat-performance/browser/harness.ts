@@ -165,7 +165,18 @@ async function waitForMark(
     if (found) return
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  throw new Error(`timed out waiting for mark ${name} (${timeoutMs}ms)`)
+  const seen = await page
+    .evaluate(() =>
+      performance
+        .getEntriesByType("mark")
+        .filter((entry) => entry.name.startsWith("chat-perf:"))
+        .map((entry) => entry.name.slice("chat-perf:".length))
+    )
+    .catch(() => ["<marks unreadable>"])
+  throw new Error(
+    `timed out waiting for mark ${name} (${timeoutMs}ms) at ${page.url()}; ` +
+      `marks seen: ${[...new Set(seen)].join(", ") || "none"}`
+  )
 }
 
 function foldSseText(body: string): { text: string; sawError: boolean } {
@@ -236,6 +247,28 @@ async function runScenarioOnce(
 
   try {
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+    // Fresh guest identity per run: the anonymous-user daily message limit
+    // (NON_AUTH_DAILY_MESSAGE_LIMIT = 5) would otherwise block the sixth
+    // send in a shared context. Clearing storage and reloading mints a new
+    // guest id while keeping the context (JS caches) warm.
+    await page.evaluate(async () => {
+      localStorage.clear()
+      sessionStorage.clear()
+      const databases = (await indexedDB.databases?.()) ?? []
+      await Promise.all(
+        databases.map(
+          (db) =>
+            new Promise<void>((resolve) => {
+              if (!db.name) return resolve()
+              const request = indexedDB.deleteDatabase(db.name)
+              request.onsuccess = () => resolve()
+              request.onerror = () => resolve()
+              request.onblocked = () => resolve()
+            })
+        )
+      )
+    })
+    await page.reload({ waitUntil: "domcontentloaded" })
     const editor = page.locator('[contenteditable="true"]').first()
     await editor.waitFor({ state: "visible", timeout: 15000 })
 
@@ -296,9 +329,12 @@ async function runScenarioOnce(
         detail = "stopped stream text is not a prefix of the oracle"
       }
     } else if (config.expectedOutcome === "error") {
-      if (foldedText !== oracle.text) {
+      // An errored stream's response body may be unreadable from the driver
+      // (the fetch aborts mid-stream); fall back to outcome + settle-mismatch
+      // rules, mirroring the stop branch.
+      if (bodyAvailable && foldedText !== oracle.text) {
         correctnessOk = false
-        detail = "pre-error text does not match the oracle"
+        detail = `pre-error text mismatch (${foldedText.length} vs ${oracle.text.length} chars)`
       }
     } else if (foldedText !== oracle.text) {
       correctnessOk = false
@@ -425,12 +461,16 @@ function scenarioTimeoutMs(config: BrowserScenarioConfig): number {
 }
 
 async function main() {
-  const suite =
+  let suite =
     SUITE_NAME === "smoke"
       ? SMOKE_SUITE
       : SUITE_NAME === "standard"
         ? STANDARD_SUITE
         : fail(`unknown SUITE: ${SUITE_NAME}`)
+  if (process.env.ONLY) {
+    suite = suite.filter((config) => config.id === process.env.ONLY)
+    if (suite.length === 0) fail(`ONLY matched no scenario: ${process.env.ONLY}`)
+  }
 
   const externalBaseUrl = process.env.BASE_URL
   const baseUrl = externalBaseUrl ?? `http://localhost:${PERF_PORT}`
@@ -464,12 +504,12 @@ async function main() {
     const runs: RunMetrics[] = []
     try {
       for (let index = 0; index < WARMUPS + RUNS; index++) {
+        const kind = index < WARMUPS ? "warmup" : "run"
         const run = await runScenarioOnce(context, baseUrl, config, timeoutMs)
-        if (index === 0 && !run.correctness.ok) {
-          log(
-            `  first warmup failed correctness: ${run.correctness.detail ?? "unknown"}`
-          )
-        }
+        log(
+          `  ${kind} ${index + 1}/${WARMUPS + RUNS}: ` +
+            `${run.correctness.ok ? "ok" : `CORRECTNESS FAILED (${run.correctness.detail ?? "unknown"})`}`
+        )
         if (index >= WARMUPS) runs.push(run)
       }
     } finally {
