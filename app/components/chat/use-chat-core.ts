@@ -206,7 +206,11 @@ export function useChatCore({
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
-  const scrollToMessageId = searchParams.get("messageId")
+  // The reference honors the legacy `?message=` deep-link param alongside
+  // `?messageId=` (conv.beauty.js:16928 `has("message") || has("messageId")`;
+  // its restore gate at 180547 keys on `!!get("message")`).
+  const scrollToMessageId =
+    searchParams.get("messageId") ?? searchParams.get("message")
 
   const { updateTitle, applyGeneratedTitle } = useChats()
 

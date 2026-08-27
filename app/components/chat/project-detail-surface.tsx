@@ -95,7 +95,7 @@ export function ProjectDetailSurface({
 
   return (
     <>
-      <header className="bg-background h-app-header sticky top-0 z-30 flex shrink-0 items-center justify-between gap-2 px-2 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] md:hidden">
+      <header className="bg-background h-app-header sticky top-0 z-30 flex shrink-0 items-center justify-between gap-2 px-2 [box-shadow:var(--sharp-edge-top-shadow-placeholder)] group-data-scroll-from-top/scroll-root:[box-shadow:var(--sharp-edge-top-shadow)] md:hidden">
         <div className="flex min-w-0 flex-1 items-center">
           <div className="relative flex shrink-0">
             {hasSidebar ? <HeaderSidebarTrigger /> : null}

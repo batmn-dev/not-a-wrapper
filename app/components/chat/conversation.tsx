@@ -95,6 +95,14 @@ function getMessageTextParts(message: MessageType): string[] {
   return textParts
 }
 
+/**
+ * Asset-bearing turns are always rendered for real so scrolling to them never
+ * jumps. The reference detector (conv.beauty.js `aZn`/`sZn`) is
+ * `(metadata.attachments?.length ?? 0) > 0 || parts.some(isAssetPointer)` over
+ * a content-type set (Image/ImageAssetPointer/Audio/Video/...). In this data
+ * model both user attachments and generated media arrive as `file` parts, so
+ * one part-type check is the whole translation.
+ */
 function hasTurnAssetContent(message: MessageType): boolean {
   return message.parts?.some((part) => part.type === "file") ?? false
 }
@@ -118,6 +126,14 @@ function getMessageAttachments(
  * TurnRow — the stable section wrapper shared by mapped messages and the
  * pending-assistant placeholder. Pending and real assistant content reconcile
  * through this same DOM node; only its data identity and contents update.
+ *
+ * Two DOM shapes, mirroring the reference's two turn lists (virt.beauty.js
+ * `EagerConversationTurns`/`VirtualizedConversationTurns`): the virtualized
+ * shape keeps an outer wrapper div carrying `data-is-intersecting` and the
+ * placeholder height; the eager shape (the shipped default arm) renders the
+ * section directly with no wrapper — the section itself carries
+ * `data-turn-id-container` and the center observation attaches to it, exactly
+ * as the reference `Fkn` section does.
  */
 function TurnRow({
   className,
@@ -128,6 +144,7 @@ function TurnRow({
   alwaysShow,
   contentVisibility = false,
   centerIntersectionObserver,
+  eager = false,
   estimatedTextParts,
   forceRender = false,
   hasDisplayableContent = true,
@@ -147,6 +164,8 @@ function TurnRow({
   alwaysShow: boolean
   contentVisibility?: boolean
   centerIntersectionObserver: TurnIntersectionObserver
+  /** Render the reference's wrapper-free eager shape. */
+  eager?: boolean
   estimatedTextParts: readonly string[]
   forceRender?: boolean
   hasDisplayableContent?: boolean
@@ -188,11 +207,17 @@ function TurnRow({
   }, [])
 
   useBrowserLayoutEffect(() => {
-    if (!alwaysShow || renderIntersecting) return
+    if (eager || !alwaysShow || renderIntersecting) return
     wasRenderIntersectingRef.current = true
     setRenderIntersecting(true)
     onRenderIntersectingChange(dataTurnId, true)
-  }, [alwaysShow, dataTurnId, onRenderIntersectingChange, renderIntersecting])
+  }, [
+    alwaysShow,
+    dataTurnId,
+    eager,
+    onRenderIntersectingChange,
+    renderIntersecting,
+  ])
 
   useBrowserLayoutEffect(() => {
     if (!forceRender || renderIntersecting || shouldAlwaysRender) return
@@ -246,6 +271,33 @@ function TurnRow({
     ]
   )
   const submitScrollRef = useSubmitTurnScrollRef(scrollOnSubmit)
+  // Eager sections own their observation directly: the reference `Fkn` runs the
+  // center (table-of-contents) observer against the section node in both arms,
+  // and the eager arm has no wrapper to host it.
+  const eagerSectionRef = useCallback(
+    (section: HTMLElement | null) => {
+      const submitCleanup = submitScrollRef(section)
+      const centerCleanup =
+        section && onCenterIntersectionChange
+          ? centerIntersectionObserver.observe(section, (intersecting) =>
+              onCenterIntersectionChange(dataTurnId, intersecting)
+            )
+          : undefined
+      return () => {
+        submitCleanup?.()
+        if (centerCleanup) {
+          centerCleanup()
+          onCenterIntersectionChange?.(dataTurnId, false)
+        }
+      }
+    },
+    [
+      centerIntersectionObserver,
+      dataTurnId,
+      onCenterIntersectionChange,
+      submitScrollRef,
+    ]
+  )
   const placeholderStyle:
     | (CSSProperties & {
         "--estimated-turn-height"?: string
@@ -253,6 +305,58 @@ function TurnRow({
     | undefined = estimatedHeight
     ? { "--estimated-turn-height": `${estimatedHeight}px` }
     : undefined
+
+  const turnContent = shouldRenderContent ? (
+    <>
+      {beforeTurn}
+      <section
+        ref={eager ? eagerSectionRef : submitScrollRef}
+        className={cn(
+          "text-foreground w-full focus:outline-none has-data-writing-block:pointer-events-none [&:has([data-writing-block])>*]:pointer-events-auto",
+          contentVisibility &&
+            "[content-visibility:auto] has-[[data-dotball-loading-indicator]]:[content-visibility:visible]! supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
+          className
+        )}
+        data-turn-id-container={dataTurnId}
+        data-turn={dataTurn}
+        data-turn-id={dataTurnId}
+        data-testid={dataTestId}
+        dir="auto"
+      >
+        <h4 className="sr-only select-none">
+          {dataTurn === "user" ? "You said:" : "ChatGPT said:"}
+        </h4>
+        <div
+          className={cn(
+            `mx-auto my-auto px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
+            verticalPadding === "first" && "pt-3",
+            verticalPadding === "large" && "pt-12",
+            verticalPadding === "last" && "pb-8"
+          )}
+        >
+          <div
+            data-conversation-screenshot-content=""
+            className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col focus-visible:outline-hidden ${THREAD_MAXWIDTH_VARS} ${dataTurn === "assistant" ? "agent-turn" : ""}`}
+          >
+            {children}
+          </div>
+          {dataTurn === "assistant" ? (
+            <div
+              data-conversation-screenshot-content=""
+              className={`mx-auto max-w-[var(--thread-content-max-width,40rem)] flex-1 ${THREAD_MAXWIDTH_VARS}`}
+            >
+              <div />
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </>
+  ) : null
+
+  // The eager shape drops the wrapper entirely (reference `fGn` → `L4`): no
+  // `data-is-intersecting`, no placeholder height — a hidden turn renders
+  // nothing at all.
+  if (eager) return turnContent
 
   return (
     <div
@@ -270,52 +374,7 @@ function TurnRow({
       data-turn-id-container={dataTurnId}
       style={placeholderStyle}
     >
-      {shouldRenderContent ? (
-        <>
-          {beforeTurn}
-          <section
-            ref={submitScrollRef}
-            className={cn(
-              "text-foreground w-full focus:outline-none has-data-writing-block:pointer-events-none [&:has([data-writing-block])>*]:pointer-events-auto",
-              contentVisibility &&
-                "[content-visibility:auto] has-[[data-dotball-loading-indicator]]:[content-visibility:visible]! supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
-              className
-            )}
-            data-turn-id-container={dataTurnId}
-            data-turn={dataTurn}
-            data-turn-id={dataTurnId}
-            data-testid={dataTestId}
-            dir="auto"
-          >
-            <h4 className="sr-only select-none">
-              {dataTurn === "user" ? "You said:" : "ChatGPT said:"}
-            </h4>
-            <div
-              className={cn(
-                `mx-auto my-auto px-[var(--thread-content-margin,1rem)] text-base ${THREAD_GUTTER_VARS}`,
-                verticalPadding === "first" && "pt-3",
-                verticalPadding === "large" && "pt-12",
-                verticalPadding === "last" && "pb-8"
-              )}
-            >
-              <div
-                data-conversation-screenshot-content=""
-                className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col focus-visible:outline-hidden ${THREAD_MAXWIDTH_VARS} ${dataTurn === "assistant" ? "agent-turn" : ""}`}
-              >
-                {children}
-              </div>
-              {dataTurn === "assistant" ? (
-                <div
-                  data-conversation-screenshot-content=""
-                  className={`mx-auto max-w-[var(--thread-content-max-width,40rem)] flex-1 ${THREAD_MAXWIDTH_VARS}`}
-                >
-                  <div />
-                </div>
-              ) : null}
-            </div>
-          </section>
-        </>
-      ) : null}
+      {turnContent}
     </div>
   )
 }
@@ -476,10 +535,13 @@ export function Conversation({
     messages,
     scrollToMessageId
   )
-  // The reference captures this once at mount and renders the whole thread
-  // for a finalAgentTurnStart arrival instead of virtualizing it.
+  // The reference selects Eager vs Virtualized turns once at mount:
+  // `J = !deepLinkAtMount && experimentGate()`. A finalAgentTurnStart arrival
+  // or a disabled gate renders the whole thread eagerly.
   const [renderAllTurns] = useState(
-    () => scrollToMessageId === "finalAgentTurnStart"
+    () =>
+      scrollToMessageId === "finalAgentTurnStart" ||
+      !CHATGPT_TURN_INTERSECTION_EXPERIMENT.enabled
   )
   const virtualization = useConversationTurnVirtualization(scrollTarget?.turnId)
   if (!messages || messages.length === 0)
@@ -561,7 +623,11 @@ export function Conversation({
           const rowTurnId = renderRowTurnId(row)
           const alwaysShow =
             renderAllTurns ||
-            isTurnAlwaysRendered(renderIndex, renderRows.length, activeTurnIndex)
+            isTurnAlwaysRendered(
+              renderIndex,
+              renderRows.length,
+              activeTurnIndex
+            )
           const forceRender = rowTurnId === scrollTarget?.turnId
           if (row.kind === "root") {
             return (
@@ -571,6 +637,7 @@ export function Conversation({
                 dataTurn="assistant"
                 dataTurnId={rowTurnId}
                 alwaysShow={alwaysShow}
+                eager={renderAllTurns}
                 centerIntersectionObserver={
                   virtualization.centerIntersectionObserver
                 }
@@ -599,6 +666,7 @@ export function Conversation({
                   dataTurnId={rowTurnId}
                   dataTestId={`conversation-turn-${row.index + 1}`}
                   alwaysShow={alwaysShow}
+                  eager={renderAllTurns}
                   centerIntersectionObserver={
                     virtualization.centerIntersectionObserver
                   }
@@ -745,6 +813,7 @@ export function Conversation({
                 dataTurnId={rowTurnId}
                 dataTestId={`conversation-turn-${index + 1}`}
                 alwaysShow={alwaysShow}
+                eager={renderAllTurns}
                 centerIntersectionObserver={
                   virtualization.centerIntersectionObserver
                 }
@@ -784,6 +853,7 @@ export function Conversation({
           hydrated={messages.length > 0}
           freshChat={hasSentFirstMessage}
           scrollTarget={scrollTarget}
+          deepLink={scrollToMessageId != null}
         />
       </div>
     </div>

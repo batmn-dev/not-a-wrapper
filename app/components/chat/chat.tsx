@@ -281,6 +281,19 @@ function ChatInner({
     }
   }, [])
 
+  // The active turn's identity scopes announcement sources (the reference
+  // announces with `conversation-turn-${turn.id}-…` ids). Mirrors the
+  // assistant-turn row key: the turn is anchored on its user message.
+  const lastAnnouncerMessage = messages[messages.length - 1]
+  const previousAnnouncerMessage = messages[messages.length - 2]
+  const announcerTurnId =
+    lastAnnouncerMessage?.role === "user"
+      ? `assistant-turn:${lastAnnouncerMessage.id}`
+      : lastAnnouncerMessage?.role === "assistant" &&
+          previousAnnouncerMessage?.role === "user"
+        ? `assistant-turn:${previousAnnouncerMessage.id}`
+        : (lastAnnouncerMessage?.id ?? null)
+
   // Memoize the conversation props to prevent unnecessary rerenders
   const conversationProps = useMemo(
     () => ({
@@ -424,6 +437,7 @@ function ChatInner({
           isSubmitting={isSubmitting}
           presentationState={presentation.state}
           completionAvailable={lastFinishReason !== undefined}
+          turnId={announcerTurnId}
         />
         <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
@@ -462,12 +476,12 @@ function ChatInner({
                 className="flex justify-center"
                 data-splash-headline-option="WHATS_ON_YOUR_MIND"
               >
-                <div className="hidden text-center sm:mb-[22px] sm:block [view-transition-name:var(--vt-splash-screen-headline)]">
+                <div className="hidden text-center [view-transition-name:var(--vt-splash-screen-headline)] sm:mb-[22px] sm:block">
                   <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>
                 </div>
-                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden [view-transition-name:var(--vt-splash-screen-headline)]">
+                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center [view-transition-name:var(--vt-splash-screen-headline)] sm:hidden">
                   <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>

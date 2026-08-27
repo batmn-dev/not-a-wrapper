@@ -17,16 +17,80 @@ import {
 } from "./thread-scroll-target"
 
 const GUTTER_THRESHOLDS = Array.from({ length: 101 }, (_, i) => i / 100)
-/** Trailing-idle fallback for browsers without native `scrollend`. */
-const SCROLL_IDLE_FALLBACK_MS = 150
+/** The reference polyfill's quiet window before a synthetic `scrollend`. */
+const SCROLLEND_POLYFILL_QUIET_MS = 100
+
+/**
+ * Active-touch tracking for the `scrollend` fallback, ported from the
+ * reference's lazily-loaded polyfill chunk (3e4a3e29-jukhsskidtr7106e.js): a
+ * document-level set of touch identifiers, installed once and kept for the
+ * page's lifetime, exactly like the polyfill's own document listeners.
+ */
+let activeTouchIdentifiers: Set<number> | null = null
+
+function ensureTouchTracking(): Set<number> {
+  if (activeTouchIdentifiers) return activeTouchIdentifiers
+  const touches = new Set<number>()
+  activeTouchIdentifiers = touches
+  document.addEventListener(
+    "touchstart",
+    (event) => {
+      for (const touch of event.changedTouches) touches.add(touch.identifier)
+    },
+    { passive: true }
+  )
+  const release = (event: TouchEvent) => {
+    for (const touch of event.changedTouches) touches.delete(touch.identifier)
+  }
+  document.addEventListener("touchend", release, { passive: true })
+  document.addEventListener("touchcancel", release, { passive: true })
+  return touches
+}
+
+/**
+ * `scrollend` with the reference's exact fallback semantics: native events
+ * when supported; otherwise a 100ms scroll-quiet timer that re-arms while any
+ * touch is active, so the event never fires mid-gesture — only after the last
+ * finger lifts and scrolling has been quiet for the window.
+ */
+export function addScrollEndListener(
+  target: HTMLElement,
+  listener: () => void
+): () => void {
+  if ("onscrollend" in window) {
+    target.addEventListener("scrollend", listener, { passive: true })
+    return () => target.removeEventListener("scrollend", listener)
+  }
+  const touches = ensureTouchTracking()
+  let timer: number | null = null
+  const onScroll = () => {
+    if (timer !== null) window.clearTimeout(timer)
+    timer = window.setTimeout(() => {
+      if (touches.size) {
+        timer = window.setTimeout(onScroll, SCROLLEND_POLYFILL_QUIET_MS)
+      } else {
+        timer = null
+        listener()
+      }
+    }, SCROLLEND_POLYFILL_QUIET_MS)
+  }
+  target.addEventListener("scroll", onScroll, { passive: true })
+  return () => {
+    target.removeEventListener("scroll", onScroll)
+    if (timer !== null) window.clearTimeout(timer)
+  }
+}
 export const CHATGPT_TURN_INTERSECTION_EXPERIMENT = {
   id: "1841171328",
   key: "is_enabled",
   defaultValue: false,
-  // The user's authenticated ChatGPT session is currently in treatment. The
-  // live bundle lookup returns this value remotely; local has no Statsig
-  // namespace, so the active reference treatment is explicit here.
-  enabled: true,
+  // The shipped code default: `Jo('1841171328').get('is_enabled', !1)`. Local
+  // has no Statsig namespace, so the bundle's hardcoded default (control arm)
+  // is authoritative: eager turns + assistant content-visibility. The
+  // treatment arm's reflow correction writes scrollTop while placeholders
+  // materialize above the viewport, which cancels in-flight touch momentum —
+  // an upward flick through unvisited turns dies at each materialization.
+  enabled: false,
 } as const
 
 export const TURN_RENDER_INTERSECTION_ROOT_MARGIN = "1000px 0px 1000px 0px"
@@ -421,6 +485,10 @@ type ThreadScrollEdgeProps = {
   /** Optional route target. Message alignment wins; the containing turn is
    * the late-mount fallback while hydration converges. */
   scrollTarget?: ThreadScrollTarget | null
+  /** A deep-link param was present at load, resolvable or not. The reference
+   * restore gate keys on raw param presence (conv.beauty.js:180547), so an
+   * unresolvable link still suppresses the default bottom restore. */
+  deepLink?: boolean
 }
 
 export function ThreadScrollEdge({
@@ -429,6 +497,7 @@ export function ThreadScrollEdge({
   hydrated,
   freshChat,
   scrollTarget,
+  deepLink = false,
 }: ThreadScrollEdgeProps) {
   const rootRef = useRef<HTMLElement | null>(null)
   const restoredChatRef = useRef<string | null | false>(false)
@@ -462,7 +531,6 @@ export function ThreadScrollEdge({
       observer.observe(el)
 
       let frame: number | null = null
-      let idleTimer: number | null = null
       const scheduleSave = () => {
         if (chatId === null) return
         if (frame !== null) cancelAnimationFrame(frame)
@@ -471,18 +539,8 @@ export function ThreadScrollEdge({
           saveThreadAnchor(chatId, root)
         })
       }
-      const supportsScrollEnd = "onscrollend" in window
-      const onScroll = () => {
-        if (idleTimer !== null) window.clearTimeout(idleTimer)
-        idleTimer = window.setTimeout(scheduleSave, SCROLL_IDLE_FALLBACK_MS)
-      }
-      if (chatId !== null) {
-        if (supportsScrollEnd) {
-          root.addEventListener("scrollend", scheduleSave, { passive: true })
-        } else {
-          root.addEventListener("scroll", onScroll, { passive: true })
-        }
-      }
+      const removeScrollEndListener =
+        chatId !== null ? addScrollEndListener(root, scheduleSave) : null
 
       let cleaned = false
       const cleanup = () => {
@@ -490,14 +548,7 @@ export function ThreadScrollEdge({
         cleaned = true
         observer.disconnect()
         root.removeAttribute("data-scroll-from-end")
-        if (chatId !== null) {
-          if (supportsScrollEnd) {
-            root.removeEventListener("scrollend", scheduleSave)
-          } else {
-            root.removeEventListener("scroll", onScroll)
-          }
-        }
-        if (idleTimer !== null) window.clearTimeout(idleTimer)
+        removeScrollEndListener?.()
         if (frame !== null) cancelAnimationFrame(frame)
         if (sentinelCleanupRef.current === cleanup) {
           sentinelCleanupRef.current = null
@@ -572,7 +623,7 @@ export function ThreadScrollEdge({
     if (!hydrated) return
     if (restoredChatRef.current === chatId) return
     restoredChatRef.current = chatId
-    if (freshChat || streamActive || scrollTarget) return
+    if (freshChat || streamActive || scrollTarget || deepLink) return
     const rootEl = rootRef.current
     if (!rootEl) return
     if (chatId !== null && restoreThreadAnchor(chatId, rootEl)) return
@@ -589,7 +640,7 @@ export function ThreadScrollEdge({
     return () => {
       if (frame !== null) cancelAnimationFrame(frame)
     }
-  }, [hydrated, chatId, freshChat, streamActive, scrollTarget])
+  }, [hydrated, chatId, freshChat, streamActive, scrollTarget, deepLink])
 
   return (
     <>
