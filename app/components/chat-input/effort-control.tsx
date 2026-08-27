@@ -142,9 +142,14 @@ function EffortControl({
                 // translates +3px while the model trigger translates -3px,
                 // 200ms easeOutQuint (transition-transform spans the v4
                 // translate/scale properties, so press-scale still animates).
-                // Touch devices have no hover to reveal the seam, so they sit
-                // flush permanently.
-                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-1.5 pe-3 py-0 text-base leading-[26px] font-normal can-hover:-ms-1.5 can-hover:group-hover/segmented:translate-x-[3px] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                // While either half's popover is open (aria-expanded anywhere
+                // in the group), the group-has variant pins the revealed
+                // position independent of hover: the pointer wandering into
+                // the menu can't slide the anchor under its own popover, and
+                // since hover and pin target the same value the handoff never
+                // animates. Touch devices have no hover to reveal the seam,
+                // so they sit flush permanently.
+                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-1.5 pe-3 py-0 text-base leading-[26px] font-normal can-hover:-ms-1.5 can-hover:group-hover/segmented:translate-x-[3px] can-hover:group-has-[[aria-expanded=true]]/segmented:translate-x-[3px] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
               />
             }
           >
