@@ -627,6 +627,24 @@ describe("production logical catalog", () => {
     expect(toLogicalModelView(sonnet).searchMode).toBe("optional")
   })
 
+  it("unions effort levels across routes in canonical order (ADR-0026)", () => {
+    // Direct Sonnet 4.6 has no "xhigh"/"minimal"; its OpenRouter wrap serves
+    // the gateway set — the view menu is the ordered union of both.
+    const sonnet46 = getLogicalModel("claude-sonnet-4-6")!
+    expect(toLogicalModelView(sonnet46).effortLevels).toEqual([
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ])
+
+    // A model with no effort-capable route omits the field entirely.
+    const gpt41 = getLogicalModel("gpt-4.1")!
+    expect(toLogicalModelView(gpt41).effortLevels).toBeUndefined()
+  })
+
   it.each([
     ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
     ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],

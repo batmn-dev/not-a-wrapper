@@ -33,6 +33,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -68,6 +70,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -104,6 +108,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -140,6 +146,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -176,6 +184,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -212,6 +222,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -248,6 +260,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -284,6 +298,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -320,6 +336,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -356,6 +374,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -392,6 +412,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -428,6 +450,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -464,6 +488,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -506,6 +532,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -549,6 +577,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -585,6 +615,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -620,6 +652,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -656,6 +690,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -691,6 +727,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -726,6 +764,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -761,6 +801,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -861,6 +903,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -898,6 +942,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -933,6 +979,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -968,6 +1016,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -1002,6 +1052,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -1036,6 +1088,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1072,6 +1126,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -1106,6 +1162,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1147,6 +1205,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -1188,6 +1248,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -1222,6 +1284,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1295,6 +1359,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1329,6 +1395,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1364,6 +1432,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -1399,6 +1469,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -1435,6 +1507,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -1471,6 +1545,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -1506,6 +1582,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -1542,6 +1620,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -1578,6 +1658,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -1646,6 +1728,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1682,6 +1766,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1717,6 +1803,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1752,6 +1840,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -1788,6 +1878,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -1830,6 +1922,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -1866,6 +1960,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -1901,6 +1997,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -1936,6 +2034,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -1972,6 +2072,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2007,6 +2109,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2042,6 +2146,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2077,6 +2183,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2173,6 +2281,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -2207,6 +2317,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -2241,6 +2353,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -2275,6 +2389,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -2383,6 +2499,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -2418,6 +2536,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -2452,6 +2572,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -2486,6 +2608,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -2648,6 +2772,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -2683,6 +2809,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2718,6 +2846,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2753,6 +2883,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -2788,6 +2920,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -2823,6 +2957,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -2858,6 +2994,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -2893,6 +3031,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -2928,6 +3068,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -2963,6 +3105,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -2998,6 +3142,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -3039,6 +3185,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -3073,6 +3221,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -3107,6 +3257,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -3141,6 +3293,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -3175,6 +3329,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -3209,6 +3365,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -3243,6 +3401,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Medium",
@@ -3284,6 +3444,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: true,
     speed: "Fast",
@@ -3319,6 +3481,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -3354,6 +3518,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -3389,6 +3555,8 @@ export const openrouterModels: ModelConfig[] = [
     reasoning: {
       effort: "medium",
     },
+    effortLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",

@@ -27,7 +27,11 @@ import {
   OPENROUTER_ALLOWLIST,
   type OpenRouterAllowlistEntry,
 } from "@/lib/models/data/openrouter.allowlist"
-import type { ModelConfig } from "@/lib/models/types"
+import type { ModelConfig, ModelReasoningEffort } from "@/lib/models/types"
+import {
+  isModelReasoningEffort,
+  REASONING_EFFORT_LEVELS,
+} from "@/lib/models/types"
 import {
   isKnownVendorId,
   MODEL_PROVIDER_IDENTITY,
@@ -54,6 +58,13 @@ export type OpenRouterSnapshotModel = {
   pricing: { prompt: string; completion: string }
   supported_parameters: string[]
   architecture: { input_modalities: string[] }
+  /**
+   * OpenRouter's per-model effort allowlist (`reasoning.supported_efforts`),
+   * highest first upstream; null means every gateway effort value is
+   * accepted. Absent on snapshots taken before the field existed — the
+   * generator then falls back to the gateway-clamped default set (ADR-0026).
+   */
+  reasoning?: { supported_efforts: string[] | null } | null
 }
 
 export type OpenRouterSnapshot = {
@@ -72,6 +83,7 @@ type OpenRouterLiveModel = {
   pricing?: { prompt?: string; completion?: string }
   supported_parameters?: string[]
   architecture?: { input_modalities?: string[] }
+  reasoning?: { supported_efforts?: string[] | null } | null
 }
 
 /**
@@ -171,10 +183,45 @@ export function buildSnapshot(
           ...(live.architecture?.input_modalities ?? []),
         ].sort(),
       },
+      reasoning:
+        live.reasoning == null
+          ? null
+          : {
+              supported_efforts:
+                live.reasoning.supported_efforts == null
+                  ? null
+                  : [...live.reasoning.supported_efforts].sort(),
+            },
     }))
     .sort((a, b) => a.id.localeCompare(b.id))
 
   return { endpoint: MODELS_ENDPOINT, retrievedAt, models }
+}
+
+/**
+ * Effort levels for a reasoning-supported wrapped route (ADR-0026). The
+ * snapshot's `supported_efforts` allowlist wins; snapshots predating the
+ * field (and models with a null allowlist) fall back to the gateway set —
+ * OpenRouter accepts every effort value and clamps to the nearest supported
+ * level, so a too-wide menu degrades to a clamp, never an error. "none" is
+ * offered only when the allowlist names it explicitly.
+ */
+const OPENROUTER_GATEWAY_EFFORT_FALLBACK: readonly ModelReasoningEffort[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]
+
+export function effortLevelsForSnapshotModel(
+  snapshotModel: OpenRouterSnapshotModel
+): readonly ModelReasoningEffort[] {
+  const supported = snapshotModel.reasoning?.supported_efforts
+  if (supported == null) return OPENROUTER_GATEWAY_EFFORT_FALLBACK
+  const allowed = new Set(supported.filter(isModelReasoningEffort))
+  return REASONING_EFFORT_LEVELS.filter((level) => allowed.has(level))
 }
 
 /** Join one allowlist entry with its snapshot record into a ModelConfig. */
@@ -279,6 +326,15 @@ export function buildModelConfig(
     audio: snapshotModel.architecture.input_modalities.includes("audio"),
     reasoningText: reasoningSupported,
     ...(reasoningSupported ? { reasoning: { effort: "medium" as const } } : {}),
+    // Per-turn effort (ADR-0026): the menu the route offers, and the default
+    // matching the construction-time `reasoning: { effort: "medium" }` above.
+    ...(reasoningSupported &&
+    effortLevelsForSnapshotModel(snapshotModel).length > 0
+      ? {
+          effortLevels: effortLevelsForSnapshotModel(snapshotModel),
+          defaultEffort: "medium" as const,
+        }
+      : {}),
     // OpenRouter's server-side search plugin works with every routed model.
     searchMode: "optional",
     openSource: entry.openSource,

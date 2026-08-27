@@ -102,8 +102,29 @@ export type ModelIdKind = "stable" | "snapshot" | "alias" | "wrapped"
 /** How a model route exposes web search to the product. */
 export type SearchMode = "optional" | "always-on" | "unsupported"
 
-export type ModelReasoningEffort =
-  "minimal" | "low" | "medium" | "high" | "xhigh"
+/**
+ * Canonical reasoning-effort scale (ADR-0026), ordered least → most effort.
+ * The app-wide superset: each route declares the subset its provider accepts
+ * via `effortLevels`; provider mapping never invents levels. "Default" (no
+ * selection) is `undefined`, never a sentinel member.
+ */
+export const REASONING_EFFORT_LEVELS = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const
+
+export type ModelReasoningEffort = (typeof REASONING_EFFORT_LEVELS)[number]
+
+export function isModelReasoningEffort(
+  value: unknown
+): value is ModelReasoningEffort {
+  return (REASONING_EFFORT_LEVELS as readonly unknown[]).includes(value)
+}
 
 /**
  * Construction-time reasoning declaration for models whose provider takes
@@ -200,6 +221,22 @@ type ModelConfig = {
    * is the request CONFIGURATION that turns reasoning output on.
    */
   reasoning?: ModelReasoningSettings
+
+  /**
+   * User-selectable reasoning-effort levels this route's provider accepts for
+   * this model (ADR-0026), in `REASONING_EFFORT_LEVELS` order. Absent → the
+   * route has no per-turn effort knob and the effort control never renders
+   * for it. Vocabulary only — the effort→wire mapping stays in
+   * lib/openproviders (Request shaping / Provider strategy).
+   */
+  effortLevels?: readonly ModelReasoningEffort[]
+
+  /**
+   * The provider's documented default effort, presentation-only: it marks the
+   * "Default" row in the effort menu and is never sent on the wire (Default
+   * always means "send nothing").
+   */
+  defaultEffort?: ModelReasoningEffort
 
   speed?: "Fast" | "Medium" | "Slow"
   intelligence?: "Low" | "Medium" | "High"

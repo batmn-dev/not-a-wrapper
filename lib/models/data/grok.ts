@@ -25,6 +25,11 @@ const grokModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    // reasoning_effort per the xAI API reference — grok-4.3 is the only
+    // catalogued Grok that accepts it ("none" disables reasoning); the other
+    // Grok 4 models reason unconditionally and reject the parameter.
+    effortLevels: ["none", "low", "medium", "high"],
+    defaultEffort: "low",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",

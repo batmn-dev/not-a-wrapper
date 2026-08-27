@@ -28,6 +28,10 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    // thinking_level per the Gemini thinking docs (Gemini 3.x takes levels;
+    // 2.5 models keep numeric budgets and stay off the effort control).
+    effortLevels: ["low", "medium", "high"],
+    defaultEffort: "high",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -61,6 +65,8 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    effortLevels: ["minimal", "low", "medium", "high"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -94,6 +100,8 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    effortLevels: ["minimal", "low", "medium", "high"],
+    defaultEffort: "minimal",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
