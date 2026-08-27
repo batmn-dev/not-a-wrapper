@@ -28,7 +28,12 @@ import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useModel as useModelStore } from "@/lib/model-store/provider"
 import { useSessionModel } from "@/lib/model-store/use-session-model"
 import { getLogicalModelInfo } from "@/lib/models"
-import type { SearchMode } from "@/lib/models/types"
+import type { ModelReasoningEffort, SearchMode } from "@/lib/models/types"
+import {
+  readStoredEffortForModel,
+  subscribeToStoredEffort,
+  writeStoredEffortForModel,
+} from "@/lib/reasoning-effort"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import { useUser } from "@/lib/user-store/provider"
@@ -39,6 +44,7 @@ import {
   useInsertionEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react"
 
@@ -46,6 +52,9 @@ export type TurnSnapshot = {
   selectedModel: string
   systemPrompt: string
   enableSearch: boolean
+  /** Per-turn reasoning effort (ADR-0026); undefined = Default. Already
+   * clamped to the selected model's available levels. */
+  reasoningEffort?: ModelReasoningEffort
   isAuthenticated: boolean
   /** Model preferences, model catalog, and user preferences are ready —
    * auto-submit must wait for this. */
@@ -58,6 +67,14 @@ export type TurnContextValue = {
   enableSearch: boolean
   setEnableSearch: (enabled: boolean) => void
   searchMode: SearchMode
+  /** The selected model's effort menu — the logical union across routes.
+   * Empty for models with no per-turn effort knob (control unmounts). */
+  effortLevels: readonly ModelReasoningEffort[]
+  reasoningEffort: ModelReasoningEffort | undefined
+  setReasoningEffort: (effort: ModelReasoningEffort | undefined) => void
+  /** ChatInner reports the last assistant message's applied effort here so a
+   * reopened conversation restores what actually ran (ADR-0026). */
+  reportLastTurnEffort: (effort: ModelReasoningEffort | undefined) => void
   isAuthenticated: boolean
   systemPrompt: string
   isHydrated: boolean
@@ -67,6 +84,45 @@ export type TurnContextValue = {
 }
 
 const TurnContext = createContext<TurnContextValue | null>(null)
+
+/** Stable empty menu so effortless models don't churn context identity. */
+const NO_EFFORT_LEVELS: readonly ModelReasoningEffort[] = []
+
+type EffortOverride = ModelReasoningEffort | "default" | undefined
+
+type ConversationEffortState = {
+  effortOverride: EffortOverride
+  lastTurnEffort: ModelReasoningEffort | undefined
+}
+
+type ConversationEffortStore = {
+  activeChatId: string | null
+  byChatId: ReadonlyMap<string | null, ConversationEffortState>
+}
+
+const EMPTY_CONVERSATION_EFFORT: ConversationEffortState = {
+  effortOverride: undefined,
+  lastTurnEffort: undefined,
+}
+
+function updateConversationEffort(
+  store: ConversationEffortStore,
+  chatId: string | null,
+  update: Partial<ConversationEffortState>
+): ConversationEffortStore {
+  const previous = store.byChatId.get(chatId) ?? EMPTY_CONVERSATION_EFFORT
+  const next = { ...previous, ...update }
+  if (
+    next.effortOverride === previous.effortOverride &&
+    next.lastTurnEffort === previous.lastTurnEffort
+  ) {
+    return store
+  }
+
+  const byChatId = new Map(store.byChatId)
+  byChatId.set(chatId, next)
+  return { ...store, byChatId }
+}
 
 function createSnapshotStore(initial: TurnSnapshot) {
   let current = initial
@@ -82,11 +138,13 @@ export function TurnContextProvider({
   chatId,
   currentChat,
   isChatLoading = false,
+  preserveEffortOnChatIdChange = false,
   children,
 }: {
   chatId: string | null
   currentChat: Chats | null
   isChatLoading?: boolean
+  preserveEffortOnChatIdChange?: boolean
   children: ReactNode
 }) {
   const { user } = useUser()
@@ -109,8 +167,83 @@ export function TurnContextProvider({
   // An authenticated preference is unknown until its Convex read settles.
   // Keep capability UI inactive during that window instead of briefly
   // projecting the product default as if the user selected Web search.
-  const searchMode =
-    getLogicalModelInfo(selectedModel)?.searchMode ?? "unsupported"
+  const modelInfo = getLogicalModelInfo(selectedModel)
+  const searchMode = modelInfo?.searchMode ?? "unsupported"
+
+  // Per-turn reasoning effort (ADR-0026). The raw selection persists across
+  // model switches; the EFFECTIVE value clamps to the selected model's level
+  // menu, so switching to a model without the level snaps to Default (and
+  // back, if the user returns) rather than sending an unsupported value.
+  const effortLevels = modelInfo?.effortLevels ?? NO_EFFORT_LEVELS
+  // Resolution order (ADR-0026, first hit wins): the user's in-conversation
+  // selection ("default" = an explicit Default that beats the fallbacks) →
+  // the last assistant turn's applied effort (reported by ChatInner, so a
+  // reopened chat restores what actually ran) → the per-model device memory
+  // → Default. The effective value then clamps to the model's level menu, so
+  // switching models keeps a supported level and snaps to Default otherwise.
+  const [conversationEfforts, setConversationEfforts] =
+    useState<ConversationEffortStore>(() => ({
+      activeChatId: chatId,
+      byChatId: new Map(),
+    }))
+
+  // ChatGPT owns effort on its conversation object. Keep the same boundary:
+  // real chat switches select separate state, while null → id moves the new
+  // conversation's state across its first-turn route handoff.
+  if (conversationEfforts.activeChatId !== chatId) {
+    const byChatId = new Map(conversationEfforts.byChatId)
+    if (conversationEfforts.activeChatId === null && chatId !== null) {
+      const newConversationEffort = byChatId.get(null)
+      byChatId.delete(null)
+      if (preserveEffortOnChatIdChange && newConversationEffort) {
+        byChatId.set(chatId, newConversationEffort)
+      }
+    }
+    setConversationEfforts({ activeChatId: chatId, byChatId })
+  }
+
+  const { effortOverride, lastTurnEffort } =
+    conversationEfforts.byChatId.get(chatId) ?? EMPTY_CONVERSATION_EFFORT
+  const reportLastTurnEffort = useCallback(
+    (effort: ModelReasoningEffort | undefined) => {
+      setConversationEfforts((current) =>
+        updateConversationEffort(current, chatId, {
+          lastTurnEffort: effort,
+        })
+      )
+    },
+    [chatId, setConversationEfforts]
+  )
+  // Device memory read synchronously during render: a model switch sees the
+  // new model's stored level in the SAME render, so a snapshot taken between
+  // switch and paint can never carry the previous model's value. The server
+  // snapshot is undefined (hydration-safe — the stored value appears on the
+  // post-hydration re-read); the 'storage' subscription folds in cross-tab
+  // writes, and same-tab writes re-render via the override state.
+  const storedEffort = useSyncExternalStore(
+    subscribeToStoredEffort,
+    () => readStoredEffortForModel(selectedModel),
+    () => undefined
+  )
+  const effortCandidate =
+    effortOverride === "default"
+      ? undefined
+      : (effortOverride ?? lastTurnEffort ?? storedEffort)
+  const reasoningEffort =
+    effortCandidate !== undefined && effortLevels.includes(effortCandidate)
+      ? effortCandidate
+      : undefined
+  const setReasoningEffort = useCallback(
+    (effort: ModelReasoningEffort | undefined) => {
+      setConversationEfforts((current) =>
+        updateConversationEffort(current, chatId, {
+          effortOverride: effort ?? "default",
+        })
+      )
+      writeStoredEffortForModel(selectedModel, effort)
+    },
+    [chatId, selectedModel, setConversationEfforts]
+  )
   const prefersSearch =
     !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)
   const enableSearch =
@@ -139,6 +272,7 @@ export function TurnContextProvider({
     selectedModel,
     systemPrompt,
     enableSearch,
+    reasoningEffort,
     isAuthenticated,
     isHydrated,
   }
@@ -160,6 +294,10 @@ export function TurnContextProvider({
       enableSearch,
       setEnableSearch,
       searchMode,
+      effortLevels,
+      reasoningEffort,
+      setReasoningEffort,
+      reportLastTurnEffort,
       isAuthenticated,
       systemPrompt,
       isHydrated,
@@ -171,6 +309,10 @@ export function TurnContextProvider({
       enableSearch,
       setEnableSearch,
       searchMode,
+      effortLevels,
+      reasoningEffort,
+      setReasoningEffort,
+      reportLastTurnEffort,
       isAuthenticated,
       systemPrompt,
       isHydrated,

@@ -102,6 +102,10 @@ vi.mock("@/app/components/chat/turn-context", () => ({
     enableSearch: composerMocks.enableSearch,
     searchMode: composerMocks.searchMode,
     setEnableSearch: composerMocks.setEnableSearch,
+    effortLevels: [],
+    reasoningEffort: undefined,
+    setReasoningEffort: vi.fn(),
+    reportLastTurnEffort: vi.fn(),
     isAuthenticated: true,
     systemPrompt: "system",
     isHydrated: true,
@@ -293,10 +297,6 @@ vi.mock("@/components/ui/prompt-input", () => ({
       />
     )
   }),
-}))
-
-vi.mock("../suggestions/prompt-system", () => ({
-  PromptSystem: () => null,
 }))
 
 vi.mock("./button-plus-menu", () => ({

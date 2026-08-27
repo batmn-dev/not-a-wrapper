@@ -26,6 +26,8 @@
  * promotes the persisted reasoning/work clocks.
  */
 
+import type { ModelReasoningEffort } from "@/lib/models/types"
+import { isModelReasoningEffort } from "@/lib/models/types"
 import {
   getMessageBranchInfo,
   isNavigableBranch,
@@ -149,6 +151,20 @@ export function getWorkDurationMs(metadata: unknown): number | undefined {
   const value = metadata.workDurationMs
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
+    : undefined
+}
+
+/**
+ * Read the applied per-turn reasoning effort (ADR-0026) off a message's
+ * metadata. Stamped by the chat turn runtime at stream start; absent means no
+ * canonical effort level described the execution.
+ */
+export function getReasoningEffort(
+  metadata: unknown
+): ModelReasoningEffort | undefined {
+  if (!isRecord(metadata)) return undefined
+  return isModelReasoningEffort(metadata.reasoningEffort)
+    ? metadata.reasoningEffort
     : undefined
 }
 
@@ -306,13 +322,15 @@ export function adoptServerOwned(
     if (!serverHasKey || !localRecord || !serverRecord) return false
     return !metadataValueEquals(localRecord[key], serverRecord[key])
   })
-  // Terminal stream durations are persisted inside the validated metadata
-  // blob rather than as top-level message fields. Adopt them when the durable
-  // snapshot has a value, but never clear a fresher live finish value merely
-  // because an intermediate server snapshot has not landed it yet.
+  // Blob-owned keys: persisted inside the validated metadata blob rather than
+  // as top-level message fields (terminal stream durations plus the applied
+  // per-turn effort, ADR-0026). Adopt them when the durable snapshot has a
+  // value, but never clear a fresher live value merely because an
+  // intermediate server snapshot has not landed it yet.
   const terminalDurationKeys = [
     "reasoningDurationMs",
     "workDurationMs",
+    "reasoningEffort",
   ] as const
   const terminalDurationChanged = terminalDurationKeys.some(
     (key) =>

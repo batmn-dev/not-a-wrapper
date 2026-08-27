@@ -11,11 +11,13 @@ import type {
   ModelLifecycle,
   ModelPriority,
   ModelPriorityReason,
+  ModelReasoningEffort,
   ModelRecommendationLaneId,
   ModelRecommendationPolicy,
   ModelReleaseStage,
   SearchMode,
 } from "./types"
+import { REASONING_EFFORT_LEVELS } from "./types"
 
 const MODEL_SUCCESSOR_GRACE_DAYS = 30
 const MODEL_RETIREMENT_PRIORITY_DAYS = 90
@@ -109,6 +111,44 @@ function aggregateSearchMode(routes: readonly ModelRoute[]): SearchMode {
   if (modes.includes("optional")) return "optional"
   if (modes.includes("always-on")) return "always-on"
   return "unsupported"
+}
+
+/**
+ * Ordered union of the effort levels any route can serve (ADR-0026). The
+ * client renders this union as the effort menu; the route resolver prefers
+ * routes supporting the requested level, and Request shaping clamps to the
+ * resolved route's own list.
+ */
+function aggregateEffortLevels(
+  routes: readonly ModelRoute[]
+): ModelReasoningEffort[] {
+  const available = new Set<ModelReasoningEffort>()
+  for (const route of routes) {
+    for (const level of route.config.effortLevels ?? []) available.add(level)
+  }
+  return REASONING_EFFORT_LEVELS.filter((level) => available.has(level))
+}
+
+/**
+ * The default level the effort menu shows as implicitly selected (ADR-0026):
+ * the first effort-capable route's default in route-precedence order. The
+ * canonical route alone is not enough — a model whose direct route has no
+ * effort knob (e.g. Gemini 2.5 budgets) still gets a menu from its wrapped
+ * route, and a menu without a default would leave no path back to the
+ * no-override state.
+ */
+function aggregateDefaultEffort(
+  routes: readonly ModelRoute[]
+): ModelReasoningEffort | undefined {
+  for (const route of routes) {
+    if (
+      route.config.effortLevels?.length &&
+      route.config.defaultEffort !== undefined
+    ) {
+      return route.config.defaultEffort
+    }
+  }
+  return undefined
 }
 
 export function toUpstreamModelId(routeId: string): string {
@@ -713,6 +753,18 @@ export function resolveLogicalModelSearchMode(
   return model ? aggregateSearchMode(model.routes) : undefined
 }
 
+/**
+ * Resolve any current or historical selection to its logical effort-level
+ * union (ADR-0026). Empty array → no route offers a per-turn effort knob.
+ */
+export function resolveLogicalModelEffortLevels(
+  modelId: string
+): ModelReasoningEffort[] | undefined {
+  const selection = resolveModelSelection(modelId)
+  const model = getLogicalModel(selection.modelId)
+  return model ? aggregateEffortLevels(model.routes) : undefined
+}
+
 /** Normalize a list of selections to unique logical ids, preserving order. */
 export function resolveModelSelections(modelIds: readonly string[]): string[] {
   const normalized: string[] = []
@@ -746,6 +798,7 @@ export function toLogicalModelView(
 ): LogicalModelView {
   const canonical = model.routes[0]!.config
   const priority = classifyLogicalModel(model, LOGICAL_MODELS, asOf)
+  const effortLevels = aggregateEffortLevels(model.routes)
   return {
     ...canonical,
     ...priority,
@@ -755,6 +808,12 @@ export function toLogicalModelView(
     reasoningText: model.routes.some(
       (route) => route.config.reasoningText === true
     ),
+    ...(effortLevels.length === 0
+      ? {}
+      : {
+          effortLevels,
+          defaultEffort: aggregateDefaultEffort(model.routes),
+        }),
     searchMode: aggregateSearchMode(model.routes),
     tools: model.routes.some((route) => Boolean(route.config.tools))
       ? true

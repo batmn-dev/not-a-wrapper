@@ -102,8 +102,63 @@ export type ModelIdKind = "stable" | "snapshot" | "alias" | "wrapped"
 /** How a model route exposes web search to the product. */
 export type SearchMode = "optional" | "always-on" | "unsupported"
 
-export type ModelReasoningEffort =
-  "minimal" | "low" | "medium" | "high" | "xhigh"
+/**
+ * Canonical reasoning-effort scale (ADR-0026), ordered least → most effort.
+ * The app-wide superset: each route declares the subset its provider accepts
+ * via `effortLevels`; provider mapping never invents levels. "Default" (no
+ * selection) is `undefined`, never a sentinel member.
+ */
+export const REASONING_EFFORT_LEVELS = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const
+
+export type ModelReasoningEffort = (typeof REASONING_EFFORT_LEVELS)[number]
+
+export function isModelReasoningEffort(
+  value: unknown
+): value is ModelReasoningEffort {
+  return (REASONING_EFFORT_LEVELS as readonly unknown[]).includes(value)
+}
+
+/**
+ * Clamp a level onto an offered subset: the requested level when offered,
+ * else the nearest offered level in canonical order (ties prefer the cheaper
+ * side). Pure vocabulary math — shared by Request shaping's effort
+ * resolution and the OpenRouter catalog generator's default derivation.
+ */
+export function clampToNearestEffortLevel(
+  levels: readonly ModelReasoningEffort[],
+  requested: ModelReasoningEffort
+): ModelReasoningEffort | undefined {
+  if (levels.length === 0) return undefined
+  if (levels.includes(requested)) return requested
+
+  const requestedIndex = REASONING_EFFORT_LEVELS.indexOf(requested)
+  let nearest: ModelReasoningEffort | undefined
+  let nearestDistance = Number.POSITIVE_INFINITY
+  for (const level of levels) {
+    const distance = Math.abs(
+      REASONING_EFFORT_LEVELS.indexOf(level) - requestedIndex
+    )
+    if (
+      distance < nearestDistance ||
+      (distance === nearestDistance &&
+        nearest !== undefined &&
+        REASONING_EFFORT_LEVELS.indexOf(level) <
+          REASONING_EFFORT_LEVELS.indexOf(nearest))
+    ) {
+      nearest = level
+      nearestDistance = distance
+    }
+  }
+  return nearest
+}
 
 /**
  * Construction-time reasoning declaration for models whose provider takes
@@ -200,6 +255,22 @@ type ModelConfig = {
    * is the request CONFIGURATION that turns reasoning output on.
    */
   reasoning?: ModelReasoningSettings
+
+  /**
+   * User-selectable reasoning-effort levels this route's provider accepts for
+   * this model (ADR-0026), in `REASONING_EFFORT_LEVELS` order. Absent → the
+   * route has no per-turn effort knob and the effort control never renders
+   * for it. Vocabulary only — the effort→wire mapping stays in
+   * lib/openproviders (Request shaping / Provider strategy).
+   */
+  effortLevels?: readonly ModelReasoningEffort[]
+
+  /**
+   * The provider's documented default effort. The menu shows it as implicitly
+   * selected with no user override, and the runtime records it as the concrete
+   * applied receipt. It is never treated as a per-turn wire override.
+   */
+  defaultEffort?: ModelReasoningEffort
 
   speed?: "Fast" | "Medium" | "Slow"
   intelligence?: "Low" | "Medium" | "High"

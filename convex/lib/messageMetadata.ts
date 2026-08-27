@@ -1,4 +1,5 @@
 import { v, type Infer } from "convex/values"
+import { REASONING_EFFORTS, vReasoningEffort } from "./reasoningEffort"
 
 /**
  * The named shape of a persisted assistant message's `metadata` blob.
@@ -45,6 +46,8 @@ export const vToolInvocationStreamMetadata = v.object({
   reasoningDurationMs: v.optional(v.number()),
   // Optional while production may contain rows written before work timing.
   workDurationMs: v.optional(v.number()),
+  // Applied per-turn reasoning effort (ADR-0026); shared vocabulary mirror.
+  reasoningEffort: v.optional(vReasoningEffort),
   toolMetadataByName: v.optional(
     v.record(v.string(), vToolInvocationDisplayMetadata)
   ),
@@ -151,6 +154,14 @@ export function projectPersistedMessageMetadata(
     result,
     "workDurationMs",
     optionalDurationMs(raw.workDurationMs)
+  )
+  setIfDefined(
+    result,
+    "reasoningEffort",
+    typeof raw.reasoningEffort === "string" &&
+      REASONING_EFFORTS.has(raw.reasoningEffort)
+      ? raw.reasoningEffort
+      : undefined
   )
   setIfDefined(
     result,

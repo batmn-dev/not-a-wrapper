@@ -62,8 +62,22 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
     keyboardCleanupRef.current?.()
     keyboardCleanupRef.current = null
     scrollRef.current = node
-    if (node)
-      keyboardCleanupRef.current = createKeyboardViewportController(node)
+    if (!node) return
+    const keyboardCleanup = createKeyboardViewportController(node)
+    // Reference `JAe` (conv.beauty.js:3873): the scroll root toggles
+    // `data-scroll-from-top` (`scrollTop > 0`) — one initial rAF write plus a
+    // passive scroll listener — and the mobile sticky header's under-scroll
+    // shadow keys off it via `group-data-scroll-from-top/scroll-root`.
+    const updateScrollFromTop = () => {
+      node.toggleAttribute("data-scroll-from-top", node.scrollTop > 0)
+    }
+    const initialFrame = requestAnimationFrame(updateScrollFromTop)
+    node.addEventListener("scroll", updateScrollFromTop, { passive: true })
+    keyboardCleanupRef.current = () => {
+      keyboardCleanup?.()
+      cancelAnimationFrame(initialFrame)
+      node.removeEventListener("scroll", updateScrollFromTop)
+    }
   }, [])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {

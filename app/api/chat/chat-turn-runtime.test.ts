@@ -1,5 +1,9 @@
 import { api } from "@/convex/_generated/api"
 import { getAllModels } from "@/lib/models"
+import {
+  resolveReasoningEffort,
+  shapeRequest,
+} from "@/lib/openproviders/request-shaping"
 import { prepareToolRuntime } from "@/lib/tools/runtime"
 import * as Sentry from "@sentry/nextjs"
 import {
@@ -49,6 +53,7 @@ vi.mock("@/lib/openproviders/create-language-model", () => ({
 
 vi.mock("@/lib/openproviders/request-shaping", () => ({
   shapeRequest: vi.fn(() => ({ providerOptions: {}, headers: {} })),
+  resolveReasoningEffort: vi.fn(() => ({})),
 }))
 
 vi.mock("@/lib/openproviders/env", () => ({ env: {} }))
@@ -377,6 +382,103 @@ describe("createChatTurnRuntime — prepare()", () => {
 
     expect(prepareToolRuntime).toHaveBeenCalledWith(
       expect.objectContaining({ providerToolKeyMode: "platform" })
+    )
+  })
+
+  it("keeps Claude's fixed-budget search request and receipts honest", async () => {
+    const actualRequestShaping = await vi.importActual<
+      typeof import("@/lib/openproviders/request-shaping")
+    >("@/lib/openproviders/request-shaping")
+    vi.mocked(resolveReasoningEffort).mockImplementationOnce(
+      actualRequestShaping.resolveReasoningEffort
+    )
+    vi.mocked(shapeRequest).mockImplementationOnce(
+      actualRequestShaping.shapeRequest
+    )
+    vi.mocked(getAllModels).mockResolvedValue([
+      {
+        id: "test-model",
+        provider: "Anthropic",
+        providerId: "anthropic",
+        tools: true,
+        reasoningText: true,
+        thinkingMode: "adaptive",
+        effortLevels: ["low", "medium", "high", "max"],
+        searchThinkingDowngrade: true,
+      },
+    ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+    const toolRuntime = makeToolRuntime({ hasTools: true })
+    toolRuntime.policySummary.searchInjected = true
+    vi.mocked(prepareToolRuntime).mockResolvedValue(
+      toolRuntime as unknown as Awaited<ReturnType<typeof prepareToolRuntime>>
+    )
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({ reasoningEffort: "high", enableSearch: true }),
+      deps: makeDeps(harness, fetchMutation),
+    })
+
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    expect(resolveReasoningEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ searchThinkingDowngrade: true }),
+      "high",
+      { platformFunded: false, searchToolsActive: true }
+    )
+    expect(harness.captured.streamOpts.providerOptions).toEqual({
+      anthropic: { thinking: { type: "enabled", budgetTokens: 10000 } },
+    })
+    const prepareArgs = findCall(
+      fetchMutation,
+      api.chatRuntime.prepareGeneration
+    )?.[1]
+    expect(prepareArgs).toEqual(
+      expect.objectContaining({ reasoningEffort: { requested: "high" } })
+    )
+    expect(prepareArgs).not.toHaveProperty("reasoningEffort.applied")
+    expect(
+      harness.captured.responseOpts.messageMetadata({ part: { type: "start" } })
+    ).not.toHaveProperty("reasoningEffort")
+  })
+
+  it("records the concrete default without sending a wire override", async () => {
+    vi.mocked(resolveReasoningEffort).mockReturnValueOnce({
+      appliedReasoningEffort: "medium",
+    })
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        reasoningEffort: "high",
+        credential: {
+          provider: "anthropic",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        route: {
+          modelId: "test-model",
+          routeId: "test-model",
+          providerId: "anthropic",
+          upstreamModelId: "test-model",
+          credentialSource: "platform",
+          routeReason: "platform",
+        },
+      }),
+      deps: makeDeps(makeStreamHarness(), fetchMutation),
+    })
+
+    await runtime.prepare()
+
+    expect(
+      findCall(fetchMutation, api.chatRuntime.prepareGeneration)?.[1]
+    ).toEqual(
+      expect.objectContaining({
+        reasoningEffort: { requested: "high", applied: "medium" },
+      })
+    )
+    expect(vi.mocked(shapeRequest).mock.calls.at(-1)?.[1]).not.toHaveProperty(
+      "wireReasoningEffort"
     )
   })
 

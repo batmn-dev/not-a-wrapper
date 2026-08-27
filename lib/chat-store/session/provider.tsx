@@ -12,6 +12,8 @@ import {
 type ChatSessionContextValue = {
   chatId: string | null
   isNewChatSurface: boolean
+  /** The first turn is adopting its newly created durable chat id. */
+  isChatIdHandoff: boolean
   navigateToChat: (chatId: string) => void
   selectedModelOverride: string | null
   setSelectedModelOverride: (modelId: string) => void
@@ -21,6 +23,7 @@ type ChatSessionContextValue = {
 const ChatSessionContext = createContext<ChatSessionContextValue>({
   chatId: null,
   isNewChatSurface: false,
+  isChatIdHandoff: false,
   navigateToChat: () => undefined,
   selectedModelOverride: null,
   setSelectedModelOverride: () => undefined,
@@ -65,6 +68,7 @@ export function ChatSessionProvider({
 
   const chatId = pathnameChatId ?? handoffChatId
   const isNewChatSurface = pathname === "/" && chatId === null
+  const isChatIdHandoff = isHandoffPending
 
   // First-turn navigation deliberately preserves the mounted chat surface.
   // Keep that shallow handoff beside the pathname parser so every consumer
@@ -121,6 +125,7 @@ export function ChatSessionProvider({
     () => ({
       chatId,
       isNewChatSurface,
+      isChatIdHandoff,
       navigateToChat,
       selectedModelOverride,
       setSelectedModelOverride,
@@ -129,6 +134,7 @@ export function ChatSessionProvider({
     [
       chatId,
       isNewChatSurface,
+      isChatIdHandoff,
       navigateToChat,
       selectedModelOverride,
       setSelectedModelOverride,

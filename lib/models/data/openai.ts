@@ -26,6 +26,11 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    // reasoning_effort per the GPT-5.6 model pages (no "minimal" on 5.1+).
+    // "max" live-verified 2026-08-26 against /v1/responses — the API our
+    // @ai-sdk/openai provider constructs (chat.completions rejects "max").
+    effortLevels: ["none", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -61,6 +66,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["none", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -96,6 +103,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["none", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -109,6 +118,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.5",
     name: "GPT-5.5",
+    shortName: "5.5",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -130,6 +140,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["none", "low", "medium", "high", "xhigh"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -143,6 +155,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4-mini",
     name: "GPT-5.4 Mini",
+    shortName: "5.4 Mini",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -163,6 +176,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["none", "low", "medium", "high", "xhigh"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -176,6 +191,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4-nano",
     name: "GPT-5.4 Nano",
+    shortName: "5.4 Nano",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -196,6 +212,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["none", "low", "medium", "high", "xhigh"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -209,6 +227,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4",
     name: "GPT-5.4",
+    shortName: "5.4",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -229,6 +248,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["none", "low", "medium", "high", "xhigh"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -242,6 +263,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4-pro",
     name: "GPT-5.4 Pro",
+    shortName: "5.4 Pro",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -276,6 +298,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.1",
     name: "GPT-5.1",
+    shortName: "5.1",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -309,6 +332,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5",
     name: "GPT-5",
+    shortName: "5",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -329,6 +353,9 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    // GPT-5 era: "minimal" exists, "none" does not (swapped from 5.1 on).
+    effortLevels: ["minimal", "low", "medium", "high"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -342,6 +369,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5-mini",
     name: "GPT-5 Mini",
+    shortName: "5 Mini",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -362,6 +390,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["minimal", "low", "medium", "high"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -375,6 +405,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-4.1",
     name: "GPT-4.1",
+    shortName: "4.1",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -404,6 +435,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
+    shortName: "4o",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "hidden",
@@ -455,6 +487,8 @@ const openaiModels: ModelConfig[] = [
     tools: true,
     audio: false,
     reasoningText: true,
+    effortLevels: ["low", "medium", "high"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",

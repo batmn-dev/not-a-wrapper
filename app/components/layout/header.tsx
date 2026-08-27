@@ -13,11 +13,7 @@ import { DialogPublish } from "./dialog-publish"
 import { HeaderSidebarTrigger } from "./header-sidebar-trigger"
 
 export type HeaderFixedMode =
-  | "always"
-  | "less-than-md"
-  | "less-than-xl"
-  | "less-than-xxl"
-  | "never"
+  "always" | "less-than-md" | "less-than-xl" | "less-than-xxl" | "never"
 
 export function Header({
   hasSidebar,
@@ -35,7 +31,7 @@ export function Header({
   return (
     <header
       id="page-header"
-      className="h-header-height data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent data-[fixed-header=less-than-xl]:@w-xl/main:shadow-none pointer-events-none sticky top-0 z-20 flex shrink-0 items-center justify-between bg-transparent p-2 shadow-none transition-none select-none [view-transition-name:var(--vt-page-header)] *:pointer-events-auto pointer-coarse:p-2.5"
+      className="h-header-height data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent data-[fixed-header=less-than-xl]:@w-xl/main:shadow-none max-md:bg-background pointer-events-none sticky top-0 z-20 flex shrink-0 items-center justify-between bg-transparent p-2 shadow-none transition-none select-none [view-transition-name:var(--vt-page-header)] *:pointer-events-auto max-md:[box-shadow:var(--sharp-edge-top-shadow-placeholder)] max-md:group-data-scroll-from-top/scroll-root:[box-shadow:var(--sharp-edge-top-shadow)] pointer-coarse:p-2.5"
       data-fixed-header={fixedHeader}
     >
       <div className="flex shrink-0 items-center gap-2">

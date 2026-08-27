@@ -1078,12 +1078,7 @@ export default function ThinkingStatesTestPage() {
                     <code>motion.div</code> with <code>AnimatePresence</code>{" "}
                     for enter/exit transitions and{" "}
                     <code>layout=&quot;position&quot;</code> for smooth
-                    repositioning when the first message is sent. Below this
-                    heading, the
-                    <code>Suggestions</code> component renders a grid of
-                    category pills (from <code>lib/config.ts SUGGESTIONS</code>)
-                    when
-                    <code>preferences.promptSuggestions</code> is enabled.
+                    repositioning when the first message is sent.
                   </StateAnnotation>
                 </AssistantShell>
 
@@ -1136,7 +1131,6 @@ export default function ThinkingStatesTestPage() {
                 status={threadLifecycle.status}
                 stop={noop}
                 stoppable={threadLifecycle.stoppable}
-                hasSuggestions={false}
               />
             </TurnContextProvider>
           </ThreadBottomContainer>

@@ -26,6 +26,7 @@ let testDom: JSDOM | null = null
 let changeDropdownOpen: ((open: boolean) => void) | undefined
 let completeDropdownOpenChange: ((open: boolean) => void) | undefined
 let dropdownAnchor: React.RefObject<Element | null> | undefined
+let dropdownModal: boolean | undefined
 
 function installDomIfNeeded() {
   if (typeof document !== "undefined") return
@@ -56,6 +57,7 @@ const modelSelectorMocks = {
     {
       id: "gpt-5.4",
       name: "GPT-5.4",
+      shortName: "5.4",
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
@@ -84,6 +86,7 @@ const modelSelectorMocks = {
     {
       id: "gpt-4.1",
       name: "GPT-4.1",
+      shortName: "4.1",
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
@@ -97,6 +100,7 @@ const modelSelectorMocks = {
     {
       id: "gpt-5.5",
       name: "GPT-5.5",
+      shortName: "5.5",
       provider: "OpenAI",
       providerId: "openai",
       catalogStatus: "visible",
@@ -110,6 +114,7 @@ const modelSelectorMocks = {
     {
       id: "openrouter:moonshotai/kimi-k2.6",
       name: "Kimi K2.6",
+      shortName: "K2.6",
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
@@ -128,6 +133,7 @@ const modelSelectorMocks = {
     {
       id: "openrouter:z-ai/glm-5.2",
       name: "GLM-5.2",
+      shortName: "5.2",
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
@@ -146,6 +152,7 @@ const modelSelectorMocks = {
     {
       id: "openrouter:moonshotai/kimi-k3",
       name: "Kimi K3",
+      shortName: "K3",
       provider: "OpenRouter",
       providerId: "openrouter",
       catalogStatus: "visible",
@@ -264,13 +271,16 @@ vi.mock("./pro-dialog", () => ({
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({
     children,
+    modal,
     onOpenChange,
     onOpenChangeComplete,
   }: {
     children: React.ReactNode
+    modal?: boolean
     onOpenChange?: (open: boolean) => void
     onOpenChangeComplete?: (open: boolean) => void
   }) => {
+    dropdownModal = modal
     changeDropdownOpen = onOpenChange
     completeDropdownOpenChange = onOpenChangeComplete
     return <div>{children}</div>
@@ -312,6 +322,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     "data-testid": dataTestId,
     "data-model-selector-row": dataModelSelectorRow,
     "aria-label": ariaLabel,
+    onPointerDown,
     onClick,
   }: {
     children: React.ReactNode
@@ -321,7 +332,8 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     "data-testid"?: string
     "data-model-selector-row"?: string
     "aria-label"?: string
-    onClick?: () => void
+    onPointerDown?: React.PointerEventHandler<HTMLDivElement>
+    onClick?: React.MouseEventHandler<HTMLDivElement>
   }) => (
     <div
       data-testid={dataTestId ?? "model-option"}
@@ -332,7 +344,11 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
       role="menuitem"
       tabIndex={0}
       aria-label={ariaLabel}
-      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onClick={(event) => {
+        Object.assign(event, { preventBaseUIHandler: () => undefined })
+        onClick?.(event)
+      }}
     >
       {children}
     </div>
@@ -420,6 +436,7 @@ describe("ModelSelector", () => {
     changeDropdownOpen = undefined
     completeDropdownOpenChange = undefined
     dropdownAnchor = undefined
+    dropdownModal = undefined
   })
 
   function renderSelector({
@@ -716,6 +733,62 @@ describe("ModelSelector", () => {
 
     expect(currentNamesAfter).toEqual(currentNamesBefore)
     expect(rowsAfter[disclosureIndex]?.textContent).toContain("Kimi K2.6")
+  })
+
+  it("preserves scroll before legacy rows can paint", () => {
+    renderSelector({ isUserAuthenticated: true })
+    const scrollSurface = document.body.querySelector<HTMLElement>(
+      "[data-scrollable-surface]"
+    )
+    const legacyDisclosure = getLegacyDisclosure("Anthropic") as HTMLElement
+    const searchInput = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
+
+    expect(scrollSurface).not.toBeNull()
+    expect(legacyDisclosure).not.toBeNull()
+    expect(searchInput).not.toBeNull()
+
+    scrollSurface!.scrollTop = 137
+    searchInput!.focus()
+    const pointerDown = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+    })
+
+    expect(legacyDisclosure.dispatchEvent(pointerDown)).toBe(false)
+    expect(document.activeElement).toBe(searchInput)
+
+    const frameCallbacks: FrameRequestCallback[] = []
+    const originalRequestAnimationFrame = window.requestAnimationFrame
+    window.requestAnimationFrame = vi.fn((callback) => {
+      frameCallbacks.push(callback)
+      return frameCallbacks.length
+    })
+    legacyDisclosure.focus()
+    const focusSearch = searchInput!.focus.bind(searchInput)
+    vi.spyOn(searchInput!, "focus").mockImplementation((options) => {
+      focusSearch(options)
+      scrollSurface!.scrollTop = 999
+    })
+
+    try {
+      act(() => {
+        legacyDisclosure.click()
+      })
+
+      expect(document.activeElement).toBe(searchInput)
+      expect(document.body.textContent).toContain("Claude Sonnet 4.5")
+      expect(frameCallbacks).toHaveLength(1)
+
+      act(() => {
+        frameCallbacks[0]?.(0)
+      })
+
+      expect(scrollSurface!.scrollTop).toBe(137)
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame
+    }
   })
 
   it("uses a lock icon instead of the locked badge for signed-out users", () => {
@@ -1197,6 +1270,76 @@ describe("ModelSelector", () => {
     expect(option.textContent).toBe("GPT-5 Mini")
   })
 
+  it.each([
+    ["openrouter:moonshotai/kimi-k3", "K3", "Kimi K3"],
+    ["openrouter:z-ai/glm-5.2", "5.2", "GLM-5.2"],
+  ])(
+    "uses the catalog short name only in the composer trigger for %s",
+    (modelId, shortName, fullName) => {
+      renderSelector({
+        isUserAuthenticated: true,
+        selectedModelId: modelId,
+        variant: "composer",
+      })
+
+      const trigger = document.body.querySelector<HTMLButtonElement>(
+        '[data-testid="model-trigger"]'
+      )
+      const option = getModelOption(fullName)
+
+      expect(trigger?.textContent).toBe(shortName)
+      expect(trigger?.getAttribute("aria-label")).toBe(
+        `Select model, current model ${fullName}`
+      )
+      expect(option.textContent).toBe(fullName)
+    }
+  )
+
+  it("omits the Gemini prefix beside its composer logo", () => {
+    const geminiModel: LogicalModelView = {
+      id: "openrouter:google/gemini-3.7-flash",
+      name: "Gemini 3.7 Flash",
+      shortName: "3.7 Flash",
+      provider: "OpenRouter",
+      providerId: "openrouter",
+      catalogStatus: "visible",
+      classification: "current",
+      idKind: "wrapped",
+      baseProviderId: "google",
+      icon: "gemini",
+      accessible: true,
+      routes: [
+        {
+          id: "openrouter:google/gemini-3.7-flash",
+          providerId: "openrouter",
+        },
+      ],
+    }
+    const models = modelSelectorMocks.models as LogicalModelView[]
+    models.push(geminiModel)
+
+    try {
+      renderSelector({
+        isUserAuthenticated: true,
+        selectedModelId: geminiModel.id,
+        variant: "composer",
+      })
+
+      const trigger = document.body.querySelector<HTMLButtonElement>(
+        '[data-testid="model-trigger"]'
+      )
+      const option = getModelOption("Gemini 3.7 Flash")
+
+      expect(trigger?.textContent).toBe("3.7 Flash")
+      expect(trigger?.getAttribute("aria-label")).toBe(
+        "Select model, current model Gemini 3.7 Flash"
+      )
+      expect(option.textContent).toBe("Gemini 3.7 Flash")
+    } finally {
+      models.pop()
+    }
+  })
+
   it("shows the selected model icon instead of a chevron in the composer", () => {
     renderSelector({
       isUserAuthenticated: false,
@@ -1258,6 +1401,7 @@ describe("ModelSelector", () => {
     )
     expect(dropdownAnchor?.current?.contains(pressSurface ?? null)).toBe(true)
     expect(dropdownAnchor?.current).not.toBe(trigger)
+    expect(dropdownModal).toBe(false)
   })
 
   it("runs the composer press on the visual surface until pointer release", () => {

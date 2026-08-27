@@ -13,6 +13,7 @@ import type {
   AssistantActivitySearchEntry,
   AssistantActivityToolEntry,
 } from "@/lib/chat-messages/assistant-activity"
+import { REASONING_EFFORT_LABELS } from "@/lib/reasoning-effort"
 import { parseSafeExternalUrl } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
 import Image from "next/image"
@@ -305,7 +306,14 @@ function ActivityEntryRow({
       isLast={isLast}
       index={index}
     >
-      <StepTitle>{entry.title}</StepTitle>
+      <StepTitle>
+        {entry.title}
+        {entry.kind === "completion" && entry.effort !== undefined ? (
+          <span className="text-muted-foreground ms-1.5 font-normal">
+            · {REASONING_EFFORT_LABELS[entry.effort]} effort
+          </span>
+        ) : null}
+      </StepTitle>
       {entry.detail ? (
         entry.kind === "reasoning" ? (
           <Markdown className="text-muted-foreground text-sm leading-5">

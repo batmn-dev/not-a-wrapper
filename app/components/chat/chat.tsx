@@ -17,8 +17,8 @@ import {
   usePublishActiveChatStatus,
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
+import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
@@ -68,7 +68,7 @@ export type ChatProjectContext = {
  * empty project chats.
  */
 export function Chat({ project }: { project?: ChatProjectContext }) {
-  const { chatId } = useChatSession()
+  const { chatId, isChatIdHandoff } = useChatSession()
   // Resolve the current chat even when it is outside the bounded sidebar window
   // (deep-links to old chats). In-window chats resolve synchronously; out-of-
   // window chats load via the chats.getById fallback (isChatLoading).
@@ -79,6 +79,7 @@ export function Chat({ project }: { project?: ChatProjectContext }) {
       chatId={chatId}
       currentChat={currentChat || null}
       isChatLoading={isChatLoading}
+      preserveEffortOnChatIdChange={isChatIdHandoff}
     >
       <ChatInner
         chatId={chatId}
@@ -115,11 +116,11 @@ function ChatInner({
     selectMessageBranch,
   } = useMessages()
   const { user } = useUser()
-  const { preferences } = useUserPreferences()
 
   // Turn inputs — reactive reads for rendering; the turn runners read the
   // same values at run time through the context's snapshot getter.
-  const { selectedModel, isAuthenticated, systemPrompt } = useTurnContext()
+  const { selectedModel, isAuthenticated, systemPrompt, reportLastTurnEffort } =
+    useTurnContext()
 
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
   // Edit and regeneration are server-owned Chat turns, available only on a
@@ -162,7 +163,6 @@ function ChatInner({
     lastFinishReason,
     scrollToMessageId,
     submit,
-    handleSuggestion,
     handleReload,
     submitEdit,
     handleToolApproval,
@@ -176,6 +176,16 @@ function ChatInner({
     bumpChat,
     setComposerText,
   })
+
+  // Conversation effort readback (ADR-0026): the last assistant message's
+  // applied effort restores the selector when a chat is reopened — messages
+  // are the conversation's effort memory; there is no per-chat server field.
+  useEffect(() => {
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant")
+    reportLastTurnEffort(getReasoningEffort(lastAssistant?.metadata))
+  }, [messages, reportLastTurnEffort])
 
   // Publish this (active) chat's live status to the sidebar so its row shows a
   // rotating ring while generating. Front-end seam #1 — cross-chat/background
@@ -281,6 +291,19 @@ function ChatInner({
     }
   }, [])
 
+  // The active turn's identity scopes announcement sources (the reference
+  // announces with `conversation-turn-${turn.id}-…` ids). Mirrors the
+  // assistant-turn row key: the turn is anchored on its user message.
+  const lastAnnouncerMessage = messages[messages.length - 1]
+  const previousAnnouncerMessage = messages[messages.length - 2]
+  const announcerTurnId =
+    lastAnnouncerMessage?.role === "user"
+      ? `assistant-turn:${lastAnnouncerMessage.id}`
+      : lastAnnouncerMessage?.role === "assistant" &&
+          previousAnnouncerMessage?.role === "user"
+        ? `assistant-turn:${previousAnnouncerMessage.id}`
+        : (lastAnnouncerMessage?.id ?? null)
+
   // Memoize the conversation props to prevent unnecessary rerenders
   const conversationProps = useMemo(
     () => ({
@@ -385,17 +408,10 @@ function ChatInner({
       ariaLabel={projectComposerLabel}
       bottomSpacing="none"
       onTurn={submit}
-      onSuggestion={handleSuggestion}
       isSubmitting={isSubmitting}
       status={effectiveStatus}
       stop={stop}
       stoppable={presentation.stoppable}
-      hasSuggestions={
-        preferences.promptSuggestions &&
-        !project &&
-        !chatId &&
-        messages.length === 0
-      }
       onLockedGuestModelSelect={() => setHasDialogAuth(true)}
     />
   )
@@ -424,6 +440,7 @@ function ChatInner({
           isSubmitting={isSubmitting}
           presentationState={presentation.state}
           completionAvailable={lastFinishReason !== undefined}
+          turnId={announcerTurnId}
         />
         <DialogAuth open={hasDialogAuth} setOpen={setHasDialogAuth} />
 
@@ -462,12 +479,12 @@ function ChatInner({
                 className="flex justify-center"
                 data-splash-headline-option="WHATS_ON_YOUR_MIND"
               >
-                <div className="hidden text-center sm:mb-[22px] sm:block [view-transition-name:var(--vt-splash-screen-headline)]">
+                <div className="hidden text-center [view-transition-name:var(--vt-splash-screen-headline)] sm:mb-[22px] sm:block">
                   <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>
                 </div>
-                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center sm:hidden [view-transition-name:var(--vt-splash-screen-headline)]">
+                <div className="flex h-full w-full shrink flex-col items-center justify-center px-4 text-center [view-transition-name:var(--vt-splash-screen-headline)] sm:hidden">
                   <h1 className="inline-flex min-h-[42px] items-baseline px-1 text-2xl leading-9 font-normal text-balance">
                     What&apos;s on your mind?
                   </h1>

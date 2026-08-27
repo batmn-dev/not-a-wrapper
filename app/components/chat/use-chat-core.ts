@@ -206,7 +206,11 @@ export function useChatCore({
   const searchParams = useSearchParams()
   const prompt = searchParams.get("prompt")
   const shouldAutoSubmitPrompt = searchParams.get("autoSubmit") === "1"
-  const scrollToMessageId = searchParams.get("messageId")
+  // The reference honors the legacy `?message=` deep-link param alongside
+  // `?messageId=` (conv.beauty.js:16928 `has("message") || has("messageId")`;
+  // its restore gate at 180547 keys on `!!get("message")`).
+  const scrollToMessageId =
+    searchParams.get("messageId") ?? searchParams.get("message")
 
   const { updateTitle, applyGeneratedTitle } = useChats()
 
@@ -288,8 +292,9 @@ export function useChatCore({
   // only orchestration and persistence policy.
   // Wire-contract fields for SDK-initiated dispatches (the approval
   // continuation auto-send carries no per-call body — the transport merges
-  // these in). Turn context is read at dispatch time, never from a
-  // render-time closure; continuations only exist on durable chats.
+  // these in). Turn context is read at dispatch time, never from a render-time
+  // closure; the transport restores a paused approval's applied effort.
+  // Continuations only exist on durable chats.
   const getFallbackTurnBody = useCallback(() => {
     if (!chatId || getMessagePersistenceMode(chatId) !== "server") return null
     const snapshot = getTurnSnapshot()
@@ -299,6 +304,7 @@ export function useChatCore({
       selectedModel: snapshot.selectedModel,
       systemPrompt: snapshot.systemPrompt,
       enableSearch: snapshot.enableSearch,
+      reasoningEffort: snapshot.reasoningEffort,
     })
   }, [chatId, getTurnSnapshot, user?.id])
 
@@ -853,17 +859,6 @@ export function useChatCore({
     getIsSubmitting,
   })
 
-  const handleSuggestion = useCallback(
-    async (suggestion: string) => {
-      await chatTurn.runSuggestionTurn({
-        text: suggestion,
-        messages,
-        chatVersion: messages.length + 1,
-      })
-    },
-    [chatTurn, messages]
-  )
-
   // Read live messages because memoized assistant rows retain this callback.
   const handleReload = useCallback(
     async (messageId: string) => {
@@ -907,7 +902,6 @@ export function useChatCore({
     scrollToMessageId,
 
     submit,
-    handleSuggestion,
     handleReload,
     submitEdit,
     handleToolApproval,

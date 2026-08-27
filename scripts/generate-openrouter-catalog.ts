@@ -27,7 +27,12 @@ import {
   OPENROUTER_ALLOWLIST,
   type OpenRouterAllowlistEntry,
 } from "@/lib/models/data/openrouter.allowlist"
-import type { ModelConfig } from "@/lib/models/types"
+import type { ModelConfig, ModelReasoningEffort } from "@/lib/models/types"
+import {
+  clampToNearestEffortLevel,
+  isModelReasoningEffort,
+  REASONING_EFFORT_LEVELS,
+} from "@/lib/models/types"
 import {
   isKnownVendorId,
   MODEL_PROVIDER_IDENTITY,
@@ -54,6 +59,17 @@ export type OpenRouterSnapshotModel = {
   pricing: { prompt: string; completion: string }
   supported_parameters: string[]
   architecture: { input_modalities: string[] }
+  /**
+   * OpenRouter's per-model effort metadata: the `supported_efforts`
+   * allowlist (highest first upstream; null means every gateway effort value
+   * is accepted) and the model's own `default_effort`. Absent on snapshots
+   * taken before the fields existed — the generator then falls back to the
+   * gateway-clamped default set and a "medium" default (ADR-0026).
+   */
+  reasoning?: {
+    supported_efforts: string[] | null
+    default_effort?: string | null
+  } | null
 }
 
 export type OpenRouterSnapshot = {
@@ -72,6 +88,10 @@ type OpenRouterLiveModel = {
   pricing?: { prompt?: string; completion?: string }
   supported_parameters?: string[]
   architecture?: { input_modalities?: string[] }
+  reasoning?: {
+    supported_efforts?: string[] | null
+    default_effort?: string | null
+  } | null
 }
 
 /**
@@ -171,10 +191,72 @@ export function buildSnapshot(
           ...(live.architecture?.input_modalities ?? []),
         ].sort(),
       },
+      reasoning:
+        live.reasoning == null
+          ? null
+          : {
+              supported_efforts:
+                live.reasoning.supported_efforts == null
+                  ? null
+                  : [...live.reasoning.supported_efforts].sort(),
+              default_effort: live.reasoning.default_effort ?? null,
+            },
     }))
     .sort((a, b) => a.id.localeCompare(b.id))
 
   return { endpoint: MODELS_ENDPOINT, retrievedAt, models }
+}
+
+/**
+ * Effort levels for a reasoning-supported wrapped route (ADR-0026). The
+ * snapshot's `supported_efforts` allowlist wins; snapshots predating the
+ * field (and models with a null allowlist) fall back to the gateway set —
+ * OpenRouter accepts every effort value and clamps to the nearest supported
+ * level, so a too-wide menu degrades to a clamp, never an error. "none" is
+ * offered only when the allowlist names it explicitly.
+ *
+ * "max" is never offered: the installed @openrouter/ai-sdk-provider
+ * construction enum stops at "xhigh", so a "max" selection could not reach
+ * the wire and the applied receipt would overstate what actually ran
+ * (provider-strategy keeps a defensive max→xhigh clamp regardless).
+ */
+const OPENROUTER_WIRE_EFFORT_LEVELS: ReadonlySet<ModelReasoningEffort> =
+  new Set(REASONING_EFFORT_LEVELS.filter((level) => level !== "max"))
+
+const OPENROUTER_GATEWAY_EFFORT_FALLBACK: readonly ModelReasoningEffort[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+]
+
+export function effortLevelsForSnapshotModel(
+  snapshotModel: OpenRouterSnapshotModel
+): readonly ModelReasoningEffort[] {
+  const supported = snapshotModel.reasoning?.supported_efforts
+  if (supported == null) return OPENROUTER_GATEWAY_EFFORT_FALLBACK
+  const allowed = new Set(supported.filter(isModelReasoningEffort))
+  return REASONING_EFFORT_LEVELS.filter(
+    (level) => allowed.has(level) && OPENROUTER_WIRE_EFFORT_LEVELS.has(level)
+  )
+}
+
+/**
+ * The route's Default effort (ADR-0026): the model's published
+ * `default_effort`, clamped to the wire-expressible offered set so it is
+ * always a level we can actually send AND a member of the route's menu
+ * (e.g. a published `max` default lands on the strongest offered level).
+ * Models publishing no default keep the historical "medium" (clamped the
+ * same way). This value is also the construction-time no-selection effort.
+ */
+export function defaultEffortForSnapshotModel(
+  snapshotModel: OpenRouterSnapshotModel
+): ModelReasoningEffort {
+  const published = snapshotModel.reasoning?.default_effort
+  const preferred = isModelReasoningEffort(published) ? published : "medium"
+  const levels = effortLevelsForSnapshotModel(snapshotModel)
+  return clampToNearestEffortLevel(levels, preferred) ?? "medium"
 }
 
 /** Join one allowlist entry with its snapshot record into a ModelConfig. */
@@ -278,7 +360,21 @@ export function buildModelConfig(
     tools: snapshotModel.supported_parameters.includes("tools"),
     audio: snapshotModel.architecture.input_modalities.includes("audio"),
     reasoningText: reasoningSupported,
-    ...(reasoningSupported ? { reasoning: { effort: "medium" as const } } : {}),
+    // Per-turn effort (ADR-0026): the menu is the model's real allowlist and
+    // the default is the model's published `default_effort`, both clamped to
+    // the wire-expressible set ("medium" when the model publishes neither).
+    // The same value becomes the construction-time no-selection effort, so
+    // what "Default" runs, the checked menu row, and the wire all agree.
+    ...(reasoningSupported
+      ? { reasoning: { effort: defaultEffortForSnapshotModel(snapshotModel) } }
+      : {}),
+    ...(reasoningSupported &&
+    effortLevelsForSnapshotModel(snapshotModel).length > 0
+      ? {
+          effortLevels: effortLevelsForSnapshotModel(snapshotModel),
+          defaultEffort: defaultEffortForSnapshotModel(snapshotModel),
+        }
+      : {}),
     // OpenRouter's server-side search plugin works with every routed model.
     searchMode: "optional",
     openSource: entry.openSource,

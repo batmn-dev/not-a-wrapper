@@ -13,7 +13,6 @@ import { useUserPreferences } from "@/lib/user-preference-store/provider"
 export function InteractionPreferences() {
   const {
     preferences,
-    setPromptSuggestions,
     setShowToolInvocations,
     setShowConversationPreviews,
     setWebSearchEnabled,
@@ -37,18 +36,6 @@ export function InteractionPreferences() {
           onCheckedChange={(enabled) =>
             setStreamingPresentation(enabled ? "smooth" : "quick")
           }
-        />
-      </Field>
-      <Field orientation="horizontal">
-        <FieldContent>
-          <FieldTitle className="text-balance">Prompt suggestions</FieldTitle>
-          <FieldDescription className="text-xs text-pretty">
-            Show suggested prompts when starting a new conversation
-          </FieldDescription>
-        </FieldContent>
-        <Switch
-          checked={preferences.promptSuggestions}
-          onCheckedChange={setPromptSuggestions}
         />
       </Field>
       <Field orientation="horizontal">

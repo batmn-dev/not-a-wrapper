@@ -589,7 +589,6 @@ describe("production logical catalog", () => {
     "openrouter:qwen/qwen3.8-max",
     "openrouter:qwen/qwen3.8-27b",
     "openrouter:qwen/qwen3.7-flash",
-    "openrouter:stealth/ox-alpha",
     "openrouter:deepseek/deepseek-v3.2",
     "openrouter:google/gemini-3.7-flash",
     "openrouter:minimax/minimax-m2.7",
@@ -627,8 +626,88 @@ describe("production logical catalog", () => {
     expect(toLogicalModelView(sonnet).searchMode).toBe("optional")
   })
 
+  it("unions effort levels across routes in canonical order (ADR-0026)", () => {
+    // Sonnet 4.6 supports low|medium|high|max (Anthropic models API,
+    // 2026-08-26 — no "xhigh" on the 4.6 generation, no "minimal" anywhere).
+    // Its OpenRouter wrap mirrors that minus the wire-inexpressible "max";
+    // the view menu is the ordered union of both routes' real sets.
+    const sonnet46 = getLogicalModel("claude-sonnet-4-6")!
+    expect(toLogicalModelView(sonnet46).effortLevels).toEqual([
+      "low",
+      "medium",
+      "high",
+      "max",
+    ])
+
+    // A model with no effort-capable route omits the field entirely.
+    const gpt41 = getLogicalModel("gpt-4.1")!
+    expect(toLogicalModelView(gpt41).effortLevels).toBeUndefined()
+  })
+
+  it("every effort-capable route declares a default within its levels (ADR-0026)", () => {
+    // The effort menu has no separate "Default" row: the default level reads
+    // as selected and re-picking it clears the override. A route offering
+    // levels without a default (or a default outside them) would leave the
+    // user no path back to the no-override state.
+    for (const model of LOGICAL_MODELS) {
+      for (const route of model.routes) {
+        const { effortLevels, defaultEffort } = route.config
+        if (!effortLevels || effortLevels.length === 0) continue
+        expect
+          .soft(defaultEffort, `route ${route.id} declares no defaultEffort`)
+          .toBeDefined()
+        if (defaultEffort !== undefined) {
+          expect
+            .soft(
+              effortLevels,
+              `route ${route.id} defaultEffort outside effortLevels`
+            )
+            .toContain(defaultEffort)
+        }
+      }
+    }
+  })
+
+  it("every logical view with an effort menu carries a default in it (ADR-0026)", () => {
+    // The menu consumes the VIEW, whose default aggregates across routes —
+    // the canonical route alone may have no effort knob (e.g. Gemini 2.5)
+    // while a wrapped route supplies the level union.
+    for (const model of LOGICAL_MODELS) {
+      const view = toLogicalModelView(model)
+      if (!view.effortLevels || view.effortLevels.length === 0) continue
+      expect
+        .soft(view.defaultEffort, `view ${model.id} has a menu but no default`)
+        .toBeDefined()
+      if (view.defaultEffort !== undefined) {
+        expect
+          .soft(
+            view.effortLevels,
+            `view ${model.id} defaultEffort outside its menu`
+          )
+          .toContain(view.defaultEffort)
+      }
+    }
+  })
+
   it.each([
     ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
+    ["gpt-5.5", "GPT-5.5", "5.5"],
+    ["gpt-5.4-mini", "GPT-5.4 Mini", "5.4 Mini"],
+    ["openrouter:openai/gpt-5.5-pro", "GPT-5.5 Pro", "5.5 Pro"],
+    ["gemini-3.5-flash", "Gemini 3.5 Flash", "3.5 Flash"],
+    ["openrouter:google/gemini-3.7-flash", "Gemini 3.7 Flash", "3.7 Flash"],
+    ["openrouter:deepseek/deepseek-v4-pro-0813", "DeepSeek V4 Pro", "V4 Pro"],
+    ["openrouter:moonshotai/kimi-k3", "Kimi K3", "K3"],
+    ["openrouter:inclusionai/ling-3.0-flash", "Ling 3.0 Flash", "3.0 Flash"],
+    ["openrouter:xiaomi/mimo-v2.5", "MiMo-V2.5", "V2.5"],
+    [
+      "openrouter:meta-llama/llama-4-maverick",
+      "Llama 4 Maverick",
+      "4 Maverick",
+    ],
+    ["openrouter:qwen/qwen3-coder", "Qwen3-Coder", "3-Coder"],
+    ["openrouter:minimax/minimax-m3", "MiniMax M3", "M3"],
+    ["openrouter:z-ai/glm-5.2", "GLM-5.2", "5.2"],
     ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],
     ["sonar", "Perplexity Sonar", "Sonar"],
     [
@@ -648,6 +727,32 @@ describe("production logical catalog", () => {
     expect(model).toMatchObject({ name, shortName })
     expect(toLogicalModelView(model!)).toMatchObject({ name, shortName })
   })
+
+  it.each([
+    ["GPT", "GPT-", /gpt/i],
+    ["Gemini", "Gemini ", /gemini/i],
+    ["DeepSeek", "DeepSeek ", /deepseek/i],
+    ["Kimi", "Kimi ", /kimi/i],
+    ["Ling", "Ling ", /ling/i],
+    ["MiMo", "MiMo-", /mimo/i],
+    ["Llama", "Llama ", /llama/i],
+    ["Qwen", "Qwen", /qwen/i],
+    ["MiniMax", "MiniMax ", /minimax/i],
+    ["GLM", "GLM-", /glm/i],
+  ])(
+    "keeps every %s compact name free of its redundant prefix",
+    (_family, fullNamePrefix, redundantPrefix) => {
+      const models = LOGICAL_MODELS.filter((model) =>
+        model.name.startsWith(fullNamePrefix)
+      )
+
+      expect(models).not.toHaveLength(0)
+      for (const model of models) {
+        expect.soft(model.shortName, model.id).toBeTruthy()
+        expect.soft(model.shortName, model.id).not.toMatch(redundantPrefix)
+      }
+    }
+  )
 
   it.each([
     ["openrouter:google/gemini-3-flash-preview", "Gemini 3 Flash"],

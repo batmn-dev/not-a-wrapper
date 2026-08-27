@@ -1,5 +1,6 @@
 import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
-import type { ModelConfig } from "@/lib/models/types"
+import type { ModelConfig, ModelReasoningEffort } from "@/lib/models/types"
+import { clampToNearestEffortLevel } from "@/lib/models/types"
 import type { ProviderOptions } from "@ai-sdk/provider-utils"
 
 /**
@@ -15,6 +16,65 @@ export type RequestShapingContext = {
   searchToolsActive: boolean
   /** The request carries any tools at all (any Tool layer). */
   hasTools: boolean
+  /**
+   * Optional per-turn wire override (ADR-0026), already clamped to a level
+   * this route's provider accepts. Absent means send no effort override.
+   */
+  wireReasoningEffort?: ModelReasoningEffort
+}
+
+function usesFixedBudgetSearchThinking(
+  modelConfig: Pick<ModelConfig, "thinkingMode" | "searchThinkingDowngrade">,
+  searchToolsActive: boolean
+): boolean {
+  return (
+    modelConfig.thinkingMode === "adaptive" &&
+    modelConfig.searchThinkingDowngrade === true &&
+    searchToolsActive
+  )
+}
+
+export type ReasoningEffortResolution = {
+  /** Concrete override sent for this turn. Absent means no wire override. */
+  wireReasoningEffort?: ModelReasoningEffort
+  /** Concrete effective level recorded in the receipt and message metadata. */
+  appliedReasoningEffort?: ModelReasoningEffort
+}
+
+/**
+ * Resolve one request into separate wire and receipt facts (ADR-0026).
+ * Default and platform-funded turns send no override but record the route's
+ * documented default. A fixed numeric thinking budget records no canonical
+ * effort level because none of the named levels can describe it honestly.
+ */
+export function resolveReasoningEffort(
+  modelConfig: Pick<
+    ModelConfig,
+    | "defaultEffort"
+    | "effortLevels"
+    | "thinkingMode"
+    | "searchThinkingDowngrade"
+  >,
+  requested: ModelReasoningEffort | undefined,
+  ctx: { platformFunded: boolean; searchToolsActive: boolean }
+): ReasoningEffortResolution {
+  const levels = modelConfig.effortLevels
+  if (!levels || levels.length === 0) return {}
+  if (usesFixedBudgetSearchThinking(modelConfig, ctx.searchToolsActive)) {
+    return {}
+  }
+  if (requested === undefined || ctx.platformFunded) {
+    return modelConfig.defaultEffort === undefined
+      ? {}
+      : { appliedReasoningEffort: modelConfig.defaultEffort }
+  }
+  const effort = clampToNearestEffortLevel(levels, requested)
+  return effort === undefined
+    ? {}
+    : {
+        wireReasoningEffort: effort,
+        appliedReasoningEffort: effort,
+      }
 }
 
 export type ShapedRequest = {
@@ -57,14 +117,28 @@ function resolveProviderOptions(
   ctx: RequestShapingContext
 ): ProviderOptions {
   if (!modelConfig.reasoningText) return {}
+  const effort = ctx.wireReasoningEffort
 
   switch (modelConfig.providerId) {
     case "anthropic": {
-      const downgradeForSearch =
-        modelConfig.searchThinkingDowngrade === true && ctx.searchToolsActive
+      const downgradeForSearch = usesFixedBudgetSearchThinking(
+        modelConfig,
+        ctx.searchToolsActive
+      )
       if (modelConfig.thinkingMode === "adaptive" && !downgradeForSearch) {
-        return { anthropic: { thinking: { type: "adaptive" } } }
+        // Effort rides only the adaptive path, and the catalog never offers
+        // "none" on Anthropic — so the Opus 5 "disabled thinking + xhigh/max
+        // → 400" combination is unrepresentable here by construction.
+        return {
+          anthropic: {
+            thinking: { type: "adaptive" },
+            ...(effort !== undefined ? { effort } : {}),
+          },
+        }
       }
+      // Fixed-budget path (pause_turn downgrade or budget-era models):
+      // `effort` and `budget_tokens` don't combine — the budget wins and the
+      // receipt omits applied effort because no named level represents it.
       const budgetTokens =
         modelConfig.thinkingMode === "adaptive"
           ? SEARCH_DOWNGRADE_BUDGET_TOKENS
@@ -72,14 +146,31 @@ function resolveProviderOptions(
       return { anthropic: { thinking: { type: "enabled", budgetTokens } } }
     }
     case "google":
-      return { google: { thinkingConfig: { includeThoughts: true } } }
+      return {
+        google: {
+          thinkingConfig: {
+            includeThoughts: true,
+            // Gemini 3.x takes thinkingLevel; 2.5 models never declare
+            // effortLevels, so effort stays undefined for them here.
+            ...(effort !== undefined ? { thinkingLevel: effort } : {}),
+          },
+        },
+      }
     case "openai":
-      return { openai: { reasoningEffort: "medium", reasoningSummary: "auto" } }
-    // Catalogued Grok 4 models reason unconditionally and reject the
-    // grok-3-mini reasoning-effort option.
-    //
+      return {
+        openai: {
+          ...(effort !== undefined ? { reasoningEffort: effort } : {}),
+          reasoningSummary: "auto",
+        },
+      }
+    case "xai":
+      // Only grok-4.3 declares effortLevels (the other catalogued Grok 4
+      // models reason unconditionally and reject the parameter), so effort
+      // is undefined for them and the option is never sent.
+      return effort !== undefined ? { xai: { reasoningEffort: effort } } : {}
     // OpenRouter reasoning remains construction-time provider state in its V4
-    // provider API; the catalog setting is mapped in provider-strategy.ts.
+    // provider API; the catalog setting (and the per-turn effort override)
+    // is mapped in provider-strategy.ts at model construction.
     default:
       return {}
   }

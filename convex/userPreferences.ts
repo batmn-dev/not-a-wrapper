@@ -17,7 +17,6 @@ export const get = maybeAuthQuery({
 export const update = authenticatedMutation({
   args: {
     layout: v.optional(v.string()),
-    promptSuggestions: v.optional(v.boolean()),
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),

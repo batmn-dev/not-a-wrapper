@@ -5,7 +5,7 @@
  * CONTEXT.md "Composer".
  *
  * It owns the draft (display state + per-chat persistence + clearing), the
- * pending attachment files, suggestion UI, paste/drop capture, and the primary
+ * pending attachment files, paste/drop capture, and the primary
  * action; it reads the model picker and search toggle from the Turn context
  * and auth from the user store directly. Its interface to the parent is one
  * payload callback (`onTurn`) plus a small imperative handle for external
@@ -55,7 +55,6 @@ import {
   useState,
 } from "react"
 import { flushSync } from "react-dom"
-import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
 import type { ComposerActionId } from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
@@ -69,6 +68,8 @@ import {
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
 import { useComposerConnectors } from "./use-composer-connectors"
+import { isReasoningEffortControlEnabled } from "@/lib/reasoning-effort"
+import { EffortControl } from "./effort-control"
 import { WebSearchControl } from "./web-search-control"
 
 export type ComposerTurnPayload = {
@@ -94,7 +95,6 @@ type ComposerProps = {
    * boolean is required: a `void` handler would silently take the
    * restore-payload path after every successful send. */
   onTurn: (payload: ComposerTurnPayload) => Promise<boolean> | boolean
-  onSuggestion?: (suggestion: string) => void | Promise<void>
   isSubmitting?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
   stop?: () => void
@@ -102,7 +102,6 @@ type ComposerProps = {
    * §8/§11): a stoppable background, awaiting-approval, or possibly-stale run
    * presents Stop even while the local status reads ready. */
   stoppable?: boolean
-  hasSuggestions?: boolean
   onLockedGuestModelSelect?: (modelId: string) => void
   /** Draft-persistence scope when there is no chat id (e.g. `project-<id>`),
    * so surface drafts don't bleed into the home composer's "new chat" draft. */
@@ -204,12 +203,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     {
       chatId,
       onTurn,
-      onSuggestion,
       isSubmitting,
       status,
       stop,
       stoppable,
-      hasSuggestions,
       onLockedGuestModelSelect,
       draftScopeId,
       placeholder = "Ask anything",
@@ -227,10 +224,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       enableSearch,
       setEnableSearch,
       searchMode,
+      effortLevels,
+      reasoningEffort,
+      setReasoningEffort,
     } = useTurnContext()
 
     const selectModelConfig = getLogicalModelInfo(selectedModel)
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
+    // Mirrors EffortControl's own render predicate: when the thinking pill is
+    // present, the model trigger joins it as one segmented control — tight
+    // facing paddings and squared inner corners on the shared edge.
+    const hasEffortControl =
+      isReasoningEffortControlEnabled() && effortLevels.length > 0
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =
       useState<PromptInputActionQuery | null>(null)
@@ -587,13 +592,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 bottom-full z-20"
         />
-        {hasSuggestions && (
-          <PromptSystem
-            onValueChange={handleValueChange}
-            onSuggestion={(suggestion) => void onSuggestion?.(suggestion)}
-            value={localValue}
-          />
-        )}
         <InputDropZone
           onFileUpload={handleAttachmentUpload}
           disabled={!isUserAuthenticated || !isFileUploadAvailable}
@@ -661,13 +659,56 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 data-composer-transition-slot="trailing"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="relative ms-1 flex min-w-0 shrink items-center gap-1.5">
+                <div
+                  className={cn(
+                    // group/segmented: hovering EITHER half of the joined
+                    // pair reveals the seam center-out (see EffortControl's
+                    // transform motion). cursor-pointer keeps the pointer
+                    // steady over the transient seam strip the reveal opens
+                    // between the two halves.
+                    "group/segmented relative ms-1 flex min-w-0 shrink cursor-pointer items-center",
+                    // Joined segmented pair: flush on hover-capable devices
+                    // (the seam only opens through the hover reveal), while
+                    // touch — whose persistent backgrounds are always visible
+                    // — keeps a constant 2px seam between the halves. The
+                    // loose 6px gap returns for effortless models.
+                    hasEffortControl ? "cant-hover:gap-0.5 gap-0" : "gap-1.5"
+                  )}
+                >
                   <ModelSelector
                     variant="composer"
+                    // Joined: soft-squared trailing corners and tight
+                    // trailing padding, and the hover bridge retracts to the
+                    // leading side only — flush against the thinking pill, a
+                    // trailing bridge would steal its neighbor's leading
+                    // clicks. The leading corners restate the pill radius as
+                    // a FINITE 2xl (18px = half the 36px height): mixed with
+                    // rounded-full's near-infinite radius, the CSS
+                    // corner-overlap reduction scales every radius by one
+                    // shared factor and crushes the finite corner to zero.
+                    // Seam motion: this half translates -3px while the
+                    // thinking pill translates +3px (center-out reveal), and
+                    // an open popover on either half pins the revealed
+                    // position independent of hover — see EffortControl.
+                    // transition-transform also displaces the composer
+                    // variant's gesture-press transition-none via the cn
+                    // merge — deliberate, the translate must animate.
+                    className={
+                      hasEffortControl
+                        ? "can-hover:after:-start-1 can-hover:after:end-0 can-hover:group-hover/segmented:-translate-x-[3px] can-hover:group-has-[[aria-expanded=true]]/segmented:-translate-x-[3px] rounded-s-2xl rounded-e-md pe-1.5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                        : undefined
+                    }
                     selectedModelId={selectedModel}
                     setSelectedModelId={handleModelChange}
                     isUserAuthenticated={isUserAuthenticated}
                     onLockedGuestModelSelect={onLockedGuestModelSelect}
+                    onSelectionCommitted={handleModelSelectionCommitted}
+                  />
+                  <EffortControl
+                    levels={effortLevels}
+                    value={reasoningEffort}
+                    defaultLevel={selectModelConfig?.defaultEffort}
+                    onChange={setReasoningEffort}
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>

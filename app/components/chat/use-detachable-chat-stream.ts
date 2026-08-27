@@ -1,6 +1,5 @@
-import type { UIMessage } from "@ai-sdk/react"
-import { Chat } from "@ai-sdk/react"
 import type { ChatTurnBodyFields } from "@/lib/chat-messages/chat-turn-contract"
+import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import {
   consumeLocallyResolvedApprovals,
   restoreLocallyResolvedApprovals,
@@ -13,6 +12,8 @@ import {
   type DetachedBindingGaugeEvent,
 } from "@/lib/observability/chat-performance"
 import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
+import type { UIMessage } from "@ai-sdk/react"
+import { Chat } from "@ai-sdk/react"
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -102,6 +103,21 @@ class RequestAcceptanceRegistry {
   }
 }
 
+function preservePausedApprovalEffort(
+  fallbackBody: ChatTurnBodyFields,
+  messages: UIMessage[]
+): ChatTurnBodyFields {
+  if (!lastAssistantMessageIsCompleteWithApprovalResponses({ messages })) {
+    return fallbackBody
+  }
+
+  const { reasoningEffort: _liveEffort, ...continuationBody } = fallbackBody
+  const pausedEffort = getReasoningEffort(messages.at(-1)?.metadata)
+  return pausedEffort === undefined
+    ? continuationBody
+    : { ...continuationBody, reasoningEffort: pausedEffort }
+}
+
 class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
   constructor(
     private readonly acceptances: RequestAcceptanceRegistry,
@@ -128,8 +144,11 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
     const callBody = options.body as Record<string, unknown> | undefined
     const fallbackBody =
       typeof callBody?.chatId === "string" ? null : this.getFallbackTurnBody()
-    const dispatchOptions = fallbackBody
-      ? { ...options, body: { ...fallbackBody, ...(callBody ?? {}) } }
+    const sdkBody = fallbackBody
+      ? preservePausedApprovalEffort(fallbackBody, options.messages)
+      : null
+    const dispatchOptions = sdkBody
+      ? { ...options, body: { ...sdkBody, ...(callBody ?? {}) } }
       : options
     try {
       // HttpChatTransport resolves here only after fetch returned an OK
@@ -209,8 +228,7 @@ function createDetachableChatStreamOwner(
   // deregisters and the map cannot leak a dead binding.
   const detachedByOrigin = new Map<string, StreamBinding>()
   const acceptances = new RequestAcceptanceRegistry()
-  let fallbackTurnBodyProvider: (() => ChatTurnBodyFields | null) | null =
-    null
+  let fallbackTurnBodyProvider: (() => ChatTurnBodyFields | null) | null = null
   const transport = new AcceptanceAwareChatTransport(acceptances, api, () =>
     fallbackTurnBodyProvider ? fallbackTurnBodyProvider() : null
   )

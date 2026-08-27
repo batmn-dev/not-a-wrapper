@@ -179,6 +179,17 @@ const MODEL_ID_SUCCESSIONS = [
     lastVerifiedAt: "2026-08-25",
   },
   {
+    // OpenRouter delisted the cloaked `stealth/ox-alpha` test model. Its
+    // reveal is unconfirmed; qwen3.8-max is the nearest live allowlisted
+    // equivalent (closed, Medium/High, text+image+video, 131k max output,
+    // ~1M context).
+    sourceId: "openrouter:stealth/ox-alpha",
+    targetId: "openrouter:qwen/qwen3.8-max",
+    replacementModelId: "openrouter:qwen/qwen3.8-max",
+    verifiedAgainst: "qwen/qwen3.8-max",
+    lastVerifiedAt: "2026-08-27",
+  },
+  {
     sourceId: "mistral-small-2503",
     targetId: "mistral-small-2506",
     replacementModelId: "mistral-small-2506",

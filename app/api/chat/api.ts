@@ -6,7 +6,11 @@ import {
   type ResolvedModelRoute,
   type RouteResolutionFailure,
 } from "@/lib/model-route-resolver"
-import { resolveLogicalModelSearchMode } from "@/lib/models/catalog"
+import {
+  resolveLogicalModelEffortLevels,
+  resolveLogicalModelSearchMode,
+} from "@/lib/models/catalog"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import { type ProviderCredentialResolution } from "@/lib/user-keys"
 import type { UIMessage } from "ai"
@@ -132,6 +136,8 @@ type ChatCredentialAdmissionParams = {
   chatId: string
   systemPrompt?: string
   enableSearch: boolean
+  /** Per-turn effort selection (ADR-0026); parser-validated, still soft. */
+  reasoningEffort?: ModelReasoningEffort
   /** Server-planned approval continuation pin, when this is one. */
   pinnedProviderId?: Provider
 }
@@ -257,6 +263,7 @@ export async function validateAndResolveChatCredential({
   chatId,
   systemPrompt,
   enableSearch,
+  reasoningEffort,
   pinnedProviderId: plannedPinnedProviderId,
 }: ChatCredentialAdmissionParams): Promise<ChatRouteAdmission> {
   const pinnedProviderId =
@@ -275,9 +282,21 @@ export async function validateAndResolveChatCredential({
 
   const effectiveEnableSearch =
     resolveLogicalModelSearchMode(model) === "always-on" ? true : enableSearch
+  // Soft effort preference (ADR-0026): steer resolution toward routes that
+  // serve the requested level only when at least one route can — a model
+  // whose routes all lack the level resolves unconstrained and the runtime
+  // clamps instead, so an effort selection never fails a turn.
+  const preferredEffort =
+    reasoningEffort !== undefined &&
+    resolveLogicalModelEffortLevels(model)?.includes(reasoningEffort)
+      ? reasoningEffort
+      : undefined
   const requiredCapabilities = {
     ...(turnRequiresVision(messages) ? { vision: true as const } : {}),
     webSearch: effectiveEnableSearch,
+    ...(preferredEffort !== undefined
+      ? { reasoningEffort: preferredEffort }
+      : {}),
   }
 
   const resolution = await resolveModelRoute({

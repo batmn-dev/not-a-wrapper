@@ -358,7 +358,7 @@ describe("thread scroll contract", () => {
     const target = container.querySelector<HTMLElement>(
       'section[data-turn-id-container="turn-3"]'
     )
-    expect(target && resolveSubmitTurnScrollBehavior(target)).toBe("instant")
+    expect(target && resolveSubmitTurnScrollBehavior(target)).toBe("smooth")
     expect(target && resolveSubmitTurnScrollBehavior(target, false)).toBe(
       "smooth"
     )

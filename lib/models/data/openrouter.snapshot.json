@@ -1,6 +1,6 @@
 {
   "endpoint": "https://openrouter.ai/api/v1/models",
-  "retrievedAt": "2026-08-25",
+  "retrievedAt": "2026-08-27",
   "models": [
     {
       "id": "anthropic/claude-fable-5",
@@ -34,6 +34,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -69,6 +79,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -101,6 +115,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -136,6 +154,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -173,6 +195,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -207,6 +238,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -242,6 +283,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -277,6 +328,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -312,6 +373,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -349,6 +414,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -383,6 +457,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -421,7 +505,8 @@
         "input_modalities": [
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "deepseek/deepseek-chat-v3.1",
@@ -461,6 +546,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -501,6 +590,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -539,6 +632,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -579,6 +676,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -591,8 +692,8 @@
         "max_completion_tokens": 384000
       },
       "pricing": {
-        "prompt": "0.0000000826",
-        "completion": "0.0000001652"
+        "prompt": "0.00000007952",
+        "completion": "0.00000015904"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -622,6 +723,13 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -634,8 +742,8 @@
         "max_completion_tokens": 943718
       },
       "pricing": {
-        "prompt": "0.00000004",
-        "completion": "0.00000008"
+        "prompt": "0.00000006",
+        "completion": "0.00000012"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -665,6 +773,14 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -677,8 +793,8 @@
         "max_completion_tokens": 384000
       },
       "pricing": {
-        "prompt": "0.00000022",
-        "completion": "0.00000066"
+        "prompt": "0.00000044",
+        "completion": "0.00000132"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -701,6 +817,14 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -713,8 +837,8 @@
         "max_completion_tokens": 384000
       },
       "pricing": {
-        "prompt": "0.000000572808",
-        "completion": "0.000001145616"
+        "prompt": "0.00000087",
+        "completion": "0.00000174"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -743,6 +867,13 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -784,6 +915,14 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -820,6 +959,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -856,6 +999,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -892,6 +1039,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -929,6 +1080,15 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -966,6 +1126,15 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "minimal"
       }
     },
     {
@@ -1003,6 +1172,14 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -1040,6 +1217,15 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -1077,6 +1263,15 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "minimal"
       }
     },
     {
@@ -1114,6 +1309,15 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -1151,6 +1355,14 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -1183,6 +1395,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1222,6 +1438,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1231,11 +1451,11 @@
       "expiration_date": null,
       "context_length": 131072,
       "top_provider": {
-        "max_completion_tokens": 16384
+        "max_completion_tokens": 115200
       },
       "pricing": {
-        "prompt": "0.0000001",
-        "completion": "0.00000032"
+        "prompt": "0.00000071",
+        "completion": "0.00000071"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -1260,7 +1480,8 @@
         "input_modalities": [
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "meta-llama/llama-4-maverick",
@@ -1299,7 +1520,8 @@
           "image",
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "meta-llama/llama-4-scout",
@@ -1308,11 +1530,11 @@
       "expiration_date": null,
       "context_length": 1310720,
       "top_provider": {
-        "max_completion_tokens": 16384
+        "max_completion_tokens": 8192
       },
       "pricing": {
-        "prompt": "0.0000001",
-        "completion": "0.0000003"
+        "prompt": "0.00000011",
+        "completion": "0.00000034"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -1336,7 +1558,8 @@
           "image",
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "minimax/minimax-m2",
@@ -1374,6 +1597,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1409,6 +1636,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1449,6 +1680,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1489,6 +1724,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1531,6 +1770,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1563,7 +1806,8 @@
         "input_modalities": [
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "moonshotai/kimi-k2-0905",
@@ -1597,20 +1841,21 @@
         "input_modalities": [
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "moonshotai/kimi-k2.5",
       "name": "MoonshotAI: Kimi K2.5",
       "created": 1769487076,
-      "expiration_date": "2026-08-31",
+      "expiration_date": null,
       "context_length": 262144,
       "top_provider": {
         "max_completion_tokens": 235929
       },
       "pricing": {
-        "prompt": "0.0000006",
-        "completion": "0.000003"
+        "prompt": "0.00000045",
+        "completion": "0.00000225"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -1638,6 +1883,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1680,6 +1929,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1722,6 +1975,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -1765,6 +2022,14 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max"
+        ],
+        "default_effort": "max"
       }
     },
     {
@@ -1795,6 +2060,13 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "medium"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -1827,7 +2099,8 @@
           "image",
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "openai/gpt-4.1-mini",
@@ -1859,7 +2132,8 @@
           "image",
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "openai/gpt-4.1-nano",
@@ -1891,7 +2165,8 @@
           "image",
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "openai/gpt-4o-mini",
@@ -1931,7 +2206,8 @@
           "image",
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "openai/gpt-5",
@@ -1964,6 +2240,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -1997,6 +2282,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2030,6 +2324,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2063,6 +2366,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "none"
+        ],
+        "default_effort": "none"
       }
     },
     {
@@ -2095,6 +2407,14 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2128,6 +2448,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "none",
+          "xhigh"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2161,6 +2491,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "none",
+          "xhigh"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2194,6 +2534,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "none",
+          "xhigh"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2227,6 +2577,16 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "none",
+          "xhigh"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2259,6 +2619,14 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2301,6 +2669,14 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2342,6 +2718,14 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium"
+        ],
+        "default_effort": "medium"
       }
     },
     {
@@ -2373,6 +2757,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2403,6 +2791,10 @@
           "file",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2434,6 +2826,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2465,6 +2861,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2474,11 +2874,11 @@
       "expiration_date": null,
       "context_length": 262144,
       "top_provider": {
-        "max_completion_tokens": 16384
+        "max_completion_tokens": 235929
       },
       "pricing": {
-        "prompt": "0.00000009",
-        "completion": "0.00000055"
+        "prompt": "0.0000000875",
+        "completion": "0.00000035"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -2503,7 +2903,8 @@
         "input_modalities": [
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "qwen/qwen3-32b",
@@ -2543,6 +2944,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2581,7 +2986,8 @@
         "input_modalities": [
           "text"
         ]
-      }
+      },
+      "reasoning": null
     },
     {
       "id": "qwen/qwen3.6-27b",
@@ -2590,11 +2996,11 @@
       "expiration_date": null,
       "context_length": 262144,
       "top_provider": {
-        "max_completion_tokens": 81920
+        "max_completion_tokens": 235929
       },
       "pricing": {
-        "prompt": "0.00000032",
-        "completion": "0.0000032"
+        "prompt": "0.0000006",
+        "completion": "0.0000036"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -2623,6 +3029,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2665,6 +3075,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2700,6 +3114,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2737,6 +3155,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2778,6 +3200,14 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "low",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "xhigh"
       }
     },
     {
@@ -2790,7 +3220,7 @@
         "max_completion_tokens": 131072
       },
       "pricing": {
-        "prompt": "0.0000004",
+        "prompt": "0.000000425",
         "completion": "0.00000255"
       },
       "supported_parameters": [
@@ -2821,6 +3251,14 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "low",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "xhigh"
       }
     },
     {
@@ -2861,39 +3299,16 @@
           "text",
           "video"
         ]
-      }
-    },
-    {
-      "id": "stealth/ox-alpha",
-      "name": "Ox Alpha",
-      "created": 1787256295,
-      "expiration_date": "2098-12-31",
-      "context_length": 1048576,
-      "top_provider": {
-        "max_completion_tokens": 131072
       },
-      "pricing": {
-        "prompt": "0",
-        "completion": "0"
-      },
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "reasoning_effort",
-        "response_format",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ],
-      "architecture": {
-        "input_modalities": [
-          "image",
-          "text",
-          "video"
-        ]
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "minimal",
+          "xhigh"
+        ],
+        "default_effort": "xhigh"
       }
     },
     {
@@ -2929,6 +3344,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -2965,6 +3384,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "none"
+        ],
+        "default_effort": "low"
       }
     },
     {
@@ -3001,6 +3429,14 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -3039,6 +3475,15 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "medium",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -3082,6 +3527,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3122,6 +3571,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3152,6 +3605,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3186,13 +3643,17 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
       "id": "z-ai/glm-4.5v",
       "name": "Z.ai: GLM 4.5V",
       "created": 1754922288,
-      "expiration_date": null,
+      "expiration_date": "2026-12-31",
       "context_length": 65536,
       "top_provider": {
         "max_completion_tokens": 16384
@@ -3222,6 +3683,10 @@
           "image",
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3231,11 +3696,11 @@
       "expiration_date": null,
       "context_length": 204800,
       "top_provider": {
-        "max_completion_tokens": 131072
+        "max_completion_tokens": 16384
       },
       "pricing": {
-        "prompt": "0.0000005",
-        "completion": "0.000002"
+        "prompt": "0.00000043",
+        "completion": "0.00000175"
       },
       "supported_parameters": [
         "frequency_penalty",
@@ -3260,6 +3725,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3297,6 +3766,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3338,6 +3811,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3378,6 +3855,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3418,6 +3899,10 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     },
     {
@@ -3460,6 +3945,13 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "xhigh"
+        ],
+        "default_effort": "high"
       }
     },
     {
@@ -3491,6 +3983,14 @@
         "input_modalities": [
           "text"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "high",
+          "low",
+          "max"
+        ],
+        "default_effort": "max"
       }
     },
     {
@@ -3523,6 +4023,10 @@
           "text",
           "video"
         ]
+      },
+      "reasoning": {
+        "supported_efforts": null,
+        "default_effort": null
       }
     }
   ]

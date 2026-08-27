@@ -12,12 +12,14 @@ vi.mock("next/navigation", () => ({
 }))
 
 function SessionProbe() {
-  const { chatId, isNewChatSurface, navigateToChat } = useChatSession()
+  const { chatId, isNewChatSurface, isChatIdHandoff, navigateToChat } =
+    useChatSession()
 
   return (
     <button
       type="button"
       data-new-chat={String(isNewChatSurface)}
+      data-chat-id-handoff={String(isChatIdHandoff)}
       onClick={() => navigateToChat("chat-durable")}
     >
       {chatId ?? "new-chat"}
@@ -64,6 +66,9 @@ describe("ChatSessionProvider route identity", () => {
     renderSession()
     expect(container?.textContent).toBe("new-chat")
     expect(container?.querySelector("button")?.dataset.newChat).toBe("true")
+    expect(container?.querySelector("button")?.dataset.chatIdHandoff).toBe(
+      "false"
+    )
 
     act(() => {
       container?.querySelector("button")?.click()
@@ -74,11 +79,17 @@ describe("ChatSessionProvider route identity", () => {
     // already crossed the handoff with no blank selected-chat interval.
     expect(container?.textContent).toBe("chat-durable")
     expect(container?.querySelector("button")?.dataset.newChat).toBe("false")
+    expect(container?.querySelector("button")?.dataset.chatIdHandoff).toBe(
+      "true"
+    )
 
     navigationMocks.pathname = "/c/chat-durable"
     renderSession()
 
     expect(container?.textContent).toBe("chat-durable")
+    expect(container?.querySelector("button")?.dataset.chatIdHandoff).toBe(
+      "false"
+    )
   })
 
   it("drops a pending handoff if navigation returns to its source", () => {

@@ -4,6 +4,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.1-pro-preview",
     name: "Gemini 3.1 Pro",
+    shortName: "3.1 Pro",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -28,6 +29,12 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    // thinking_level per the Gemini thinking docs (Gemini 3.x takes levels;
+    // 2.5 models keep numeric budgets and stay off the effort control).
+    // "medium" verified live against generateContent 2026-08-26 (200 OK) —
+    // wider than the older Gemini 3 Pro's low|high pair.
+    effortLevels: ["low", "medium", "high"],
+    defaultEffort: "high",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -40,6 +47,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.5-flash",
     name: "Gemini 3.5 Flash",
+    shortName: "3.5 Flash",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -61,6 +69,9 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    // "minimal" live-verified 2026-08-26 against generateContent (200 OK).
+    effortLevels: ["minimal", "low", "medium", "high"],
+    defaultEffort: "medium",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -73,6 +84,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.1-flash-lite",
     name: "Gemini 3.1 Flash Lite",
+    shortName: "3.1 Flash Lite",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -94,6 +106,8 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    effortLevels: ["minimal", "low", "medium", "high"],
+    defaultEffort: "minimal",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -106,6 +120,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash-Lite",
+    shortName: "2.5 Flash-Lite",
     provider: "Google",
     providerId: "google",
     // 2026-08-21: the Gemini API answers 404 "no longer available to new
@@ -147,6 +162,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-2.5-flash",
     name: "Gemini 2.5 Flash",
+    shortName: "2.5 Flash",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -178,6 +194,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
+    shortName: "2.5 Pro",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",

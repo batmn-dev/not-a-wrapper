@@ -13,6 +13,7 @@
 // stop() mid-stream (isAbort), and a transport error (isError).
 
 import { clearLocallyResolvedApprovals } from "@/lib/chat-runs/approval-auto-send-gate"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
 import {
@@ -45,6 +46,7 @@ const seamMocks = vi.hoisted(() => ({
   // detached guest stream must cache into its ORIGIN chat id, never the
   // currently mounted one.
   cacheAndAddMessage: vi.fn(async (_message: unknown, _chatId?: string) => {}),
+  turnSnapshotReasoningEffort: undefined as ModelReasoningEffort | undefined,
   controllerAdapters: null as null | {
     sendMessageAndWaitForAcceptance: (
       message: UIMessage & { messageId: string },
@@ -56,7 +58,6 @@ const seamMocks = vi.hoisted(() => ({
   // spies record it.
   chatTurnController: {
     runSendTurn: vi.fn(async (_args: unknown) => {}),
-    runSuggestionTurn: vi.fn(async (_args: unknown) => {}),
     runEditTurn: vi.fn(async (_args: unknown) => ({ status: "submitted" })),
     runRegenerationTurn: vi.fn(async (_args: unknown) => {}),
     finishChatTurn: vi.fn(async (_args: unknown) => {}),
@@ -85,6 +86,7 @@ vi.mock("./turn-context", () => ({
       selectedModel: "claude-haiku-4-5-20251001",
       systemPrompt: "system prompt",
       enableSearch: false,
+      reasoningEffort: seamMocks.turnSnapshotReasoningEffort,
       isAuthenticated: true,
       isHydrated: true,
     }),
@@ -315,10 +317,9 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal(
-      "requestAnimationFrame",
-      (callback: FrameRequestCallback) =>
-        window.setTimeout(() => callback(performance.now()), 16)
+    seamMocks.turnSnapshotReasoningEffort = undefined
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16)
     )
     vi.stubGlobal("cancelAnimationFrame", (id: number) =>
       window.clearTimeout(id)
@@ -1134,123 +1135,145 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       }
     })
 
-    it("tool approval and one-shot auto-send continuation survive frame coalescing", async () => {
-      seamMocks.convexMutation.mockResolvedValue({
-        status: "approved",
-        alreadyResolved: false,
-        reason: undefined,
-      })
+    it.each([
+      ["high", "low"],
+      [undefined, "high"],
+    ] as const)(
+      "tool approval preserves paused effort %s through its one-shot continuation",
+      async (pausedEffort, nextTurnEffort) => {
+        seamMocks.convexMutation.mockResolvedValue({
+          status: "approved",
+          alreadyResolved: false,
+          reason: undefined,
+        })
 
-      // Request 1: a real needsApproval tool-call turn built by the genuine
-      // server pipeline; request 2: the continuation's text answer.
-      const makeApprovalSseResponse = () => {
-        const result = streamText({
-          model: new MockLanguageModelV4({
-            doStream: async () => ({
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: "stream-start" as const, warnings: [] },
-                  {
-                    type: "tool-call" as const,
-                    toolCallId: "call-approve-1",
-                    toolName: "send_note",
-                    input: JSON.stringify({ note: "hello" }),
-                  },
-                  {
-                    type: "finish" as const,
-                    finishReason: {
-                      unified: "tool-calls" as const,
-                      raw: "tool_use",
+        // Request 1: a real needsApproval tool-call turn built by the genuine
+        // server pipeline; request 2: the continuation's text answer.
+        const makeApprovalSseResponse = () => {
+          const result = streamText({
+            model: new MockLanguageModelV4({
+              doStream: async () => ({
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: "stream-start" as const, warnings: [] },
+                    {
+                      type: "tool-call" as const,
+                      toolCallId: "call-approve-1",
+                      toolName: "send_note",
+                      input: JSON.stringify({ note: "hello" }),
                     },
-                    usage: STEP_USAGE,
-                  },
-                ],
-                chunkDelayInMs: null,
+                    {
+                      type: "finish" as const,
+                      finishReason: {
+                        unified: "tool-calls" as const,
+                        raw: "tool_use",
+                      },
+                      usage: STEP_USAGE,
+                    },
+                  ],
+                  chunkDelayInMs: null,
+                }),
               }),
             }),
-          }),
-          tools: {
-            send_note: tool({
-              description: "Send a note",
-              inputSchema: jsonSchema<{ note: string }>({
-                type: "object",
-                properties: { note: { type: "string" } },
-                required: ["note"],
-                additionalProperties: false,
+            tools: {
+              send_note: tool({
+                description: "Send a note",
+                inputSchema: jsonSchema<{ note: string }>({
+                  type: "object",
+                  properties: { note: { type: "string" } },
+                  required: ["note"],
+                  additionalProperties: false,
+                }),
+                needsApproval: true,
+                execute: async () => ({ ok: true }),
               }),
-              needsApproval: true,
-              execute: async () => ({ ok: true }),
+            },
+            prompt: "hi",
+          })
+          return createUIMessageStreamResponse({
+            stream: toUIMessageStream({
+              stream: result.stream,
+              messageMetadata: () =>
+                pausedEffort === undefined
+                  ? undefined
+                  : { reasoningEffort: pausedEffort },
             }),
-          },
-          prompt: "hi",
+          })
+        }
+
+        let requestCount = 0
+        fetchMock.mockImplementation(async (_url, init) => {
+          requestCount += 1
+          return withAbortSemantics(
+            requestCount === 1
+              ? makeApprovalSseResponse()
+              : makeUiMessageSseResponse({
+                  deltas: ["Continued ", "answer."],
+                  chunkDelayInMs: null,
+                }),
+            init?.signal
+          )
         })
-        return createUIMessageStreamResponse({
-          stream: toUIMessageStream({ stream: result.stream }),
+
+        framesRecorder.current = []
+        const mounted = mountFrameHarness()
+        seamMocks.turnSnapshotReasoningEffort = pausedEffort
+        await act(async () => {
+          void hookApiRef.current?.sendMessage({ text: "hi" })
         })
-      }
+        await advanceFake(0)
 
-      let requestCount = 0
-      fetchMock.mockImplementation(async (_url, init) => {
-        requestCount += 1
-        return withAbortSemantics(
-          requestCount === 1
-            ? makeApprovalSseResponse()
-            : makeUiMessageSseResponse({
-                deltas: ["Continued ", "answer."],
-                chunkDelayInMs: null,
-              }),
-          init?.signal
+        // The approval terminal render must expose the latest tool part before
+        // the pending frame publication is advanced.
+        type ApprovalToolPart = {
+          type: string
+          state?: string
+          approval?: { id?: string; approved?: boolean }
+        }
+        const findToolPart = (): ApprovalToolPart | undefined => {
+          const messages = hookApiRef.current?.messages ?? []
+          const assistant = [...messages]
+            .reverse()
+            .find((message) => message.role === "assistant")
+          return assistant?.parts.find(
+            (part) => part.type === "tool-send_note"
+          ) as ApprovalToolPart | undefined
+        }
+        expect(hookApiRef.current?.status).toBe("ready")
+        expect(findToolPart()?.state).toBe("approval-requested")
+        const approvalId = findToolPart()?.approval?.id
+        if (!approvalId) throw new Error("approval id missing from tool part")
+
+        // Composer changes during the pause belong to the next user turn.
+        seamMocks.turnSnapshotReasoningEffort = nextTurnEffort
+        await act(async () => {
+          await hookApiRef.current?.handleToolApproval(approvalId, true)
+        })
+        // The approval response and the continuation dispatch are not lost to
+        // frame coalescing: exactly one second request, and the continuation's
+        // answer lands in the rendered conversation.
+        await waitFake(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+        await waitFake(() =>
+          expect(assistantText(hookApiRef.current?.messages ?? [])).toContain(
+            "Continued answer."
+          )
         )
-      })
-
-      framesRecorder.current = []
-      const mounted = mountFrameHarness()
-      await act(async () => {
-        void hookApiRef.current?.sendMessage({ text: "hi" })
-      })
-      await advanceFake(0)
-
-      // The approval terminal render must expose the latest tool part before
-      // the pending frame publication is advanced.
-      type ApprovalToolPart = {
-        type: string
-        state?: string
-        approval?: { id?: string; approved?: boolean }
-      }
-      const findToolPart = (): ApprovalToolPart | undefined => {
-        const messages = hookApiRef.current?.messages ?? []
-        const assistant = [...messages]
-          .reverse()
-          .find((message) => message.role === "assistant")
-        return assistant?.parts.find(
-          (part) => part.type === "tool-send_note"
-        ) as ApprovalToolPart | undefined
-      }
-      expect(hookApiRef.current?.status).toBe("ready")
-      expect(findToolPart()?.state).toBe("approval-requested")
-      const approvalId = findToolPart()?.approval?.id
-      if (!approvalId) throw new Error("approval id missing from tool part")
-
-      await act(async () => {
-        await hookApiRef.current?.handleToolApproval(approvalId, true)
-      })
-      // The approval response and the continuation dispatch are not lost to
-      // frame coalescing: exactly one second request, and the continuation's
-      // answer lands in the rendered conversation.
-      await waitFake(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-      await waitFake(() =>
-        expect(assistantText(hookApiRef.current?.messages ?? [])).toContain(
-          "Continued answer."
+        expect(findToolPart()?.state).toBe("approval-responded")
+        expect(findToolPart()?.approval?.approved).toBe(true)
+        const continuationInit = fetchMock.mock.calls[1]?.[1]
+        if (typeof continuationInit?.body !== "string") {
+          throw new Error("continuation request body missing")
+        }
+        expect(JSON.parse(continuationInit.body).reasoningEffort).toBe(
+          pausedEffort
         )
-      )
-      expect(findToolPart()?.state).toBe("approval-responded")
-      expect(findToolPart()?.approval?.approved).toBe(true)
 
-      // One-shot: no further dispatches however long the clock runs.
-      await advanceFake(500)
-      expect(fetchMock).toHaveBeenCalledTimes(2)
-      mounted.unmount()
-    })
+        // One-shot: no further dispatches however long the clock runs.
+        await advanceFake(500)
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        mounted.unmount()
+      }
+    )
 
     it("survives unmount during a pending trailing update", async () => {
       // Unmount while a trailing notification is still scheduled: the late

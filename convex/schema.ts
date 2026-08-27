@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
+import { vReasoningEffort } from "./lib/reasoningEffort"
 import {
   vLedgerEntryType,
   vPricingSnapshot,
@@ -225,6 +226,12 @@ export default defineSchema({
         v.literal("legacy_route_hint")
       )
     ),
+    // Per-turn effort receipt (ADR-0026): what the user requested and what
+    // the runtime applied after route clamping (platform turns record the
+    // concrete provider default). Verified by the signed admission proof at
+    // prepare; display/audit only.
+    reasoningEffort: v.optional(vReasoningEffort),
+    appliedReasoningEffort: v.optional(vReasoningEffort),
     status: generationRunStatus,
     // Compatibility field: no longer written, but production may still contain
     // older run docs. Drop only after preflight proves zero legacy documents.
@@ -422,7 +429,7 @@ export default defineSchema({
   userPreferences: defineTable({
     userId: v.id("users"),
     layout: v.optional(v.string()),
-    promptSuggestions: v.optional(v.boolean()),
+    promptSuggestions: v.optional(v.boolean()), // Legacy production compatibility.
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),

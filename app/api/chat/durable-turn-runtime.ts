@@ -14,6 +14,7 @@ import {
   type ChatAdmissionProofPayload,
 } from "@/convex/lib/chatAdmissionProof"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
@@ -378,6 +379,13 @@ export type DurableTurnRuntime = {
       credentialSource: "platform" | "byok"
       routeReason:
         "priority_byok" | "platform" | "fallback_byok" | "legacy_route_hint"
+    }
+    /** Per-turn effort receipt (ADR-0026), signed into the admission proof
+     * and persisted on the run row: what the user requested and what the
+     * runtime actually applied after route clamping. */
+    reasoningEffort?: {
+      requested?: ModelReasoningEffort
+      applied?: ModelReasoningEffort
     }
   }): Promise<MessageAISDK[]>
 
@@ -1296,7 +1304,7 @@ export function createConvexDurableTurn(args: {
       return [executionAbortController.signal]
     },
 
-    async prepare({ provider, route }) {
+    async prepare({ provider, route, reasoningEffort }) {
       if (prepareCalled) {
         throw new Error(
           "Durable turn runtime: prepare() may only be called once"
@@ -1313,6 +1321,7 @@ export function createConvexDurableTurn(args: {
         model,
         provider,
         route,
+        reasoningEffort,
         grantDigest,
         reservationId,
         generationInputHash,
@@ -1327,6 +1336,7 @@ export function createConvexDurableTurn(args: {
           model,
           provider,
           route,
+          reasoningEffort,
           expectedVisibleMessageCount,
           tailMessageId,
           latestUserMessage: latestUserMessage

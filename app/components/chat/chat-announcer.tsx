@@ -1,83 +1,73 @@
 "use client"
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react"
-import type { GenerationPresentationState } from "@/lib/chat-runs/run-presentation"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
-import { createPortal } from "react-dom"
-
-type Politeness = "polite" | "assertive"
-type Slots = Record<Politeness, HTMLElement | null>
-
-const AnnouncerContext = createContext<{
-  slots: Slots
-  setSlot: (politeness: Politeness, element: HTMLElement | null) => void
-} | null>(null)
+import type { GenerationPresentationState } from "@/lib/chat-runs/run-presentation"
+import { useEffect, useSyncExternalStore, type ReactNode } from "react"
+import {
+  activeAnnouncement,
+  announce,
+  subscribeToAnnouncements,
+} from "./aria-notify"
 
 /**
- * Holds body-level live-region elements so the chat surface can portal
- * announcement text into them. The regions live at the document root so
- * announcements survive route changes, while the announced text is derived from
- * chat status deep in the tree (`<ChatStatusAnnouncer />`). The bridge shares a
- * DOM element via context — no prop-drilling and no effect.
+ * Chat screen-reader announcements, routed through the aria-notify registry
+ * (see `aria-notify.ts` — the port of the reference's `Ll` announcer). The
+ * persistent live regions render the registry's active announcement per
+ * priority; announcers enqueue with per-turn source ids and
+ * interrupt/priority semantics instead of writing text into the DOM
+ * themselves.
  */
+
+const getServerText = () => ""
+
+function usePoliteAnnouncement(): string {
+  return useSyncExternalStore(
+    subscribeToAnnouncements,
+    () => activeAnnouncement("normal")?.message ?? "",
+    getServerText
+  )
+}
+
+function useAssertiveAnnouncement(): string {
+  return useSyncExternalStore(
+    subscribeToAnnouncements,
+    () => activeAnnouncement("high")?.message ?? "",
+    getServerText
+  )
+}
+
+/** Compatibility wrapper — the registry is module-scoped, so the provider no
+ * longer carries state. Kept so layout composition stays unchanged. */
 export function ChatAnnouncerProvider({ children }: { children: ReactNode }) {
-  const [slots, setSlots] = useState<Slots>({ polite: null, assertive: null })
-  // `setSlots` is stable; only re-render consumers when an element actually
-  // changes (mount/unmount), never on streaming re-renders.
-  const setSlot = useCallback(
-    (politeness: Politeness, element: HTMLElement | null) => {
-      setSlots((prev) =>
-        prev[politeness] === element ? prev : { ...prev, [politeness]: element }
-      )
-    },
-    []
-  )
-  const value = useMemo(() => ({ slots, setSlot }), [slots, setSlot])
-  return (
-    <AnnouncerContext.Provider value={value}>
-      {children}
-    </AnnouncerContext.Provider>
-  )
+  return children
 }
 
 /**
  * The two persistent `sr-only` live regions. Mount once near the `<body>` root,
  * outside the app shell, so navigation never unmounts them mid-announcement.
+ * `normal`-priority announcements render politely, `high` assertively.
  */
 export function ChatAnnouncerOutlet() {
-  const setSlot = useContext(AnnouncerContext)?.setSlot
-  // Stable callback refs: register on mount, clear on unmount.
-  const politeRef = useCallback(
-    (element: HTMLElement | null) => setSlot?.("polite", element),
-    [setSlot]
-  )
-  const assertiveRef = useCallback(
-    (element: HTMLElement | null) => setSlot?.("assertive", element),
-    [setSlot]
-  )
+  const polite = usePoliteAnnouncement()
+  const assertive = useAssertiveAnnouncement()
   return (
     <>
       <div
-        ref={politeRef}
         role="status"
         aria-live="polite"
         aria-atomic="true"
         className="sr-only"
-      />
+      >
+        {polite}
+      </div>
       <div
-        ref={assertiveRef}
         role="alert"
         aria-live="assertive"
         aria-atomic="true"
         className="sr-only"
-      />
+      >
+        {assertive}
+      </div>
     </>
   )
 }
@@ -85,27 +75,32 @@ export function ChatAnnouncerOutlet() {
 type ChatStatus = "streaming" | "ready" | "submitted" | "error"
 
 /**
- * Derives a screen-reader announcement from the current chat status and portals
- * it into the body-level live regions. The text changes only when the status
- * changes, so assistive tech announces each transition exactly once — no effect
- * and no transition tracking. Renders nothing visible.
+ * Derives a screen-reader announcement from the current chat status and
+ * enqueues it into the registry on each transition. Source ids are scoped to
+ * the active turn (the reference announces
+ * `conversation-turn-${id}-${index}-thinking|-complete`). Our additional
+ * durable status messages share the completion source so a finished turn can
+ * discard stale queued statuses without changing the reference's distinct
+ * Thinking source.
  *
  * Attached-stream finish evidence distinguishes a completed request from an
  * idle or newly opened chat. Desktop announces completion; mobile moves focus
- * to the final response in MessageAssistant. Empty text never re-announces.
+ * to the final response in MessageAssistant. Empty text never announces.
  */
 export function ChatStatusAnnouncer({
   status,
   isSubmitting,
   presentationState,
   completionAvailable = false,
+  turnId,
 }: {
   status?: ChatStatus
   isSubmitting?: boolean
   presentationState?: GenerationPresentationState
   completionAvailable?: boolean
+  /** Active turn identity scoping the announcement sources. */
+  turnId?: string | null
 }) {
-  const ctx = useContext(AnnouncerContext)
   const isMobile = useBreakpoint(768)
   const generating =
     isSubmitting === true || status === "submitted" || status === "streaming"
@@ -145,17 +140,38 @@ export function ChatStatusAnnouncer({
         : "")
   const assertive =
     presentationAnnouncement?.assertive ??
-    (status === "error"
-      ? "Something went wrong generating the response."
-      : "")
+    (status === "error" ? "Something went wrong generating the response." : "")
 
-  if (!ctx) return null
-  return (
-    <>
-      {ctx.slots.polite ? createPortal(polite, ctx.slots.polite) : null}
-      {ctx.slots.assertive
-        ? createPortal(assertive, ctx.slots.assertive)
-        : null}
-    </>
-  )
+  const sourceBase = turnId ? `conversation-turn-${turnId}` : "chat-status"
+
+  useEffect(() => {
+    if (!polite) return
+    if (polite === "Response complete") {
+      announce(polite, {
+        id: `${sourceBase}-complete`,
+        interrupt: "pending",
+        priority: "normal",
+      })
+      return
+    }
+    announce(polite, {
+      id:
+        polite === "Thinking"
+          ? `${sourceBase}-thinking`
+          : `${sourceBase}-complete`,
+      interrupt: "none",
+      priority: "normal",
+    })
+  }, [polite, sourceBase])
+
+  useEffect(() => {
+    if (!assertive) return
+    announce(assertive, {
+      id: `${sourceBase}-error`,
+      interrupt: "none",
+      priority: "high",
+    })
+  }, [assertive, sourceBase])
+
+  return null
 }

@@ -1,4 +1,7 @@
-import type { ModelReasoningSettings } from "@/lib/models/types"
+import type {
+  ModelReasoningEffort,
+  ModelReasoningSettings,
+} from "@/lib/models/types"
 import type { ToolMetadata } from "@/lib/tools/types"
 import { anthropic, createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogle, google } from "@ai-sdk/google"
@@ -49,8 +52,19 @@ function toOpenRouterChatSettings(settings?: ModelConstructionSettings) {
     return { reasoning: { max_tokens: reasoning.maxTokens } }
   }
   return {
-    reasoning: { effort: reasoning.effort },
+    reasoning: { effort: toOpenRouterEffort(reasoning.effort) },
   }
+}
+
+/**
+ * The provider package's effort enum stops at "xhigh"; the canonical scale's
+ * "max" (ADR-0026) clamps down to it here. OpenRouter itself clamps any
+ * effort to the upstream model's nearest supported level.
+ */
+function toOpenRouterEffort(
+  effort: ModelReasoningEffort
+): Exclude<ModelReasoningEffort, "max"> {
+  return effort === "max" ? "xhigh" : effort
 }
 
 /**

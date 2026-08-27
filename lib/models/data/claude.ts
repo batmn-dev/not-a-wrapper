@@ -27,6 +27,11 @@ const claudeModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     thinkingMode: "adaptive",
+    // output_config.effort — confirmed against the Anthropic models API
+    // (capabilities.effort.*.supported, 2026-08-26) for every entry below:
+    // 4.7+/5 low…max, the 4.6 pair without "xhigh", 4.5 snapshots none.
+    effortLevels: ["low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "high",
     searchMode: "optional",
     openSource: false,
     speed: "Medium",
@@ -64,6 +69,8 @@ const claudeModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     thinkingMode: "adaptive",
+    effortLevels: ["low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "high",
     searchMode: "optional",
     openSource: false,
     speed: "Fast",
@@ -99,6 +106,8 @@ const claudeModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     thinkingMode: "adaptive",
+    effortLevels: ["low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "high",
     searchMode: "optional",
     openSource: false,
     speed: "Slow",
@@ -136,6 +145,9 @@ const claudeModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     thinkingMode: "adaptive",
+    // 4.6 generation: no "xhigh" (effort docs — newer level than this model).
+    effortLevels: ["low", "medium", "high", "max"],
+    defaultEffort: "high",
     // 4.6 generation: budget_tokens is deprecated but functional, so the
     // pause_turn search downgrade still applies (removed on 4.7+/5 — see
     // ModelConfig.searchThinkingDowngrade).
@@ -176,6 +188,8 @@ const claudeModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     thinkingMode: "adaptive",
+    effortLevels: ["low", "medium", "high", "max"],
+    defaultEffort: "high",
     searchThinkingDowngrade: true,
     searchMode: "optional",
     openSource: false,

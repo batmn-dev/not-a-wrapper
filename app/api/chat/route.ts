@@ -144,6 +144,7 @@ export async function POST(req: Request) {
       model: requestedModel,
       systemPrompt,
       enableSearch,
+      reasoningEffort,
       chatVersion,
       expectedVisibleMessageCount,
       tailMessageId,
@@ -241,6 +242,7 @@ export async function POST(req: Request) {
                 chatId,
                 systemPrompt,
                 enableSearch: enableSearch ?? false,
+                reasoningEffort,
                 pinnedProviderId,
               })
           )
@@ -270,6 +272,7 @@ export async function POST(req: Request) {
         model,
         systemPrompt,
         enableSearch: enableSearch ?? false,
+        reasoningEffort,
         chatVersion,
         expectedVisibleMessageCount,
         tailMessageId,

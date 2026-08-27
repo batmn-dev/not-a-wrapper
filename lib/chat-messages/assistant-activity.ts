@@ -7,7 +7,8 @@ import type {
   SearchImageResult,
 } from "./assistant-turn"
 import { parseSafeExternalUrl } from "../url-safety"
-import { getToolDisplayName } from "./metadata"
+import type { ModelReasoningEffort } from "../models/types"
+import { getReasoningEffort, getToolDisplayName } from "./metadata"
 import { dedupeSources, type AssistantSourceResult } from "./sources"
 import {
   classifyToolName,
@@ -102,6 +103,9 @@ export type AssistantActivityCompletion = {
   status: "complete" | "error" | "stopped"
   title: string
   detail: string
+  /** Applied per-turn effort (ADR-0026), from the message metadata stamp —
+   * the panel badges the completion row with it. */
+  effort?: ModelReasoningEffort
 }
 
 /** What a single Activity panel row can receive. */
@@ -289,7 +293,8 @@ function reasoningSteps(
 function deriveCompletion(
   entries: readonly AssistantActivityTimelineEntry[],
   durationSeconds: number | undefined,
-  status: AssistantTurnRenderStatus | undefined
+  status: AssistantTurnRenderStatus | undefined,
+  effort?: ModelReasoningEffort
 ): AssistantActivityCompletion {
   // A user-denied tool is a decision, not a failure: the entry itself reads
   // "<tool> denied" and the run continues to a normal answer. Only tool errors
@@ -332,6 +337,7 @@ function deriveCompletion(
           : `Thought for ${formatDuration(durationSeconds)}`,
     detail: "Done",
     status: "complete",
+    ...(effort !== undefined ? { effort } : {}),
   }
 }
 
@@ -470,7 +476,12 @@ export function deriveAssistantActivityModel(
   )
   const completion =
     phase.kind === "settled" || phase.kind === "responding"
-      ? deriveCompletion(nonEmptyEntries, durationSeconds, options?.status)
+      ? deriveCompletion(
+          nonEmptyEntries,
+          durationSeconds,
+          options?.status,
+          getReasoningEffort(view.metadata)
+        )
       : undefined
 
   return {
