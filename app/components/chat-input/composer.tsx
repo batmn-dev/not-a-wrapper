@@ -671,11 +671,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 data-composer-transition-slot="trailing"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="relative ms-1 flex min-w-0 shrink items-center gap-1.5">
+                <div
+                  className={cn(
+                    "relative ms-1 flex min-w-0 shrink items-center",
+                    // Joined segmented pair: a hairline 2px seam between the
+                    // model trigger and the thinking pill; the loose 6px gap
+                    // returns for effortless models.
+                    hasEffortControl ? "gap-0.5" : "gap-1.5"
+                  )}
+                >
                   <ModelSelector
                     variant="composer"
                     className={
-                      hasEffortControl ? "rounded-e-lg pe-0.5" : undefined
+                      hasEffortControl ? "rounded-e-xl pe-0.5" : undefined
                     }
                     selectedModelId={selectedModel}
                     setSelectedModelId={handleModelChange}

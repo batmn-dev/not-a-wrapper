@@ -126,7 +126,7 @@ function EffortControl({
                 // model trigger mirrors both when this control is present).
                 // Always the quiet tertiary grey — an override changes the
                 // label, not the color.
-                className="text-[var(--text-tertiary)] can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 shrink-0 overflow-visible rounded-s-lg ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
+                className="text-[var(--text-tertiary)] can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 shrink-0 overflow-visible rounded-s-xl ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
               />
             }
           >
