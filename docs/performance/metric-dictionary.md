@@ -2,8 +2,18 @@
 
 Date: 2026-08-27 · Companion to [`current-measurement-map.md`](./current-measurement-map.md).
 This is the naming and interpretation contract for every chat-performance metric —
-existing, proxy, and proposed. Phase 2 implements the `proposed` rows; Phase 3/4 report
-against these names; nothing may report under a name not defined here.
+existing, proxy, and proposed. Phase 3/4 report against these names; nothing may report
+under a name not defined here.
+
+**Status update (2026-08-27, Phase 2 landed):** the schema defects are fixed
+(`deduped` checkpoint kind accepted; `stream_terminal` reports `abort` after a Stop
+intent; `request_parse`/`model_config`/`history_adaptation` now emitted), the
+receipt-anchored server spans, provider first-event/first-text spans, transport taps,
+Stop mark, rAF-coalescer publication summary, projection/Shiki durations, long-task and
+rAF-gap observers, per-op `durable_write` timings, `settlement_total`, and the sampled
+Convex-side read/write bucket logs (`CHAT_PERF_CONVEX_SAMPLE_RATE`, `_tag:
+"chat_perf_convex"`) all exist. Rows below are annotated individually; `proposed` rows
+that remain are harness-derived (Phase 3) or deferred to an experiment.
 
 ## Global rules
 
@@ -33,11 +43,11 @@ against these names; nothing may report under a name not defined here.
 | Metric | Start → End | Layer | Gate? | Status |
 |---|---|---|---|---|
 | `send_to_optimistic_paint` | `chat_send_intent` → `optimistic_message_painted` | browser | yes (deterministic harness) | existing (proxy) |
-| `send_to_request_dispatched` | `chat_send_intent` → `request_dispatched` | browser | yes | proxy |
+| `send_to_request_dispatched` | `chat_send_intent` → `request_dispatched` | browser | yes | existing (true fetch mark since Phase 2 — emitted by the transport immediately before the HTTP request) |
 | `send_to_first_visible_text` | `chat_send_intent` → `first_visible_text` | browser+server+provider | no (includes provider) | existing (proxy) |
 | `input_to_next_paint` | keystroke `event.timeStamp` → next frame (`composer.keystroke_to_next_paint`) | browser | yes | existing |
 | `input_to_settled_paint` | keystroke → second frame (`composer.keystroke_to_settled_paint`) | browser | yes | existing |
-| `stop_to_ui_feedback` | `stop_intent` → `stop_ui_feedback` | browser | yes | proposed |
+| `stop_to_ui_feedback` | `stop_intent` → stopped-state render | browser | yes | partial (`stop_intent` mark exists; the feedback endpoint is harness-measured — `stream_terminal` with `outcome: "abort"` bounds it from above) |
 
 Interpretation and limitations:
 
@@ -45,10 +55,9 @@ Interpretation and limitations:
   **commit-time, not paint-time**. Under the deterministic harness the commit→paint gap is
   measured separately (`delta_to_paint`, group 5); a paint-adjacent variant of
   `first_visible_text` is proposed via the rAF-chain technique.
-- `request_dispatched` is today the AI SDK `status→"submitted"` transition, not the
-  `fetch()` call; Phase 2 moves it into the transport. Until then
-  `send_to_request_dispatched` under-reports the pre-fetch client work
-  (`chat-turn-controller.ts:371-419`).
+- `request_dispatched` fires from the transport at the actual `fetch()` (Phase 2); the
+  old status-transition proxy is gone, so `send_to_request_dispatched` now includes the
+  pre-fetch client work (`chat-turn-controller.ts:371-419`) it used to hide.
 - `send_to_first_visible_text` includes provider latency; report it only decomposed and
   never compare across providers/models as one population.
 - Allowed dimensions: `textLengthBucket` (on `first_visible_text`), scenario, viewport,
@@ -63,21 +72,21 @@ harness (local Convex, fixed fixtures) they gate with generous ceilings.
 
 | Metric (span name) | Measures | Convex I/O inside? | Status |
 |---|---|---|---|
-| `request_parse` | body `req.json()` + wire-contract validation | no | proposed (declared, never emitted) |
+| `request_parse` | body `req.json()` + wire-contract validation | no | existing (Phase 2; rejected requests return without a span) |
 | `auth_session` | WorkOS session resolution | no (network: WorkOS) | existing |
 | `usage_admission` | outer admission block: abuse check, preflight, credential resolution, usage increment | yes (several) | existing |
 | `attachment_resolution` | `planGenerationInput` + trusted-text preflight | yes | existing |
 | `credential_resolution` | approval-route facts, key settings, route resolution, **platform usage reservation** | yes | existing |
 | `usage_reservation` | `reserveAuthorized` mutation alone | yes | proposed (today folded into `credential_resolution`, not separable) |
-| `model_config` | logical model resolution (pure) | no | proposed (declared, never emitted) |
+| `model_config` | logical model resolution (pure) | no | existing (Phase 2) |
 | `tool_preparation` | 3-layer tool setup + MCP connect | network: MCP | existing |
 | `durable_prepare` | execution grant + run creation + history load (`prepareGeneration`) | yes | existing |
 | `message_validation` | boundary-1 structural validation | no | existing |
-| `history_adaptation` | provider history adaptation | no | proposed (exists as `_tag:"history_adapt"` log, promote to span) |
+| `history_adaptation` | provider history adaptation | no | existing (Phase 2; the `_tag:"history_adapt"` log keeps its richer warning fields) |
 | `model_bound_validation` | boundary-2 validation | no | existing |
 | `prepare_total` | whole `turn.prepare()` | yes | existing |
 | `stream_start` | runtime-construction → immediately before `streamText` | no | existing — **anchor caveat**: excludes auth/parse/admission; do not sum with them until re-anchored (map §2.3) |
-| `provider_request_started` | request receipt → `streamText` call | no | proposed (receipt-anchored replacement) |
+| `provider_request_started` | request receipt → `streamText` call | no | existing (Phase 2; the receipt-anchored companion to `stream_start`) |
 
 Interpretation: `prepare_total` + admission spans + `auth_session` approximate the plan's
 "server preparation excluding provider" (working target 250–300 ms p95). Sub-spans are
@@ -87,8 +96,8 @@ nested, not additive across groups — never sum overlapping spans.
 
 | Metric | Start → End | Layer | Gate? | Status |
 |---|---|---|---|---|
-| `provider_invocation_to_first_event` | `streamText` call → first chunk of any type | provider | no | proxy (`firstChunkLatencyMs` → Braintrust/Sentry buckets only; promote to `chat_perf` with `chunkType` dimension) |
-| `provider_invocation_to_first_text` | `streamText` call → first `text-delta` chunk | provider | no | proposed |
+| `provider_invocation_to_first_event` | `streamText` call → first chunk of any type | provider | no | existing (Phase 2: `server_span` `provider_first_event`; Braintrust/Sentry buckets retained) |
+| `provider_invocation_to_first_text` | `streamText` call → first `text-delta` chunk | provider | no | existing (Phase 2: `server_span` `provider_first_text_delta`) |
 
 Reasoning, source, and tool events can precede visible text — the two metrics are kept
 separate deliberately. Smoke-suite only; labeled by provider+model+route tier; never a
@@ -99,10 +108,10 @@ warm/cold credential path.
 
 | Metric | Start → End | Layer | Gate? | Status |
 |---|---|---|---|---|
-| `server_first_stream_write` | request receipt → first chunk enqueued to the response stream | next | no | proposed (TransformStream tap) |
-| `first_write_to_client_first_bytes` | `server_first_stream_write` → `client_first_stream_bytes` | network | no | proposed (needs both taps + clock-skew note: computed per-turn from the correlationId join, cross-machine clocks — report medians only) |
-| `client_first_stream_bytes` | fetch dispatch → first response-body chunk | browser | no | proposed |
-| `client_first_text_delta_received` | fetch dispatch → first text-delta SSE frame (envelope type only) | browser | no | proposed |
+| `server_first_stream_write` | request receipt → first chunk enqueued to the response stream | next | no | existing (Phase 2; sampled requests only — the tap is skipped otherwise) |
+| `first_write_to_client_first_bytes` | `server_first_stream_write` → `client_first_stream_bytes` | network | no | proposed (both endpoints now exist; the join is harness-side, cross-machine clocks — report medians only) |
+| `client_first_stream_bytes` | fetch dispatch → first parsed response chunk | browser | no | existing (Phase 2; transport tap reads only the chunk `type` discriminant) |
+| `client_first_text_delta_received` | fetch dispatch → first text-delta chunk | browser | no | existing (Phase 2) |
 
 ## 5. Rendering (browser)
 
@@ -110,11 +119,11 @@ warm/cold credential path.
 |---|---|---|---|
 | `delta_to_paint` | text-delta receipt → next painted frame (rAF-chain) | yes (harness) | proposed |
 | `first_text_to_visible` | `client_first_text_delta_received` → `first_visible_text` | yes (harness) | proposed (plan target: <50 ms p95 normal CPU) |
-| `long_task_count` / `longest_task_ms` / `total_blocking_time_ms` | `PerformanceObserver("longtask")` during a scenario window | yes (harness) | proposed |
-| `raf_gap_p95_ms` | rAF-interval sampler during streaming | yes (harness) | proposed |
-| `markdown_projection_ms` | duration of `advanceMarkdownProjection` per update | yes | proposed |
+| `long_task_count` / `longest_task_ms` / `total_blocking_time_ms` | derived from `long_task` marks (`PerformanceObserver("longtask")`, mounted in instrumentation builds by `useChatResponsivenessMarks`) | yes (harness) | existing (marks; aggregates harness-derived) |
+| `raf_gap_p95_ms` | derived from `raf_gap` marks (rAF-interval sampler while streaming, >40 ms gaps) | yes (harness) | existing (marks; aggregates harness-derived) |
+| `markdown_projection_ms` | `markdown_projection_advance` mark per committed advance | yes | existing (Phase 2) |
 | `markdown_projection_anomalies` | count of `markdown_projection_reset` / `_fallback` / `_settle_mismatch` by `reason` | yes (zero-tolerance on settle_mismatch) | existing |
-| `shiki_highlight_ms` / `shiki_invocations` / `shiki_grammar_load_ms` | around `highlightCode` | yes | proposed |
+| `shiki_highlight_ms` / `shiki_invocations` | `shiki_highlight` mark per highlight run (duration includes any lazy grammar/theme load; count = mark count) | yes | existing (Phase 2; a separate grammar-load split stays proposed) |
 | `dom_node_count_start` / `_end` | scenario boundaries | yes (harness) | proposed |
 | `heap_growth_bytes` | CDP, harness-only | no (advisory) | proposed |
 
@@ -123,8 +132,8 @@ warm/cold credential path.
 | Metric | Definition | Gate? | Status |
 |---|---|---|---|
 | `stream_chunks_received` | SSE frames observed by the client tap | yes | proposed |
-| `ui_publications` | rAF-coalescer publications per scenario | yes | proposed (counter in `message-throttle.ts` — highest-value single insertion point) |
-| `coalesced_deltas` | deltas absorbed without a publication | yes | proposed |
+| `ui_publications` | rAF-coalescer publications per streaming session | yes | existing (Phase 2: `stream_publication_summary` mark — one per session, emitted when the stream leaves `streaming`) |
+| `coalesced_deltas` | SDK message callbacks absorbed without a publication | yes | existing (Phase 2, same summary; "deltas" = SDK message callbacks, not SSE frames) |
 | `react_commits` | React commit count — **profiling builds only**, never normal production | yes (profiling harness) | proposed |
 | `stream_bytes_total` / `stream_chars_total` | bucketed totals per turn | yes | proposed |
 
@@ -144,11 +153,12 @@ status/error publications are exempt (they bypass the coalescer by design).
 
 | Metric | Definition | Layer | Status |
 |---|---|---|---|
-| `checkpoint.attempt` / `.accepted` / `.deduped` / `.authority_lost` / `.failed` (+ `payloadBytes`) | snapshot write outcomes, Next side | next | existing — **`deduped` currently dropped by the enum (defect, fix first)**; invariant after fix: `attempt = accepted + deduped + authority_lost + failed` |
+| `checkpoint.attempt` / `.accepted` / `.deduped` / `.authority_lost` / `.failed` (+ `payloadBytes`) | snapshot write outcomes, Next side | next | existing — `deduped` accepted since Phase 2; invariant: `attempt = accepted + deduped + authority_lost + failed` (source-pinned by test) |
 | `checkpoint.final_flush` / `.settlement_receipt_confirmed` / `.settlement_receipt_degraded` | settlement events | next | existing (counts only) |
-| `snapshot_write_ms` | per worker-wire write duration (snapshot/step/approval/heartbeat/terminal, by `op` dimension) | next | proposed |
-| `final_snapshot_ms` / `terminal_write_ms` / `settlement_total_ms` | durations inside `settle()` | next | proposed |
-| `snapshot_mutation_outcomes` | applied/stale/deduped/lost counters, Convex side (mirror of the Next counters) | convex | proposed |
+| `snapshot_write_ms` | per worker-wire write duration by `op` (closed 8-op enum) | next | existing (Phase 2: `durable_write` event; sampled requests only, so the untimed fast path keeps its microtask depth) |
+| `final_snapshot_ms` / `terminal_write_ms` | durations inside `settle()` | next | existing via `durable_write` per-op rows (`updateAssistantSnapshot` final flush, `markGenerationRunCompleted`/`markGenerationRunAborted`) |
+| `settlement_total_ms` | whole `settle()` — drain + final flush + terminal write | next | existing (Phase 2: `server_span` `settlement_total`) |
+| `snapshot_mutation_outcomes` | applied/stale/deduped/lost, Convex side (mirror of the Next counters) | convex | existing (Phase 2: sampled `_tag:"chat_perf_convex"` `snapshot_write` lines with `payloadBytesBucket`) |
 | `snapshot_acceptance_ratio` | accepted / attempt per streamed minute | derived | proposed (cost baseline, no target yet) |
 
 ## 9. Reactive reads
@@ -158,7 +168,7 @@ status/error publications are exempt (they bypass the coalescer by design).
 | `selected_conversation_client` (`selectedCount`, `mappingDurationMs`) | client-side mapping cost + row count per subscription update | browser | existing (note: re-runs mapping to time it; flag-gated) |
 | `subscription_updates_per_turn` | count of `getSelectedConversation` results delivered during one turn | browser | proposed |
 | `reactive_result_bytes_bucket` | serialized result size bucket per update | browser | proposed |
-| `messages_read_bucket` / `selected_count_bucket` / `parts_bytes_bucket` | per-invocation read cost, sampled, Convex side | convex | proposed |
+| `messages_read_bucket` / `selected_count_bucket` / `parts_bytes_bucket` | per-invocation read cost, sampled, Convex side | convex | existing (Phase 2: `_tag:"chat_perf_convex"` `selected_conversation_read`, gated by `CHAT_PERF_CONVEX_SAMPLE_RATE`; line frequency doubles as the re-execution counter) |
 | `query_reexecutions` / `documents_read` / `db_bandwidth` | deployment metrics via Convex dashboard/MCP, recorded per benchmark run | convex | proposed (result-file only, not app logs) |
 
 ## 10. Cross-client freshness
@@ -178,7 +188,7 @@ status/error publications are exempt (they bypass the coalescer by design).
 | `correctness_hash` | FNV-1a hash of folded/rendered output vs fixture expectation | existing (fixture); proposed (harness end-to-end) |
 | `snapshot_duplicate_acceptance` | Convex accepts a sequence ≤ `lastSnapshotSequence` | proposed (server rejects today — the metric proves it stays zero) |
 | `settle_mismatch_count` | `markdown_projection_settle_mismatch` occurrences | existing (target: zero) |
-| `stream_terminal.outcome` fidelity | `abort`/`disconnect` reported truthfully | defect today (collapses to finish/error) — fix in §4.1 of the map |
+| `stream_terminal.outcome` fidelity | `abort`/`disconnect` reported truthfully | fixed for `abort` in Phase 2 (Stop intent noted per turn); `disconnect` remains unemitted — the client cannot distinguish it today |
 
 ## 12. Cost proxies (baseline-only, no targets yet)
 

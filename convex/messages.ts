@@ -6,6 +6,11 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
+import {
+  bucketPow2,
+  logChatPerfConvex,
+  shouldSampleChatPerfConvex,
+} from "./domain/chat_perf"
 import { createMessageBranchWriter } from "./domain/message_branch_writes"
 import {
   createBranchContext,
@@ -217,6 +222,26 @@ export async function getSelectedConversationForViewer(
 
   const messages = await listMessagesByChatOrder(ctx, chat._id)
   const selectedMessages = getVisibleSelectedMessages(messages)
+
+  // Sampled read-cost telemetry (measurement plan Phase 2 §2.3): rows read
+  // vs rows returned and the projected parts size, buckets only. A logged
+  // line marks a real (uncached) execution, so line frequency doubles as the
+  // re-execution/invalidation counter this query never had.
+  if (shouldSampleChatPerfConvex()) {
+    let partsBytes = 0
+    try {
+      partsBytes = JSON.stringify(
+        selectedMessages.map((message) => message.parts)
+      ).length
+    } catch {
+      // Size estimate only.
+    }
+    logChatPerfConvex("selected_conversation_read", {
+      messagesReadBucket: bucketPow2(messages.length),
+      selectedCountBucket: bucketPow2(selectedMessages.length),
+      partsBytesBucket: bucketPow2(partsBytes),
+    })
+  }
 
   const isOwner = viewer !== null && chat.userId === viewer._id
   if (!isOwner) {

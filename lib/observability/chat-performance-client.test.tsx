@@ -13,7 +13,9 @@ import {
   type MockInstance,
 } from "vitest"
 import {
+  beginChatPerfTurn,
   deriveChatPerfTurnFacts,
+  noteChatPerfStopIntent,
   useChatNavigationPerfMarks,
   useChatTurnPerfMarks,
 } from "./chat-performance-client"
@@ -192,6 +194,27 @@ describe("chat turn performance marks", () => {
     expect(marksNamed("first_visible_text")).toHaveLength(2)
     expect(marksNamed("first_visible_text")[1]?.[1]).toEqual({
       detail: { textLengthBucket: 4 },
+    })
+  })
+
+  it("reports abort on stream_terminal after a stop intent, and finish otherwise", () => {
+    beginChatPerfTurn()
+    render({ status: "submitted" })
+    render({ status: "streaming" })
+    noteChatPerfStopIntent()
+    render({ status: "ready" })
+    expect(marksNamed("stop_intent")).toHaveLength(1)
+    expect(marksNamed("stream_terminal").at(-1)?.[1]).toMatchObject({
+      detail: expect.objectContaining({ outcome: "abort" }),
+    })
+
+    // A new turn clears the noted stop; a natural completion reads finish.
+    beginChatPerfTurn()
+    render({ status: "submitted" })
+    render({ status: "streaming" })
+    render({ status: "ready" })
+    expect(marksNamed("stream_terminal").at(-1)?.[1]).toMatchObject({
+      detail: expect.objectContaining({ outcome: "finish" }),
     })
   })
 

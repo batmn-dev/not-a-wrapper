@@ -184,6 +184,12 @@ export type ChatTurnInput = {
    * checkpoint counters from the durable runtime.
    */
   perf?: ChatPerfServerSession
+  /**
+   * HTTP request receipt time (route-captured). Anchors the receipt-anchored
+   * perf spans; absent in tests/non-route callers, which fall back to the
+   * runtime's construction clock.
+   */
+  requestReceivedAtMs?: number
 }
 
 /**
@@ -423,6 +429,7 @@ export function createChatTurnRuntime(args: {
   } = input
   // No-op unless the route sampled this request (rate 0 short-circuits).
   const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
+  const requestReceivedAtMs = input.requestReceivedAtMs ?? turnStartedAtMs
 
   // Lifecycle guard — the runtime is one-shot. `prepare()` and `toResponse()`
   // may each run at most once, in order, so a repeated call can never open a
@@ -848,6 +855,7 @@ export function createChatTurnRuntime(args: {
       ...continuationTail,
     ]
     const adaptationTimeMs = Date.now() - adaptStartTime
+    perf.record("history_adaptation", adaptationTimeMs)
     const warningCount = adapterResult.warnings.length
     const warningCountsByCode = countWarningsByCode(adapterResult.warnings)
     const replayNormalizeWarningCount =
@@ -1191,6 +1199,7 @@ export function createChatTurnRuntime(args: {
       initialReasoningDurationMs
     )
     let firstChunkLatencyMs: number | null = null
+    let firstTextDeltaLatencyMs: number | null = null
     let lastChunkAtMs: number | null = null
     let lastProgressAtMs = 0
     let observedToolCalls = 0
@@ -1352,9 +1361,16 @@ export function createChatTurnRuntime(args: {
         initialDurationMs: initialWorkDurationMs,
       })
       providerStreamStarted = true
-      // Request-to-provider-start (plan §7.4): request receipt → immediately
-      // before provider consumption begins. Content-free; no-op unless sampled.
+      // Two anchors, deliberately both emitted (no-ops unless sampled):
+      // `stream_start` keeps its historical clock — runtime construction →
+      // streamText (turnStartedAtMs is set AFTER auth/parse/admission);
+      // `provider_request_started` is the receipt-anchored span the
+      // measurement plan's lifecycle timeline sums against.
       perf.record("stream_start", streamStartMs - turnStartedAtMs)
+      perf.record(
+        "provider_request_started",
+        streamStartMs - requestReceivedAtMs
+      )
       return streamText({
         model: aiModel,
         instructions: enrichedSystemPrompt,
@@ -1453,6 +1469,13 @@ export function createChatTurnRuntime(args: {
           lifecycle.stream.onChunk(chunk)
           if (firstChunkLatencyMs === null) {
             firstChunkLatencyMs = now - streamStartMs
+            // First provider event of ANY type — reasoning, source, and tool
+            // chunks satisfy this as readily as text.
+            perf.record("provider_first_event", firstChunkLatencyMs)
+          }
+          if (firstTextDeltaLatencyMs === null && chunk.type === "text-delta") {
+            firstTextDeltaLatencyMs = now - streamStartMs
+            perf.record("provider_first_text_delta", firstTextDeltaLatencyMs)
           }
           if (chunk.type === "reasoning-start") {
             reasoningActivity.start(chunk.id)
@@ -2030,8 +2053,37 @@ export function createChatTurnRuntime(args: {
           })
         : uiMessageStream
 
+    // Receipt-anchored transport spans (sampled requests only): first chunk
+    // enqueued toward the wire and stream close. An identity transform — no
+    // chunk is inspected or retained; unsampled requests skip the extra hop.
+    const observedResponseStream = perf.sampled
+      ? (() => {
+          let firstWriteRecorded = false
+          return responseStream.pipeThrough(
+            new TransformStream<UIMessageChunk, UIMessageChunk>({
+              transform(chunk, controller) {
+                if (!firstWriteRecorded) {
+                  firstWriteRecorded = true
+                  perf.record(
+                    "server_first_stream_write",
+                    Date.now() - requestReceivedAtMs
+                  )
+                }
+                controller.enqueue(chunk)
+              },
+              flush() {
+                perf.record(
+                  "response_stream_closed",
+                  Date.now() - requestReceivedAtMs
+                )
+              },
+            })
+          )
+        })()
+      : responseStream
+
     return createUIMessageStreamResponse({
-      stream: responseStream,
+      stream: observedResponseStream,
       consumeSseStream: consumeStream,
     })
   }

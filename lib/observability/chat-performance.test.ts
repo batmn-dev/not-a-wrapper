@@ -124,6 +124,95 @@ describe("event schema allow-list", () => {
     ).toBe(false)
   })
 
+  it("accepts the Phase 2 lifecycle shapes and the deduped checkpoint kind", () => {
+    const correlationId = createChatPerfCorrelationId()
+    for (const span of [
+      "request_parse",
+      "model_config",
+      "history_adaptation",
+      "provider_request_started",
+      "provider_first_event",
+      "provider_first_text_delta",
+      "server_first_stream_write",
+      "response_stream_closed",
+      "settlement_total",
+    ]) {
+      expect(
+        validateChatPerfEvent("server_span", { span, durationMs: 1, ok: true })
+      ).toEqual({ ok: true })
+    }
+    // The counter kind durable-turn-runtime.ts emitted from the start and the
+    // validator silently dropped: attempts must reconcile against outcomes.
+    expect(validateChatPerfEvent("checkpoint", { kind: "deduped" })).toEqual({
+      ok: true,
+    })
+    expect(
+      validateChatPerfEvent("durable_write", {
+        op: "updateAssistantSnapshot",
+        durationMs: 3.5,
+        ok: true,
+        correlationId,
+      })
+    ).toEqual({ ok: true })
+    expect(
+      validateChatPerfEvent("durable_write", { op: "dropTables", durationMs: 1 })
+        .ok
+    ).toBe(false)
+    expect(
+      validateChatPerfEvent("stream_publication_summary", {
+        callbackCount: 120,
+        publicationCount: 40,
+        coalescedCount: 80,
+      })
+    ).toEqual({ ok: true })
+    for (const event of [
+      "client_first_stream_bytes",
+      "client_first_text_delta_received",
+      "stop_intent",
+    ]) {
+      expect(validateChatPerfEvent(event, { correlationId })).toEqual({
+        ok: true,
+      })
+    }
+    for (const event of [
+      "markdown_projection_advance",
+      "shiki_highlight",
+      "long_task",
+      "raf_gap",
+    ]) {
+      expect(validateChatPerfEvent(event, { durationMs: 2 })).toEqual({
+        ok: true,
+      })
+      expect(validateChatPerfEvent(event, {})).toEqual({
+        ok: false,
+        reason: "missing required field: durationMs",
+      })
+    }
+  })
+
+  it("pins every checkpoint counter emitted by the durable runtime to the enum", async () => {
+    // Regression pin for the silently-dropped "deduped" defect: extract every
+    // string literal passed to `counter(...)` in the durable runtime source
+    // and require the schema to accept it.
+    const { readFile } = await import("node:fs/promises")
+    const source = await readFile(
+      new URL(
+        "../../app/api/chat/durable-turn-runtime.ts",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    const kinds = [...source.matchAll(/\.counter\(([^)]*)\)/g)].flatMap(
+      (call) => [...call[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
+    )
+    expect(kinds.length).toBeGreaterThan(0)
+    for (const kind of kinds) {
+      expect(validateChatPerfEvent("checkpoint", { kind })).toEqual({
+        ok: true,
+      })
+    }
+  })
+
   it("accepts the documented shapes", () => {
     const correlationId = createChatPerfCorrelationId()
     expect(
@@ -178,8 +267,31 @@ describe("server session", () => {
     const result = await session.span("durable_prepare", async () => 42)
     session.counter("attempt", 10)
     session.record("stream_start", 5)
+    session.event("durable_write", { op: "heartbeatGenerationRun" })
     expect(result).toBe(42)
     expect(log).not.toHaveBeenCalled()
+  })
+
+  it("emits schema-validated generic events with correlation when sampled", () => {
+    const correlationId = createChatPerfCorrelationId()
+    const log = vi.spyOn(console, "log").mockImplementation(() => {})
+    const session = createChatPerfServerSession(correlationId, {
+      rate: 1,
+      random: () => 0,
+    })
+    session.event("durable_write", {
+      op: "updateAssistantSnapshot",
+      durationMs: 7,
+      ok: true,
+    })
+    session.event("durable_write", { op: "not_an_op", durationMs: 1 })
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      _tag: "chat_perf",
+      event: "durable_write",
+      op: "updateAssistantSnapshot",
+      correlationId,
+    })
   })
 
   it("carries a valid correlation id through spans and counters when sampled", async () => {

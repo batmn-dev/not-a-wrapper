@@ -6,6 +6,7 @@ import {
   type LocalTransportStatus,
 } from "@/lib/chat-runs/run-presentation"
 import { getMessagePersistenceMode } from "@/lib/chat-store/identity"
+import { noteChatPerfStopIntent } from "@/lib/observability/chat-performance-client"
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 const PRESENTATION_TICK_MS = 5_000
@@ -194,6 +195,10 @@ export function useGenerationPresentationController({
   )
 
   const stop = useCallback(async () => {
+    // Earliest synchronous point of the user's Stop (measurement plan Phase
+    // 2): before the persistence-mode branch, the durable mutation, and the
+    // deferred-stop arming. No-op unless instrumented.
+    noteChatPerfStopIntent()
     localStopIntentRef.current = true
     if (!chatId || getMessagePersistenceMode(chatId) !== "server") {
       void stopLocal()

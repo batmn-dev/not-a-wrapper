@@ -53,6 +53,11 @@ function setChatConversationCorrelation(chatId: string): void {
 // the durable-persistence timeline.
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID()
+  // Receipt anchor for the receipt-anchored perf spans
+  // (`provider_request_started`, `server_first_stream_write`,
+  // `response_stream_closed`). Distinct from the runtime's turn clock, which
+  // deliberately starts at construction (see chat-turn-runtime.ts).
+  const requestReceivedAtMs = Date.now()
   // Sampled chat-performance session (PR 0b): off unless CHAT_PERF_SAMPLE_RATE
   // is set. The client's x-chat-perf-id is validated here and carried only
   // through perf spans — never persisted to chat/run/message docs and never
@@ -95,6 +100,7 @@ export async function POST(req: Request) {
     // A body that isn't valid JSON is a client error, not a server fault —
     // classify it as 400 INVALID_REQUEST instead of letting the SyntaxError
     // fall through to the generic 500 catch (which would page via Sentry).
+    const parseStartedAt = performance.now()
     let jsonBody: unknown
     try {
       jsonBody = await req.json()
@@ -113,6 +119,10 @@ export async function POST(req: Request) {
     // (lib/chat-messages/chat-turn-contract.ts). Identity stays session-derived:
     // the parser only uses `isAuthenticated` for the guest-id rule.
     const parsed = parseChatTurnRequest(jsonBody, { isAuthenticated })
+    // Body parse + wire-contract validation together; rejected requests
+    // return above/below without a span (they never stream, so their absence
+    // cannot skew a turn timeline).
+    perf.record("request_parse", performance.now() - parseStartedAt)
     if (!parsed.ok) {
       // Routine bad input (missing fields, malformed JSON, absent guest id) is
       // an expected 400 and stays silent. An `unexpected` rejection is a
@@ -155,7 +165,9 @@ export async function POST(req: Request) {
     // Logical identity (ADR-0020): aliases, successions, and old routed ids
     // all normalize to the logical model id; the route resolver below decides
     // the concrete execution route (and re-derives the legacy hint itself).
+    const modelConfigStartedAt = performance.now()
     const model = resolveModelSelection(requestedModel).modelId
+    perf.record("model_config", performance.now() - modelConfigStartedAt)
     telemetryChatId = chatId
     telemetryModel = model
     telemetryMessageCount = Array.isArray(messages)
@@ -288,6 +300,7 @@ export async function POST(req: Request) {
         reservationId: admission.reservationId,
         generationInput: admission.generationInput,
         perf,
+        requestReceivedAtMs,
       },
     })
 

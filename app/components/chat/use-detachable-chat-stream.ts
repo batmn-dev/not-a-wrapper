@@ -8,10 +8,16 @@ import { LOCAL_CHAT_ID_PREFIX } from "@/lib/chat-store/identity"
 import { isSelectedPathDivergent } from "@/lib/chat-store/turns/selected-path"
 import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 import {
+  isChatPerfClientEnabled,
   markChatPerf,
   type DetachedBindingGaugeEvent,
 } from "@/lib/observability/chat-performance"
-import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
+import {
+  markChatPerfFirstStreamChunk,
+  markChatPerfFirstTextDelta,
+  markChatPerfRequestDispatched,
+  takeChatPerfHeader,
+} from "@/lib/observability/chat-performance-client"
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
 import {
@@ -118,6 +124,40 @@ function preservePausedApprovalEffort(
     : { ...continuationBody, reasoningEffort: pausedEffort }
 }
 
+type TransportStream = Awaited<
+  ReturnType<ChatTransport<UIMessage>["sendMessages"]>
+>
+
+/**
+ * Identity tap for the accepted response stream (measurement plan Phase 2):
+ * marks the first parsed chunk and the first text-delta chunk. Reads only the
+ * chunk's `type` discriminant, retains nothing, and is skipped entirely when
+ * instrumentation is off — the SDK then consumes the original stream.
+ */
+function instrumentAcceptedStream(stream: TransportStream): TransportStream {
+  if (!isChatPerfClientEnabled()) return stream
+  let sawFirstChunk = false
+  let sawFirstTextDelta = false
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        if (!sawFirstChunk) {
+          sawFirstChunk = true
+          markChatPerfFirstStreamChunk()
+        }
+        if (
+          !sawFirstTextDelta &&
+          (chunk as { type?: string } | null)?.type === "text-delta"
+        ) {
+          sawFirstTextDelta = true
+          markChatPerfFirstTextDelta()
+        }
+        controller.enqueue(chunk)
+      },
+    })
+  ) as TransportStream
+}
+
 class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
   constructor(
     private readonly acceptances: RequestAcceptanceRegistry,
@@ -151,6 +191,9 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
       ? { ...options, body: { ...sdkBody, ...(callBody ?? {}) } }
       : options
     try {
+      // The true fetch-dispatch mark (measurement plan Phase 2): the next
+      // statement performs the HTTP request. No-op unless instrumented.
+      markChatPerfRequestDispatched()
       // HttpChatTransport resolves here only after fetch returned an OK
       // response with a body. The route performs durable prepareGeneration —
       // including the idempotent first-message claim — before constructing
@@ -158,7 +201,7 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
       // itself remains unconsumed and can continue independently.
       const stream = await super.sendMessages(dispatchOptions)
       this.acceptances.accept(options.messageId)
-      return stream
+      return instrumentAcceptedStream(stream)
     } catch (error) {
       this.acceptances.reject(options.messageId, error)
       throw error

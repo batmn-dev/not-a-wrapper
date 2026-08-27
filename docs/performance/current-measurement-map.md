@@ -232,6 +232,18 @@ Everything lives in `benchmarks/chat-performance/` and runs via
 
 ## 4. Instrumentation gap proposal (Phase 2 scope)
 
+> **Status (2026-08-27, same day):** §4.1 items 1, 3 (via the receipt-anchored
+> `provider_request_started` companion; `stream_start` keeps its historical clock with
+> corrected docs), and 4 are implemented; §4.1 item 2 is implemented for `abort`
+> (`disconnect` remains indistinguishable client-side). §4.2 is implemented except
+> `server_request_received` (the receipt anchor exists implicitly as the zero point of
+> the receipt-anchored spans) and the paint-adjacent `first_visible_text` variant.
+> §4.3 is implemented except delta-receipt→painted-frame and DOM-node counts
+> (harness-side, Phase 3). §4.4 is implemented (`CHAT_PERF_CONVEX_SAMPLE_RATE`,
+> `_tag:"chat_perf_convex"`), except the `usage_reservation` sub-span, deferred to
+> Experiment 1 which restructures admission anyway. The metric dictionary's per-row
+> statuses are authoritative.
+
 Ordered by measurement value. All additions stay inside the existing allow-listed,
 content-free system (`EVENT_SCHEMAS` + `validateChatPerfEvent`); every new event/field
 must be added to the schema table and covered by the privacy tests.

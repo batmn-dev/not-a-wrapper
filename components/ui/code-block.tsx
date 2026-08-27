@@ -17,6 +17,10 @@
 
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
 import { highlightCode } from "@/lib/markdown/shiki-client"
+import {
+  isChatPerfClientEnabled,
+  markChatPerf,
+} from "@/lib/observability/chat-performance"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import React, { useEffect, useRef, useState } from "react"
@@ -96,7 +100,17 @@ function CodeBlockCode({
         // Lazy service (ADR-0016 "Lazy Shiki"): Shiki core, themes, and the
         // grammar for this language load on first demand; unknown/plain ids
         // resolve to the grammar-less `text` language inside the service.
+        // Highlight duration (measurement plan Phase 2): includes any lazy
+        // grammar/theme module load on first use. Duration only, never code.
+        const highlightStartedAt = isChatPerfClientEnabled()
+          ? performance.now()
+          : null
         const html = await highlightCode({ code, language, theme })
+        if (highlightStartedAt !== null) {
+          markChatPerf("shiki_highlight", {
+            durationMs: performance.now() - highlightStartedAt,
+          })
+        }
         if (cancelled || generation !== generationRef.current) return
         setHighlighted({ code, language, theme, html })
       } catch {
