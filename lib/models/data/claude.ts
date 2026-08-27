@@ -27,7 +27,9 @@ const claudeModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     thinkingMode: "adaptive",
-    // output_config.effort per the Anthropic effort docs (2026-08-26).
+    // output_config.effort — confirmed against the Anthropic models API
+    // (capabilities.effort.*.supported, 2026-08-26) for every entry below:
+    // 4.7+/5 low…max, the 4.6 pair without "xhigh", 4.5 snapshots none.
     effortLevels: ["low", "medium", "high", "xhigh", "max"],
     defaultEffort: "high",
     searchMode: "optional",

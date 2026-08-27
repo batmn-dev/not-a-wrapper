@@ -27,6 +27,8 @@ const openaiModels: ModelConfig[] = [
     audio: false,
     reasoningText: true,
     // reasoning_effort per the GPT-5.6 model pages (no "minimal" on 5.1+).
+    // "max" live-verified 2026-08-26 against /v1/responses — the API our
+    // @ai-sdk/openai provider constructs (chat.completions rejects "max").
     effortLevels: ["none", "low", "medium", "high", "xhigh", "max"],
     defaultEffort: "medium",
     searchMode: "optional",

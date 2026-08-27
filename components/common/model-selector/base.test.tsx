@@ -321,7 +321,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     "data-testid"?: string
     "data-model-selector-row"?: string
     "aria-label"?: string
-    onClick?: () => void
+    onClick?: React.MouseEventHandler<HTMLDivElement>
   }) => (
     <div
       data-testid={dataTestId ?? "model-option"}
@@ -716,6 +716,40 @@ describe("ModelSelector", () => {
 
     expect(currentNamesAfter).toEqual(currentNamesBefore)
     expect(rowsAfter[disclosureIndex]?.textContent).toContain("Kimi K2.6")
+  })
+
+  it("preserves the model list scroll position when revealing legacy models", () => {
+    renderSelector({ isUserAuthenticated: true })
+    const scrollSurface = document.body.querySelector<HTMLElement>(
+      "[data-scrollable-surface]"
+    )
+    const legacyDisclosure = getLegacyDisclosure("Anthropic") as HTMLElement
+
+    expect(scrollSurface).not.toBeNull()
+    expect(legacyDisclosure).not.toBeNull()
+
+    scrollSurface!.scrollTop = 137
+    legacyDisclosure.focus()
+    vi.useFakeTimers()
+
+    try {
+      act(() => {
+        legacyDisclosure.click()
+      })
+
+      expect(document.activeElement).not.toBe(legacyDisclosure)
+      expect(document.body.textContent).toContain("Claude Sonnet 4.5")
+
+      scrollSurface!.scrollTop = 999
+
+      act(() => {
+        vi.runAllTimers()
+      })
+
+      expect(scrollSurface!.scrollTop).toBe(137)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("uses a lock icon instead of the locked badge for signed-out users", () => {

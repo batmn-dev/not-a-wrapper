@@ -186,18 +186,6 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     openSource: true,
   }),
   referenceCatalogModel({
-    slug: "stealth/ox-alpha",
-    name: "Ox Alpha",
-    maker: "Stealth",
-    tags: ["reasoning", "vision", "coding", "agents"],
-    modelFamily: "Ox",
-    baseProviderId: "stealth",
-    icon: "openrouter",
-    speed: "Medium",
-    intelligence: "High",
-    openSource: false,
-  }),
-  referenceCatalogModel({
     slug: "z-ai/glm-5.3",
     name: "GLM-5.3",
     maker: "Z.ai",

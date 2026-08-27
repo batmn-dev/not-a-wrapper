@@ -111,7 +111,7 @@ type ModelListScrollSnapshot = {
 const modelSelectorRowSelector = "[data-model-selector-row]"
 
 function captureModelListScroll(
-  trigger: HTMLButtonElement
+  trigger: HTMLElement
 ): ModelListScrollSnapshot | null {
   const scrollSurface = trigger.closest<HTMLElement>(
     "[data-scrollable-surface]"
@@ -427,7 +427,7 @@ function ModelSelectorRows({
   pinnedModelIds: ReadonlySet<string>
   onSelect: (modelId: string, isLocked: boolean) => void
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
-  onShowLegacy: (providerId: string) => void
+  onShowLegacy: (providerId: string, trigger: HTMLElement) => void
 }) {
   return buildModelSelectorRows(
     models,
@@ -458,9 +458,12 @@ function ModelSelectorRows({
           key={`show-legacy-${row.provider.providerId}`}
           type="button"
           data-testid="show-legacy-models"
+          data-model-selector-row={`legacy:${row.provider.providerId}`}
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
-          onClick={() => onShowLegacy(row.provider.providerId)}
+          onClick={(event) =>
+            onShowLegacy(row.provider.providerId, event.currentTarget)
+          }
         >
           {content}
         </button>
@@ -473,7 +476,9 @@ function ModelSelectorRows({
           data-model-selector-row={`legacy:${row.provider.providerId}`}
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
-          onClick={() => onShowLegacy(row.provider.providerId)}
+          onClick={(event) =>
+            onShowLegacy(row.provider.providerId, event.currentTarget)
+          }
         >
           {content}
         </DropdownMenuItem>
@@ -555,7 +560,7 @@ function ModelSelectorList({
   pinnedModelIds: ReadonlySet<string>
   onSelect: (modelId: string, isLocked: boolean) => void
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
-  onShowLegacy: (providerId: string) => void
+  onShowLegacy: (providerId: string, trigger: HTMLElement) => void
 }) {
   if (isLoading) {
     return (
@@ -770,12 +775,21 @@ export function ModelSelector({
     e.stopPropagation()
   }
 
-  const handleShowLegacy = (providerId: string) => {
+  const handleShowLegacy = (providerId: string, trigger: HTMLElement) => {
+    const scrollSnapshot = captureModelListScroll(trigger)
+
+    trigger.blur()
     setRevealedLegacyProviders((current) => {
       const next = new Set(current)
       next.add(providerId)
       return next
     })
+
+    if (scrollSnapshot) {
+      window.setTimeout(() => {
+        restoreModelListScroll(scrollSnapshot)
+      }, 0)
+    }
   }
 
   const handlePressPointerDown = (
@@ -1009,6 +1023,7 @@ export function ModelSelector({
             </div>
             <div
               data-slot="model-selector-mobile-scroll"
+              data-scrollable-surface=""
               className="flex h-full min-h-0 flex-col space-y-0 overflow-y-auto overscroll-contain px-4 pt-(--model-selector-mobile-header-height) pb-6"
             >
               <ModelSelectorList

@@ -1,6 +1,6 @@
 import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
 import type { ModelConfig, ModelReasoningEffort } from "@/lib/models/types"
-import { REASONING_EFFORT_LEVELS } from "@/lib/models/types"
+import { clampToNearestEffortLevel } from "@/lib/models/types"
 import type { ProviderOptions } from "@ai-sdk/provider-utils"
 
 /**
@@ -39,27 +39,7 @@ export function resolveAppliedReasoningEffort(
   if (requested === undefined || ctx.platformFunded) return undefined
   const levels = modelConfig.effortLevels
   if (!levels || levels.length === 0) return undefined
-  if (levels.includes(requested)) return requested
-
-  const requestedIndex = REASONING_EFFORT_LEVELS.indexOf(requested)
-  let nearest: ModelReasoningEffort | undefined
-  let nearestDistance = Number.POSITIVE_INFINITY
-  for (const level of levels) {
-    const distance = Math.abs(
-      REASONING_EFFORT_LEVELS.indexOf(level) - requestedIndex
-    )
-    if (
-      distance < nearestDistance ||
-      (distance === nearestDistance &&
-        nearest !== undefined &&
-        REASONING_EFFORT_LEVELS.indexOf(level) <
-          REASONING_EFFORT_LEVELS.indexOf(nearest))
-    ) {
-      nearest = level
-      nearestDistance = distance
-    }
-  }
-  return nearest
+  return clampToNearestEffortLevel(levels, requested)
 }
 
 export type ShapedRequest = {

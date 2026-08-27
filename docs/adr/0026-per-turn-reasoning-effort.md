@@ -12,14 +12,18 @@ fixed thinking mode/budget from the catalog, and OpenRouter routes bake
 control, and every provider exposes a different level vocabulary:
 
 - OpenAI: `none|minimal|low|medium|high|xhigh|max`, subset per family
-  (gpt-5 takes `minimal` but not `none`; gpt-5.1+ the reverse; `max` from 5.6).
+  (gpt-5 takes `minimal` but not `none`; gpt-5.1+ the reverse; `max` from 5.6
+  — Responses-API-only, which is the API the installed provider constructs;
+  boundaries live-verified 2026-08-26).
 - Anthropic: `output_config.effort` `low|medium|high|xhigh|max` on 4.7+/5
   (`xhigh` absent on 4.6); older models take only `budget_tokens`.
 - Google: `thinkingLevel` subsets per Gemini 3 model (the retired 3 Pro took
   `low|high` only; 3.1 Pro takes `low|medium|high` — `medium` verified live
   against `generateContent` 2026-08-26); Gemini 2.5 takes numeric budgets
   instead.
-- xAI: `low|medium|high(|xhigh)` on Grok 4.5/4.6; Grok 4 reasons
+- xAI: `none|low|medium|high|xhigh` on the catalogued Grok 4.3 (live-verified
+  2026-08-26; the API also takes `minimal`, which the installed provider enum
+  cannot send) and `low|medium|high(|xhigh)` on 4.5/4.6; Grok 4 reasons
   unconditionally.
 - OpenRouter: one normalized `reasoning.effort` enum, clamped to the nearest
   supported level per upstream model.
@@ -65,10 +69,10 @@ levels are vocabulary; the effort→wire mapping lives in `lib/openproviders`.
 The logical view aggregates `effortLevels` as the ordered union across routes
 (the client renders the menu of every level any route can serve), next to the
 existing `searchMode`/`reasoningText` aggregation. Sources: the OpenRouter
-generator emits `effortLevels` from `reasoning.supported_efforts`; direct
-provider data files are hand-maintained snapshots with `verifiedAgainst`
-evidence (an Anthropic models-API refresh script may automate that lane
-later).
+generator emits `effortLevels` from `reasoning.supported_efforts` and
+`defaultEffort` from `reasoning.default_effort`; direct provider data files
+are hand-maintained snapshots with verification evidence (an Anthropic
+models-API refresh script may automate that lane later).
 
 ### Wire and trust boundary
 
@@ -131,12 +135,14 @@ capability gating separate.
 
 - The effort menu is provider-truth: it can differ per model and silently
   gains levels when catalog data (or the OpenRouter snapshot) updates.
-- OpenRouter's construction-time `reasoning: { effort: "medium" }` remains the
-  no-selection default; a per-turn selection overrides it at model
-  construction (the installed provider has no per-call reasoning override).
-  Its wire enum stops at `xhigh`, so wrapped routes never offer `max` — a
-  route must not offer a level its wire path cannot send, or the applied
-  receipt would overstate what ran.
+- OpenRouter's construction-time no-selection effort is per-model: the
+  snapshot's published `reasoning.default_effort` clamped to the
+  wire-expressible offered set (`medium` when the model publishes none), so
+  what Default runs, the checked menu row, and the wire agree. A per-turn
+  selection overrides it at model construction (the installed provider has no
+  per-call reasoning override). Its wire enum stops at `xhigh`, so wrapped
+  routes never offer `max` — a route must not offer a level its wire path
+  cannot send, or the applied receipt would overstate what ran.
 - Clamping means a receipt can differ from the request; the message badge and
   `generationRuns` keep both honest.
 - Later work (not in scope): syncing the per-model map to `userPreferences`,

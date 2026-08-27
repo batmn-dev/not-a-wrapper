@@ -589,7 +589,6 @@ describe("production logical catalog", () => {
     "openrouter:qwen/qwen3.8-max",
     "openrouter:qwen/qwen3.8-27b",
     "openrouter:qwen/qwen3.7-flash",
-    "openrouter:stealth/ox-alpha",
     "openrouter:deepseek/deepseek-v3.2",
     "openrouter:google/gemini-3.7-flash",
     "openrouter:minimax/minimax-m2.7",
@@ -628,15 +627,15 @@ describe("production logical catalog", () => {
   })
 
   it("unions effort levels across routes in canonical order (ADR-0026)", () => {
-    // Direct Sonnet 4.6 has no "xhigh"/"minimal"; its OpenRouter wrap serves
-    // the gateway set — the view menu is the ordered union of both.
+    // Sonnet 4.6 supports low|medium|high|max (Anthropic models API,
+    // 2026-08-26 — no "xhigh" on the 4.6 generation, no "minimal" anywhere).
+    // Its OpenRouter wrap mirrors that minus the wire-inexpressible "max";
+    // the view menu is the ordered union of both routes' real sets.
     const sonnet46 = getLogicalModel("claude-sonnet-4-6")!
     expect(toLogicalModelView(sonnet46).effortLevels).toEqual([
-      "minimal",
       "low",
       "medium",
       "high",
-      "xhigh",
       "max",
     ])
 

@@ -67,6 +67,7 @@ const geminiModels: ModelConfig[] = [
     tools: true,
     audio: true,
     reasoningText: true,
+    // "minimal" live-verified 2026-08-26 against generateContent (200 OK).
     effortLevels: ["minimal", "low", "medium", "high"],
     defaultEffort: "medium",
     searchMode: "optional",

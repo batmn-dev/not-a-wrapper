@@ -127,6 +127,40 @@ export function isModelReasoningEffort(
 }
 
 /**
+ * Clamp a level onto an offered subset: the requested level when offered,
+ * else the nearest offered level in canonical order (ties prefer the cheaper
+ * side). Pure vocabulary math — shared by Request shaping's applied-effort
+ * resolution and the OpenRouter catalog generator's default derivation.
+ */
+export function clampToNearestEffortLevel(
+  levels: readonly ModelReasoningEffort[],
+  requested: ModelReasoningEffort
+): ModelReasoningEffort | undefined {
+  if (levels.length === 0) return undefined
+  if (levels.includes(requested)) return requested
+
+  const requestedIndex = REASONING_EFFORT_LEVELS.indexOf(requested)
+  let nearest: ModelReasoningEffort | undefined
+  let nearestDistance = Number.POSITIVE_INFINITY
+  for (const level of levels) {
+    const distance = Math.abs(
+      REASONING_EFFORT_LEVELS.indexOf(level) - requestedIndex
+    )
+    if (
+      distance < nearestDistance ||
+      (distance === nearestDistance &&
+        nearest !== undefined &&
+        REASONING_EFFORT_LEVELS.indexOf(level) <
+          REASONING_EFFORT_LEVELS.indexOf(nearest))
+    ) {
+      nearest = level
+      nearestDistance = distance
+    }
+  }
+  return nearest
+}
+
+/**
  * Construction-time reasoning declaration for models whose provider takes
  * reasoning as a model-construction setting rather than a per-call provider
  * option (today: OpenRouter's `.chat(id, { reasoning })`; per-call reasoning

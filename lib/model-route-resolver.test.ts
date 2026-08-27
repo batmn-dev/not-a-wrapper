@@ -180,18 +180,18 @@ describe("resolveModelRoute", () => {
   })
 
   it("steers to the route serving the requested effort level (ADR-0026)", async () => {
-    // claude-sonnet-4-6: the direct anthropic route has no "xhigh"; its
-    // OpenRouter wrap serves the gateway set. With keys for both, the effort
-    // preference must beat the direct-before-aggregator tier ordering.
+    // gemini-2.5-pro: the direct google route has no effort knob (numeric
+    // budgets), only its OpenRouter wrap serves levels. With keys for both,
+    // the effort preference must beat the direct-before-aggregator ordering.
     const deps = makeDeps({
       userKeys: {
-        anthropic: { key: "sk-ant", preference: "priority" },
+        google: { key: "sk-goog", preference: "priority" },
         openrouter: { key: "sk-or", preference: "priority" },
       },
     })
     const result = await resolveModelRoute(
       {
-        modelId: "claude-sonnet-4-6",
+        modelId: "gemini-2.5-pro",
         ...authed,
         requiredCapabilities: { webSearch: false, reasoningEffort: "xhigh" },
       },
@@ -204,17 +204,17 @@ describe("resolveModelRoute", () => {
   })
 
   it("keeps the effort preference soft when no preferred route has a credential (ADR-0026)", async () => {
-    // Only the OpenRouter wrap of claude-sonnet-4-6 serves "xhigh", but this
-    // user holds only an anthropic key (and the model has no platform tier).
-    // The preference must not turn a servable turn into no_eligible_route —
-    // resolution re-runs unconstrained and shaping clamps the level.
+    // Only the OpenRouter wrap of gemini-2.5-pro serves effort levels, but
+    // this user holds only a google key (and no platform tier applies). The
+    // preference must not turn a servable turn into no_eligible_route —
+    // resolution re-runs unconstrained and the turn runs at Default.
     const deps = makeDeps({
       platformKeys: [],
-      userKeys: { anthropic: { key: "sk-ant", preference: "priority" } },
+      userKeys: { google: { key: "sk-goog", preference: "priority" } },
     })
     const result = await resolveModelRoute(
       {
-        modelId: "claude-sonnet-4-6",
+        modelId: "gemini-2.5-pro",
         ...authed,
         requiredCapabilities: { webSearch: false, reasoningEffort: "xhigh" },
       },
@@ -222,8 +222,8 @@ describe("resolveModelRoute", () => {
     )
     expect(result).toMatchObject({
       ok: true,
-      apiKey: "sk-ant",
-      route: { providerId: "anthropic" },
+      apiKey: "sk-goog",
+      route: { providerId: "google" },
     })
   })
 
