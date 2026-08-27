@@ -57,6 +57,7 @@ import {
 } from "@remixicon/react"
 import { useReducedMotion } from "motion/react"
 import { useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { ProModelDialog } from "./pro-dialog"
 
 type ModelSelectorProps = {
@@ -777,19 +778,22 @@ export function ModelSelector({
 
   const handleShowLegacy = (providerId: string, trigger: HTMLElement) => {
     const scrollSnapshot = captureModelListScroll(trigger)
+    const revealProvider = () => {
+      setRevealedLegacyProviders((current) => {
+        const next = new Set(current)
+        next.add(providerId)
+        return next
+      })
+    }
 
     trigger.blur()
-    setRevealedLegacyProviders((current) => {
-      const next = new Set(current)
-      next.add(providerId)
-      return next
-    })
-
-    if (scrollSnapshot) {
-      window.setTimeout(() => {
-        restoreModelListScroll(scrollSnapshot)
-      }, 0)
+    if (!scrollSnapshot) {
+      revealProvider()
+      return
     }
+
+    flushSync(revealProvider)
+    restoreModelListScroll(scrollSnapshot)
   }
 
   const handlePressPointerDown = (

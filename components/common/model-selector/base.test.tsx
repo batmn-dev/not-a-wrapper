@@ -718,7 +718,7 @@ describe("ModelSelector", () => {
     expect(rowsAfter[disclosureIndex]?.textContent).toContain("Kimi K2.6")
   })
 
-  it("preserves the model list scroll position when revealing legacy models", () => {
+  it("preserves scroll before legacy rows can paint", () => {
     renderSelector({ isUserAuthenticated: true })
     const scrollSurface = document.body.querySelector<HTMLElement>(
       "[data-scrollable-surface]"
@@ -730,26 +730,19 @@ describe("ModelSelector", () => {
 
     scrollSurface!.scrollTop = 137
     legacyDisclosure.focus()
-    vi.useFakeTimers()
-
-    try {
-      act(() => {
-        legacyDisclosure.click()
-      })
-
-      expect(document.activeElement).not.toBe(legacyDisclosure)
-      expect(document.body.textContent).toContain("Claude Sonnet 4.5")
-
+    const blur = legacyDisclosure.blur.bind(legacyDisclosure)
+    vi.spyOn(legacyDisclosure, "blur").mockImplementation(() => {
+      blur()
       scrollSurface!.scrollTop = 999
+    })
 
-      act(() => {
-        vi.runAllTimers()
-      })
+    act(() => {
+      legacyDisclosure.click()
+    })
 
-      expect(scrollSurface!.scrollTop).toBe(137)
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(document.activeElement).not.toBe(legacyDisclosure)
+    expect(document.body.textContent).toContain("Claude Sonnet 4.5")
+    expect(scrollSurface!.scrollTop).toBe(137)
   })
 
   it("uses a lock icon instead of the locked badge for signed-out users", () => {
