@@ -16,6 +16,9 @@ export type ChatAdmissionProofPayload = {
   model: string
   provider: string
   route?: ChatAdmissionRouteReceipt
+  /** Per-turn effort receipt (ADR-0026). Signing it makes a forged effort
+   * receipt on the run row unrepresentable. */
+  reasoningEffort?: { requested?: string; applied?: string }
   grantDigest?: string
   /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
    * makes a forged or swapped reservation attach unrepresentable. */
@@ -44,6 +47,12 @@ function serializeAdmission(payload: ChatAdmissionProofPayload): string {
           payload.route.routeId,
           payload.route.credentialSource,
           payload.route.routeReason,
+        ]
+      : null,
+    payload.reasoningEffort
+      ? [
+          payload.reasoningEffort.requested ?? null,
+          payload.reasoningEffort.applied ?? null,
         ]
       : null,
     payload.grantDigest ?? null,

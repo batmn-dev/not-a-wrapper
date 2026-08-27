@@ -63,6 +63,23 @@ describe("parseChatTurnRequest", () => {
     expect(missingFields).not.toHaveProperty("unexpected")
   })
 
+  it("keeps a valid reasoningEffort and drops unknown values (ADR-0026)", () => {
+    const valid = parseChatTurnRequest(
+      { ...validBody, reasoningEffort: "high" },
+      { isAuthenticated: true }
+    )
+    expect(valid).toMatchObject({ ok: true })
+    expect(valid.ok && valid.request.reasoningEffort).toBe("high")
+
+    // Unknown effort degrades to Default (routine bad input, never a 400).
+    const invalid = parseChatTurnRequest(
+      { ...validBody, reasoningEffort: "ultra" },
+      { isAuthenticated: true }
+    )
+    expect(invalid).toMatchObject({ ok: true })
+    expect(invalid.ok && invalid.request.reasoningEffort).toBeUndefined()
+  })
+
   it("requires a guest id only for unauthenticated turns", () => {
     expect(parseChatTurnRequest(validBody, { isAuthenticated: false })).toEqual(
       {

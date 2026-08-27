@@ -27,7 +27,7 @@ import {
 import type { ResolvedModelRoute } from "@/lib/model-route-resolver"
 import { getAllModels } from "@/lib/models"
 import { resolveModelSearchMode } from "@/lib/models/catalog"
-import type { ModelConfig } from "@/lib/models/types"
+import type { ModelConfig, ModelReasoningEffort } from "@/lib/models/types"
 import {
   flushBraintrust,
   getBraintrustErrorMetadata,
@@ -51,7 +51,10 @@ import {
   sanitizeExceptionForTelemetry,
 } from "@/lib/observability/sentry-scrubbing"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import { shapeRequest } from "@/lib/openproviders/request-shaping"
+import {
+  resolveAppliedReasoningEffort,
+  shapeRequest,
+} from "@/lib/openproviders/request-shaping"
 import {
   captureGeneration,
   flushPostHog,
@@ -152,6 +155,9 @@ export type ChatTurnInput = {
   // prepare() falls back to SYSTEM_PROMPT_DEFAULT.
   systemPrompt?: string
   enableSearch: boolean
+  /** Parser-validated per-turn effort request (ADR-0026); the runtime clamps
+   * it to the resolved route via `resolveAppliedReasoningEffort`. */
+  reasoningEffort?: ModelReasoningEffort
   chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
@@ -231,6 +237,8 @@ type PreparedTurn = {
   titleRouteId: string
   modelConfig: ModelConfig
   provider: Provider
+  /** Clamped per-turn effort actually sent to the provider (ADR-0026). */
+  appliedReasoningEffort: ModelReasoningEffort | undefined
   normalizedChatVersion: number
   hasAnyTools: boolean
   shouldInjectSearch: boolean
@@ -397,6 +405,7 @@ export function createChatTurnRuntime(args: {
     model,
     systemPrompt,
     enableSearch,
+    reasoningEffort,
     chatVersion,
     expectedVisibleMessageCount,
     tailMessageId,
@@ -537,8 +546,26 @@ export function createChatTurnRuntime(args: {
     }
     const providerToolKeyMode: ToolKeyMode = credentialSource
 
+    // Per-turn effort (ADR-0026): clamp the request to the resolved route's
+    // levels; platform-funded turns run at Default so the ADR-0021 reservation
+    // estimate stays valid. The applied value feeds model construction
+    // (OpenRouter), request shaping, the run receipt, and the message stamp.
+    const appliedReasoningEffort = resolveAppliedReasoningEffort(
+      modelConfig,
+      reasoningEffort,
+      { platformFunded: credentialSource === "platform" }
+    )
+
     // Search is provided only through visible, auditable tool calls.
-    const aiModel = createLanguageModel(modelConfig, apiKey)
+    // OpenRouter's reasoning knob is construction-time (provider-strategy.ts),
+    // so an applied per-turn effort overrides the catalog default here.
+    const aiModel = createLanguageModel(
+      appliedReasoningEffort !== undefined &&
+        modelConfig.providerId === "openrouter"
+        ? { ...modelConfig, reasoning: { effort: appliedReasoningEffort } }
+        : modelConfig,
+      apiKey
+    )
     const titleModelConfig = selectChatTitleModelConfig(allModels, modelConfig)
     const titleModel = createLanguageModel(titleModelConfig, apiKey)
 
@@ -663,6 +690,19 @@ export function createChatTurnRuntime(args: {
           credentialSource: route.credentialSource,
           routeReason: route.routeReason,
         },
+        ...(reasoningEffort !== undefined ||
+        appliedReasoningEffort !== undefined
+          ? {
+              reasoningEffort: {
+                ...(reasoningEffort !== undefined
+                  ? { requested: reasoningEffort }
+                  : {}),
+                ...(appliedReasoningEffort !== undefined
+                  ? { applied: appliedReasoningEffort }
+                  : {}),
+              },
+            }
+          : {}),
       })
     )
     let canonicalMessages = generationInput?.messages ?? preparedDurableMessages
@@ -964,6 +1004,9 @@ export function createChatTurnRuntime(args: {
       {
         searchToolsActive: shouldInjectSearch,
         hasTools: hasAnyTools,
+        ...(appliedReasoningEffort !== undefined
+          ? { reasoningEffort: appliedReasoningEffort }
+          : {}),
       }
     )
 
@@ -1044,6 +1087,7 @@ export function createChatTurnRuntime(args: {
       titleRouteId: titleModelConfig.id,
       modelConfig,
       provider: resolvedProvider,
+      appliedReasoningEffort,
       normalizedChatVersion,
       hasAnyTools,
       shouldInjectSearch,
@@ -1104,6 +1148,7 @@ export function createChatTurnRuntime(args: {
       braintrustMetadata,
       phClient,
       titleRequest,
+      appliedReasoningEffort,
     } = prepared
 
     // The AI SDK lifecycle binding (ADR-0011, Design 2): both callback halves
@@ -1862,6 +1907,11 @@ export function createChatTurnRuntime(args: {
             // persistence projector drops this transient copy because the
             // durable message already owns `provider` as a first-class field.
             provider: resolvedProvider,
+            // Applied per-turn effort (ADR-0026): stamped at start so the
+            // badge shows while the turn streams; persisted by the projector.
+            ...(appliedReasoningEffort !== undefined
+              ? { reasoningEffort: appliedReasoningEffort }
+              : {}),
           }
         }
         if (part.type === "finish") {

@@ -1789,6 +1789,8 @@ type PrepareGenerationForChatArgs = {
   provider: string
   /** Route-resolution receipt (ADR-0020); absent only for legacy callers. */
   route?: GenerationRouteReceipt
+  /** Per-turn effort receipt (ADR-0026), verified by the admission proof. */
+  reasoningEffort?: { requested?: string; applied?: string }
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -1906,6 +1908,12 @@ export async function prepareGenerationForChat(
           credentialSource: args.route.credentialSource,
           routeReason: args.route.routeReason,
         }
+      : {}),
+    ...(args.reasoningEffort?.requested !== undefined
+      ? { reasoningEffort: args.reasoningEffort.requested }
+      : {}),
+    ...(args.reasoningEffort?.applied !== undefined
+      ? { appliedReasoningEffort: args.reasoningEffort.applied }
       : {}),
     status: "running",
     startedAt: now,
@@ -2118,6 +2126,7 @@ export async function prepareGenerationWithVerifiedAdmission(
       model: args.model,
       provider: args.provider,
       route: args.route,
+      reasoningEffort: args.reasoningEffort,
       grantDigest: args.grantDigest,
       reservationId: args.reservationId,
       generationInputHash: args.generationInputHash,
@@ -2151,6 +2160,12 @@ export const prepareGeneration = mutation({
           v.literal("fallback_byok"),
           v.literal("legacy_route_hint")
         ),
+      })
+    ),
+    reasoningEffort: v.optional(
+      v.object({
+        requested: v.optional(v.string()),
+        applied: v.optional(v.string()),
       })
     ),
     expectedVisibleMessageCount: v.optional(v.number()),

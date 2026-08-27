@@ -303,6 +303,7 @@ export function useChatCore({
       selectedModel: snapshot.selectedModel,
       systemPrompt: snapshot.systemPrompt,
       enableSearch: snapshot.enableSearch,
+      reasoningEffort: snapshot.reasoningEffort,
     })
   }, [chatId, getTurnSnapshot, user?.id])
 

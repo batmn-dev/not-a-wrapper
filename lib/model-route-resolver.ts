@@ -26,6 +26,7 @@ import {
   freeModelsPlatformEntitlement,
   type PlatformEntitlement,
 } from "./models/platform-entitlement"
+import type { ModelReasoningEffort } from "./models/types"
 
 /**
  * Route resolver (ADR-0020): the ONE server-owned decision of how a chat
@@ -96,6 +97,13 @@ export type RequiredRouteCapabilities = {
   vision?: boolean
   /** Enabled excludes unsupported routes; disabled excludes always-on routes. */
   webSearch?: boolean
+  /**
+   * Per-turn effort preference (ADR-0026): only routes offering this level
+   * are candidates. Soft by construction — the admission caller sets it only
+   * when at least one route of the logical model supports the level, so an
+   * effort selection steers routing but never empties the candidate set.
+   */
+  reasoningEffort?: ModelReasoningEffort
 }
 
 /**
@@ -216,6 +224,12 @@ function routeMeetsCapabilities(
     const searchMode = resolveModelSearchMode(route.config)
     if (required.webSearch && searchMode === "unsupported") return false
     if (!required.webSearch && searchMode === "always-on") return false
+  }
+  if (
+    required?.reasoningEffort !== undefined &&
+    !route.config.effortLevels?.includes(required.reasoningEffort)
+  ) {
+    return false
   }
   return true
 }

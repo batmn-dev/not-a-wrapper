@@ -4,6 +4,7 @@ import {
   createOptimisticMessageId,
 } from "@/lib/chat-store/identity"
 import type { Attachment } from "@/lib/file-handling"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import { evaluatePromptSize } from "./prompt-size-policy"
 import {
   buildChatTurnRequestBody,
@@ -64,6 +65,9 @@ export type ChatTurnSnapshot = {
   isAuthenticated: boolean
   systemPrompt: string
   enableSearch: boolean
+  /** Per-turn effort (ADR-0026); undefined = Default. Regeneration and edit
+   * inherit it exactly like the model — the composer's current value wins. */
+  reasoningEffort?: ModelReasoningEffort
 }
 
 export type EnsureChatForTurnArgs = {
@@ -511,6 +515,7 @@ async function runSendTurn(
           selectedModel: snapshot.selectedModel,
           systemPrompt: snapshot.systemPrompt,
           enableSearch: snapshot.enableSearch,
+          reasoningEffort: snapshot.reasoningEffort,
           chatVersion,
           // After an atomic first-turn creation the server's selected path
           // already holds exactly the persisted user message, so the token
@@ -697,6 +702,7 @@ async function runEditTurn(
           selectedModel: snapshot.selectedModel,
           systemPrompt: snapshot.systemPrompt,
           enableSearch: snapshot.enableSearch,
+          reasoningEffort: snapshot.reasoningEffort,
           chatVersion: editPlan.chatVersion,
           edit: buildEditRequest(messageId, editPlan),
         }),
@@ -782,6 +788,7 @@ async function runRegenerationTurn(
         selectedModel: snapshot.selectedModel,
         systemPrompt: snapshot.systemPrompt,
         enableSearch: snapshot.enableSearch,
+        reasoningEffort: snapshot.reasoningEffort,
         chatVersion,
         regeneration: regenerationPlan.regeneration,
       }),

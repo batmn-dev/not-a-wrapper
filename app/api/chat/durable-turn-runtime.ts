@@ -379,6 +379,13 @@ export type DurableTurnRuntime = {
       routeReason:
         "priority_byok" | "platform" | "fallback_byok" | "legacy_route_hint"
     }
+    /** Per-turn effort receipt (ADR-0026), signed into the admission proof
+     * and persisted on the run row: what the user requested and what the
+     * runtime actually applied after route clamping. */
+    reasoningEffort?: {
+      requested?: string
+      applied?: string
+    }
   }): Promise<MessageAISDK[]>
 
   /** The provisional title version authorized by durable prepare. Guest turns
@@ -1296,7 +1303,7 @@ export function createConvexDurableTurn(args: {
       return [executionAbortController.signal]
     },
 
-    async prepare({ provider, route }) {
+    async prepare({ provider, route, reasoningEffort }) {
       if (prepareCalled) {
         throw new Error(
           "Durable turn runtime: prepare() may only be called once"
@@ -1313,6 +1320,7 @@ export function createConvexDurableTurn(args: {
         model,
         provider,
         route,
+        reasoningEffort,
         grantDigest,
         reservationId,
         generationInputHash,
@@ -1327,6 +1335,7 @@ export function createConvexDurableTurn(args: {
           model,
           provider,
           route,
+          reasoningEffort,
           expectedVisibleMessageCount,
           tailMessageId,
           latestUserMessage: latestUserMessage

@@ -45,6 +45,20 @@ export const vToolInvocationStreamMetadata = v.object({
   reasoningDurationMs: v.optional(v.number()),
   // Optional while production may contain rows written before work timing.
   workDurationMs: v.optional(v.number()),
+  // Applied per-turn reasoning effort (ADR-0026). Mirrors the canonical
+  // REASONING_EFFORT_LEVELS vocabulary (lib/models/types.ts) — kept in
+  // lockstep by the ToolInvocationStreamMetadata type assertion.
+  reasoningEffort: v.optional(
+    v.union(
+      v.literal("none"),
+      v.literal("minimal"),
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high"),
+      v.literal("xhigh"),
+      v.literal("max")
+    )
+  ),
   toolMetadataByName: v.optional(
     v.record(v.string(), vToolInvocationDisplayMetadata)
   ),
@@ -60,6 +74,15 @@ type DisplayMetadata = Infer<typeof vToolInvocationDisplayMetadata>
 
 const TOOL_SOURCES = new Set(["builtin", "third-party", "mcp", "platform"])
 const TOOL_ICONS = new Set(["search", "code", "image", "extract", "wrench"])
+const REASONING_EFFORTS = new Set([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+])
 const POISON_METADATA_KEYS = new Set(["__proto__", "constructor", "prototype"])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -151,6 +174,14 @@ export function projectPersistedMessageMetadata(
     result,
     "workDurationMs",
     optionalDurationMs(raw.workDurationMs)
+  )
+  setIfDefined(
+    result,
+    "reasoningEffort",
+    typeof raw.reasoningEffort === "string" &&
+      REASONING_EFFORTS.has(raw.reasoningEffort)
+      ? raw.reasoningEffort
+      : undefined
   )
   setIfDefined(
     result,

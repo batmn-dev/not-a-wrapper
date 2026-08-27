@@ -49,6 +49,7 @@ vi.mock("@/lib/openproviders/create-language-model", () => ({
 
 vi.mock("@/lib/openproviders/request-shaping", () => ({
   shapeRequest: vi.fn(() => ({ providerOptions: {}, headers: {} })),
+  resolveAppliedReasoningEffort: vi.fn(() => undefined),
 }))
 
 vi.mock("@/lib/openproviders/env", () => ({ env: {} }))

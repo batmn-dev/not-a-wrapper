@@ -1,3 +1,5 @@
+import type { ModelReasoningEffort } from "@/lib/models/types"
+import { isModelReasoningEffort } from "@/lib/models/types"
 import type { UIMessage } from "ai"
 
 // Chat turn wire contract (CONTEXT.md): the single statement of the
@@ -72,6 +74,10 @@ export type ChatTurnBodyFields = {
    * sends one. */
   systemPrompt?: string
   enableSearch?: boolean
+  /** Per-turn reasoning-effort selection (ADR-0026). Absent = Default (the
+   * provider decides). Untrusted: the parser drops unknown values and the
+   * Chat turn runtime clamps to the resolved route's supported levels. */
+  reasoningEffort?: ModelReasoningEffort
   chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
@@ -154,6 +160,15 @@ export function parseChatTurnRequest(
       code: "MISSING_GUEST_ID",
       error: "Guest ID required for anonymous users",
     }
+  }
+
+  // Routine bad input, not a contract violation: an unknown effort value
+  // (stale client, hand-crafted request) degrades to Default rather than 400.
+  if (
+    record.reasoningEffort !== undefined &&
+    !isModelReasoningEffort(record.reasoningEffort)
+  ) {
+    delete record.reasoningEffort
   }
 
   return { ok: true, request: record as ChatTurnWireRequest }

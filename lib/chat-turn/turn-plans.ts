@@ -8,6 +8,7 @@ import type {
 } from "@/lib/chat-messages/chat-turn-contract"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { UIMessage } from "ai"
 
 // Chat turn controller internals — the pure planning half: given the visible
@@ -34,6 +35,7 @@ type BuildChatTurnRequestBodyArgs = {
   selectedModel: string
   systemPrompt?: string
   enableSearch?: boolean
+  reasoningEffort?: ModelReasoningEffort
   chatVersion?: number
   selectedPathToken?: ChatTurnSelectedPathToken
   edit?: ChatTurnEditRequest
@@ -50,6 +52,7 @@ export function buildChatTurnRequestBody({
   selectedModel,
   systemPrompt,
   enableSearch,
+  reasoningEffort,
   chatVersion,
   selectedPathToken,
   edit,
@@ -61,6 +64,7 @@ export function buildChatTurnRequestBody({
     model: selectedModel,
     systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
     ...(enableSearch !== undefined ? { enableSearch } : {}),
+    ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
     ...(chatVersion !== undefined ? { chatVersion } : {}),
     ...(selectedPathToken
       ? {

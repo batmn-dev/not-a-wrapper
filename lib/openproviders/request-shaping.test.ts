@@ -2,7 +2,11 @@ import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
 import { getAllModels } from "@/lib/models"
 import type { ModelConfig } from "@/lib/models/types"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { shapeRequest, type RequestShapingContext } from "./request-shaping"
+import {
+  resolveAppliedReasoningEffort,
+  shapeRequest,
+  type RequestShapingContext,
+} from "./request-shaping"
 
 function makeModel(overrides: Partial<ModelConfig>): ModelConfig {
   return {
@@ -153,6 +157,78 @@ describe("shapeRequest provider options", () => {
   it.each(cases)("$name", ({ model, ctx, expected }) => {
     const { providerOptions } = shapeRequest(makeModel(model), ctx)
     expect(providerOptions).toEqual(expected)
+  })
+})
+
+describe("per-turn reasoning effort (ADR-0026)", () => {
+  it("resolves applied effort: pass-through, clamp, platform, effortless", () => {
+    const levels = makeModel({
+      effortLevels: ["low", "medium", "high", "max"],
+    })
+    const platform = { platformFunded: true }
+    const byok = { platformFunded: false }
+
+    expect(resolveAppliedReasoningEffort(levels, "high", byok)).toBe("high")
+    // "xhigh" is not offered — clamps to the nearest level in canonical order.
+    expect(resolveAppliedReasoningEffort(levels, "xhigh", byok)).toBe("high")
+    expect(resolveAppliedReasoningEffort(levels, "none", byok)).toBe("low")
+    // Platform-funded turns run at Default (ADR-0021 reservation estimate).
+    expect(resolveAppliedReasoningEffort(levels, "max", platform))
+      .toBeUndefined()
+    expect(resolveAppliedReasoningEffort(levels, undefined, byok))
+      .toBeUndefined()
+    expect(resolveAppliedReasoningEffort(makeModel({}), "high", byok))
+      .toBeUndefined()
+  })
+
+  it("maps applied effort onto each provider's wire shape", () => {
+    const ctx: RequestShapingContext = {
+      ...NO_TOOLS,
+      reasoningEffort: "xhigh",
+    }
+    expect(
+      shapeRequest(
+        makeModel({
+          providerId: "anthropic",
+          reasoningText: true,
+          thinkingMode: "adaptive",
+        }),
+        ctx
+      ).providerOptions
+    ).toEqual({
+      anthropic: { thinking: { type: "adaptive" }, effort: "xhigh" },
+    })
+    expect(
+      shapeRequest(makeModel({ providerId: "openai", reasoningText: true }), {
+        ...NO_TOOLS,
+        reasoningEffort: "low",
+      }).providerOptions
+    ).toEqual({
+      openai: { reasoningEffort: "low", reasoningSummary: "auto" },
+    })
+    expect(
+      shapeRequest(makeModel({ providerId: "google", reasoningText: true }), {
+        ...NO_TOOLS,
+        reasoningEffort: "high",
+      }).providerOptions
+    ).toEqual({
+      google: {
+        thinkingConfig: { includeThoughts: true, thinkingLevel: "high" },
+      },
+    })
+    expect(
+      shapeRequest(makeModel({ providerId: "xai", reasoningText: true }), {
+        ...NO_TOOLS,
+        reasoningEffort: "low",
+      }).providerOptions
+    ).toEqual({ xai: { reasoningEffort: "low" } })
+    // Without an applied effort, xai sends nothing (Grok 4 rejects the param).
+    expect(
+      shapeRequest(
+        makeModel({ providerId: "xai", reasoningText: true }),
+        NO_TOOLS
+      ).providerOptions
+    ).toEqual({})
   })
 })
 

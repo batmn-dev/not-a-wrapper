@@ -225,6 +225,11 @@ export default defineSchema({
         v.literal("legacy_route_hint")
       )
     ),
+    // Per-turn effort receipt (ADR-0026): what the user requested and what
+    // the runtime applied after route clamping (platform turns run Default).
+    // Verified by the signed admission proof at prepare; display/audit only.
+    reasoningEffort: v.optional(v.string()),
+    appliedReasoningEffort: v.optional(v.string()),
     status: generationRunStatus,
     // Compatibility field: no longer written, but production may still contain
     // older run docs. Drop only after preflight proves zero legacy documents.

@@ -28,7 +28,7 @@ import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useModel as useModelStore } from "@/lib/model-store/provider"
 import { useSessionModel } from "@/lib/model-store/use-session-model"
 import { getLogicalModelInfo } from "@/lib/models"
-import type { SearchMode } from "@/lib/models/types"
+import type { ModelReasoningEffort, SearchMode } from "@/lib/models/types"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import { useUser } from "@/lib/user-store/provider"
@@ -46,6 +46,9 @@ export type TurnSnapshot = {
   selectedModel: string
   systemPrompt: string
   enableSearch: boolean
+  /** Per-turn reasoning effort (ADR-0026); undefined = Default. Already
+   * clamped to the selected model's available levels. */
+  reasoningEffort?: ModelReasoningEffort
   isAuthenticated: boolean
   /** Model preferences, model catalog, and user preferences are ready —
    * auto-submit must wait for this. */
@@ -58,6 +61,11 @@ export type TurnContextValue = {
   enableSearch: boolean
   setEnableSearch: (enabled: boolean) => void
   searchMode: SearchMode
+  /** The selected model's effort menu — the logical union across routes.
+   * Empty for models with no per-turn effort knob (control unmounts). */
+  effortLevels: readonly ModelReasoningEffort[]
+  reasoningEffort: ModelReasoningEffort | undefined
+  setReasoningEffort: (effort: ModelReasoningEffort | undefined) => void
   isAuthenticated: boolean
   systemPrompt: string
   isHydrated: boolean
@@ -67,6 +75,9 @@ export type TurnContextValue = {
 }
 
 const TurnContext = createContext<TurnContextValue | null>(null)
+
+/** Stable empty menu so effortless models don't churn context identity. */
+const NO_EFFORT_LEVELS: readonly ModelReasoningEffort[] = []
 
 function createSnapshotStore(initial: TurnSnapshot) {
   let current = initial
@@ -109,8 +120,23 @@ export function TurnContextProvider({
   // An authenticated preference is unknown until its Convex read settles.
   // Keep capability UI inactive during that window instead of briefly
   // projecting the product default as if the user selected Web search.
-  const searchMode =
-    getLogicalModelInfo(selectedModel)?.searchMode ?? "unsupported"
+  const modelInfo = getLogicalModelInfo(selectedModel)
+  const searchMode = modelInfo?.searchMode ?? "unsupported"
+
+  // Per-turn reasoning effort (ADR-0026). The raw selection persists across
+  // model switches; the EFFECTIVE value clamps to the selected model's level
+  // menu, so switching to a model without the level snaps to Default (and
+  // back, if the user returns) rather than sending an unsupported value.
+  const effortLevels = modelInfo?.effortLevels ?? NO_EFFORT_LEVELS
+  // The state setter is referentially stable, so it doubles as the context's
+  // setter without a wrapping callback.
+  const [selectedEffort, setReasoningEffort] = useState<
+    ModelReasoningEffort | undefined
+  >(undefined)
+  const reasoningEffort =
+    selectedEffort !== undefined && effortLevels.includes(selectedEffort)
+      ? selectedEffort
+      : undefined
   const prefersSearch =
     !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)
   const enableSearch =
@@ -139,6 +165,7 @@ export function TurnContextProvider({
     selectedModel,
     systemPrompt,
     enableSearch,
+    reasoningEffort,
     isAuthenticated,
     isHydrated,
   }
@@ -160,6 +187,9 @@ export function TurnContextProvider({
       enableSearch,
       setEnableSearch,
       searchMode,
+      effortLevels,
+      reasoningEffort,
+      setReasoningEffort,
       isAuthenticated,
       systemPrompt,
       isHydrated,
@@ -171,6 +201,9 @@ export function TurnContextProvider({
       enableSearch,
       setEnableSearch,
       searchMode,
+      effortLevels,
+      reasoningEffort,
+      setReasoningEffort,
       isAuthenticated,
       systemPrompt,
       isHydrated,

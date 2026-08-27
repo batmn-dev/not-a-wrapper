@@ -1,4 +1,5 @@
 import type { ServerInfo } from "@/lib/mcp/load-tools"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { ToolMetadata, ToolSource } from "./types"
 
 export type ToolInvocationDisplayMetadata = {
@@ -25,6 +26,8 @@ export type ToolInvocationMetadataByCallId = Record<
 
 export type ToolInvocationStreamMetadata = {
   reasoningDurationMs?: number
+  /** Applied per-turn reasoning effort (ADR-0026), stamped at stream start. */
+  reasoningEffort?: ModelReasoningEffort
   /**
    * Cumulative active assistant generation time across provider-stream segments
    * for this assistant turn. Each segment runs from provider-stream start
