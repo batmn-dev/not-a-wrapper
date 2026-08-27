@@ -133,11 +133,11 @@ function EffortControl({
                 // shared factor and paints the finite corner square.
                 //
                 // Seam motion: at rest this pill overlaps the model trigger
-                // by 4px (its background hides the seam notch); hovering
+                // by 6px (its background hides the seam notch); hovering
                 // either half of the segmented pair slides it flush, 200ms
                 // easeOutQuint. transform stays in the transition list so the
                 // Button press-scale keeps animating.
-                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-1.5 pe-3 py-0 text-base leading-[26px] font-normal -ms-1 can-hover:group-hover/segmented:ms-0 transition-[margin-inline-start,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-1.5 pe-3 py-0 text-base leading-[26px] font-normal -ms-1.5 can-hover:group-hover/segmented:ms-0 transition-[margin-inline-start,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
               />
             }
           >
