@@ -236,6 +236,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // facing paddings and squared inner corners on the shared edge.
     const hasEffortControl =
       isReasoningEffortControlEnabled() && effortLevels.length > 0
+    const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false)
+    const [isEffortMenuOpen, setIsEffortMenuOpen] = useState(false)
+    const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
+    const isComposerOverlayOpen =
+      isModelSelectorOpen || isEffortMenuOpen || isActionMenuOpen
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =
       useState<PromptInputActionQuery | null>(null)
@@ -270,6 +275,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleCloseActionQuery = useCallback(() => {
       editorRef.current?.endActionQuery()
     }, [])
+    const handleActionQueryChange = (query: PromptInputActionQuery | null) => {
+      setActionQuery(query)
+      setIsActionMenuOpen(query !== null)
+    }
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
     // pastes cross the turn seam as ordinary turn text.
@@ -616,6 +625,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onFileRemove={handleAttachmentRemove}
                   onRestoreLargePaste={handleRestoreLargePaste}
                   onRetry={handleAttachmentRetry}
+                  tooltipDisabled={isComposerOverlayOpen}
                 />
               </div>
               <PromptInputActions
@@ -637,18 +647,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onToggleConnector={handleToggleConnector}
                   onOpenActionMenu={handleOpenActionMenu}
                   onCloseActionQuery={handleCloseActionQuery}
+                  tooltipDisabled={isComposerOverlayOpen}
+                  onMenuOpenChange={setIsActionMenuOpen}
                 />
                 <WebSearchControl
                   enabled={enableSearch}
                   mode={searchMode}
                   onEnabledChange={setEnableSearch}
+                  tooltipDisabled={isComposerOverlayOpen}
                 />
               </PromptInputActions>
               <PromptInputTextarea
                 ref={editorRef}
                 placeholder={placeholder}
                 aria-label={ariaLabel}
-                onActionQueryChange={setActionQuery}
+                onActionQueryChange={handleActionQueryChange}
                 onPaste={handlePaste}
                 containerClassName="[grid-area:primary]"
               />
@@ -702,6 +715,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     setSelectedModelId={handleModelChange}
                     isUserAuthenticated={isUserAuthenticated}
                     onLockedGuestModelSelect={onLockedGuestModelSelect}
+                    tooltipDisabled={isComposerOverlayOpen}
+                    onOpenChange={setIsModelSelectorOpen}
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                   <EffortControl
@@ -709,11 +724,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     value={reasoningEffort}
                     defaultLevel={selectModelConfig?.defaultEffort}
                     onChange={setReasoningEffort}
+                    tooltipDisabled={isComposerOverlayOpen}
+                    onOpenChange={setIsEffortMenuOpen}
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>
                 <div className="ms-auto flex shrink-0 items-center gap-2">
                   <PromptInputAction
+                    disabled={isComposerOverlayOpen || undefined}
                     tooltip={
                       primaryAction.mode === "send" &&
                       !primaryAction.disabled ? (

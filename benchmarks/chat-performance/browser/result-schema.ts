@@ -43,6 +43,29 @@ export type RunMetrics = {
   jsHeapUsedAfterBytes?: number
   /** Server spans joined by correlation id (ms), when the server was sampled. */
   serverSpans?: Record<string, number>
+  /** Durable worker-wire writes joined by correlation id (durable runs). */
+  durableWrites?: {
+    snapshotCount: number
+    snapshotMeanMs: number
+    snapshotMaxMs: number
+    otherOps: Record<string, number>
+  }
+  /** Cross-tab freshness (second-tab runs): accepted checkpoint → tab-2 render. */
+  snapshotToSecondTabMedianMs?: number
+  snapshotToSecondTabMaxMs?: number
+  /** Tab-1 terminal mark → tab-2 settlement receipt mark (second-tab runs). */
+  terminalToSecondTabSettledMs?: number
+  /** Reload runs: navigation start → authoritative content / settlement receipt. */
+  reloadToAuthoritativeMs?: number
+  reloadToSettlementReceiptMs?: number
+  /** Client-observed terminal → durable settlement receipt (durable runs). */
+  terminalToSettlementReceiptMs?: number
+  /**
+   * Durable send lost live-stream adoption after the hard navigation — the
+   * turn settled server-side and rendered via snapshots only. Counted per
+   * scenario; such runs contribute no stream-latency samples.
+   */
+  liveStreamNotAdopted?: boolean
   /** Correctness. */
   correctness: {
     ok: boolean
@@ -59,10 +82,12 @@ export type ScenarioResult = {
   directive: string
   viewport: string
   cpuThrottle: number
-  action: "complete" | "stop"
+  action: "complete" | "stop" | "second-tab" | "reload"
   sampleCount: number
   warmupRuns: number
   correctnessOk: boolean
+  /** Runs whose live stream was never adopted (durable adoption-loss count). */
+  liveStreamNotAdoptedRuns?: number
   metrics: Record<string, MetricSummary>
   runs: RunMetrics[]
 }

@@ -66,6 +66,9 @@ type ModelSelectorProps = {
   selectedModelId: string | null
   setSelectedModelId: (modelId: string) => void
   onLockedGuestModelSelect?: (modelId: string) => void
+  /** Lets a shared control group coordinate tooltip visibility with this menu. */
+  onOpenChange?: (open: boolean) => void
+  tooltipDisabled?: boolean
   /** Called after a desktop model selection closes so the owning surface can restore task focus. */
   onSelectionCommitted?: () => void
   disabled?: boolean
@@ -675,6 +678,8 @@ export function ModelSelector({
   selectedModelId,
   setSelectedModelId,
   onLockedGuestModelSelect,
+  onOpenChange,
+  tooltipDisabled = false,
   onSelectionCommitted,
   disabled = false,
   variant = "default",
@@ -698,6 +703,16 @@ export function ModelSelector({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectionCommittedRef = useRef(false)
 
+  const setDrawerOpen = (open: boolean) => {
+    setIsDrawerOpen(open)
+    onOpenChange?.(open)
+  }
+
+  const setDropdownOpen = (open: boolean) => {
+    setIsDropdownOpen(open)
+    onOpenChange?.(open)
+  }
+
   const resetModelList = () => {
     setSearchQuery("")
     setRevealedLegacyProviders(new Set<string>())
@@ -720,11 +735,11 @@ export function ModelSelector({
 
       if (isMobile) {
         const nextOpen = !isDrawerOpen
-        setIsDrawerOpen(nextOpen)
+        setDrawerOpen(nextOpen)
         if (!nextOpen) resetModelList()
       } else {
         const nextOpen = !isDropdownOpen
-        setIsDropdownOpen(nextOpen)
+        setDropdownOpen(nextOpen)
         if (!nextOpen) resetModelList()
       }
     }
@@ -736,8 +751,8 @@ export function ModelSelector({
     if (isLocked) {
       setSelectedProModel(modelId)
       if (!isUserAuthenticated) {
-        setIsDrawerOpen(false)
-        setIsDropdownOpen(false)
+        setDrawerOpen(false)
+        setDropdownOpen(false)
         resetModelList()
         onLockedGuestModelSelect?.(modelId)
         return
@@ -749,8 +764,8 @@ export function ModelSelector({
 
     selectionCommittedRef.current = !isMobile
     setSelectedModelId(modelId)
-    setIsDrawerOpen(false)
-    setIsDropdownOpen(false)
+    setDrawerOpen(false)
+    setDropdownOpen(false)
     resetModelList()
   }
 
@@ -909,7 +924,7 @@ export function ModelSelector({
           open={isDrawerOpen}
           onOpenChange={(open) => {
             if (disabled && open) return
-            setIsDrawerOpen(open)
+            setDrawerOpen(open)
             if (!open) resetModelList()
           }}
         >
@@ -992,7 +1007,7 @@ export function ModelSelector({
         open={isDropdownOpen}
         onOpenChange={(open) => {
           if (disabled && open) return
-          setIsDropdownOpen(open)
+          setDropdownOpen(open)
           if (!open) {
             resetModelList()
           }
@@ -1010,7 +1025,10 @@ export function ModelSelector({
             tabIndex={-1}
             onPointerDown={handlePressPointerDown}
           >
-            <Tooltip disableHoverablePopup disabled={isDropdownOpen}>
+            <Tooltip
+              disableHoverablePopup
+              disabled={isDropdownOpen || tooltipDisabled}
+            >
               <TooltipTrigger
                 render={<DropdownMenuTrigger render={trigger} />}
               />

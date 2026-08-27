@@ -32,6 +32,9 @@ type EffortControlProps = {
    * override, and picking it clears the override. */
   defaultLevel?: ModelReasoningEffort
   onChange: (effort: ModelReasoningEffort | undefined) => void
+  /** Lets the segmented model control coordinate every composer tooltip. */
+  tooltipDisabled?: boolean
+  onOpenChange?: (open: boolean) => void
   onSelectionCommitted?: () => void
 }
 
@@ -77,10 +80,17 @@ function EffortControl({
   value,
   defaultLevel,
   onChange,
+  tooltipDisabled = false,
+  onOpenChange,
   onSelectionCommitted,
 }: EffortControlProps) {
   const [isOpen, setIsOpen] = useState(false)
   const { anchorRef, handlePressPointerDown } = useComposerPopoverPress()
+
+  const setOpen = (open: boolean) => {
+    setIsOpen(open)
+    onOpenChange?.(open)
+  }
 
   if (!isReasoningEffortControlEnabled() || levels.length === 0) return null
 
@@ -100,7 +110,7 @@ function EffortControl({
     // Picking the model's own default is "no override": keep the canonical
     // absent state so Default semantics (send nothing) stay representable.
     onChange(level === defaultLevel ? undefined : level)
-    setIsOpen(false)
+    setOpen(false)
     onSelectionCommitted?.()
   }
 
@@ -110,14 +120,14 @@ function EffortControl({
       data-slot="effort-control-desktop-anchor"
       className="inline-flex shrink-0"
     >
-      <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
+      <DropdownMenu open={isOpen} onOpenChange={setOpen} modal={false}>
         <div
           data-slot="effort-control-press-surface"
           className="inline-flex min-w-0"
           tabIndex={-1}
           onPointerDown={handlePressPointerDown}
         >
-          <Tooltip disabled={isOpen}>
+          <Tooltip disabled={isOpen || tooltipDisabled}>
             <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
               <DropdownMenuTrigger
                 render={

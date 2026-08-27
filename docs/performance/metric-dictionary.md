@@ -175,9 +175,9 @@ status/error publications are exempt (they bypass the coalescer by design).
 
 | Metric | Start → End | Gate? | Status |
 |---|---|---|---|
-| `snapshot_accepted_to_second_tab_render` | Next-side `accepted` counter timestamp → second browser context renders the content | no (harness-measured, target <1.5 s p95) | proposed (Phase 3 two-context harness; there is no adoption code path — this measures the reactive plane end to end) |
+| `snapshot_accepted_to_second_tab_render` | Next-side `accepted` counter timestamp → second browser context renders the content | no (harness-measured, target <1.5 s p95) | existing (durable suite: harness-stamped checkpoint lines vs a MutationObserver in tab 2; baseline 44 ms median) |
 | `reload_to_content` | reload navigation start → authoritative thread content rendered | yes (harness) | partial (`chat_navigation_intent` → `first_thread_content_painted` / `authoritative_thread_content_received` marks exist for sidebar nav; reload variant proposed) |
-| `terminal_to_settlement` | `response_stream_closed` → `durable_settlement_receipt` (client observation) | no | partial (endpoints exist; requires §4.1 fixes to be trustworthy) |
+| `terminal_to_settlement` | `response_stream_closed` → `durable_settlement_receipt` (client observation) | no | existing (durable suite; note the receipt can precede the local stream-close mark by ~10–15 ms — settlement runs server-side in `onEnd` and the Convex projection outruns the SDK status flip) |
 | `detached_binding_gauge` | same-tab back-nav binding events (8-value enum, counts) | n/a | existing |
 
 ## 11. Correctness (blocking — a failure invalidates all perf numbers from the run)

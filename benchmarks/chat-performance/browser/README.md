@@ -47,10 +47,19 @@ failure exits non-zero and the timings must be discarded.
 
 ## Scope and known limitations
 
-- **Guest path only.** No WorkOS auth in the harness yet, so durable-Convex
-  scenarios — cross-tab freshness, reload adoption, snapshot cadence — are
-  not covered here; the runbook's manual protocol still owns those. The
-  Convex dev deployment is still exercised for guest usage admission.
+- **Durable scenarios: `SUITE=durable`.** The harness provisions a WorkOS
+  test user via the API (`ensure-auth-user.ts`; override with
+  `PERF_AUTH_EMAIL`/`PERF_AUTH_PASSWORD`), signs in once through the real
+  `/auth/login` form, and reuses the storage state. Durable runs measure
+  settlement, per-op worker-write durations, second-tab freshness, and
+  reload recovery. Two durable caveats: the hard navigation to `/c/<chatId>`
+  flushes Chromium's network buffer, so correctness falls back to
+  settlement-outcome + settle-mismatch + rendered-length rules when the SSE
+  body is unreadable (byte fidelity is proven by the guest suite); and runs
+  that lose live-stream adoption (a real, intermittent product behavior) are
+  counted per scenario as `liveStreamNotAdoptedRuns` rather than failed.
+  Convex-side cost sampling needs `CHAT_PERF_CONVEX_SAMPLE_RATE` set on the
+  deployment.
 - Scenarios needing real tools (the fixture `interleaved` script) are not
   replayed; the deterministic provider covers text/reasoning/code/error/stop
   shapes plus the payload stress variants.

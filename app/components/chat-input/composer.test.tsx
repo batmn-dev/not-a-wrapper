@@ -20,6 +20,12 @@ type PendingAttachment = import("./pending-attachment").PendingAttachment
 type ButtonPlusMenuProps = React.ComponentProps<
   (typeof import("./button-plus-menu"))["ButtonPlusMenu"]
 >
+type ModelSelectorProps = React.ComponentProps<
+  (typeof import("@/components/common/model-selector/base"))["ModelSelector"]
+>
+type EffortControlProps = React.ComponentProps<
+  (typeof import("./effort-control"))["EffortControl"]
+>
 const promptInputMockCalls: Array<{
   expanded?: boolean
   entities?: readonly {
@@ -45,9 +51,8 @@ const promptInputActionMockCalls: Array<{
   disabled?: boolean
   tooltip: React.ReactNode
 }> = []
-const modelSelectorMockCalls: Array<{
-  onSelectionCommitted?: () => void
-}> = []
+const modelSelectorMockCalls: ModelSelectorProps[] = []
+const effortControlMockCalls: EffortControlProps[] = []
 const buttonPlusMenuMockCalls: ButtonPlusMenuProps[] = []
 
 // Controllable module state for the Composer's internal seams.
@@ -82,6 +87,7 @@ const composerMocks = vi.hoisted(() => ({
   })),
   enableSearch: false,
   searchMode: "optional" as "optional" | "always-on" | "unsupported",
+  effortLevels: [] as EffortControlProps["levels"],
   setEnableSearch: vi.fn(),
   replaceActionQuery: vi.fn(() => true),
   toggleSyntheticActionQuery: vi.fn(),
@@ -102,7 +108,7 @@ vi.mock("@/app/components/chat/turn-context", () => ({
     enableSearch: composerMocks.enableSearch,
     searchMode: composerMocks.searchMode,
     setEnableSearch: composerMocks.setEnableSearch,
-    effortLevels: [],
+    effortLevels: composerMocks.effortLevels,
     reasoningEffort: undefined,
     setReasoningEffort: vi.fn(),
     reportLastTurnEffort: vi.fn(),
@@ -178,8 +184,15 @@ vi.mock("@/app/components/chat/use-file-upload", () => ({
 }))
 
 vi.mock("@/components/common/model-selector/base", () => ({
-  ModelSelector: (props: { onSelectionCommitted?: () => void }) => {
+  ModelSelector: (props: ModelSelectorProps) => {
     modelSelectorMockCalls.push(props)
+    return null
+  },
+}))
+
+vi.mock("./effort-control", () => ({
+  EffortControl: (props: EffortControlProps) => {
+    effortControlMockCalls.push(props)
     return null
   },
 }))
@@ -318,6 +331,7 @@ describe("Composer primary action", () => {
     promptInputMockCalls.length = 0
     promptInputActionMockCalls.length = 0
     modelSelectorMockCalls.length = 0
+    effortControlMockCalls.length = 0
     buttonPlusMenuMockCalls.length = 0
     composerMocks.draftValue = ""
     composerMocks.draftById.clear()
@@ -328,6 +342,7 @@ describe("Composer primary action", () => {
     composerMocks.attachments = []
     composerMocks.enableSearch = false
     composerMocks.searchMode = "optional"
+    composerMocks.effortLevels = []
     vi.clearAllMocks()
   })
 
@@ -617,6 +632,27 @@ describe("Composer primary action", () => {
     expect(document.activeElement).toBe(textarea)
     expect(textarea.selectionStart).toBe(5)
     expect(textarea.selectionEnd).toBe(5)
+  })
+
+  it("suppresses background tooltips only while a composer menu is open", () => {
+    composerMocks.effortLevels = ["low", "high"]
+    renderComposer({ status: "ready" })
+
+    expect(promptInputActionMockCalls.at(-1)?.disabled).toBeUndefined()
+
+    act(() => {
+      modelSelectorMockCalls.at(-1)?.onOpenChange?.(true)
+    })
+
+    expect(effortControlMockCalls.at(-1)?.tooltipDisabled).toBe(true)
+    expect(buttonPlusMenuMockCalls.at(-1)?.tooltipDisabled).toBe(true)
+    expect(promptInputActionMockCalls.at(-1)?.disabled).toBe(true)
+
+    act(() => {
+      modelSelectorMockCalls.at(-1)?.onOpenChange?.(false)
+    })
+
+    expect(promptInputActionMockCalls.at(-1)?.disabled).toBeUndefined()
   })
 
   it("does not resurrect Stop from local streaming while the resolver says a Stop is pending", () => {

@@ -223,3 +223,80 @@ Branch projection (0.4 ms at 2× today's largest fixture), guest prepare
 outside admission (< 1 ms), Stop feedback (6 ms), transport first-chunk
 delivery (~80 ms including server prep), publication discipline (rAF-aligned
 with working coalescing), 12 KB-class streams on normal CPU (TBT ≤ 8 ms).
+
+---
+
+## 7. Addendum (same day, post-review): the durable plane measured — B5 closed
+
+The checkpoint was reviewed and the B5 measurement gap closed first, as
+recommended. New apparatus: a real WorkOS test user
+(`benchmarks/chat-performance/browser/ensure-auth-user.ts`, provisioned via
+the WorkOS API with a verified email; real `/auth/login` once per harness run,
+storage-state reuse), a `SUITE=durable` scenario set (complete, second-tab,
+reload-mid-stream, durable Stop), and `CHAT_PERF_CONVEX_SAMPLE_RATE=1` on the
+dev deployment. Result file `results/2026-08-27T23-45-14-durable.json`
+(4 scenarios × 10 runs after 2 warmups, all correctness green; deterministic
+provider; platform-funded turns settle at the scripted 10-in/5-out token
+usage, so allowance burn is negligible).
+
+### 7.1 Authenticated turn timeline (mixed-markdown 30cps, p50 of 10)
+
+| Stage | Durable | Guest (§3) |
+|---|---|---|
+| `usage_admission` (incl. credential resolution + reservation) | **234.7 ms** | 67.4 ms |
+| · `credential_resolution` (key settings, approval facts, `reserveAuthorized`) | 114.9 ms | 0.04 ms |
+| `durable_prepare` (grant + run + history) | 69.0 ms | ~0 |
+| `prepare_total` | 173.8 ms | 0.76 ms |
+| `provider_request_started` (receipt → streamText) | **405 ms** | 68.5 ms |
+| client dispatch → first stream chunk | 436.9 ms | 84 ms |
+| send → first visible text | 828.7 ms | 465.3 ms |
+| send → optimistic paint | 121.7 ms | 90.5 ms |
+| `settlement_total` (drain + final flush + terminal write) | 276.5 ms | n/a |
+| snapshot writes per turn / mean round-trip | 16 × 64.6 ms | n/a |
+
+**B4 restated with the real numbers: the authenticated pre-stream pipeline is
+~405 ms — 6× the guest path — all of it sequential Convex/WorkOS round-trips**
+(abuse check, key settings, approval facts, allowance reservation, increment,
+grant + run creation). This is Experiment 1's before-picture. Perceived send →
+first visible text on a durable chat is ~830 ms before any provider latency
+would even apply.
+
+### 7.2 Durability targets — all previously unmeasured rows now PASS
+
+| Target | Result |
+|---|---|
+| Accepted snapshot → second-tab display < 1.5 s p95 | **PASS** — median 44 ms, per-run max p95 193 ms (MutationObserver on the second tab vs harness-stamped accepted checkpoints) |
+| Terminal → durable settlement < 1.5 s p95 | **PASS** — `settlement_total` 276–295 ms p50; the client-side receipt lands **before** the local stream-close mark by ~12–14 ms on complete runs (settlement runs server-side in `onEnd`, and the Convex projection outruns the SDK's status flip); durable Stop: receipt +88 ms after terminal |
+| Reload-mid-stream recovery | reload → authoritative content **213 ms** p50; reload → settlement receipt ≈ 8.1 s (that is stream remainder — the run keeps streaming server-side — not recovery latency) |
+| Stop → terminal (durable, mutation path) | 7.6 ms p50 |
+| Snapshot duplicate acceptance | zero (all writes `applied`, none `stale`/`lost` in the sampled Convex logs) |
+
+### 7.3 Cost proxies (Convex `usageStats`, spot window inside one streaming turn, single subscriber)
+
+| Function | Rate | Per execution |
+|---|---|---|
+| `getSelectedConversation` re-executions | **~116/min while streaming** (≈2/s — the message patch AND the run patch each invalidate it per beat) | ~23 KB read, 6 docs, 19 ms |
+| `updateAssistantSnapshot` | ~80/min (750 ms cadence) | ~35 KB read + ~20 KB written, 16 ms |
+| `markGenerationRunCompleted` | 1/turn | 53 KB read, 30 KB written |
+
+≈ **2.7 MB/min query reads + 2.8 MB/min mutation reads + 1.6 MB/min writes per
+streaming turn with one subscriber**, growing with answer length (the query
+re-delivers the full selected path each execution). Each additional
+tab/subscriber adds its own full re-delivery. This is B5's Experiment 2
+before-picture, now with runtime numbers.
+
+### 7.4 New product finding: intermittent live-stream adoption loss
+
+In 3 observed runs (2/10 in the recorded reload scenario plus one in an
+earlier discarded run), the durable send's hard navigation to `/c/<chatId>`
+lost live-stream adoption: the turn ran and settled server-side and content
+rendered correctly — but only via the 750 ms snapshot plane
+(`first_chunk_received`/`first_visible_text`/`stream_terminal` never fired
+while the transport tap and settlement receipt did). Users would see a
+correct but visibly chunky answer with no error. The harness now counts this
+per scenario (`liveStreamNotAdoptedRuns`); worth a dedicated investigation
+alongside (not inside) Experiment 1. Related: the hard navigation itself is
+why durable `send → optimistic paint` (~122 ms) and the guest→durable
+dispatch gap are elevated — and it also flushes Chromium's network buffer,
+which is why durable correctness uses settlement-based rules when the SSE
+body is unreadable.

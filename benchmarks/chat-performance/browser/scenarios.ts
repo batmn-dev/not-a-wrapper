@@ -10,9 +10,16 @@ export type BrowserScenarioConfig = {
   shape: DeterministicDeliveryShape
   viewport: "desktop" | "mobile"
   cpuThrottle: 1 | 4
-  action: "complete" | "stop"
+  /**
+   * complete/stop run in one tab; second-tab opens the durable chat in a
+   * second page mid-stream and measures snapshot→render freshness; reload
+   * reloads the sending tab mid-stream and measures recovery.
+   */
+  action: "complete" | "stop" | "second-tab" | "reload"
   /** Expected `stream_terminal` outcome. */
   expectedOutcome: "finish" | "error" | "abort"
+  /** Sign in as the harness test user — the turn runs the durable path. */
+  auth?: boolean
 }
 
 const base = {
@@ -46,6 +53,18 @@ export const SMOKE_SUITE: BrowserScenarioConfig[] = [
   STANDARD_SUITE[0],
   STANDARD_SUITE[1],
   STANDARD_SUITE[10],
+]
+
+/**
+ * Authenticated durable-path scenarios (measurement plan B5): real WorkOS
+ * session, server chat ids, prepareGeneration, 750 ms snapshots, settlement.
+ * Kept as a separate suite so the guest baseline stays comparable.
+ */
+export const DURABLE_SUITE: BrowserScenarioConfig[] = [
+  { ...base, id: "durable-mixed-30-fixed", scenario: "mixed-markdown", chunksPerSecond: 30, shape: "fixed", auth: true },
+  { ...base, id: "durable-text-30-second-tab", scenario: "text-only", chunksPerSecond: 30, shape: "fixed", auth: true, action: "second-tab" },
+  { ...base, id: "durable-text-30-reload", scenario: "text-only", chunksPerSecond: 30, shape: "fixed", auth: true, action: "reload" },
+  { ...base, id: "durable-stop-10-fixed", scenario: "stop-during-text", chunksPerSecond: 10, shape: "fixed", auth: true, action: "stop", expectedOutcome: "abort" },
 ]
 
 export function directiveFor(config: BrowserScenarioConfig): string {
