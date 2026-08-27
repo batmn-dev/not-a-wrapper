@@ -694,7 +694,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     // shared factor and crushes the finite corner to zero.
                     className={
                       hasEffortControl
-                        ? "can-hover:after:-start-1 can-hover:after:end-0 rounded-s-2xl rounded-e-lg pe-0.5"
+                        ? "can-hover:after:-start-1 can-hover:after:end-0 rounded-s-2xl rounded-e-md pe-0.5"
                         : undefined
                     }
                     selectedModelId={selectedModel}

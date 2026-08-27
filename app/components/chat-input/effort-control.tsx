@@ -131,7 +131,7 @@ function EffortControl({
                 // with rounded-full's near-infinite radius triggers the CSS
                 // corner-overlap reduction, which scales all radii by one
                 // shared factor and paints the finite corner square.
-                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-lg rounded-e-2xl ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
+                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
               />
             }
           >
