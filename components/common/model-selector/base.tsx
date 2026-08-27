@@ -477,9 +477,12 @@ function ModelSelectorRows({
           data-model-selector-row={`legacy:${row.provider.providerId}`}
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
-          onClick={(event) =>
+          onPointerDown={(event) => event.preventDefault()}
+          onMouseMove={(event) => event.preventBaseUIHandler()}
+          onClick={(event) => {
+            event.preventBaseUIHandler()
             onShowLegacy(row.provider.providerId, event.currentTarget)
-          }
+          }}
         >
           {content}
         </DropdownMenuItem>
@@ -786,14 +789,20 @@ export function ModelSelector({
       })
     }
 
-    trigger.blur()
+    if (!isMobile && searchInputRef.current) {
+      searchInputRef.current.focus({ preventScroll: true })
+    } else {
+      trigger.blur()
+    }
     if (!scrollSnapshot) {
       revealProvider()
       return
     }
 
     flushSync(revealProvider)
-    restoreModelListScroll(scrollSnapshot)
+    window.requestAnimationFrame(() => {
+      restoreModelListScroll(scrollSnapshot)
+    })
   }
 
   const handlePressPointerDown = (

@@ -312,6 +312,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     "data-testid": dataTestId,
     "data-model-selector-row": dataModelSelectorRow,
     "aria-label": ariaLabel,
+    onPointerDown,
     onClick,
   }: {
     children: React.ReactNode
@@ -321,6 +322,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     "data-testid"?: string
     "data-model-selector-row"?: string
     "aria-label"?: string
+    onPointerDown?: React.PointerEventHandler<HTMLDivElement>
     onClick?: React.MouseEventHandler<HTMLDivElement>
   }) => (
     <div
@@ -332,7 +334,11 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
       role="menuitem"
       tabIndex={0}
       aria-label={ariaLabel}
-      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onClick={(event) => {
+        Object.assign(event, { preventBaseUIHandler: () => undefined })
+        onClick?.(event)
+      }}
     >
       {children}
     </div>
@@ -724,25 +730,54 @@ describe("ModelSelector", () => {
       "[data-scrollable-surface]"
     )
     const legacyDisclosure = getLegacyDisclosure("Anthropic") as HTMLElement
+    const searchInput = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="Search models..."]'
+    )
 
     expect(scrollSurface).not.toBeNull()
     expect(legacyDisclosure).not.toBeNull()
+    expect(searchInput).not.toBeNull()
 
     scrollSurface!.scrollTop = 137
+    searchInput!.focus()
+    const pointerDown = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+    })
+
+    expect(legacyDisclosure.dispatchEvent(pointerDown)).toBe(false)
+    expect(document.activeElement).toBe(searchInput)
+
+    const frameCallbacks: FrameRequestCallback[] = []
+    const originalRequestAnimationFrame = window.requestAnimationFrame
+    window.requestAnimationFrame = vi.fn((callback) => {
+      frameCallbacks.push(callback)
+      return frameCallbacks.length
+    })
     legacyDisclosure.focus()
-    const blur = legacyDisclosure.blur.bind(legacyDisclosure)
-    vi.spyOn(legacyDisclosure, "blur").mockImplementation(() => {
-      blur()
+    const focusSearch = searchInput!.focus.bind(searchInput)
+    vi.spyOn(searchInput!, "focus").mockImplementation((options) => {
+      focusSearch(options)
       scrollSurface!.scrollTop = 999
     })
 
-    act(() => {
-      legacyDisclosure.click()
-    })
+    try {
+      act(() => {
+        legacyDisclosure.click()
+      })
 
-    expect(document.activeElement).not.toBe(legacyDisclosure)
-    expect(document.body.textContent).toContain("Claude Sonnet 4.5")
-    expect(scrollSurface!.scrollTop).toBe(137)
+      expect(document.activeElement).toBe(searchInput)
+      expect(document.body.textContent).toContain("Claude Sonnet 4.5")
+      expect(frameCallbacks).toHaveLength(1)
+
+      act(() => {
+        frameCallbacks[0]?.(0)
+      })
+
+      expect(scrollSurface!.scrollTop).toBe(137)
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame
+    }
   })
 
   it("uses a lock icon instead of the locked badge for signed-out users", () => {

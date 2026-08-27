@@ -673,7 +673,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               >
                 <div
                   className={cn(
-                    "relative ms-1 flex min-w-0 shrink items-center",
+                    // group/segmented: hovering EITHER half of the joined
+                    // pair relaxes the thinking pill's resting 2px overlap
+                    // back to flush (see EffortControl's margin motion).
+                    "group/segmented relative ms-1 flex min-w-0 shrink items-center",
                     // Joined segmented pair: the model trigger and the
                     // thinking pill sit flush (their persistent touch
                     // backgrounds must read as one surface); the loose 6px
