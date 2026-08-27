@@ -41,7 +41,7 @@ function requireAdmissionSecret(secret: string | undefined): string {
 
 function serializeAdmission(payload: ChatAdmissionProofPayload): string {
   return JSON.stringify([
-    "chat-admission-v1",
+    "chat-admission-v2",
     payload.chatId,
     payload.requestId,
     payload.model,

@@ -156,8 +156,8 @@ export function getWorkDurationMs(metadata: unknown): number | undefined {
 
 /**
  * Read the applied per-turn reasoning effort (ADR-0026) off a message's
- * metadata. Stamped by the chat turn runtime at stream start; absent means
- * the turn ran at the provider's default.
+ * metadata. Stamped by the chat turn runtime at stream start; absent means no
+ * canonical effort level described the execution.
  */
 export function getReasoningEffort(
   metadata: unknown

@@ -68,7 +68,7 @@ export type ChatProjectContext = {
  * empty project chats.
  */
 export function Chat({ project }: { project?: ChatProjectContext }) {
-  const { chatId } = useChatSession()
+  const { chatId, isChatIdHandoff } = useChatSession()
   // Resolve the current chat even when it is outside the bounded sidebar window
   // (deep-links to old chats). In-window chats resolve synchronously; out-of-
   // window chats load via the chats.getById fallback (isChatLoading).
@@ -79,6 +79,7 @@ export function Chat({ project }: { project?: ChatProjectContext }) {
       chatId={chatId}
       currentChat={currentChat || null}
       isChatLoading={isChatLoading}
+      preserveEffortOnChatIdChange={isChatIdHandoff}
     >
       <ChatInner
         chatId={chatId}

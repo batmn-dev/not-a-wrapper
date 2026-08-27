@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -17,11 +18,23 @@ const turnMocks = vi.hoisted(() => ({
   preferencesLoading: false,
   isChatLoading: false,
   searchMode: "optional" as "optional" | "always-on" | "unsupported",
+  effortLevels: ["low", "medium", "high"] as const,
+  storedEffort: undefined as ModelReasoningEffort | undefined,
   setWebSearchEnabled: vi.fn(),
+  writeStoredEffortForModel: vi.fn(),
 }))
 
 vi.mock("@/lib/models", () => ({
-  getLogicalModelInfo: () => ({ searchMode: turnMocks.searchMode }),
+  getLogicalModelInfo: () => ({
+    searchMode: turnMocks.searchMode,
+    effortLevels: turnMocks.effortLevels,
+  }),
+}))
+
+vi.mock("@/lib/reasoning-effort", () => ({
+  readStoredEffortForModel: () => turnMocks.storedEffort,
+  subscribeToStoredEffort: () => () => undefined,
+  writeStoredEffortForModel: turnMocks.writeStoredEffortForModel,
 }))
 
 vi.mock("@/lib/user-store/provider", () => ({
@@ -71,7 +84,9 @@ describe("TurnContextProvider snapshot contract", () => {
     container = null
     root = null
     turnMocks.searchMode = "optional"
+    turnMocks.storedEffort = undefined
     turnMocks.setWebSearchEnabled.mockClear()
+    turnMocks.writeStoredEffortForModel.mockClear()
   })
 
   it("forces inherent search on without overwriting the optional preference", () => {
@@ -98,6 +113,58 @@ describe("TurnContextProvider snapshot contract", () => {
     expect(contexts.at(-1)?.enableSearch).toBe(true)
     act(() => contexts.at(-1)?.setEnableSearch(false))
     expect(turnMocks.setWebSearchEnabled).not.toHaveBeenCalled()
+  })
+
+  it("scopes effort to each chat while preserving the first-turn handoff", () => {
+    const contexts: Array<ReturnType<typeof useTurnContext>> = []
+    function Probe() {
+      contexts.push(useTurnContext())
+      return null
+    }
+
+    function mount(
+      chatId: string | null,
+      preserveEffortOnChatIdChange = false
+    ) {
+      act(() => {
+        root?.render(
+          <TurnContextProvider
+            chatId={chatId}
+            currentChat={null}
+            preserveEffortOnChatIdChange={preserveEffortOnChatIdChange}
+          >
+            <Probe />
+          </TurnContextProvider>
+        )
+      })
+    }
+
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    mount(null)
+    act(() => contexts.at(-1)?.reportLastTurnEffort("low"))
+    act(() => contexts.at(-1)?.setReasoningEffort("high"))
+    expect(contexts.at(-1)?.reasoningEffort).toBe("high")
+
+    mount("chat-a", true)
+    expect(contexts.at(-1)?.reasoningEffort).toBe("high")
+
+    mount("chat-b")
+    expect(contexts.at(-1)?.reasoningEffort).toBeUndefined()
+    expect(contexts.at(-1)?.getTurnSnapshot().reasoningEffort).toBeUndefined()
+    act(() => contexts.at(-1)?.reportLastTurnEffort("medium"))
+    expect(contexts.at(-1)?.reasoningEffort).toBe("medium")
+
+    mount("chat-a")
+    expect(contexts.at(-1)?.reasoningEffort).toBe("high")
+    expect(contexts.at(-1)?.getTurnSnapshot().reasoningEffort).toBe("high")
+
+    mount(null)
+    act(() => contexts.at(-1)?.setReasoningEffort("medium"))
+    mount("existing-chat")
+    expect(contexts.at(-1)?.reasoningEffort).toBeUndefined()
   })
 
   it("getTurnSnapshot is identity-stable and commit-fresh, including from a child's passive effect", () => {

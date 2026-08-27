@@ -100,7 +100,7 @@ describe("ChatStatusAnnouncer durable presentation", () => {
   })
 })
 
-describe("aria-notify registry semantics", () => {
+describe("ChatStatusAnnouncer transitions", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
@@ -112,38 +112,49 @@ describe("aria-notify registry semantics", () => {
     resetAriaNotify()
   })
 
-  async function mountOutlet() {
+  function renderAnnouncer(
+    presentationState: React.ComponentProps<
+      typeof ChatStatusAnnouncer
+    >["presentationState"]
+  ) {
+    root?.render(
+      <>
+        <ChatAnnouncerOutlet />
+        <ChatStatusAnnouncer
+          presentationState={presentationState}
+          completionAvailable={presentationState === "completed"}
+          turnId="a"
+        />
+      </>
+    )
+  }
+
+  async function mountAnnouncer(
+    presentationState: React.ComponentProps<
+      typeof ChatStatusAnnouncer
+    >["presentationState"]
+  ) {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => {
-      root?.render(<ChatAnnouncerOutlet />)
+      renderAnnouncer(presentationState)
     })
   }
 
-  it("holds the active announcement and drops same-source pending on interrupt", async () => {
+  it("drops a queued durable status when the turn completes", async () => {
     vi.useFakeTimers()
     try {
-      await mountOutlet()
       await act(async () => {
-        announce("Thinking", {
-          id: "conversation-turn-a-thinking",
-          interrupt: "none",
-        })
+        announce("Other announcement", { id: "other" })
       })
-      expect(politeText()).toBe("Thinking")
+      await mountAnnouncer("background-streaming")
+      expect(politeText()).toBe("Other announcement")
 
-      // Same-source queued update is superseded by the pending-interrupt
-      // completion before it is ever spoken.
       await act(async () => {
-        announce("Still thinking", { id: "conversation-turn-a-complete" })
-        announce("Response complete", {
-          id: "conversation-turn-a-complete",
-          interrupt: "pending",
-        })
+        renderAnnouncer("completed")
       })
-      // "Thinking" still holds the region for its 500ms window.
-      expect(politeText()).toBe("Thinking")
+      expect(politeText()).toBe("Other announcement")
 
       await act(async () => {
         vi.advanceTimersByTime(500)

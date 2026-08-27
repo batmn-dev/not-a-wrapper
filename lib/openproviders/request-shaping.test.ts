@@ -3,7 +3,7 @@ import { getAllModels } from "@/lib/models"
 import type { ModelConfig } from "@/lib/models/types"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
-  resolveAppliedReasoningEffort,
+  resolveReasoningEffort,
   shapeRequest,
   type RequestShapingContext,
 } from "./request-shaping"
@@ -125,12 +125,10 @@ describe("shapeRequest provider options", () => {
       expected: { google: { thinkingConfig: { includeThoughts: true } } },
     },
     {
-      name: "openai reasoning model gets medium effort and auto summary",
+      name: "openai reasoning model gets no effort override and an auto summary",
       model: { providerId: "openai", reasoningText: true },
       ctx: NO_TOOLS,
-      expected: {
-        openai: { reasoningEffort: "medium", reasoningSummary: "auto" },
-      },
+      expected: { openai: { reasoningSummary: "auto" } },
     },
     {
       // xAI accepts reasoning_effort only on grok-3-mini ("low" | "high");
@@ -161,30 +159,67 @@ describe("shapeRequest provider options", () => {
 })
 
 describe("per-turn reasoning effort (ADR-0026)", () => {
-  it("resolves applied effort: pass-through, clamp, platform, effortless", () => {
+  it("separates the wire override from the concrete applied receipt", () => {
     const levels = makeModel({
       effortLevels: ["low", "medium", "high", "max"],
+      defaultEffort: "medium",
     })
-    const platform = { platformFunded: true }
-    const byok = { platformFunded: false }
+    const platform = { platformFunded: true, searchToolsActive: false }
+    const byok = { platformFunded: false, searchToolsActive: false }
 
-    expect(resolveAppliedReasoningEffort(levels, "high", byok)).toBe("high")
+    expect(resolveReasoningEffort(levels, "high", byok)).toEqual({
+      wireReasoningEffort: "high",
+      appliedReasoningEffort: "high",
+    })
     // "xhigh" is not offered — clamps to the nearest level in canonical order.
-    expect(resolveAppliedReasoningEffort(levels, "xhigh", byok)).toBe("high")
-    expect(resolveAppliedReasoningEffort(levels, "none", byok)).toBe("low")
-    // Platform-funded turns run at Default (ADR-0021 reservation estimate).
-    expect(resolveAppliedReasoningEffort(levels, "max", platform))
-      .toBeUndefined()
-    expect(resolveAppliedReasoningEffort(levels, undefined, byok))
-      .toBeUndefined()
-    expect(resolveAppliedReasoningEffort(makeModel({}), "high", byok))
-      .toBeUndefined()
+    expect(resolveReasoningEffort(levels, "xhigh", byok)).toEqual({
+      wireReasoningEffort: "high",
+      appliedReasoningEffort: "high",
+    })
+    expect(resolveReasoningEffort(levels, "none", byok)).toEqual({
+      wireReasoningEffort: "low",
+      appliedReasoningEffort: "low",
+    })
+    // Default/platform turns omit the wire override but record the concrete
+    // provider default so receipts and reopened chats agree.
+    expect(resolveReasoningEffort(levels, "max", platform)).toEqual({
+      appliedReasoningEffort: "medium",
+    })
+    expect(resolveReasoningEffort(levels, undefined, byok)).toEqual({
+      appliedReasoningEffort: "medium",
+    })
+    expect(resolveReasoningEffort(makeModel({}), "high", byok)).toEqual({})
   })
 
-  it("maps applied effort onto each provider's wire shape", () => {
+  it("drops applied effort when Claude search uses the fixed-budget fallback", () => {
+    const claude46 = makeModel({
+      providerId: "anthropic",
+      thinkingMode: "adaptive",
+      effortLevels: ["low", "medium", "high", "max"],
+      searchThinkingDowngrade: true,
+    })
+
+    expect(
+      resolveReasoningEffort(claude46, "high", {
+        platformFunded: false,
+        searchToolsActive: true,
+      })
+    ).toEqual({})
+    expect(
+      resolveReasoningEffort(claude46, "high", {
+        platformFunded: false,
+        searchToolsActive: false,
+      })
+    ).toEqual({
+      wireReasoningEffort: "high",
+      appliedReasoningEffort: "high",
+    })
+  })
+
+  it("maps the wire override onto each provider's request shape", () => {
     const ctx: RequestShapingContext = {
       ...NO_TOOLS,
-      reasoningEffort: "xhigh",
+      wireReasoningEffort: "xhigh",
     }
     expect(
       shapeRequest(
@@ -201,7 +236,7 @@ describe("per-turn reasoning effort (ADR-0026)", () => {
     expect(
       shapeRequest(makeModel({ providerId: "openai", reasoningText: true }), {
         ...NO_TOOLS,
-        reasoningEffort: "low",
+        wireReasoningEffort: "low",
       }).providerOptions
     ).toEqual({
       openai: { reasoningEffort: "low", reasoningSummary: "auto" },
@@ -209,7 +244,7 @@ describe("per-turn reasoning effort (ADR-0026)", () => {
     expect(
       shapeRequest(makeModel({ providerId: "google", reasoningText: true }), {
         ...NO_TOOLS,
-        reasoningEffort: "high",
+        wireReasoningEffort: "high",
       }).providerOptions
     ).toEqual({
       google: {
@@ -219,10 +254,10 @@ describe("per-turn reasoning effort (ADR-0026)", () => {
     expect(
       shapeRequest(makeModel({ providerId: "xai", reasoningText: true }), {
         ...NO_TOOLS,
-        reasoningEffort: "low",
+        wireReasoningEffort: "low",
       }).providerOptions
     ).toEqual({ xai: { reasoningEffort: "low" } })
-    // Without an applied effort, xai sends nothing (Grok 4 rejects the param).
+    // Without a wire override, xai sends nothing (Grok 4 rejects the param).
     expect(
       shapeRequest(
         makeModel({ providerId: "xai", reasoningText: true }),

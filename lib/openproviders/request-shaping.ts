@@ -17,29 +17,64 @@ export type RequestShapingContext = {
   /** The request carries any tools at all (any Tool layer). */
   hasTools: boolean
   /**
-   * The APPLIED per-turn effort (ADR-0026) — already resolved through
-   * {@link resolveAppliedReasoningEffort}, so it is guaranteed to be a level
-   * this route's provider accepts. Absent = Default (today's shapes exactly).
+   * Optional per-turn wire override (ADR-0026), already clamped to a level
+   * this route's provider accepts. Absent means send no effort override.
    */
-  reasoningEffort?: ModelReasoningEffort
+  wireReasoningEffort?: ModelReasoningEffort
+}
+
+function usesFixedBudgetSearchThinking(
+  modelConfig: Pick<ModelConfig, "thinkingMode" | "searchThinkingDowngrade">,
+  searchToolsActive: boolean
+): boolean {
+  return (
+    modelConfig.thinkingMode === "adaptive" &&
+    modelConfig.searchThinkingDowngrade === true &&
+    searchToolsActive
+  )
+}
+
+export type ReasoningEffortResolution = {
+  /** Concrete override sent for this turn. Absent means no wire override. */
+  wireReasoningEffort?: ModelReasoningEffort
+  /** Concrete effective level recorded in the receipt and message metadata. */
+  appliedReasoningEffort?: ModelReasoningEffort
 }
 
 /**
- * Resolve the user's requested effort into what this route actually runs
- * (ADR-0026). Absent request, an effortless route, or a platform-funded turn
- * (the ADR-0021 reservation estimate assumes default thinking) all resolve
- * to Default; a level the route doesn't offer clamps to the nearest one in
- * canonical order (ties prefer the cheaper side).
+ * Resolve one request into separate wire and receipt facts (ADR-0026).
+ * Default and platform-funded turns send no override but record the route's
+ * documented default. A fixed numeric thinking budget records no canonical
+ * effort level because none of the named levels can describe it honestly.
  */
-export function resolveAppliedReasoningEffort(
-  modelConfig: Pick<ModelConfig, "effortLevels">,
+export function resolveReasoningEffort(
+  modelConfig: Pick<
+    ModelConfig,
+    | "defaultEffort"
+    | "effortLevels"
+    | "thinkingMode"
+    | "searchThinkingDowngrade"
+  >,
   requested: ModelReasoningEffort | undefined,
-  ctx: { platformFunded: boolean }
-): ModelReasoningEffort | undefined {
-  if (requested === undefined || ctx.platformFunded) return undefined
+  ctx: { platformFunded: boolean; searchToolsActive: boolean }
+): ReasoningEffortResolution {
   const levels = modelConfig.effortLevels
-  if (!levels || levels.length === 0) return undefined
-  return clampToNearestEffortLevel(levels, requested)
+  if (!levels || levels.length === 0) return {}
+  if (usesFixedBudgetSearchThinking(modelConfig, ctx.searchToolsActive)) {
+    return {}
+  }
+  if (requested === undefined || ctx.platformFunded) {
+    return modelConfig.defaultEffort === undefined
+      ? {}
+      : { appliedReasoningEffort: modelConfig.defaultEffort }
+  }
+  const effort = clampToNearestEffortLevel(levels, requested)
+  return effort === undefined
+    ? {}
+    : {
+        wireReasoningEffort: effort,
+        appliedReasoningEffort: effort,
+      }
 }
 
 export type ShapedRequest = {
@@ -82,12 +117,14 @@ function resolveProviderOptions(
   ctx: RequestShapingContext
 ): ProviderOptions {
   if (!modelConfig.reasoningText) return {}
-  const effort = ctx.reasoningEffort
+  const effort = ctx.wireReasoningEffort
 
   switch (modelConfig.providerId) {
     case "anthropic": {
-      const downgradeForSearch =
-        modelConfig.searchThinkingDowngrade === true && ctx.searchToolsActive
+      const downgradeForSearch = usesFixedBudgetSearchThinking(
+        modelConfig,
+        ctx.searchToolsActive
+      )
       if (modelConfig.thinkingMode === "adaptive" && !downgradeForSearch) {
         // Effort rides only the adaptive path, and the catalog never offers
         // "none" on Anthropic — so the Opus 5 "disabled thinking + xhigh/max
@@ -101,7 +138,7 @@ function resolveProviderOptions(
       }
       // Fixed-budget path (pause_turn downgrade or budget-era models):
       // `effort` and `budget_tokens` don't combine — the budget wins and the
-      // turn runs at Default. The receipt reflects what actually applied.
+      // receipt omits applied effort because no named level represents it.
       const budgetTokens =
         modelConfig.thinkingMode === "adaptive"
           ? SEARCH_DOWNGRADE_BUDGET_TOKENS
@@ -122,7 +159,7 @@ function resolveProviderOptions(
     case "openai":
       return {
         openai: {
-          reasoningEffort: effort ?? "medium",
+          ...(effort !== undefined ? { reasoningEffort: effort } : {}),
           reasoningSummary: "auto",
         },
       }

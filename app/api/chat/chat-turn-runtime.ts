@@ -52,7 +52,7 @@ import {
 } from "@/lib/observability/sentry-scrubbing"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
 import {
-  resolveAppliedReasoningEffort,
+  resolveReasoningEffort,
   shapeRequest,
 } from "@/lib/openproviders/request-shaping"
 import {
@@ -156,7 +156,7 @@ export type ChatTurnInput = {
   systemPrompt?: string
   enableSearch: boolean
   /** Parser-validated per-turn effort request (ADR-0026); the runtime clamps
-   * it to the resolved route via `resolveAppliedReasoningEffort`. */
+   * it to the resolved route via `resolveReasoningEffort`. */
   reasoningEffort?: ModelReasoningEffort
   chatVersion?: number
   expectedVisibleMessageCount?: number
@@ -237,7 +237,7 @@ type PreparedTurn = {
   titleRouteId: string
   modelConfig: ModelConfig
   provider: Provider
-  /** Clamped per-turn effort actually sent to the provider (ADR-0026). */
+  /** Concrete effective effort recorded for badges and reopen (ADR-0026). */
   appliedReasoningEffort: ModelReasoningEffort | undefined
   normalizedChatVersion: number
   hasAnyTools: boolean
@@ -546,29 +546,6 @@ export function createChatTurnRuntime(args: {
     }
     const providerToolKeyMode: ToolKeyMode = credentialSource
 
-    // Per-turn effort (ADR-0026): clamp the request to the resolved route's
-    // levels; platform-funded turns run at Default so the ADR-0021 reservation
-    // estimate stays valid. The applied value feeds model construction
-    // (OpenRouter), request shaping, the run receipt, and the message stamp.
-    const appliedReasoningEffort = resolveAppliedReasoningEffort(
-      modelConfig,
-      reasoningEffort,
-      { platformFunded: credentialSource === "platform" }
-    )
-
-    // Search is provided only through visible, auditable tool calls.
-    // OpenRouter's reasoning knob is construction-time (provider-strategy.ts),
-    // so an applied per-turn effort overrides the catalog default here.
-    const aiModel = createLanguageModel(
-      appliedReasoningEffort !== undefined &&
-        modelConfig.providerId === "openrouter"
-        ? { ...modelConfig, reasoning: { effort: appliedReasoningEffort } }
-        : modelConfig,
-      apiKey
-    )
-    const titleModelConfig = selectChatTitleModelConfig(allModels, modelConfig)
-    const titleModel = createLanguageModel(titleModelConfig, apiKey)
-
     const phClient = deps.getPostHogClient()
     const normalizedChatVersion = normalizeChatVersion(chatVersion, messages)
 
@@ -638,6 +615,28 @@ export function createChatTurnRuntime(args: {
 
     const hasAnyTools = tool.hasTools
     const shouldInjectSearch = tool.policySummary.searchInjected
+
+    // Per-turn effort (ADR-0026): resolve only after Capability policy proves
+    // whether search is active. Claude 4.6's pause_turn workaround replaces
+    // adaptive effort with a fixed budget, so that path must not emit an
+    // applied-effort receipt or message badge.
+    const { wireReasoningEffort, appliedReasoningEffort } =
+      resolveReasoningEffort(modelConfig, reasoningEffort, {
+        platformFunded: credentialSource === "platform",
+        searchToolsActive: shouldInjectSearch,
+      })
+
+    // OpenRouter's reasoning knob is construction-time (provider-strategy.ts),
+    // so a per-turn wire override replaces the catalog default here.
+    const aiModel = createLanguageModel(
+      wireReasoningEffort !== undefined &&
+        modelConfig.providerId === "openrouter"
+        ? { ...modelConfig, reasoning: { effort: wireReasoningEffort } }
+        : modelConfig,
+      apiKey
+    )
+    const titleModelConfig = selectChatTitleModelConfig(allModels, modelConfig)
+    const titleModel = createLanguageModel(titleModelConfig, apiKey)
 
     const durableRuntimeEnabled = isDurableConvexChat({
       isAuthenticated,
@@ -1004,9 +1003,7 @@ export function createChatTurnRuntime(args: {
       {
         searchToolsActive: shouldInjectSearch,
         hasTools: hasAnyTools,
-        ...(appliedReasoningEffort !== undefined
-          ? { reasoningEffort: appliedReasoningEffort }
-          : {}),
+        ...(wireReasoningEffort !== undefined ? { wireReasoningEffort } : {}),
       }
     )
 

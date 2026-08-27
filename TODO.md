@@ -3,16 +3,16 @@
 - **Model presentation: Improve how models display across the UI**
   - Make model logos appear during thinking states to make assistant output ownership clear
 - **Per-turn effort, platform-funded UX (ADR-0026 v1 follow-up):** two accepted
-nuances to review and tackle: (1) platform-funded turns silently run at the
-provider default even when the resolved route supports the requested level —
-requested is recorded but applied stays Default so ADR-0021 reservation math
-holds, and the composer gives no hint (the user only notices the missing
-badge). Decide between surfacing an affordance ("effort applies on your own
-key / paid usage") and implementing effort-scaled reservations. (2) An effort
-selection can steer resolution off a platform-entitled route onto the user's
-own BYOK key when only that route serves the level — capability-correct, but
-it silently shifts cost onto the user's key; decide whether that needs
-disclosure in the composer or a funding-tier preference in the resolver.
+  nuances to review and tackle: (1) platform-funded turns silently run at the
+  provider default even when the resolved route supports the requested level —
+  requested and the concrete provider default are both recorded so the badge and
+  reopened composer stay honest, but the composer gives no hint before sending.
+  Decide between surfacing an affordance ("effort applies on your own key / paid
+  usage") and implementing effort-scaled reservations. (2) An effort
+  selection can steer resolution off a platform-entitled route onto the user's
+  own BYOK key when only that route serves the level — capability-correct, but
+  it silently shifts cost onto the user's key; decide whether that needs
+  disclosure in the composer or a funding-tier preference in the resolver.
 - **Web Search modes and quantity controls:** Think through how the Composer
 should expose an **Always** option that lets users force `web_search`, alongside
 the existing Off and Auto behavior where the model decides whether to search.
@@ -64,14 +64,16 @@ backpressure-preserving seam for persisting approval requests before forwarding
 them. Exit when a stable released API preserves ordering, abort propagation,
 multi-step behavior, and approval-settle -> snapshot-flush -> terminal-write
 ordering without moving durable ownership out of ADR-0009.
-- **Anthropic** `pause_turn` **continuation:** retain the catalog-scoped fixed-thinking
-search workaround only for Claude 4.6 models that still accept `budget_tokens`;
-never apply it to adaptive-only models. Measure production incidence of raw
-`pause_turn` by model and search configuration before changing terminal
-semantics. Exit when a released AI SDK or Anthropic provider correctly replays
-paused assistant content with the same tools, bounded continuation, abort
-propagation, deduplicated parts, and exact aggregate usage—or after a fully
-tested provider-specific continuation adapter provides those guarantees.
+- **Research and implement Anthropic** `pause_turn` **continuation:** check the
+  latest AI SDK and Anthropic provider behavior against Anthropic's replay
+  contract, and measure production incidence by model and search configuration.
+  If no released SDK fix exists, build a provider-boundary continuation adapter
+  that replays paused assistant content with the same tools, bounded
+  continuation, abort propagation, deduplicated parts, and exact aggregate
+  usage. Until those guarantees are tested, retain the catalog-scoped
+  fixed-thinking search workaround only for Claude 4.6 models that still accept
+  `budget_tokens`; never apply it to adaptive-only models. Remove
+  `searchThinkingDowngrade` after the continuation path is proven.
 - **Signed tool approvals:** defer `experimental_toolApprovalSecret` until the
 coherent AI SDK patch line preserves signatures end to end and the deployment
 has a shared-secret, unsigned-pending-approval, and rotation strategy. Reassess

@@ -292,8 +292,9 @@ export function useChatCore({
   // only orchestration and persistence policy.
   // Wire-contract fields for SDK-initiated dispatches (the approval
   // continuation auto-send carries no per-call body — the transport merges
-  // these in). Turn context is read at dispatch time, never from a
-  // render-time closure; continuations only exist on durable chats.
+  // these in). Turn context is read at dispatch time, never from a render-time
+  // closure; the transport restores a paused approval's applied effort.
+  // Continuations only exist on durable chats.
   const getFallbackTurnBody = useCallback(() => {
     if (!chatId || getMessagePersistenceMode(chatId) !== "server") return null
     const snapshot = getTurnSnapshot()

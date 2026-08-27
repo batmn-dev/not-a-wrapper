@@ -42,6 +42,57 @@ describe("chat admission proof", () => {
     ).toBe(true)
   })
 
+  it("rejects the retired v1 format", () => {
+    const v1Proof = hmacSha256Hex(
+      SECRET,
+      JSON.stringify([
+        "chat-admission-v1",
+        payload.chatId,
+        payload.requestId,
+        payload.model,
+        payload.provider,
+        [
+          payload.route!.routeId,
+          payload.route!.credentialSource,
+          payload.route!.routeReason,
+        ],
+        payload.grantDigest,
+        null,
+        null,
+        payload.issuedAt,
+      ])
+    )
+
+    expect(
+      verifyChatAdmissionProof(payload, v1Proof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(false)
+  })
+
+  it("binds reasoning effort into the v2 proof", () => {
+    const withEffort: ChatAdmissionProofPayload = {
+      ...payload,
+      reasoningEffort: { requested: "high", applied: "medium" },
+    }
+    const proof = signChatAdmissionProof(withEffort, SECRET)
+
+    expect(
+      verifyChatAdmissionProof(withEffort, proof, { secret: SECRET, now: NOW })
+    ).toBe(true)
+    expect(
+      verifyChatAdmissionProof(
+        {
+          ...withEffort,
+          reasoningEffort: { requested: "high", applied: "low" },
+        },
+        proof,
+        { secret: SECRET, now: NOW }
+      )
+    ).toBe(false)
+  })
+
   it.each([
     ["chat", { chatId: "chat_2" }],
     ["request", { requestId: "request_2" }],
@@ -105,11 +156,10 @@ describe("chat admission proof", () => {
     ).toBe(true)
     // Swapping or dropping the reservation invalidates the proof.
     expect(
-      verifyChatAdmissionProof(
-        { ...payload, reservationId: "res-2" },
-        proof,
-        { secret: SECRET, now: NOW }
-      )
+      verifyChatAdmissionProof({ ...payload, reservationId: "res-2" }, proof, {
+        secret: SECRET,
+        now: NOW,
+      })
     ).toBe(false)
     expect(
       verifyChatAdmissionProof(payload, proof, { secret: SECRET, now: NOW })

@@ -129,7 +129,7 @@ export function isModelReasoningEffort(
 /**
  * Clamp a level onto an offered subset: the requested level when offered,
  * else the nearest offered level in canonical order (ties prefer the cheaper
- * side). Pure vocabulary math — shared by Request shaping's applied-effort
+ * side). Pure vocabulary math — shared by Request shaping's effort
  * resolution and the OpenRouter catalog generator's default derivation.
  */
 export function clampToNearestEffortLevel(
@@ -266,10 +266,9 @@ type ModelConfig = {
   effortLevels?: readonly ModelReasoningEffort[]
 
   /**
-   * The provider's documented default effort, presentation-only: the effort
-   * menu shows it as the implicitly selected level while the user has no
-   * override, and it is never sent on the wire (no override always means
-   * "send nothing").
+   * The provider's documented default effort. The menu shows it as implicitly
+   * selected with no user override, and the runtime records it as the concrete
+   * applied receipt. It is never treated as a per-turn wire override.
    */
   defaultEffort?: ModelReasoningEffort
 

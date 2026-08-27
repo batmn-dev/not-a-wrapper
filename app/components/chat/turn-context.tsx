@@ -88,6 +88,42 @@ const TurnContext = createContext<TurnContextValue | null>(null)
 /** Stable empty menu so effortless models don't churn context identity. */
 const NO_EFFORT_LEVELS: readonly ModelReasoningEffort[] = []
 
+type EffortOverride = ModelReasoningEffort | "default" | undefined
+
+type ConversationEffortState = {
+  effortOverride: EffortOverride
+  lastTurnEffort: ModelReasoningEffort | undefined
+}
+
+type ConversationEffortStore = {
+  activeChatId: string | null
+  byChatId: ReadonlyMap<string | null, ConversationEffortState>
+}
+
+const EMPTY_CONVERSATION_EFFORT: ConversationEffortState = {
+  effortOverride: undefined,
+  lastTurnEffort: undefined,
+}
+
+function updateConversationEffort(
+  store: ConversationEffortStore,
+  chatId: string | null,
+  update: Partial<ConversationEffortState>
+): ConversationEffortStore {
+  const previous = store.byChatId.get(chatId) ?? EMPTY_CONVERSATION_EFFORT
+  const next = { ...previous, ...update }
+  if (
+    next.effortOverride === previous.effortOverride &&
+    next.lastTurnEffort === previous.lastTurnEffort
+  ) {
+    return store
+  }
+
+  const byChatId = new Map(store.byChatId)
+  byChatId.set(chatId, next)
+  return { ...store, byChatId }
+}
+
 function createSnapshotStore(initial: TurnSnapshot) {
   let current = initial
   return {
@@ -102,11 +138,13 @@ export function TurnContextProvider({
   chatId,
   currentChat,
   isChatLoading = false,
+  preserveEffortOnChatIdChange = false,
   children,
 }: {
   chatId: string | null
   currentChat: Chats | null
   isChatLoading?: boolean
+  preserveEffortOnChatIdChange?: boolean
   children: ReactNode
 }) {
   const { user } = useUser()
@@ -143,12 +181,39 @@ export function TurnContextProvider({
   // reopened chat restores what actually ran) → the per-model device memory
   // → Default. The effective value then clamps to the model's level menu, so
   // switching models keeps a supported level and snaps to Default otherwise.
-  const [effortOverride, setEffortOverride] = useState<
-    ModelReasoningEffort | "default" | undefined
-  >(undefined)
-  const [lastTurnEffort, reportLastTurnEffort] = useState<
-    ModelReasoningEffort | undefined
-  >(undefined)
+  const [conversationEfforts, setConversationEfforts] =
+    useState<ConversationEffortStore>(() => ({
+      activeChatId: chatId,
+      byChatId: new Map(),
+    }))
+
+  // ChatGPT owns effort on its conversation object. Keep the same boundary:
+  // real chat switches select separate state, while null → id moves the new
+  // conversation's state across its first-turn route handoff.
+  if (conversationEfforts.activeChatId !== chatId) {
+    const byChatId = new Map(conversationEfforts.byChatId)
+    if (conversationEfforts.activeChatId === null && chatId !== null) {
+      const newConversationEffort = byChatId.get(null)
+      byChatId.delete(null)
+      if (preserveEffortOnChatIdChange && newConversationEffort) {
+        byChatId.set(chatId, newConversationEffort)
+      }
+    }
+    setConversationEfforts({ activeChatId: chatId, byChatId })
+  }
+
+  const { effortOverride, lastTurnEffort } =
+    conversationEfforts.byChatId.get(chatId) ?? EMPTY_CONVERSATION_EFFORT
+  const reportLastTurnEffort = useCallback(
+    (effort: ModelReasoningEffort | undefined) => {
+      setConversationEfforts((current) =>
+        updateConversationEffort(current, chatId, {
+          lastTurnEffort: effort,
+        })
+      )
+    },
+    [chatId, setConversationEfforts]
+  )
   // Device memory read synchronously during render: a model switch sees the
   // new model's stored level in the SAME render, so a snapshot taken between
   // switch and paint can never carry the previous model's value. The server
@@ -170,10 +235,14 @@ export function TurnContextProvider({
       : undefined
   const setReasoningEffort = useCallback(
     (effort: ModelReasoningEffort | undefined) => {
-      setEffortOverride(effort ?? "default")
+      setConversationEfforts((current) =>
+        updateConversationEffort(current, chatId, {
+          effortOverride: effort ?? "default",
+        })
+      )
       writeStoredEffortForModel(selectedModel, effort)
     },
-    [selectedModel, setEffortOverride]
+    [chatId, selectedModel, setConversationEfforts]
   )
   const prefersSearch =
     !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)

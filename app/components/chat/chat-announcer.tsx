@@ -78,10 +78,10 @@ type ChatStatus = "streaming" | "ready" | "submitted" | "error"
  * Derives a screen-reader announcement from the current chat status and
  * enqueues it into the registry on each transition. Source ids are scoped to
  * the active turn (the reference announces
- * `conversation-turn-${id}-${index}-thinking|-complete`); "Response complete"
- * uses `interrupt: "pending"` so it supersedes this turn's queued-but-unspoken
- * announcements, "Thinking" uses `interrupt: "none"` — both recovered verbatim
- * from the reference turn effect.
+ * `conversation-turn-${id}-${index}-thinking|-complete`). Our additional
+ * durable status messages share the completion source so a finished turn can
+ * discard stale queued statuses without changing the reference's distinct
+ * Thinking source.
  *
  * Attached-stream finish evidence distinguishes a completed request from an
  * idle or newly opened chat. Desktop announces completion; mobile moves focus
@@ -158,7 +158,7 @@ export function ChatStatusAnnouncer({
       id:
         polite === "Thinking"
           ? `${sourceBase}-thinking`
-          : `${sourceBase}-status`,
+          : `${sourceBase}-complete`,
       interrupt: "none",
       priority: "normal",
     })

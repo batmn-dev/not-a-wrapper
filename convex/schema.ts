@@ -227,8 +227,9 @@ export default defineSchema({
       )
     ),
     // Per-turn effort receipt (ADR-0026): what the user requested and what
-    // the runtime applied after route clamping (platform turns run Default).
-    // Verified by the signed admission proof at prepare; display/audit only.
+    // the runtime applied after route clamping (platform turns record the
+    // concrete provider default). Verified by the signed admission proof at
+    // prepare; display/audit only.
     reasoningEffort: v.optional(vReasoningEffort),
     appliedReasoningEffort: v.optional(vReasoningEffort),
     status: generationRunStatus,

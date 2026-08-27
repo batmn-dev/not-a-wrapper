@@ -26,6 +26,7 @@ import {
   TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useComposerPopoverPress } from "@/components/ui/use-composer-popover-press"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useModel } from "@/lib/model-store/provider"
 import {
@@ -55,7 +56,6 @@ import {
   RiLockLine,
   RiSearchLine,
 } from "@remixicon/react"
-import { useReducedMotion } from "motion/react"
 import { useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { ProModelDialog } from "./pro-dialog"
@@ -81,16 +81,6 @@ const modelSelectorSearchOverlayClassName =
   "from-floating-surface/80 to-floating-surface/0 pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b"
 const modelSelectorSearchInputClassName =
   "border-input-border bg-floating-surface/70 rounded-full border shadow-none backdrop-blur-md focus-visible:ring-0"
-const modelSelectorPressKeyframes: Keyframe[] = [
-  { transform: "scale(1)" },
-  { transform: "scale(0.96)" },
-]
-const modelSelectorPressTiming: KeyframeAnimationOptions = {
-  duration: 75,
-  easing: "cubic-bezier(0.4, 0, 0.2, 1)",
-  fill: "forwards",
-}
-
 type LegacyProviderOption = {
   providerId: string
   providerName: string
@@ -694,7 +684,8 @@ export function ModelSelector({
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
-  const shouldReduceMotion = useReducedMotion()
+  const { anchorRef: desktopAnchorRef, handlePressPointerDown } =
+    useComposerPopoverPress()
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -705,9 +696,6 @@ export function ModelSelector({
     () => new Set<string>()
   )
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const desktopAnchorRef = useRef<HTMLDivElement>(null)
-  const pressAnimationRef = useRef<Animation | null>(null)
-  const pressEndCleanupRef = useRef<(() => void) | null>(null)
   const selectionCommittedRef = useRef(false)
 
   const resetModelList = () => {
@@ -803,77 +791,6 @@ export function ModelSelector({
     window.requestAnimationFrame(() => {
       restoreModelListScroll(scrollSnapshot)
     })
-  }
-
-  const handlePressPointerDown = (
-    event: React.PointerEvent<HTMLDivElement>
-  ) => {
-    if (event.button !== 0 || !event.isPrimary) return
-
-    pressEndCleanupRef.current?.()
-    pressAnimationRef.current?.cancel()
-    pressAnimationRef.current = null
-
-    if (shouldReduceMotion) return
-
-    // Start before Base UI's mousedown open so menu work cannot delay the press.
-    const pressSurface = event.currentTarget
-    const animation = pressSurface.animate(
-      modelSelectorPressKeyframes,
-      modelSelectorPressTiming
-    )
-    pressAnimationRef.current = animation
-
-    let isReleased = false
-    let hasReachedPressedScale = false
-    let isReturning = false
-
-    const startReturnAnimation = () => {
-      if (isReturning || pressAnimationRef.current !== animation) return
-      isReturning = true
-
-      const returnAnimation = pressSurface.animate(
-        [...modelSelectorPressKeyframes].reverse(),
-        modelSelectorPressTiming
-      )
-      animation.cancel()
-      pressAnimationRef.current = returnAnimation
-      returnAnimation.onfinish = () => {
-        if (pressAnimationRef.current !== returnAnimation) return
-        returnAnimation.cancel()
-        pressAnimationRef.current = null
-      }
-    }
-
-    animation.onfinish = () => {
-      if (pressAnimationRef.current !== animation) return
-      hasReachedPressedScale = true
-      if (isReleased) startReturnAnimation()
-    }
-
-    const ownerWindow = pressSurface.ownerDocument.defaultView
-    if (!ownerWindow) return
-
-    const pointerId = event.pointerId
-
-    function cleanupPointerEnd() {
-      ownerWindow?.removeEventListener("pointerup", handlePointerEnd, true)
-      ownerWindow?.removeEventListener("pointercancel", handlePointerEnd, true)
-      if (pressEndCleanupRef.current === cleanupPointerEnd) {
-        pressEndCleanupRef.current = null
-      }
-    }
-
-    function handlePointerEnd(endEvent: PointerEvent) {
-      if (endEvent.pointerId !== pointerId) return
-      cleanupPointerEnd()
-      isReleased = true
-      if (hasReachedPressedScale) startReturnAnimation()
-    }
-
-    pressEndCleanupRef.current = cleanupPointerEnd
-    ownerWindow.addEventListener("pointerup", handlePointerEnd, true)
-    ownerWindow.addEventListener("pointercancel", handlePointerEnd, true)
   }
 
   const handleTogglePinned = (modelId: string, trigger: HTMLButtonElement) => {
@@ -1071,6 +988,7 @@ export function ModelSelector({
         />
       ) : null}
       <DropdownMenu
+        modal={false}
         open={isDropdownOpen}
         onOpenChange={(open) => {
           if (disabled && open) return

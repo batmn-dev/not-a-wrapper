@@ -48,8 +48,10 @@ the template for later options.
 `ModelReasoningEffort` widens to the closed superset
 `"none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"`, ordered.
 It is the app-wide canonical scale; provider mapping never invents levels. The
-absence of a selection ("Default") is represented by `undefined`, never by a
-sentinel level — Default means "send nothing, let the provider decide".
+absence of a user override ("Default") is represented by `undefined`, never by
+a sentinel level. Default means "send no per-turn effort override". It does
+not mean the applied receipt is absent: the receipt records the route's
+concrete `defaultEffort`.
 
 ### Catalog (per-route facts, ADR-0020 discipline)
 
@@ -58,10 +60,11 @@ Two new optional `ModelConfig` fields:
 - `effortLevels?: readonly ModelReasoningEffort[]` — the levels this route's
   provider accepts for this model, in canonical order. Absent → the route has
   no user-selectable effort (the effort control does not render for it).
-- `defaultEffort?: ModelReasoningEffort` — the provider's documented default,
-  presentation-only: the menu carries no separate "Default" row; this level
-  reads as selected while the user has no override, and re-picking it clears
-  the override. Never sent on the wire.
+- `defaultEffort?: ModelReasoningEffort` — the provider's documented default.
+  The menu carries no separate "Default" row; this level reads as selected
+  while the user has no override, and re-picking it clears the override. The
+  runtime also records this concrete level as applied when it sends no
+  per-turn override. It is never itself treated as a per-turn wire override.
 
 `lib/models` stays provider-import-free (`model-runtime-boundary.test.ts`):
 levels are vocabulary; the effort→wire mapping lives in `lib/openproviders`.
@@ -89,13 +92,15 @@ level. An effort selection never fails a turn.
 
 ### Request shaping and receipts
 
-`RequestShapingContext` gains `reasoningEffort?`; `shapeRequest` maps it per
-provider (Anthropic `thinking` + `effort`, OpenAI `reasoningEffort`, Google
-`thinkingLevel`, xAI `reasoningEffort`), falling back to today's defaults when
-absent. OpenRouter's reasoning knob is construction-time provider state in the
-installed provider package, so the applied effort threads into
-`createLanguageModel` there instead of per-call provider options. The applied
-effort is recorded twice:
+The runtime resolves two separate facts: optional `wireReasoningEffort` and
+concrete `appliedReasoningEffort`. `RequestShapingContext` carries only the wire
+override; `shapeRequest` maps it per provider (Anthropic `thinking` + `effort`,
+OpenAI `reasoningEffort`, Google `thinkingLevel`, xAI `reasoningEffort`). When
+the override is absent, provider shaping sends no per-turn effort option.
+OpenRouter's reasoning knob is construction-time provider state in the
+installed provider package, so only a per-turn wire override replaces its
+catalog default in `createLanguageModel`. The concrete applied effort is
+recorded twice:
 
 - `generationRuns.reasoningEffort` (requested) and `.appliedReasoningEffort`
   — the execution receipt, carried through the signed admission proof so the
@@ -103,18 +108,21 @@ effort is recorded twice:
 - assistant message `metadata.reasoningEffort` (applied), stamped at stream
   start — the per-turn fact the UI badges and the composer restores from.
 
-Platform-funded turns ignore the requested level in v1 (applied = provider
-default) so ADR-0021 reservation math stays valid; BYOK turns honor every
-catalog level. Requested is still recorded for transparency.
+Platform-funded turns ignore the requested level in v1: they send no per-turn
+override and record the route's concrete `defaultEffort` as applied, so
+ADR-0021 reservation math stays valid. BYOK turns honor every catalog level.
+Requested is still recorded for transparency. The applied value is absent only
+when the route has no canonical effort level for the execution, such as
+Claude's fixed numeric search-thinking budget.
 
 ### Client resolution order
 
 The composer's effective effort for the next turn resolves, first hit wins:
 
 1. the user's in-conversation selection (Turn context state);
-2. the last assistant message's `metadata.reasoningEffort` (reopened chats
-   restore what actually ran — messages are the conversation memory; there is
-   no per-chat server field);
+2. the last assistant message's concrete `metadata.reasoningEffort` (reopened
+   chats restore what actually ran, including the provider default — messages
+   are the conversation memory; there is no per-chat server field);
 3. the per-model last-used map (device-local, `lastUsedEffortByModel`);
 4. Default (`undefined`).
 

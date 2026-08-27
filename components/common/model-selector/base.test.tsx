@@ -26,6 +26,7 @@ let testDom: JSDOM | null = null
 let changeDropdownOpen: ((open: boolean) => void) | undefined
 let completeDropdownOpenChange: ((open: boolean) => void) | undefined
 let dropdownAnchor: React.RefObject<Element | null> | undefined
+let dropdownModal: boolean | undefined
 
 function installDomIfNeeded() {
   if (typeof document !== "undefined") return
@@ -270,13 +271,16 @@ vi.mock("./pro-dialog", () => ({
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({
     children,
+    modal,
     onOpenChange,
     onOpenChangeComplete,
   }: {
     children: React.ReactNode
+    modal?: boolean
     onOpenChange?: (open: boolean) => void
     onOpenChangeComplete?: (open: boolean) => void
   }) => {
+    dropdownModal = modal
     changeDropdownOpen = onOpenChange
     completeDropdownOpenChange = onOpenChangeComplete
     return <div>{children}</div>
@@ -432,6 +436,7 @@ describe("ModelSelector", () => {
     changeDropdownOpen = undefined
     completeDropdownOpenChange = undefined
     dropdownAnchor = undefined
+    dropdownModal = undefined
   })
 
   function renderSelector({
@@ -1396,6 +1401,7 @@ describe("ModelSelector", () => {
     )
     expect(dropdownAnchor?.current?.contains(pressSurface ?? null)).toBe(true)
     expect(dropdownAnchor?.current).not.toBe(trigger)
+    expect(dropdownModal).toBe(false)
   })
 
   it("runs the composer press on the visual surface until pointer release", () => {
