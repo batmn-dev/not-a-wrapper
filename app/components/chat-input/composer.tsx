@@ -69,6 +69,7 @@ import {
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
 import { useComposerConnectors } from "./use-composer-connectors"
+import { EffortControl } from "./effort-control"
 import { WebSearchControl } from "./web-search-control"
 
 export type ComposerTurnPayload = {
@@ -227,6 +228,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       enableSearch,
       setEnableSearch,
       searchMode,
+      effortLevels,
+      reasoningEffort,
+      setReasoningEffort,
     } = useTurnContext()
 
     const selectModelConfig = getLogicalModelInfo(selectedModel)
@@ -668,6 +672,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     setSelectedModelId={handleModelChange}
                     isUserAuthenticated={isUserAuthenticated}
                     onLockedGuestModelSelect={onLockedGuestModelSelect}
+                    onSelectionCommitted={handleModelSelectionCommitted}
+                  />
+                  <EffortControl
+                    levels={effortLevels}
+                    value={reasoningEffort}
+                    defaultLevel={selectModelConfig?.defaultEffort}
+                    onChange={setReasoningEffort}
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>

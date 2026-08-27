@@ -29,6 +29,10 @@ import { useModel as useModelStore } from "@/lib/model-store/provider"
 import { useSessionModel } from "@/lib/model-store/use-session-model"
 import { getLogicalModelInfo } from "@/lib/models"
 import type { ModelReasoningEffort, SearchMode } from "@/lib/models/types"
+import {
+  readStoredEffortForModel,
+  writeStoredEffortForModel,
+} from "@/lib/reasoning-effort"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { resolveWebSearchEnabled } from "@/lib/user-preference-store/web-search"
 import { useUser } from "@/lib/user-store/provider"
@@ -36,6 +40,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useInsertionEffect,
   useMemo,
   useState,
@@ -66,6 +71,9 @@ export type TurnContextValue = {
   effortLevels: readonly ModelReasoningEffort[]
   reasoningEffort: ModelReasoningEffort | undefined
   setReasoningEffort: (effort: ModelReasoningEffort | undefined) => void
+  /** ChatInner reports the last assistant message's applied effort here so a
+   * reopened conversation restores what actually ran (ADR-0026). */
+  reportLastTurnEffort: (effort: ModelReasoningEffort | undefined) => void
   isAuthenticated: boolean
   systemPrompt: string
   isHydrated: boolean
@@ -128,15 +136,40 @@ export function TurnContextProvider({
   // menu, so switching to a model without the level snaps to Default (and
   // back, if the user returns) rather than sending an unsupported value.
   const effortLevels = modelInfo?.effortLevels ?? NO_EFFORT_LEVELS
-  // The state setter is referentially stable, so it doubles as the context's
-  // setter without a wrapping callback.
-  const [selectedEffort, setReasoningEffort] = useState<
+  // Resolution order (ADR-0026, first hit wins): the user's in-conversation
+  // selection ("default" = an explicit Default that beats the fallbacks) →
+  // the last assistant turn's applied effort (reported by ChatInner, so a
+  // reopened chat restores what actually ran) → the per-model device memory
+  // → Default. The effective value then clamps to the model's level menu, so
+  // switching models keeps a supported level and snaps to Default otherwise.
+  const [effortOverride, setEffortOverride] = useState<
+    ModelReasoningEffort | "default" | undefined
+  >(undefined)
+  const [lastTurnEffort, reportLastTurnEffort] = useState<
     ModelReasoningEffort | undefined
   >(undefined)
+  const [storedEffort, setStoredEffort] = useState<
+    ModelReasoningEffort | undefined
+  >(undefined)
+  useEffect(() => {
+    setStoredEffort(readStoredEffortForModel(selectedModel))
+  }, [selectedModel])
+  const effortCandidate =
+    effortOverride === "default"
+      ? undefined
+      : (effortOverride ?? lastTurnEffort ?? storedEffort)
   const reasoningEffort =
-    selectedEffort !== undefined && effortLevels.includes(selectedEffort)
-      ? selectedEffort
+    effortCandidate !== undefined && effortLevels.includes(effortCandidate)
+      ? effortCandidate
       : undefined
+  const setReasoningEffort = useCallback(
+    (effort: ModelReasoningEffort | undefined) => {
+      setEffortOverride(effort ?? "default")
+      setStoredEffort(effort)
+      writeStoredEffortForModel(selectedModel, effort)
+    },
+    [selectedModel]
+  )
   const prefersSearch =
     !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)
   const enableSearch =
@@ -190,6 +223,7 @@ export function TurnContextProvider({
       effortLevels,
       reasoningEffort,
       setReasoningEffort,
+      reportLastTurnEffort,
       isAuthenticated,
       systemPrompt,
       isHydrated,
@@ -204,6 +238,7 @@ export function TurnContextProvider({
       effortLevels,
       reasoningEffort,
       setReasoningEffort,
+      reportLastTurnEffort,
       isAuthenticated,
       systemPrompt,
       isHydrated,

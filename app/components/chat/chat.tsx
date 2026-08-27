@@ -17,6 +17,7 @@ import {
   usePublishActiveChatStatus,
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
+import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
@@ -119,7 +120,8 @@ function ChatInner({
 
   // Turn inputs — reactive reads for rendering; the turn runners read the
   // same values at run time through the context's snapshot getter.
-  const { selectedModel, isAuthenticated, systemPrompt } = useTurnContext()
+  const { selectedModel, isAuthenticated, systemPrompt, reportLastTurnEffort } =
+    useTurnContext()
 
   const [hasDialogAuth, setHasDialogAuth] = useState(false)
   // Edit and regeneration are server-owned Chat turns, available only on a
@@ -176,6 +178,16 @@ function ChatInner({
     bumpChat,
     setComposerText,
   })
+
+  // Conversation effort readback (ADR-0026): the last assistant message's
+  // applied effort restores the selector when a chat is reopened — messages
+  // are the conversation's effort memory; there is no per-chat server field.
+  useEffect(() => {
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant")
+    reportLastTurnEffort(getReasoningEffort(lastAssistant?.metadata))
+  }, [messages, reportLastTurnEffort])
 
   // Publish this (active) chat's live status to the sidebar so its row shows a
   // rotating ring while generating. Front-end seam #1 — cross-chat/background
