@@ -4,6 +4,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.1-pro-preview",
     name: "Gemini 3.1 Pro",
+    shortName: "3.1 Pro",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -46,6 +47,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.5-flash",
     name: "Gemini 3.5 Flash",
+    shortName: "3.5 Flash",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -82,6 +84,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-3.1-flash-lite",
     name: "Gemini 3.1 Flash Lite",
+    shortName: "3.1 Flash Lite",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -117,6 +120,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash-Lite",
+    shortName: "2.5 Flash-Lite",
     provider: "Google",
     providerId: "google",
     // 2026-08-21: the Gemini API answers 404 "no longer available to new
@@ -158,6 +162,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-2.5-flash",
     name: "Gemini 2.5 Flash",
+    shortName: "2.5 Flash",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
@@ -189,6 +194,7 @@ const geminiModels: ModelConfig[] = [
   {
     id: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
+    shortName: "2.5 Pro",
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",

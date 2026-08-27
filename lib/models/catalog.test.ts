@@ -691,6 +691,23 @@ describe("production logical catalog", () => {
 
   it.each([
     ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
+    ["gpt-5.5", "GPT-5.5", "5.5"],
+    ["gpt-5.4-mini", "GPT-5.4 Mini", "5.4 Mini"],
+    ["openrouter:openai/gpt-5.5-pro", "GPT-5.5 Pro", "5.5 Pro"],
+    ["gemini-3.5-flash", "Gemini 3.5 Flash", "3.5 Flash"],
+    ["openrouter:google/gemini-3.7-flash", "Gemini 3.7 Flash", "3.7 Flash"],
+    ["openrouter:deepseek/deepseek-v4-pro-0813", "DeepSeek V4 Pro", "V4 Pro"],
+    ["openrouter:moonshotai/kimi-k3", "Kimi K3", "K3"],
+    ["openrouter:inclusionai/ling-3.0-flash", "Ling 3.0 Flash", "3.0 Flash"],
+    ["openrouter:xiaomi/mimo-v2.5", "MiMo-V2.5", "V2.5"],
+    [
+      "openrouter:meta-llama/llama-4-maverick",
+      "Llama 4 Maverick",
+      "4 Maverick",
+    ],
+    ["openrouter:qwen/qwen3-coder", "Qwen3-Coder", "3-Coder"],
+    ["openrouter:minimax/minimax-m3", "MiniMax M3", "M3"],
+    ["openrouter:z-ai/glm-5.2", "GLM-5.2", "5.2"],
     ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],
     ["sonar", "Perplexity Sonar", "Sonar"],
     [
@@ -710,6 +727,32 @@ describe("production logical catalog", () => {
     expect(model).toMatchObject({ name, shortName })
     expect(toLogicalModelView(model!)).toMatchObject({ name, shortName })
   })
+
+  it.each([
+    ["GPT", "GPT-", /gpt/i],
+    ["Gemini", "Gemini ", /gemini/i],
+    ["DeepSeek", "DeepSeek ", /deepseek/i],
+    ["Kimi", "Kimi ", /kimi/i],
+    ["Ling", "Ling ", /ling/i],
+    ["MiMo", "MiMo-", /mimo/i],
+    ["Llama", "Llama ", /llama/i],
+    ["Qwen", "Qwen", /qwen/i],
+    ["MiniMax", "MiniMax ", /minimax/i],
+    ["GLM", "GLM-", /glm/i],
+  ])(
+    "keeps every %s compact name free of its redundant prefix",
+    (_family, fullNamePrefix, redundantPrefix) => {
+      const models = LOGICAL_MODELS.filter((model) =>
+        model.name.startsWith(fullNamePrefix)
+      )
+
+      expect(models).not.toHaveLength(0)
+      for (const model of models) {
+        expect.soft(model.shortName, model.id).toBeTruthy()
+        expect.soft(model.shortName, model.id).not.toMatch(redundantPrefix)
+      }
+    }
+  )
 
   it.each([
     ["openrouter:google/gemini-3-flash-preview", "Gemini 3 Flash"],

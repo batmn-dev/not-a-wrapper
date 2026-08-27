@@ -5,7 +5,7 @@
  * CONTEXT.md "Composer".
  *
  * It owns the draft (display state + per-chat persistence + clearing), the
- * pending attachment files, suggestion UI, paste/drop capture, and the primary
+ * pending attachment files, paste/drop capture, and the primary
  * action; it reads the model picker and search toggle from the Turn context
  * and auth from the user store directly. Its interface to the parent is one
  * payload callback (`onTurn`) plus a small imperative handle for external
@@ -55,7 +55,6 @@ import {
   useState,
 } from "react"
 import { flushSync } from "react-dom"
-import { PromptSystem } from "../suggestions/prompt-system"
 import { ButtonPlusMenu } from "./button-plus-menu"
 import type { ComposerActionId } from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
@@ -96,7 +95,6 @@ type ComposerProps = {
    * boolean is required: a `void` handler would silently take the
    * restore-payload path after every successful send. */
   onTurn: (payload: ComposerTurnPayload) => Promise<boolean> | boolean
-  onSuggestion?: (suggestion: string) => void | Promise<void>
   isSubmitting?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
   stop?: () => void
@@ -104,7 +102,6 @@ type ComposerProps = {
    * §8/§11): a stoppable background, awaiting-approval, or possibly-stale run
    * presents Stop even while the local status reads ready. */
   stoppable?: boolean
-  hasSuggestions?: boolean
   onLockedGuestModelSelect?: (modelId: string) => void
   /** Draft-persistence scope when there is no chat id (e.g. `project-<id>`),
    * so surface drafts don't bleed into the home composer's "new chat" draft. */
@@ -206,12 +203,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     {
       chatId,
       onTurn,
-      onSuggestion,
       isSubmitting,
       status,
       stop,
       stoppable,
-      hasSuggestions,
       onLockedGuestModelSelect,
       draftScopeId,
       placeholder = "Ask anything",
@@ -597,13 +592,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 bottom-full z-20"
         />
-        {hasSuggestions && (
-          <PromptSystem
-            onValueChange={handleValueChange}
-            onSuggestion={(suggestion) => void onSuggestion?.(suggestion)}
-            value={localValue}
-          />
-        )}
         <InputDropZone
           onFileUpload={handleAttachmentUpload}
           disabled={!isUserAuthenticated || !isFileUploadAvailable}

@@ -428,7 +428,7 @@ export default defineSchema({
   userPreferences: defineTable({
     userId: v.id("users"),
     layout: v.optional(v.string()),
-    promptSuggestions: v.optional(v.boolean()),
+    promptSuggestions: v.optional(v.boolean()), // Legacy production compatibility.
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),

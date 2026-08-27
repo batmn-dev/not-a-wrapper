@@ -897,44 +897,6 @@ describe("chat turn controller", () => {
     expect(adapters.setIsSending).not.toHaveBeenCalled()
   })
 
-  it("runs suggestions through send behavior with the suggestion error message and chatVersion", async () => {
-    const { adapters, controller } = createHarness()
-    adapters.sendMessage = vi.fn(() => {
-      throw new Error("send failed")
-    })
-
-    await controller.runSuggestionTurn({
-      text: "Try this",
-      chatVersion: 4,
-    })
-
-    expect(adapters.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "optimistic-message",
-        role: "user",
-        parts: [{ type: "text", text: "Try this" }],
-        createdAt: expect.any(Date),
-        messageId: "optimistic-message",
-      }),
-      {
-        body: {
-          chatId: "chat-1",
-          userId: "user-1",
-          model: "model-1",
-          systemPrompt: SYSTEM_PROMPT_DEFAULT,
-          // Suggestions now read the same Turn context snapshot as typed
-          // sends, so enableSearch no longer silently diverges.
-          enableSearch: false,
-          chatVersion: 4,
-          expectedVisibleMessageCount: 0,
-        },
-      }
-    )
-    expect(adapters.toastError).toHaveBeenCalledWith(
-      "Failed to send suggestion"
-    )
-  })
-
   it("runs edit resend after validation, preserving target file parts and staging the pending edit", async () => {
     const {
       adapters,

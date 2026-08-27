@@ -56,7 +56,6 @@ const seamMocks = vi.hoisted(() => ({
   // spies record it.
   chatTurnController: {
     runSendTurn: vi.fn(async (_args: unknown) => {}),
-    runSuggestionTurn: vi.fn(async (_args: unknown) => {}),
     runEditTurn: vi.fn(async (_args: unknown) => ({ status: "submitted" })),
     runRegenerationTurn: vi.fn(async (_args: unknown) => {}),
     finishChatTurn: vi.fn(async (_args: unknown) => {}),

@@ -1,6 +1,3 @@
-export type SuggestionIconId =
-  "code" | "research" | "analysis" | "creative" | "learning"
-
 // Rate Limits & Usage
 
 export const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
@@ -31,75 +28,6 @@ export function getDefaultModelForUser(isAuthenticated: boolean): string {
 
 export const APP_NAME = "Not A Wrapper"
 export const APP_DOMAIN = "https://not-a-wrapper.com"
-
-export const SUGGESTIONS: Array<{
-  label: string
-  highlight: string
-  prompt: string
-  items: string[]
-  icon: SuggestionIconId
-}> = [
-  {
-    label: "Code",
-    highlight: "Help me",
-    prompt: `Help me code`,
-    items: [
-      "Help me debug this React component that's not rendering",
-      "Help me write a Python script to process CSV files",
-      "Help me optimize this database query for better performance",
-      "Help me implement authentication in my Next.js app",
-    ],
-    icon: "code",
-  },
-  {
-    label: "Research",
-    highlight: "Research",
-    prompt: `Research`,
-    items: [
-      "Research the pros and cons of different state management libraries",
-      "Research best practices for API design in 2025",
-      "Research how to implement real-time features with WebSockets",
-      "Research the latest trends in AI and machine learning",
-    ],
-    icon: "research",
-  },
-  {
-    label: "Analysis",
-    highlight: "Analyze",
-    prompt: `Analyze`,
-    items: [
-      "Analyze this code for potential security vulnerabilities",
-      "Analyze the performance bottlenecks in my application",
-      "Analyze this dataset and summarize key insights",
-      "Analyze the architecture of this system and suggest improvements",
-    ],
-    icon: "analysis",
-  },
-  {
-    label: "Creative",
-    highlight: "Create",
-    prompt: `Create`,
-    items: [
-      "Create a color palette for a modern SaaS dashboard",
-      "Create user stories for a new feature I'm building",
-      "Create a README template for my GitHub project",
-      "Create a presentation outline for my tech talk",
-    ],
-    icon: "creative",
-  },
-  {
-    label: "Learning",
-    highlight: "Explain",
-    prompt: `Explain`,
-    items: [
-      "Explain how React Server Components work",
-      "Explain the difference between SQL and NoSQL databases",
-      "Explain WebAssembly and when to use it",
-      "Explain OAuth 2.0 flow in simple terms",
-    ],
-    icon: "learning",
-  },
-]
 
 export const SYSTEM_PROMPT_DEFAULT = `You are a helpful AI assistant`
 

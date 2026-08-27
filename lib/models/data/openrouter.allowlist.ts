@@ -98,6 +98,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-v4-flash-vision-exp",
     name: "DeepSeek V4 Flash Vision",
+    shortName: "V4 Flash Vision",
     maker: "DeepSeek",
     tags: ["reasoning", "vision", "tools", "experimental", "OSS"],
     modelFamily: "DeepSeek V4",
@@ -112,6 +113,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.8-2.4t-a95b",
     name: "Qwen3.8-2.4T",
+    shortName: "3.8-2.4T",
     maker: "Qwen",
     tags: ["flagship", "reasoning", "coding", "tools", "OSS"],
     modelFamily: "Qwen3.8",
@@ -126,6 +128,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.8-max",
     name: "Qwen3.8 Max",
+    shortName: "3.8 Max",
     maker: "Qwen",
     tags: ["flagship", "reasoning", "vision", "coding", "tools"],
     modelFamily: "Qwen3.8",
@@ -138,6 +141,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.7-flash",
     name: "Qwen3.7 Flash",
+    shortName: "3.7 Flash",
     maker: "Qwen",
     tags: ["reasoning", "vision", "coding", "tools", "fast"],
     modelFamily: "Qwen3.7",
@@ -150,6 +154,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "inclusionai/ling-3.0-flash",
     name: "Ling 3.0 Flash",
+    shortName: "3.0 Flash",
     maker: "inclusionAI",
     tags: ["reasoning", "coding", "agents", "tools", "fast", "OSS"],
     modelFamily: "Ling 3.0",
@@ -163,6 +168,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "moonshotai/kimi-k2.7-code",
     name: "Kimi K2.7 Code",
+    shortName: "K2.7 Code",
     maker: "Moonshot AI",
     tags: ["reasoning", "vision", "coding", "agents", "tools", "OSS"],
     modelFamily: "Kimi K2",
@@ -176,6 +182,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.8-27b",
     name: "Qwen3.8-27B",
+    shortName: "3.8-27B",
     maker: "Qwen",
     tags: ["reasoning", "vision", "coding", "OSS"],
     modelFamily: "Qwen3.8",
@@ -188,6 +195,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-5.3",
     name: "GLM-5.3",
+    shortName: "5.3",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "GLM-5",
@@ -200,6 +208,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3-32b",
     name: "Qwen3-32B",
+    shortName: "3-32B",
     maker: "Qwen",
     tags: ["reasoning", "tools", "OSS"],
     modelFamily: "Qwen3",
@@ -212,6 +221,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3-235b-a22b-2507",
     name: "Qwen3-235B",
+    shortName: "3-235B",
     maker: "Qwen",
     tags: ["tools", "OSS"],
     modelFamily: "Qwen3",
@@ -232,6 +242,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.6-27b",
     name: "Qwen3.6-27B",
+    shortName: "3.6-27B",
     maker: "Qwen",
     tags: ["reasoning", "vision", "coding", "OSS"],
     modelFamily: "Qwen3.6",
@@ -244,6 +255,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "qwen/qwen3.6-35b-a3b",
     name: "Qwen3.6-35B",
+    shortName: "3.6-35B",
     maker: "Qwen",
     tags: ["reasoning", "vision", "tools", "OSS"],
     modelFamily: "Qwen3.6",
@@ -351,6 +363,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-chat-v3-0324",
     name: "DeepSeek V3",
+    shortName: "V3",
     maker: "DeepSeek",
     tags: ["tools", "cheap", "OSS"],
     modelFamily: "DeepSeek V3",
@@ -365,6 +378,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-chat-v3.1",
     name: "DeepSeek V3.1",
+    shortName: "V3.1",
     maker: "DeepSeek",
     tags: ["reasoning", "tools", "cheap", "OSS"],
     modelFamily: "DeepSeek V3",
@@ -378,6 +392,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-v3.1-terminus",
     name: "DeepSeek V3.1 Terminus",
+    shortName: "V3.1 Terminus",
     maker: "DeepSeek",
     tags: ["reasoning", "tools", "cheap", "OSS"],
     modelFamily: "DeepSeek V3",
@@ -391,6 +406,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-v3.2",
     name: "DeepSeek V3.2",
+    shortName: "V3.2",
     maker: "DeepSeek",
     tags: ["reasoning", "tools", "cheap", "OSS"],
     modelFamily: "DeepSeek V3",
@@ -404,6 +420,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-v4-flash-0731",
     name: "DeepSeek V4 Flash",
+    shortName: "V4 Flash",
     maker: "DeepSeek",
     tags: ["reasoning", "tools", "cheap", "OSS"],
     modelFamily: "DeepSeek V4",
@@ -418,6 +435,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-v4-pro-0813",
     name: "DeepSeek V4 Pro",
+    shortName: "V4 Pro",
     maker: "DeepSeek",
     tags: ["flagship", "reasoning", "tools", "OSS"],
     modelFamily: "DeepSeek V4",
@@ -432,6 +450,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "deepseek/deepseek-r1-0528",
     name: "DeepSeek R1",
+    shortName: "R1",
     maker: "DeepSeek",
     tags: ["reasoning", "tools", "OSS"],
     modelFamily: "DeepSeek R1",
@@ -453,6 +472,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "google/gemini-2.5-flash",
     logicalModelId: "gemini-2.5-flash",
     name: "Gemini 2.5 Flash",
+    shortName: "2.5 Flash",
     maker: "Google",
     tags: ["reasoning", "vision", "fast"],
     modelFamily: "Gemini 2.5",
@@ -466,6 +486,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "google/gemini-2.5-flash-lite",
     logicalModelId: "gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash Lite",
+    shortName: "2.5 Flash Lite",
     maker: "Google",
     tags: ["reasoning", "vision", "cheap"],
     modelFamily: "Gemini 2.5",
@@ -479,6 +500,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "google/gemini-2.5-pro",
     logicalModelId: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
+    shortName: "2.5 Pro",
     maker: "Google",
     tags: ["flagship", "reasoning", "vision"],
     modelFamily: "Gemini 2.5",
@@ -491,6 +513,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "google/gemini-3-flash-preview",
     name: "Gemini 3 Flash",
+    shortName: "3 Flash",
     maker: "Google",
     tags: ["reasoning", "vision", "fast", "preview"],
     modelFamily: "Gemini 3",
@@ -505,6 +528,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "google/gemini-3.6-flash",
     name: "Gemini 3.6 Flash",
+    shortName: "3.6 Flash",
     maker: "Google",
     tags: ["reasoning", "vision", "fast"],
     modelFamily: "Gemini 3.6",
@@ -518,6 +542,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "google/gemini-3.7-flash",
     name: "Gemini 3.7 Flash",
+    shortName: "3.7 Flash",
     maker: "Google",
     tags: ["reasoning", "vision", "fast"],
     modelFamily: "Gemini 3.7",
@@ -531,6 +556,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "google/gemini-3.5-flash-lite",
     name: "Gemini 3.5 Flash Lite",
+    shortName: "3.5 Flash Lite",
     maker: "Google",
     tags: ["reasoning", "vision", "cheap", "fast"],
     modelFamily: "Gemini 3.5",
@@ -544,6 +570,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "meta-llama/llama-4-scout",
     name: "Llama 4 Scout",
+    shortName: "4 Scout",
     maker: "Meta",
     tags: ["vision", "tools", "OSS"],
     modelFamily: "Llama 4",
@@ -556,6 +583,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "meta-llama/llama-3.3-70b-instruct",
     name: "Llama 3.3 70B Instruct",
+    shortName: "3.3 70B Instruct",
     maker: "Meta",
     tags: ["tools", "OSS"],
     modelFamily: "Llama 3.3",
@@ -568,6 +596,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "minimax/minimax-m2",
     name: "MiniMax M2",
+    shortName: "M2",
     maker: "MiniMax",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "MiniMax M",
@@ -580,6 +609,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "minimax/minimax-m2.1",
     name: "MiniMax M2.1",
+    shortName: "M2.1",
     maker: "MiniMax",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "MiniMax M",
@@ -592,6 +622,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "minimax/minimax-m2.7",
     name: "MiniMax M2.7",
+    shortName: "M2.7",
     maker: "MiniMax",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "MiniMax M",
@@ -604,6 +635,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "xiaomi/mimo-v2.5-pro",
     name: "MiMo-V2.5-Pro",
+    shortName: "V2.5-Pro",
     maker: "Xiaomi",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "MiMo",
@@ -616,6 +648,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "moonshotai/kimi-k2",
     name: "Kimi K2",
+    shortName: "K2",
     maker: "Moonshot AI",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "Kimi K2",
@@ -630,6 +663,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "moonshotai/kimi-k2-0905",
     name: "Kimi K2",
+    shortName: "K2",
     maker: "Moonshot AI",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "Kimi K2",
@@ -644,6 +678,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "moonshotai/kimi-k2.5",
     name: "Kimi K2.5",
+    shortName: "K2.5",
     maker: "Moonshot AI",
     tags: ["reasoning", "vision", "coding", "agents", "OSS"],
     modelFamily: "Kimi K2",
@@ -657,6 +692,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "moonshotai/kimi-k3",
     name: "Kimi K3",
+    shortName: "K3",
     maker: "Moonshot AI",
     tags: ["reasoning", "vision", "coding", "agents", "OSS"],
     modelFamily: "Kimi K3",
@@ -694,6 +730,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "openai/gpt-4o-mini",
     name: "GPT-4o Mini",
+    shortName: "4o Mini",
     maker: "OpenAI",
     tags: ["vision", "tools", "fast", "cheap"],
     modelFamily: "GPT-4o",
@@ -707,6 +744,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-4.1",
     logicalModelId: "gpt-4.1",
     name: "GPT-4.1",
+    shortName: "4.1",
     maker: "OpenAI",
     tags: ["vision", "tools", "coding"],
     modelFamily: "GPT-4.1",
@@ -719,6 +757,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "openai/gpt-4.1-mini",
     name: "GPT-4.1 Mini",
+    shortName: "4.1 Mini",
     maker: "OpenAI",
     tags: ["vision", "tools", "fast", "cheap"],
     modelFamily: "GPT-4.1",
@@ -732,6 +771,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "openai/gpt-4.1-nano",
     name: "GPT-4.1 Nano",
+    shortName: "4.1 Nano",
     maker: "OpenAI",
     tags: ["vision", "tools", "fast", "cheap"],
     modelFamily: "GPT-4.1",
@@ -746,6 +786,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5",
     logicalModelId: "gpt-5",
     name: "GPT-5",
+    shortName: "5",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools"],
     modelFamily: "GPT-5",
@@ -759,6 +800,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5-mini",
     logicalModelId: "gpt-5-mini",
     name: "GPT-5 Mini",
+    shortName: "5 Mini",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools", "fast"],
     modelFamily: "GPT-5",
@@ -771,6 +813,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "openai/gpt-5-nano",
     name: "GPT-5 Nano",
+    shortName: "5 Nano",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools", "fast", "cheap"],
     modelFamily: "GPT-5",
@@ -785,6 +828,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5.1",
     logicalModelId: "gpt-5.1",
     name: "GPT-5.1",
+    shortName: "5.1",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools"],
     modelFamily: "GPT-5",
@@ -797,6 +841,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "openai/gpt-5.2-pro",
     name: "GPT-5.2 Pro",
+    shortName: "5.2 Pro",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools", "high-compute"],
     modelFamily: "GPT-5",
@@ -811,6 +856,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5.4-nano",
     logicalModelId: "gpt-5.4-nano",
     name: "GPT-5.4 Nano",
+    shortName: "5.4 Nano",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools", "fast", "cheap"],
     modelFamily: "GPT-5",
@@ -836,6 +882,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "openai/gpt-5.5-pro",
     name: "GPT-5.5 Pro",
+    shortName: "5.5 Pro",
     maker: "OpenAI",
     tags: ["reasoning", "vision", "tools", "high-compute"],
     modelFamily: "GPT-5",
@@ -888,6 +935,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-4.5",
     name: "GLM-4.5",
+    shortName: "4.5",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "tools", "OSS"],
     modelFamily: "GLM 4",
@@ -900,6 +948,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-4.5v",
     name: "GLM-4.5V",
+    shortName: "4.5V",
     maker: "Z.ai",
     tags: ["reasoning", "vision", "coding", "OSS"],
     modelFamily: "GLM 4",
@@ -912,6 +961,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-4.5-air",
     name: "GLM-4.5-Air",
+    shortName: "4.5-Air",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "fast", "OSS"],
     modelFamily: "GLM 4",
@@ -924,6 +974,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-4.6",
     name: "GLM-4.6",
+    shortName: "4.6",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "tools", "OSS"],
     modelFamily: "GLM 4",
@@ -936,6 +987,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-4.6v",
     name: "GLM-4.6V",
+    shortName: "4.6V",
     maker: "Z.ai",
     tags: ["reasoning", "vision", "coding", "OSS"],
     modelFamily: "GLM 4",
@@ -948,6 +1000,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-4.7",
     name: "GLM-4.7",
+    shortName: "4.7",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "tools", "OSS"],
     modelFamily: "GLM 4",
@@ -960,6 +1013,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-5.1",
     name: "GLM-5.1",
+    shortName: "5.1",
     maker: "Z.ai",
     tags: ["reasoning", "coding", "agents", "OSS"],
     modelFamily: "GLM 5",
@@ -972,6 +1026,7 @@ const REFERENCE_CATALOG_MODELS: readonly OpenRouterAllowlistEntry[] = [
   referenceCatalogModel({
     slug: "z-ai/glm-5v-turbo",
     name: "GLM-5V-Turbo",
+    shortName: "5V-Turbo",
     maker: "Z.ai",
     tags: ["reasoning", "vision", "tools", "OSS"],
     modelFamily: "GLM 5",
@@ -1112,6 +1167,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5.5",
     logicalModelId: "gpt-5.5",
     name: "GPT-5.5",
+    shortName: "5.5",
     description:
       "OpenAI's GPT-5.5 flagship via OpenRouter — 1M-token-context reasoning generalist.",
     tags: ["flagship", "reasoning", "vision"],
@@ -1126,6 +1182,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5.4",
     logicalModelId: "gpt-5.4",
     name: "GPT-5.4",
+    shortName: "5.4",
     description:
       "OpenAI's GPT-5.4 workhorse via OpenRouter — strong reasoning at mid-tier pricing.",
     tags: ["reasoning", "vision"],
@@ -1140,6 +1197,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
     slug: "openai/gpt-5.4-mini",
     logicalModelId: "gpt-5.4-mini",
     name: "GPT-5.4 Mini",
+    shortName: "5.4 Mini",
     description:
       "OpenAI's GPT-5.4 Mini via OpenRouter — fast, low-cost reasoning tier.",
     tags: ["fast", "cheap", "reasoning"],
@@ -1154,6 +1212,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
     slug: "google/gemini-3.5-flash",
     logicalModelId: "gemini-3.5-flash",
     name: "Gemini 3.5 Flash",
+    shortName: "3.5 Flash",
     description:
       "Google's Gemini 3.5 Flash via OpenRouter — fast multimodal reasoning with a 1M-token context.",
     tags: ["fast", "reasoning", "vision"],
@@ -1168,6 +1227,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
     slug: "google/gemini-3.1-pro-preview",
     logicalModelId: "gemini-3.1-pro-preview",
     name: "Gemini 3.1 Pro",
+    shortName: "3.1 Pro",
     description:
       "Google's Gemini 3.1 Pro preview via OpenRouter — flagship multimodal reasoning. Preview id: retire with a succession entry when the stable ships.",
     tags: ["flagship", "reasoning", "vision", "preview"],
@@ -1182,6 +1242,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
     slug: "google/gemini-3.1-flash-lite",
     logicalModelId: "gemini-3.1-flash-lite",
     name: "Gemini 3.1 Flash Lite",
+    shortName: "3.1 Flash Lite",
     description:
       "Google's cheapest Gemini 3.1 tier via OpenRouter — high-volume multimodal workhorse.",
     tags: ["fast", "cheap", "vision"],
@@ -1209,6 +1270,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "deepseek/deepseek-v4-pro",
     name: "DeepSeek V4 Pro",
+    shortName: "V4 Pro",
     description:
       "DeepSeek's April 2026 V4 Pro snapshot via OpenRouter — open-weight frontier reasoning at aggressive pricing.",
     tags: ["reasoning", "OSS", "cheap"],
@@ -1230,6 +1292,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "deepseek/deepseek-v4-flash",
     name: "DeepSeek V4 Flash",
+    shortName: "V4 Flash",
     description:
       "DeepSeek's April 2026 V4 Flash snapshot via OpenRouter — very low cost with reasoning support.",
     tags: ["fast", "cheap", "reasoning", "OSS"],
@@ -1251,6 +1314,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "z-ai/glm-5.2",
     name: "GLM-5.2",
+    shortName: "5.2",
     description:
       "Z.ai's GLM-5.2 via OpenRouter — open-weight 1M-context reasoning and coding model.",
     tags: ["reasoning", "coding", "OSS"],
@@ -1264,6 +1328,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "z-ai/glm-5",
     name: "GLM-5",
+    shortName: "5",
     description:
       "Z.ai's GLM-5 via OpenRouter — the previous open-weight flagship generation.",
     tags: ["reasoning", "OSS"],
@@ -1277,6 +1342,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "moonshotai/kimi-k2.6",
     name: "Kimi K2.6",
+    shortName: "K2.6",
     description:
       "Moonshot AI's Kimi K2.6 via OpenRouter — open-weight agentic MoE with vision.",
     tags: ["agents", "reasoning", "vision", "OSS"],
@@ -1291,6 +1357,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "minimax/minimax-m3",
     name: "MiniMax M3",
+    shortName: "M3",
     description:
       "MiniMax's M3 via OpenRouter — open-weight 1M-context reasoner with vision and huge output budgets.",
     tags: ["reasoning", "vision", "OSS"],
@@ -1304,6 +1371,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "minimax/minimax-m2.5",
     name: "MiniMax M2.5",
+    shortName: "M2.5",
     description:
       "MiniMax's M2.5 via OpenRouter — cheap agentic workhorse with reasoning support.",
     tags: ["cheap", "reasoning", "OSS"],
@@ -1317,6 +1385,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "qwen/qwen3.7-max",
     name: "Qwen3.7 Max",
+    shortName: "3.7 Max",
     description:
       "Alibaba's Qwen3.7 Max via OpenRouter — 1M-context flagship of the Qwen family.",
     tags: ["flagship", "reasoning"],
@@ -1330,6 +1399,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "qwen/qwen3-coder",
     name: "Qwen3-Coder",
+    shortName: "3-Coder",
     description:
       "Qwen's open-weight 480B-A35B coding MoE via OpenRouter — the paid endpoint, without the free pool's rate caps.",
     tags: ["coding", "tools", "OSS"],
@@ -1343,6 +1413,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "meta-llama/llama-4-maverick",
     name: "Llama 4 Maverick",
+    shortName: "4 Maverick",
     description:
       "Meta's Llama 4 Maverick via OpenRouter — open-weight multimodal MoE with a 1M-token context.",
     tags: ["OSS", "vision", "cheap"],
@@ -1357,6 +1428,7 @@ export const OPENROUTER_ALLOWLIST: readonly OpenRouterAllowlistEntry[] = [
   {
     slug: "xiaomi/mimo-v2.5",
     name: "MiMo-V2.5",
+    shortName: "V2.5",
     description:
       "Xiaomi's MiMo-V2.5 via OpenRouter — open-weight multimodal reasoner at very low cost.",
     tags: ["cheap", "reasoning", "vision", "OSS"],

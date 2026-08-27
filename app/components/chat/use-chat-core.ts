@@ -858,17 +858,6 @@ export function useChatCore({
     getIsSubmitting,
   })
 
-  const handleSuggestion = useCallback(
-    async (suggestion: string) => {
-      await chatTurn.runSuggestionTurn({
-        text: suggestion,
-        messages,
-        chatVersion: messages.length + 1,
-      })
-    },
-    [chatTurn, messages]
-  )
-
   // Read live messages because memoized assistant rows retain this callback.
   const handleReload = useCallback(
     async (messageId: string) => {
@@ -912,7 +901,6 @@ export function useChatCore({
     scrollToMessageId,
 
     submit,
-    handleSuggestion,
     handleReload,
     submitEdit,
     handleToolApproval,

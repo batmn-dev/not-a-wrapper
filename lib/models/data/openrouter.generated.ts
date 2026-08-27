@@ -236,6 +236,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.5",
     name: "GPT-5.5",
+    shortName: "5.5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -274,6 +275,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.4",
     name: "GPT-5.4",
+    shortName: "5.4",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -312,6 +314,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.4-mini",
     name: "GPT-5.4 Mini",
+    shortName: "5.4 Mini",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -350,6 +353,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3.5-flash",
     name: "Gemini 3.5 Flash",
+    shortName: "3.5 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -388,6 +392,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3.1-pro-preview",
     name: "Gemini 3.1 Pro",
+    shortName: "3.1 Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -426,6 +431,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3.1-flash-lite",
     name: "Gemini 3.1 Flash Lite",
+    shortName: "3.1 Flash Lite",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -502,6 +508,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v4-pro",
     name: "DeepSeek V4 Pro",
+    shortName: "V4 Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -547,6 +554,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v4-flash",
     name: "DeepSeek V4 Flash",
+    shortName: "V4 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -592,6 +600,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-5.2",
     name: "GLM-5.2",
+    shortName: "5.2",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -629,6 +638,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-5",
     name: "GLM-5",
+    shortName: "5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -666,6 +676,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:moonshotai/kimi-k2.6",
     name: "Kimi K2.6",
+    shortName: "K2.6",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -704,6 +715,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:minimax/minimax-m3",
     name: "MiniMax M3",
+    shortName: "M3",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -741,6 +753,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:minimax/minimax-m2.5",
     name: "MiniMax M2.5",
+    shortName: "M2.5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -778,6 +791,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.7-max",
     name: "Qwen3.7 Max",
+    shortName: "3.7 Max",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -815,6 +829,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3-coder",
     name: "Qwen3-Coder",
+    shortName: "3-Coder",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -847,6 +862,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:meta-llama/llama-4-maverick",
     name: "Llama 4 Maverick",
+    shortName: "4 Maverick",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -880,6 +896,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:xiaomi/mimo-v2.5",
     name: "MiMo-V2.5",
+    shortName: "V2.5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -917,6 +934,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v4-flash-vision-exp",
     name: "DeepSeek V4 Flash Vision",
+    shortName: "V4 Flash Vision",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -956,6 +974,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.8-2.4t-a95b",
     name: "Qwen3.8-2.4T",
+    shortName: "3.8-2.4T",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -994,6 +1013,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.8-max",
     name: "Qwen3.8 Max",
+    shortName: "3.8 Max",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1030,6 +1050,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.7-flash",
     name: "Qwen3.7 Flash",
+    shortName: "3.7 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1066,6 +1087,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:inclusionai/ling-3.0-flash",
     name: "Ling 3.0 Flash",
+    shortName: "3.0 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1103,6 +1125,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:moonshotai/kimi-k2.7-code",
     name: "Kimi K2.7 Code",
+    shortName: "K2.7 Code",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1140,6 +1163,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.8-27b",
     name: "Qwen3.8-27B",
+    shortName: "3.8-27B",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1176,6 +1200,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-5.3",
     name: "GLM-5.3",
+    shortName: "5.3",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1219,6 +1244,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3-32b",
     name: "Qwen3-32B",
+    shortName: "3-32B",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1255,6 +1281,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3-235b-a22b-2507",
     name: "Qwen3-235B",
+    shortName: "3-235B",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1294,6 +1321,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.6-27b",
     name: "Qwen3.6-27B",
+    shortName: "3.6-27B",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1330,6 +1358,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:qwen/qwen3.6-35b-a3b",
     name: "Qwen3.6-35B",
+    shortName: "3.6-35B",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1629,6 +1658,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-chat-v3-0324",
     name: "DeepSeek V3",
+    shortName: "V3",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1662,6 +1692,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-chat-v3.1",
     name: "DeepSeek V3.1",
+    shortName: "V3.1",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1699,6 +1730,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v3.1-terminus",
     name: "DeepSeek V3.1 Terminus",
+    shortName: "V3.1 Terminus",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1737,6 +1769,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v3.2",
     name: "DeepSeek V3.2",
+    shortName: "V3.2",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1774,6 +1807,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v4-flash-0731",
     name: "DeepSeek V4 Flash",
+    shortName: "V4 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1812,6 +1846,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-v4-pro-0813",
     name: "DeepSeek V4 Pro",
+    shortName: "V4 Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1850,6 +1885,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:deepseek/deepseek-r1-0528",
     name: "DeepSeek R1",
+    shortName: "R1",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1894,6 +1930,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-2.5-flash",
     name: "Gemini 2.5 Flash",
+    shortName: "2.5 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1931,6 +1968,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash Lite",
+    shortName: "2.5 Flash Lite",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -1968,6 +2006,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
+    shortName: "2.5 Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2005,6 +2044,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3-flash-preview",
     name: "Gemini 3 Flash",
+    shortName: "3 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2043,6 +2083,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3.6-flash",
     name: "Gemini 3.6 Flash",
+    shortName: "3.6 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2080,6 +2121,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3.7-flash",
     name: "Gemini 3.7 Flash",
+    shortName: "3.7 Flash",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2117,6 +2159,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:google/gemini-3.5-flash-lite",
     name: "Gemini 3.5 Flash Lite",
+    shortName: "3.5 Flash Lite",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2154,6 +2197,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:meta-llama/llama-4-scout",
     name: "Llama 4 Scout",
+    shortName: "4 Scout",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2185,6 +2229,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:meta-llama/llama-3.3-70b-instruct",
     name: "Llama 3.3 70B Instruct",
+    shortName: "3.3 70B Instruct",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2216,6 +2261,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:minimax/minimax-m2",
     name: "MiniMax M2",
+    shortName: "M2",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2252,6 +2298,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:minimax/minimax-m2.1",
     name: "MiniMax M2.1",
+    shortName: "M2.1",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2288,6 +2335,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:minimax/minimax-m2.7",
     name: "MiniMax M2.7",
+    shortName: "M2.7",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2324,6 +2372,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:xiaomi/mimo-v2.5-pro",
     name: "MiMo-V2.5-Pro",
+    shortName: "V2.5-Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2360,6 +2409,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:moonshotai/kimi-k2",
     name: "Kimi K2",
+    shortName: "K2",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2393,6 +2443,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:moonshotai/kimi-k2-0905",
     name: "Kimi K2",
+    shortName: "K2",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2426,6 +2477,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:moonshotai/kimi-k2.5",
     name: "Kimi K2.5",
+    shortName: "K2.5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2463,6 +2515,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:moonshotai/kimi-k3",
     name: "Kimi K3",
+    shortName: "K3",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2572,6 +2625,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-4o-mini",
     name: "GPT-4o Mini",
+    shortName: "4o Mini",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2603,6 +2657,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-4.1",
     name: "GPT-4.1",
+    shortName: "4.1",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2635,6 +2690,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-4.1-mini",
     name: "GPT-4.1 Mini",
+    shortName: "4.1 Mini",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2667,6 +2723,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-4.1-nano",
     name: "GPT-4.1 Nano",
+    shortName: "4.1 Nano",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2699,6 +2756,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5",
     name: "GPT-5",
+    shortName: "5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2736,6 +2794,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5-mini",
     name: "GPT-5 Mini",
+    shortName: "5 Mini",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2773,6 +2832,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5-nano",
     name: "GPT-5 Nano",
+    shortName: "5 Nano",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2810,6 +2870,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.1",
     name: "GPT-5.1",
+    shortName: "5.1",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2847,6 +2908,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.2-pro",
     name: "GPT-5.2 Pro",
+    shortName: "5.2 Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2884,6 +2946,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.4-nano",
     name: "GPT-5.4 Nano",
+    shortName: "5.4 Nano",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -2958,6 +3021,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:openai/gpt-5.5-pro",
     name: "GPT-5.5 Pro",
+    shortName: "5.5 Pro",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3106,6 +3170,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-4.5",
     name: "GLM-4.5",
+    shortName: "4.5",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3149,6 +3214,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-4.5v",
     name: "GLM-4.5V",
+    shortName: "4.5V",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3192,6 +3258,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-4.5-air",
     name: "GLM-4.5-Air",
+    shortName: "4.5-Air",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3228,6 +3295,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-4.6",
     name: "GLM-4.6",
+    shortName: "4.6",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3264,6 +3332,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-4.6v",
     name: "GLM-4.6V",
+    shortName: "4.6V",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3300,6 +3369,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-4.7",
     name: "GLM-4.7",
+    shortName: "4.7",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3336,6 +3406,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-5.1",
     name: "GLM-5.1",
+    shortName: "5.1",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",
@@ -3372,6 +3443,7 @@ export const openrouterModels: ModelConfig[] = [
   {
     id: "openrouter:z-ai/glm-5v-turbo",
     name: "GLM-5V-Turbo",
+    shortName: "5V-Turbo",
     provider: "OpenRouter",
     providerId: "openrouter",
     catalogStatus: "visible",

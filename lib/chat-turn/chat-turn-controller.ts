@@ -30,6 +30,8 @@ export type { ChatTurnMessage } from "./turn-plans"
 type SetMessagesAction =
   ChatTurnMessage[] | ((messages: ChatTurnMessage[]) => ChatTurnMessage[])
 
+const SEND_ERROR_MESSAGE = "Failed to send message"
+
 // The shared attachment shape (lib/file-handling.ts). An optimistic attachment
 // is the same minus the server-assigned id it does not have yet.
 type OptimisticAttachment = Omit<Attachment, "attachmentId">
@@ -171,13 +173,6 @@ export type SendTurnArgs = {
   optimisticAttachments?: OptimisticAttachment[]
   chatVersion?: number
   onSuccess?: (chatId: string) => void
-  errorMessage?: string
-}
-
-export type SuggestionTurnArgs = {
-  text: string
-  messages?: ChatTurnMessage[]
-  chatVersion: number
 }
 
 export type EditTurnArgs = {
@@ -245,8 +240,6 @@ export function createChatTurnController(adapters: ChatTurnAdapters) {
   }
   return {
     runSendTurn: (args: SendTurnArgs) => runSendTurn(context(), args),
-    runSuggestionTurn: (args: SuggestionTurnArgs) =>
-      runSuggestionTurn(context(), args),
     runEditTurn: (args: EditTurnArgs) => runEditTurn(context(), args),
     runRegenerationTurn: (args: RegenerationTurnArgs) =>
       runRegenerationTurn(context(), args),
@@ -277,7 +270,6 @@ async function runSendTurn(
     optimisticAttachments = [],
     chatVersion,
     onSuccess,
-    errorMessage = "Failed to send message",
   }: SendTurnArgs
 ) {
   if (adapters.getIsSending()) return
@@ -309,7 +301,7 @@ async function runSendTurn(
     attachment.attachmentId ? [attachment.attachmentId] : []
   )
   if (attachmentIds.length !== submittedAttachments.length) {
-    adapters.toastError(errorMessage)
+    adapters.toastError(SEND_ERROR_MESSAGE)
     return
   }
 
@@ -422,7 +414,7 @@ async function runSendTurn(
         attachmentIds
       )
       if (attachments === null || attachments.length !== attachmentIds.length) {
-        adapters.toastError(errorMessage)
+        adapters.toastError(SEND_ERROR_MESSAGE)
         return
       }
     }
@@ -544,7 +536,7 @@ async function runSendTurn(
       finalizeAcceptedTurn()
       return
     }
-    adapters.toastError(errorMessage)
+    adapters.toastError(SEND_ERROR_MESSAGE)
   } finally {
     if (!keepOptimistic) {
       removeOptimistic()
@@ -552,18 +544,6 @@ async function runSendTurn(
     adapters.setIsSending(false)
     adapters.setIsSubmitting(false)
   }
-}
-
-async function runSuggestionTurn(
-  adapters: RunnerContext,
-  args: SuggestionTurnArgs
-) {
-  await runSendTurn(adapters, {
-    text: args.text,
-    messages: args.messages,
-    chatVersion: args.chatVersion,
-    errorMessage: "Failed to send suggestion",
-  })
 }
 
 async function runEditTurn(

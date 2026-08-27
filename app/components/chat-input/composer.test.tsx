@@ -299,10 +299,6 @@ vi.mock("@/components/ui/prompt-input", () => ({
   }),
 }))
 
-vi.mock("../suggestions/prompt-system", () => ({
-  PromptSystem: () => null,
-}))
-
 vi.mock("./button-plus-menu", () => ({
   ButtonPlusMenu: (props: ButtonPlusMenuProps) => {
     buttonPlusMenuMockCalls.push(props)

@@ -118,6 +118,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.5",
     name: "GPT-5.5",
+    shortName: "5.5",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -154,6 +155,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4-mini",
     name: "GPT-5.4 Mini",
+    shortName: "5.4 Mini",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -189,6 +191,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4-nano",
     name: "GPT-5.4 Nano",
+    shortName: "5.4 Nano",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -224,6 +227,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4",
     name: "GPT-5.4",
+    shortName: "5.4",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -259,6 +263,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.4-pro",
     name: "GPT-5.4 Pro",
+    shortName: "5.4 Pro",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -293,6 +298,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5.1",
     name: "GPT-5.1",
+    shortName: "5.1",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -326,6 +332,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5",
     name: "GPT-5",
+    shortName: "5",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -362,6 +369,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-5-mini",
     name: "GPT-5 Mini",
+    shortName: "5 Mini",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -397,6 +405,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-4.1",
     name: "GPT-4.1",
+    shortName: "4.1",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "visible",
@@ -426,6 +435,7 @@ const openaiModels: ModelConfig[] = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
+    shortName: "4o",
     provider: "OpenAI",
     providerId: "openai",
     catalogStatus: "hidden",

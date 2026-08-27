@@ -43,7 +43,6 @@ let localPreferencesSnapshot: UserPreferences = defaultPreferences
 type UserPreferencesContextType = {
   preferences: UserPreferences
   setLayout: (layout: LayoutType) => void
-  setPromptSuggestions: (enabled: boolean) => void
   setShowToolInvocations: (enabled: boolean) => void
   setShowConversationPreviews: (enabled: boolean) => void
   setWebSearchEnabled: (enabled: boolean) => void
@@ -154,9 +153,6 @@ export function UserPreferencesProvider({
       return {
         layout:
           (convexPreferences.layout as LayoutType) || defaultPreferences.layout,
-        promptSuggestions:
-          convexPreferences.promptSuggestions ??
-          defaultPreferences.promptSuggestions,
         showToolInvocations:
           convexPreferences.showToolInvocations ??
           defaultPreferences.showToolInvocations,
@@ -237,13 +233,6 @@ export function UserPreferencesProvider({
     [isAuthenticated, updatePreferences]
   )
 
-  const setPromptSuggestions = useCallback(
-    (enabled: boolean) => {
-      updatePreferences({ promptSuggestions: enabled })
-    },
-    [updatePreferences]
-  )
-
   const setShowToolInvocations = useCallback(
     (enabled: boolean) => {
       updatePreferences({ showToolInvocations: enabled })
@@ -306,7 +295,6 @@ export function UserPreferencesProvider({
       value={{
         preferences,
         setLayout,
-        setPromptSuggestions,
         setShowToolInvocations,
         setShowConversationPreviews,
         setWebSearchEnabled,

@@ -19,7 +19,6 @@ import {
 import type { Chats } from "@/lib/chat-store/types"
 import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
-import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
@@ -116,7 +115,6 @@ function ChatInner({
     selectMessageBranch,
   } = useMessages()
   const { user } = useUser()
-  const { preferences } = useUserPreferences()
 
   // Turn inputs — reactive reads for rendering; the turn runners read the
   // same values at run time through the context's snapshot getter.
@@ -164,7 +162,6 @@ function ChatInner({
     lastFinishReason,
     scrollToMessageId,
     submit,
-    handleSuggestion,
     handleReload,
     submitEdit,
     handleToolApproval,
@@ -410,17 +407,10 @@ function ChatInner({
       ariaLabel={projectComposerLabel}
       bottomSpacing="none"
       onTurn={submit}
-      onSuggestion={handleSuggestion}
       isSubmitting={isSubmitting}
       status={effectiveStatus}
       stop={stop}
       stoppable={presentation.stoppable}
-      hasSuggestions={
-        preferences.promptSuggestions &&
-        !project &&
-        !chatId &&
-        messages.length === 0
-      }
       onLockedGuestModelSelect={() => setHasDialogAuth(true)}
     />
   )
