@@ -69,6 +69,7 @@ import {
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
 import { useComposerConnectors } from "./use-composer-connectors"
+import { isReasoningEffortControlEnabled } from "@/lib/reasoning-effort"
 import { EffortControl } from "./effort-control"
 import { WebSearchControl } from "./web-search-control"
 
@@ -235,6 +236,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     const selectModelConfig = getLogicalModelInfo(selectedModel)
     const isFileUploadAvailable = Boolean(selectModelConfig?.vision)
+    // Mirrors EffortControl's own render predicate: when the thinking pill is
+    // present, the model trigger joins it as one segmented control — tight
+    // facing paddings and squared inner corners on the shared edge.
+    const hasEffortControl =
+      isReasoningEffortControlEnabled() && effortLevels.length > 0
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =
       useState<PromptInputActionQuery | null>(null)
@@ -668,6 +674,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 <div className="relative ms-1 flex min-w-0 shrink items-center gap-1.5">
                   <ModelSelector
                     variant="composer"
+                    className={
+                      hasEffortControl ? "rounded-e-lg pe-0.5" : undefined
+                    }
                     selectedModelId={selectedModel}
                     setSelectedModelId={handleModelChange}
                     isUserAuthenticated={isUserAuthenticated}

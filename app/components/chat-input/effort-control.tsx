@@ -120,9 +120,13 @@ function EffortControl({
                 // Geometry and type mirror the composer model trigger: same
                 // text scale, and the same invisible hover bridge
                 // (after:-inset-x-1) so the pointer never dead-zones in the
-                // gap between the two pills. Always the quiet tertiary grey —
-                // an override changes the label, not the color.
-                className="text-[var(--text-tertiary)] can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 shrink-0 overflow-visible px-3 py-0 text-base leading-[26px] font-normal"
+                // gap between the two pills. This pill always renders joined
+                // to the model trigger as one segmented control: tight facing
+                // padding and a squared inner corner on the shared edge (the
+                // model trigger mirrors both when this control is present).
+                // Always the quiet tertiary grey — an override changes the
+                // label, not the color.
+                className="text-[var(--text-tertiary)] can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 shrink-0 overflow-visible rounded-s-lg ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
               />
             }
           >
