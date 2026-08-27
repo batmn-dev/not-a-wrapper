@@ -232,9 +232,10 @@ type ModelConfig = {
   effortLevels?: readonly ModelReasoningEffort[]
 
   /**
-   * The provider's documented default effort, presentation-only: it marks the
-   * "Default" row in the effort menu and is never sent on the wire (Default
-   * always means "send nothing").
+   * The provider's documented default effort, presentation-only: the effort
+   * menu shows it as the implicitly selected level while the user has no
+   * override, and it is never sent on the wire (no override always means
+   * "send nothing").
    */
   defaultEffort?: ModelReasoningEffort
 

@@ -645,6 +645,30 @@ describe("production logical catalog", () => {
     expect(toLogicalModelView(gpt41).effortLevels).toBeUndefined()
   })
 
+  it("every effort-capable route declares a default within its levels (ADR-0026)", () => {
+    // The effort menu has no separate "Default" row: the default level reads
+    // as selected and re-picking it clears the override. A route offering
+    // levels without a default (or a default outside them) would leave the
+    // user no path back to the no-override state.
+    for (const model of LOGICAL_MODELS) {
+      for (const route of model.routes) {
+        const { effortLevels, defaultEffort } = route.config
+        if (!effortLevels || effortLevels.length === 0) continue
+        expect
+          .soft(defaultEffort, `route ${route.id} declares no defaultEffort`)
+          .toBeDefined()
+        if (defaultEffort !== undefined) {
+          expect
+            .soft(
+              effortLevels,
+              `route ${route.id} defaultEffort outside effortLevels`
+            )
+            .toContain(defaultEffort)
+        }
+      }
+    }
+  })
+
   it.each([
     ["gpt-5.6-luna", "GPT-5.6 Luna", "5.6 Luna"],
     ["claude-sonnet-5", "Claude Sonnet 5", "Sonnet 5"],

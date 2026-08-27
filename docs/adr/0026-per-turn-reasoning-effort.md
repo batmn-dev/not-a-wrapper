@@ -53,7 +53,9 @@ Two new optional `ModelConfig` fields:
   provider accepts for this model, in canonical order. Absent → the route has
   no user-selectable effort (the effort control does not render for it).
 - `defaultEffort?: ModelReasoningEffort` — the provider's documented default,
-  presentation-only (marks the "Default" row); never sent on the wire.
+  presentation-only: the menu carries no separate "Default" row; this level
+  reads as selected while the user has no override, and re-picking it clears
+  the override. Never sent on the wire.
 
 `lib/models` stays provider-import-free (`model-runtime-boundary.test.ts`):
 levels are vocabulary; the effort→wire mapping lives in `lib/openproviders`.

@@ -63,8 +63,12 @@ function EffortRow({
 /**
  * Per-turn thinking-effort selector (ADR-0026), right of the model button.
  * Renders only for models whose catalog declares effort levels; the menu is
- * the model's real level list, never a fixed vocabulary. Selection applies
- * to the next message (and retries) and is remembered per model.
+ * the model's real level list, never a fixed vocabulary — no separate
+ * "Default" row: the model's own default level reads as selected until the
+ * user overrides, and re-picking it clears the override (state stays
+ * `undefined`, so the wire still sends nothing and the provider decides).
+ * Selection applies to the next message (and retries) and is remembered per
+ * model.
  */
 function EffortControl({
   levels,
@@ -77,15 +81,22 @@ function EffortControl({
 
   if (!isReasoningEffortControlEnabled() || levels.length === 0) return null
 
-  const selectedLabel =
-    value !== undefined ? REASONING_EFFORT_LABELS[value] : undefined
-  const defaultRowLabel =
-    defaultLevel !== undefined
-      ? `Default · ${REASONING_EFFORT_LABELS[defaultLevel]}`
-      : "Default"
+  // What the menu shows as checked (and the trigger as label): the explicit
+  // override, else the model's default level when the union menu carries it.
+  const effectiveLevel =
+    value ??
+    (defaultLevel !== undefined && levels.includes(defaultLevel)
+      ? defaultLevel
+      : undefined)
+  const effectiveLabel =
+    effectiveLevel !== undefined
+      ? REASONING_EFFORT_LABELS[effectiveLevel]
+      : undefined
 
-  const select = (effort: ModelReasoningEffort | undefined) => {
-    onChange(effort)
+  const select = (level: ModelReasoningEffort) => {
+    // Picking the model's own default is "no override": keep the canonical
+    // absent state so Default semantics (send nothing) stay representable.
+    onChange(level === defaultLevel ? undefined : level)
     setIsOpen(false)
     onSelectionCommitted?.()
   }
@@ -100,14 +111,14 @@ function EffortControl({
                 type="button"
                 data-effort-control=""
                 aria-label={
-                  selectedLabel
-                    ? `Thinking effort: ${selectedLabel}`
+                  effectiveLabel
+                    ? `Thinking effort: ${effectiveLabel}`
                     : "Thinking effort"
                 }
                 aria-expanded={isOpen}
                 className={cn(
                   "h-9 shrink-0 gap-1.5 py-0 ps-2 text-sm/5 font-normal",
-                  selectedLabel ? "pe-3" : "pe-2",
+                  effectiveLabel ? "pe-3" : "pe-2",
                   value !== undefined
                     ? "text-[var(--composer-capability-accent)]"
                     : "text-[var(--text-tertiary)]"
@@ -116,9 +127,9 @@ function EffortControl({
             }
           >
             <Icon inert={true} icon={RiBrainLine} slotSize={20} />
-            {selectedLabel ? (
+            {effectiveLabel ? (
               <span className="max-w-24 truncate max-[520px]:sr-only">
-                {selectedLabel}
+                {effectiveLabel}
               </span>
             ) : null}
           </DropdownMenuTrigger>
@@ -128,16 +139,11 @@ function EffortControl({
         </TooltipContent>
       </Tooltip>
       <DropdownMenuContent side="top" align="start" className="min-w-44">
-        <EffortRow
-          label={defaultRowLabel}
-          selected={value === undefined}
-          onSelect={() => select(undefined)}
-        />
         {levels.map((level) => (
           <EffortRow
             key={level}
             label={REASONING_EFFORT_LABELS[level]}
-            selected={value === level}
+            selected={level === effectiveLevel}
             onSelect={() => select(level)}
           />
         ))}
