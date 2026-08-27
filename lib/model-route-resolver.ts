@@ -275,6 +275,27 @@ export async function resolveModelRoute(
   args: ResolveModelRouteArgs,
   deps: RouteResolverDeps = defaultDeps
 ): Promise<RouteResolution> {
+  const result = await resolveModelRouteOnce(args, deps)
+  const preferredEffort = args.requiredCapabilities?.reasoningEffort
+  if (result.ok || preferredEffort === undefined) return result
+  if (result.reason === "model_not_found") return result
+  // The effort preference is soft past route filtering too (ADR-0026): the
+  // preferred set can survive the capability filter yet still lose every
+  // candidate later — no usable credential for those providers, or no
+  // affordable platform allowance. Re-resolve unconstrained so Request
+  // shaping clamps instead; an effort selection never fails a turn.
+  const { reasoningEffort: _preferred, ...hardCapabilities } =
+    args.requiredCapabilities ?? {}
+  return resolveModelRouteOnce(
+    { ...args, requiredCapabilities: hardCapabilities },
+    deps
+  )
+}
+
+async function resolveModelRouteOnce(
+  args: ResolveModelRouteArgs,
+  deps: RouteResolverDeps
+): Promise<RouteResolution> {
   const selection = resolveModelSelection(args.modelId)
   const model = getLogicalModel(selection.modelId)
   if (!model) {

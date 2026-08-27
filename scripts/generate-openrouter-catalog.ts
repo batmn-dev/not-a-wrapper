@@ -205,14 +205,21 @@ export function buildSnapshot(
  * OpenRouter accepts every effort value and clamps to the nearest supported
  * level, so a too-wide menu degrades to a clamp, never an error. "none" is
  * offered only when the allowlist names it explicitly.
+ *
+ * "max" is never offered: the installed @openrouter/ai-sdk-provider
+ * construction enum stops at "xhigh", so a "max" selection could not reach
+ * the wire and the applied receipt would overstate what actually ran
+ * (provider-strategy keeps a defensive max→xhigh clamp regardless).
  */
+const OPENROUTER_WIRE_EFFORT_LEVELS: ReadonlySet<ModelReasoningEffort> =
+  new Set(REASONING_EFFORT_LEVELS.filter((level) => level !== "max"))
+
 const OPENROUTER_GATEWAY_EFFORT_FALLBACK: readonly ModelReasoningEffort[] = [
   "minimal",
   "low",
   "medium",
   "high",
   "xhigh",
-  "max",
 ]
 
 export function effortLevelsForSnapshotModel(
@@ -221,7 +228,9 @@ export function effortLevelsForSnapshotModel(
   const supported = snapshotModel.reasoning?.supported_efforts
   if (supported == null) return OPENROUTER_GATEWAY_EFFORT_FALLBACK
   const allowed = new Set(supported.filter(isModelReasoningEffort))
-  return REASONING_EFFORT_LEVELS.filter((level) => allowed.has(level))
+  return REASONING_EFFORT_LEVELS.filter(
+    (level) => allowed.has(level) && OPENROUTER_WIRE_EFFORT_LEVELS.has(level)
+  )
 }
 
 /** Join one allowlist entry with its snapshot record into a ModelConfig. */
