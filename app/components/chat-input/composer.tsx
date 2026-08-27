@@ -679,11 +679,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     // steady over the transient seam strip the reveal opens
                     // between the two halves.
                     "group/segmented relative ms-1 flex min-w-0 shrink cursor-pointer items-center",
-                    // Joined segmented pair: the model trigger and the
-                    // thinking pill sit flush (their persistent touch
-                    // backgrounds must read as one surface); the loose 6px
-                    // gap returns for effortless models.
-                    hasEffortControl ? "gap-0" : "gap-1.5"
+                    // Joined segmented pair: flush on hover-capable devices
+                    // (the seam only opens through the hover reveal), while
+                    // touch — whose persistent backgrounds are always visible
+                    // — keeps a constant 2px seam between the halves. The
+                    // loose 6px gap returns for effortless models.
+                    hasEffortControl ? "cant-hover:gap-0.5 gap-0" : "gap-1.5"
                   )}
                 >
                   <ModelSelector
