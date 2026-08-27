@@ -132,12 +132,14 @@ function EffortControl({
                 // corner-overlap reduction, which scales all radii by one
                 // shared factor and paints the finite corner square.
                 //
-                // Seam motion: at rest this pill overlaps the model trigger
-                // by 6px (its background hides the seam notch); hovering
-                // either half of the segmented pair slides it flush, 200ms
-                // easeOutQuint. transform stays in the transition list so the
-                // Button press-scale keeps animating.
-                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-1.5 pe-3 py-0 text-base leading-[26px] font-normal -ms-1.5 can-hover:group-hover/segmented:ms-0 transition-[margin-inline-start,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                // Seam motion (hover-capable devices only): at rest this pill
+                // overlaps the model trigger by 6px (its background hides the
+                // seam notch); hovering either half of the segmented pair
+                // slides it flush, 200ms easeOutQuint. Touch devices have no
+                // hover to reveal the seam, so they sit flush permanently.
+                // transform stays in the transition list so the Button
+                // press-scale keeps animating.
+                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl ps-1.5 pe-3 py-0 text-base leading-[26px] font-normal can-hover:-ms-1.5 can-hover:group-hover/segmented:ms-0 transition-[margin-inline-start,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
               />
             }
           >
