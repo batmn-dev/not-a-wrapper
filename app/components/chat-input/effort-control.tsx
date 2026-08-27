@@ -19,7 +19,7 @@ import {
   REASONING_EFFORT_LABELS,
 } from "@/lib/reasoning-effort"
 import { cn } from "@/lib/utils"
-import { RiBrainLine, RiCheckLine } from "@remixicon/react"
+import { RiCheckLine } from "@remixicon/react"
 import { useState } from "react"
 
 type EffortControlProps = {
@@ -117,21 +117,17 @@ function EffortControl({
                     : "Thinking effort"
                 }
                 aria-expanded={isOpen}
-                className={cn(
-                  "h-9 shrink-0 gap-1.5 py-0 ps-2 text-sm/5 font-normal",
-                  effectiveLabel ? "pe-3" : "pe-2",
-                  value !== undefined
-                    ? "text-[var(--composer-capability-accent)]"
-                    : "text-[var(--text-tertiary)]"
-                )}
+                // Geometry and type mirror the composer model trigger: same
+                // text scale, and the same invisible hover bridge
+                // (after:-inset-x-1) so the pointer never dead-zones in the
+                // gap between the two pills. Always the quiet tertiary grey —
+                // an override changes the label, not the color.
+                className="text-[var(--text-tertiary)] can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 shrink-0 overflow-visible px-3 py-0 text-base leading-[26px] font-normal"
               />
             }
           >
-            <Icon inert={true} icon={RiBrainLine} slotSize={20} />
             {effectiveLabel ? (
-              <span className="max-w-24 truncate max-[520px]:sr-only">
-                {effectiveLabel}
-              </span>
+              <span className="max-w-24 truncate">{effectiveLabel}</span>
             ) : null}
           </DropdownMenuTrigger>
         </TooltipTrigger>
