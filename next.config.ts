@@ -95,6 +95,10 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Default unchanged (.next). The chat-performance browser harness builds
+  // into an isolated dir (NEXT_DIST_DIR=.next-perf) so a perf production
+  // build/serve never touches the dev server's .next.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }]
   },

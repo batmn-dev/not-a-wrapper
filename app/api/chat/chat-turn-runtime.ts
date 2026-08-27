@@ -52,6 +52,11 @@ import {
 } from "@/lib/observability/sentry-scrubbing"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
 import {
+  createDeterministicChatModel,
+  createDeterministicTitleModel,
+  parseDeterministicPerfDirective,
+} from "./deterministic-provider"
+import {
   resolveReasoningEffort,
   shapeRequest,
 } from "@/lib/openproviders/request-shaping"
@@ -633,17 +638,27 @@ export function createChatTurnRuntime(args: {
         searchToolsActive: shouldInjectSearch,
       })
 
+    // Deterministic perf provider (measurement plan Phase 3 §3.1): active
+    // only when the SERVER environment sets CHAT_PERF_DETERMINISTIC_PROVIDER
+    // and the trailing user message carries a well-formed [[perf:...]]
+    // directive — the parse returns null otherwise, and everything below the
+    // model call (transforms, durable writes, settlement) runs unchanged.
+    const perfDirective = parseDeterministicPerfDirective(messages)
     // OpenRouter's reasoning knob is construction-time (provider-strategy.ts),
     // so a per-turn wire override replaces the catalog default here.
-    const aiModel = createLanguageModel(
-      wireReasoningEffort !== undefined &&
-        modelConfig.providerId === "openrouter"
-        ? { ...modelConfig, reasoning: { effort: wireReasoningEffort } }
-        : modelConfig,
-      apiKey
-    )
+    const aiModel = perfDirective
+      ? createDeterministicChatModel(perfDirective)
+      : createLanguageModel(
+          wireReasoningEffort !== undefined &&
+            modelConfig.providerId === "openrouter"
+            ? { ...modelConfig, reasoning: { effort: wireReasoningEffort } }
+            : modelConfig,
+          apiKey
+        )
     const titleModelConfig = selectChatTitleModelConfig(allModels, modelConfig)
-    const titleModel = createLanguageModel(titleModelConfig, apiKey)
+    const titleModel = perfDirective
+      ? createDeterministicTitleModel()
+      : createLanguageModel(titleModelConfig, apiKey)
 
     const durableRuntimeEnabled = isDurableConvexChat({
       isAuthenticated,
