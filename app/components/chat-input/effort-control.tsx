@@ -117,16 +117,21 @@ function EffortControl({
                     : "Thinking effort"
                 }
                 aria-expanded={isOpen}
-                // Geometry and type mirror the composer model trigger: same
-                // text scale, and the same invisible hover bridge
-                // (after:-inset-x-1) so the pointer never dead-zones in the
-                // gap between the two pills. This pill always renders joined
-                // to the model trigger as one segmented control: tight facing
-                // padding and a squared inner corner on the shared edge (the
-                // model trigger mirrors both when this control is present).
-                // Always the quiet tertiary grey — an override changes the
-                // label, not the color.
-                className="text-[var(--text-tertiary)] can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 shrink-0 overflow-visible rounded-s-xl ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
+                // Geometry and type mirror the composer model trigger. This
+                // pill always renders joined flush to the model trigger as
+                // one segmented control: tight facing padding and a squared
+                // inner corner on the shared edge (the model trigger mirrors
+                // both when this control is present). No hover bridge — the
+                // seam has no gap to cover, and an extended hit area would
+                // steal the model trigger's trailing clicks. Always the quiet
+                // tertiary grey — an override changes the label, not the
+                // color.
+                // Both radii are FINITE (18px trailing = half the height, so
+                // it reads as the pill's full round): pairing a finite corner
+                // with rounded-full's near-infinite radius triggers the CSS
+                // corner-overlap reduction, which scales all radii by one
+                // shared factor and paints the finite corner square.
+                className="text-[var(--text-tertiary)] h-9 shrink-0 overflow-visible rounded-s-lg rounded-e-2xl ps-0.5 pe-3 py-0 text-base leading-[26px] font-normal"
               />
             }
           >

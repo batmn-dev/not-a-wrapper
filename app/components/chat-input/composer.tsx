@@ -674,16 +674,28 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 <div
                   className={cn(
                     "relative ms-1 flex min-w-0 shrink items-center",
-                    // Joined segmented pair: a hairline 2px seam between the
-                    // model trigger and the thinking pill; the loose 6px gap
-                    // returns for effortless models.
-                    hasEffortControl ? "gap-0.5" : "gap-1.5"
+                    // Joined segmented pair: the model trigger and the
+                    // thinking pill sit flush (their persistent touch
+                    // backgrounds must read as one surface); the loose 6px
+                    // gap returns for effortless models.
+                    hasEffortControl ? "gap-0" : "gap-1.5"
                   )}
                 >
                   <ModelSelector
                     variant="composer"
+                    // Joined: soft-squared trailing corners and tight
+                    // trailing padding, and the hover bridge retracts to the
+                    // leading side only — flush against the thinking pill, a
+                    // trailing bridge would steal its neighbor's leading
+                    // clicks. The leading corners restate the pill radius as
+                    // a FINITE 2xl (18px = half the 36px height): mixed with
+                    // rounded-full's near-infinite radius, the CSS
+                    // corner-overlap reduction scales every radius by one
+                    // shared factor and crushes the finite corner to zero.
                     className={
-                      hasEffortControl ? "rounded-e-xl pe-0.5" : undefined
+                      hasEffortControl
+                        ? "can-hover:after:-start-1 can-hover:after:end-0 rounded-s-2xl rounded-e-lg pe-0.5"
+                        : undefined
                     }
                     selectedModelId={selectedModel}
                     setSelectedModelId={handleModelChange}
