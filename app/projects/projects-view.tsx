@@ -54,7 +54,7 @@ const DEFAULT_DIRECTORY_STATE: DirectoryViewState = {
 }
 
 const projectNewButtonClassName =
-  "border border-transparent bg-[#0d0d0d] hover:bg-[#2f2f2f] focus-visible:ring-0 focus-visible:outline-[1.5px] focus-visible:outline-offset-[2.5px] focus-visible:outline-foreground focus-visible:[outline-style:solid] dark:bg-white dark:hover:bg-[#e8e8e8] motion-reduce:transition-none motion-reduce:active:scale-100"
+  "border border-transparent bg-[#0d0d0d] hover:bg-[#2f2f2f] focus-visible:ring-0 focus-visible:outline-[1.5px] focus-visible:outline-offset-[2.5px] focus-visible:outline-foreground focus-visible:[outline-style:solid] dark:bg-white dark:hover:bg-[#e8e8e8]"
 
 function parseDirectoryViewState(searchParams: URLSearchParams) {
   const tabParam = searchParams.get("tab")

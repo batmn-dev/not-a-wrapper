@@ -661,7 +661,7 @@ describe("PromptInput responsive expansion", () => {
     expect(expandButton.className).not.toContain(
       "active:bg-interactive-pressed"
     )
-    expect(expandButton.className).toContain("active:scale-[0.96]")
+    expect(expandButton.className).toContain("press-motion")
     expect(expandButton.querySelector('[data-slot="icon"]')).not.toBeNull()
     expect(
       expandButton.querySelector('[data-slot="icon"]')?.className

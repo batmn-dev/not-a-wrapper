@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { EffortControl } from "./effort-control"
 
 let dropdownAnchor: React.RefObject<Element | null> | undefined
+let changeDropdownOpen: ((open: boolean) => void) | undefined
 
 vi.mock("motion/react", () => ({
   useReducedMotion: () => false,
@@ -15,10 +16,15 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({
     children,
     modal,
+    onOpenChange,
   }: {
     children: React.ReactNode
     modal?: boolean
-  }) => <div data-modal={String(modal)}>{children}</div>,
+    onOpenChange?: (open: boolean) => void
+  }) => {
+    changeDropdownOpen = onOpenChange
+    return <div data-modal={String(modal)}>{children}</div>
+  },
   DropdownMenuTrigger: ({
     children,
     render,
@@ -77,9 +83,10 @@ describe("EffortControl", () => {
     act(() => root.unmount())
     container.remove()
     dropdownAnchor = undefined
+    changeDropdownOpen = undefined
   })
 
-  it("scales a visual press surface while keeping the menu anchor fixed", () => {
+  it("keeps the visual control still and the menu anchor fixed", () => {
     act(() => {
       root.render(
         <EffortControl
@@ -95,7 +102,7 @@ describe("EffortControl", () => {
       '[data-slot="effort-control-desktop-anchor"]'
     )
     const pressSurface = container.querySelector<HTMLDivElement>(
-      '[data-slot="effort-control-press-surface"]'
+      '[data-slot="effort-control-visual-surface"]'
     )
     const trigger = container.querySelector<HTMLButtonElement>(
       '[data-testid="effort-trigger"]'
@@ -105,66 +112,31 @@ describe("EffortControl", () => {
     expect(pressSurface?.contains(trigger ?? null)).toBe(true)
     expect(dropdownAnchor?.current).toBe(anchor)
     expect(dropdownAnchor?.current).not.toBe(trigger)
-    expect(trigger?.className).toContain("active:scale-100")
+    expect(pressSurface?.className).not.toContain("press-motion")
+    expect(trigger?.className).not.toContain("press-motion")
     expect(container.querySelector("[data-modal=false]")).not.toBeNull()
+  })
 
-    if (!pressSurface) return
-
-    const pressAnimation = {
-      cancel: vi.fn(),
-      onfinish: null,
-    } as unknown as Animation
-    const returnAnimation = {
-      cancel: vi.fn(),
-      onfinish: null,
-    } as unknown as Animation
-    const animate = vi
-      .fn<() => Animation>()
-      .mockReturnValueOnce(pressAnimation)
-      .mockReturnValueOnce(returnAnimation)
-    Object.defineProperty(pressSurface, "animate", {
-      configurable: true,
-      value: animate,
-    })
-
-    const pointerDown = new Event("pointerdown", { bubbles: true })
-    Object.defineProperties(pointerDown, {
-      button: { value: 0 },
-      isPrimary: { value: true },
-      pointerId: { value: 11 },
-    })
-    act(() => pressSurface.dispatchEvent(pointerDown))
-
-    expect(animate).toHaveBeenCalledWith(
-      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }],
-      {
-        duration: 75,
-        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
-        fill: "forwards",
-      }
-    )
-
-    const pointerUp = new Event("pointerup")
-    Object.defineProperty(pointerUp, "pointerId", { value: 11 })
-    act(() => window.dispatchEvent(pointerUp))
-    expect(animate).toHaveBeenCalledOnce()
-
+  it("opens the thinking menu as soon as the button is pressed", () => {
     act(() => {
-      pressAnimation.onfinish?.call(
-        pressAnimation,
-        new Event("finish") as AnimationPlaybackEvent
+      root.render(
+        <EffortControl
+          levels={["low", "high"]}
+          value={undefined}
+          defaultLevel="low"
+          onChange={() => {}}
+        />
       )
     })
 
-    expect(animate).toHaveBeenNthCalledWith(
-      2,
-      [{ transform: "scale(0.96)" }, { transform: "scale(1)" }],
-      {
-        duration: 75,
-        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
-        fill: "forwards",
-      }
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="effort-trigger"]'
     )
-    expect(pressAnimation.cancel).toHaveBeenCalledOnce()
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false")
+
+    act(() => {
+      changeDropdownOpen?.(true)
+    })
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true")
   })
 })

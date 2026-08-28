@@ -37,6 +37,37 @@
 @custom-variant data-horizontal (&[data-orientation="horizontal"]);
 @custom-variant data-vertical (&[data-orientation="vertical"]);
 
+/* Shared button-like press feedback. Controls that should stay still opt out
+   through the Button primitive instead of overriding this recipe locally. */
+@utility press-motion {
+  --press-motion-scale: 0.96;
+  --press-motion-release-duration: 75ms;
+  --press-motion-release-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  scale: 1;
+  transition-property: scale;
+  transition-duration: var(--press-motion-release-duration);
+  transition-timing-function: var(--press-motion-release-easing);
+
+  &:active:not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-visually-disabled]
+    ) {
+    scale: var(--press-motion-scale);
+    transition-duration: 0ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &,
+    &:active {
+      scale: 1;
+      transition: none;
+    }
+  }
+}
+
 @keyframes collapsible-down {
   from {
     height: 0;

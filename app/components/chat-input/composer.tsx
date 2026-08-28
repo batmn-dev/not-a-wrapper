@@ -703,9 +703,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     // thinking pill translates +3px (center-out reveal), and
                     // an open popover on either half pins the revealed
                     // position independent of hover — see EffortControl.
-                    // transition-transform also displaces the composer
-                    // variant's gesture-press transition-none via the cn
-                    // merge — deliberate, the translate must animate.
+                    // transition-transform owns only this seam translation;
+                    // the Model and Thinking controls opt out of press scale.
                     className={
                       hasEffortControl
                         ? "can-hover:after:-start-1 can-hover:after:end-0 can-hover:group-hover/segmented:-translate-x-[3px] can-hover:group-has-[[aria-expanded=true]]/segmented:-translate-x-[3px] rounded-s-2xl rounded-e-md pe-1.5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"

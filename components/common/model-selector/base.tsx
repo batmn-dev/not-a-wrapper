@@ -26,7 +26,6 @@ import {
   TooltipShortcut,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useComposerPopoverPress } from "@/components/ui/use-composer-popover-press"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useModel } from "@/lib/model-store/provider"
 import {
@@ -689,8 +688,7 @@ export function ModelSelector({
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
-  const { anchorRef: desktopAnchorRef, handlePressPointerDown } =
-    useComposerPopoverPress()
+  const desktopAnchorRef = useRef<HTMLDivElement>(null)
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -855,7 +853,6 @@ export function ModelSelector({
   )
   const legacyProviders = getLegacyProviderOptions(legacyModels)
   const pinnedModelIds = new Set(favoriteModels)
-  const usesGesturePress = isComposerVariant && !isMobile
   const effectiveRevealedLegacyProviders = searchQuery
     ? new Set(legacyProviders.map((provider) => provider.providerId))
     : revealedLegacyProviders
@@ -867,12 +864,12 @@ export function ModelSelector({
   const trigger = (
     <TriggerControl
       {...(!isComposerVariant && { variant: "ghost" as const })}
+      pressMotion={isComposerVariant ? "none" : undefined}
       className={cn(
         "min-w-0 shrink font-normal",
         isComposerVariant
           ? "text-muted-foreground can-hover:relative can-hover:after:absolute can-hover:after:-inset-x-1 can-hover:after:inset-y-0 can-hover:after:content-[''] h-9 max-w-full justify-start gap-1.5 overflow-visible rounded-full py-0 ps-3.5 pe-3 text-base leading-[26px]"
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
-        usesGesturePress && "transition-none active:scale-100",
         className
       )}
       disabled={disabled || isLoadingModels}
@@ -1020,10 +1017,9 @@ export function ModelSelector({
       >
         {isComposerVariant ? (
           <div
-            data-slot="model-selector-press-surface"
+            data-slot="model-selector-visual-surface"
             className="inline-flex"
             tabIndex={-1}
-            onPointerDown={handlePressPointerDown}
           >
             <Tooltip
               disableHoverablePopup
