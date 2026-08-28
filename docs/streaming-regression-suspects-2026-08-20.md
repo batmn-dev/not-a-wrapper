@@ -39,11 +39,6 @@ model identities + server-owned route selection).
    (`app/api/chat/api.ts`), so **the first turn of a new chat (local optimistic
    id) can never take the platform tier** and may select an eligible priority
    or fallback BYOK route; otherwise, route resolution fails.
-3. **Time-to-first-token grew by 1–2 sequential Convex roundtrips.**
-   `usageAllowance.reserveAuthorized` mutation now sits on the admission
-   critical path (`lib/model-route-resolver.ts`), and #143 added a per-turn
-   `getKeySettings` query plus per-candidate `getUserKey` lookups —
-   ~50–150 ms each, all before `streamText` starts.
 4. **End-of-stream settle waits on the title call** (platform runs,
    `chat-turn-runtime.ts` `onEnd`). First turns can hold terminal settlement
    — and UI keyed off it (stop button, run status) — up to ~8 s after the
@@ -57,5 +52,4 @@ model identities + server-owned route selection).
 | --- | --- |
 | Answers cut off / stream dies early | 1 (check `finishReason: "length"`) |
 | Same model fast one turn, slow the next | 2 (check `credentialSource`/`routeReason` on runs) |
-| Slow to start streaming | 3 |
 | Spinner lingers after answer finished | 4 |
