@@ -92,6 +92,9 @@ export const CHAT_PERF_SPAN_NAMES = [
   "history_adaptation",
   "stream_start",
   "prepare_total",
+  // The platform allowance reservation alone (`reserveAuthorized`), split
+  // out of `credential_resolution` (Experiment 1).
+  "usage_reservation",
   // Receipt-anchored lifecycle spans (measurement plan Phase 2): all measured
   // from HTTP request receipt, unlike `stream_start` (see its note below).
   "provider_request_started",

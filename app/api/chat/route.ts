@@ -16,7 +16,7 @@ import {
 } from "@/lib/observability/sentry-scrubbing"
 import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import * as Sentry from "@sentry/nextjs"
-import { fetchMutation } from "convex/nextjs"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
 import {
   checkServerSideUsage,
   incrementServerSideUsage,
@@ -213,15 +213,31 @@ export async function POST(req: Request) {
       },
       () =>
         perf.span("usage_admission", async () => {
-          // Abuse rate limit only (ADR-0021) — the economic admission is the
-          // atomic allowance reservation inside credential resolution below.
-          await checkServerSideUsage(convexToken, anonymousId)
-          const generationInput = isDurableConvexChat({
+          // Experiment 1 overlap: the abuse check, the attachment preflight,
+          // and the key-settings read are independent READS — run them
+          // concurrently. The ordering that carries authorization weight is
+          // unchanged: the allowance reservation (inside credential
+          // resolution below) still starts only after the abuse gate passed,
+          // and abuse-check failure keeps precedence over preflight failure.
+          // The no-op catches keep an early rejection from surfacing as
+          // unhandled while its sibling is still being awaited.
+          const keySettingsPromise =
+            isAuthenticated && convexToken
+              ? fetchQuery(
+                  api.userKeys.getKeySettings,
+                  {},
+                  { token: convexToken }
+                )
+              : undefined
+          keySettingsPromise?.catch(() => {})
+          const abuseCheck = checkServerSideUsage(convexToken, anonymousId)
+          abuseCheck.catch(() => {})
+          const preflight = isDurableConvexChat({
             isAuthenticated,
             convexToken,
             chatId,
           })
-            ? await perf.span("attachment_resolution", () =>
+            ? perf.span("attachment_resolution", () =>
                 preflightDurableGenerationInput({
                   chatId,
                   token: convexToken!,
@@ -233,6 +249,9 @@ export async function POST(req: Request) {
                 })
               )
             : undefined
+          preflight?.catch(() => {})
+          await abuseCheck
+          const generationInput = preflight ? await preflight : undefined
           const plannedPinnedProvider = generationInput?.pinnedProvider
           const pinnedProviderId =
             plannedPinnedProvider &&
@@ -256,6 +275,8 @@ export async function POST(req: Request) {
                 enableSearch: enableSearch ?? false,
                 reasoningEffort,
                 pinnedProviderId,
+                keySettingsPromise,
+                perf,
               })
           )
           // Arm the release hook the moment a reservation exists — BEFORE
@@ -271,8 +292,16 @@ export async function POST(req: Request) {
                 { token }
               )
           }
-          await incrementServerSideUsage(convexToken, anonymousId)
-          return { ...resolvedAdmission, generationInput }
+          // Off the critical path (Experiment 1): started in its historical
+          // order — after reservation arming, so a failure still finds the
+          // release hook armed — but awaited only after prepare, before any
+          // streaming begins.
+          const incrementPromise = incrementServerSideUsage(
+            convexToken,
+            anonymousId
+          )
+          incrementPromise.catch(() => {})
+          return { ...resolvedAdmission, generationInput, incrementPromise }
         })
     )
     Sentry.setTag("chat_route_id", admission.route.routeId)
@@ -305,6 +334,10 @@ export async function POST(req: Request) {
     })
 
     await perf.span("prepare_total", () => turn!.prepare())
+    // The abuse-counter increment overlapped prepare; a failure still lands
+    // strictly pre-stream (the outer catch fails the prepared turn cleanly,
+    // and the reservation settles through its run's lifecycle).
+    await admission.incrementPromise
     return await turn.toResponse(req.signal)
   } catch (err: unknown) {
     console.error(

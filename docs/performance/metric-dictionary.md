@@ -74,10 +74,10 @@ harness (local Convex, fixed fixtures) they gate with generous ceilings.
 |---|---|---|---|
 | `request_parse` | body `req.json()` + wire-contract validation | no | existing (Phase 2; rejected requests return without a span) |
 | `auth_session` | WorkOS session resolution | no (network: WorkOS) | existing |
-| `usage_admission` | outer admission block: abuse check, preflight, credential resolution, usage increment | yes (several) | existing |
+| `usage_admission` | outer admission block: abuse check ∥ preflight ∥ key-settings prefetch, then credential resolution. Since Experiment 1 the usage increment is started here but awaited after `prepare_total` (still pre-stream) — the span no longer contains it, and `attachment_resolution` includes its concurrent window | yes (several) | existing |
 | `attachment_resolution` | `planGenerationInput` + trusted-text preflight | yes | existing |
 | `credential_resolution` | approval-route facts, key settings, route resolution, **platform usage reservation** | yes | existing |
-| `usage_reservation` | `reserveAuthorized` mutation alone | yes | proposed (today folded into `credential_resolution`, not separable) |
+| `usage_reservation` | `reserveAuthorized` mutation alone | yes | existing (Experiment 1; baseline 56.6 ms p50 — effectively all of post-prefetch `credential_resolution`) |
 | `model_config` | logical model resolution (pure) | no | existing (Phase 2) |
 | `tool_preparation` | 3-layer tool setup + MCP connect | network: MCP | existing |
 | `durable_prepare` | execution grant + run creation + history load (`prepareGeneration`) | yes | existing |
