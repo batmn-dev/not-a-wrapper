@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
+  finalizeTerminalUsageWithSettlementGrant,
   grantRejectionCode,
   requireGrantAuthorizedRun,
 } from "./chatRuntimeWorker"
@@ -145,5 +146,124 @@ describe("requireGrantAuthorizedRun", () => {
     ).catch((caught: unknown) => caught)
 
     expect(grantRejectionCode(error)).toBe("grant_unauthorized")
+  })
+})
+
+// The settlement-only receipt gate (ADR-0021 cancellation amendment): the
+// stopped worker's ONE remaining capability. Only the authorization boundary
+// is proven here — the settlement math behind it is covered by
+// usageAllowance.test.ts (finalizePendingTerminalUsage).
+describe("finalizeTerminalUsageWithSettlementGrant authorization", () => {
+  const reservationId = "reservation_1" as Id<"usageReservations">
+  const evidence = {
+    primary: { kind: "started-without-usage" as const },
+    title: { kind: "not-run" as const },
+  }
+
+  function makeReceiptWorld(
+    overrides: {
+      reservation?: Partial<Doc<"usageReservations">> | null
+      run?: Partial<Doc<"generationRuns">>
+    } = {}
+  ) {
+    return makeCtx({
+      ...(overrides.reservation === null
+        ? {}
+        : {
+            reservation_1: {
+              _id: "reservation_1",
+              status: "reserved",
+              generationRunId: "run_1",
+              settlementGrantDigest: DIGEST,
+              settlementGrantExpiresAt: Date.now() + 30_000,
+              terminalPendingAt: Date.now() - 1_000,
+              ...overrides.reservation,
+            },
+          }),
+      run_1: {
+        _id: "run_1",
+        chatId: "chat_1",
+        status: "aborted",
+        terminalReason: "user_stop",
+        ...overrides.run,
+      },
+    })
+  }
+
+  it.each([
+    ["missing reservation", { reservation: null }],
+    ["cleared digest on a still-reserved row", {
+      reservation: { settlementGrantDigest: undefined },
+    }],
+    ["expired settlement authority", {
+      reservation: { settlementGrantExpiresAt: Date.now() - 1 },
+    }],
+    ["wrong run linkage", {
+      reservation: { generationRunId: "run_2" as Id<"generationRuns"> },
+    }],
+    ["a run not terminal for a cancellation reason", {
+      run: { status: "completed", terminalReason: "completed" },
+    }],
+  ] as const)("rejects %s without changing balances", async (_name, world) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    await expect(
+      finalizeTerminalUsageWithSettlementGrant(makeReceiptWorld(world), {
+        runId,
+        grantDigest: DIGEST,
+        reservationId,
+        terminalUsage: evidence,
+      })
+    ).rejects.toThrow(/Execution grant/)
+    warn.mockRestore()
+  })
+
+  it("rejects a wrong secret against the settlement digest", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const error = await finalizeTerminalUsageWithSettlementGrant(
+      makeReceiptWorld(),
+      {
+        runId,
+        grantDigest: sha256Hex("some-other-secret"),
+        reservationId,
+        terminalUsage: evidence,
+      }
+    ).catch((caught: unknown) => caught)
+    expect(grantRejectionCode(error)).toBe("grant_unauthorized")
+    warn.mockRestore()
+  })
+
+  it("acknowledges an already-finalized reservation as a benign no-op", async () => {
+    // The receipt raced the deadline reconciler (digest cleared, row
+    // settled): no 401 storm, no second ledger entry.
+    const result = await finalizeTerminalUsageWithSettlementGrant(
+      makeReceiptWorld({
+        reservation: {
+          status: "settled",
+          settlementGrantDigest: undefined,
+          settlementGrantExpiresAt: undefined,
+        },
+      }),
+      {
+        runId,
+        grantDigest: DIGEST,
+        reservationId,
+        terminalUsage: evidence,
+      }
+    )
+    expect(result).toEqual({ outcome: "already-finalized" })
+  })
+
+  it("rejects malformed token counts after authorization", async () => {
+    await expect(
+      finalizeTerminalUsageWithSettlementGrant(makeReceiptWorld(), {
+        runId,
+        grantDigest: DIGEST,
+        reservationId,
+        terminalUsage: {
+          primary: { kind: "started-without-usage", partialOutputTokens: -1 },
+          title: { kind: "not-run" },
+        },
+      })
+    ).rejects.toThrow("Invalid terminal usage evidence")
   })
 })

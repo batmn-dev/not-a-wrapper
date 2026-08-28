@@ -1,4 +1,6 @@
 import { v } from "convex/values"
+import { CHAT_TURN_EXECUTION_BUDGET } from "../lib/chat-turn/execution-budget"
+import { estimatePartialOutputTokens } from "../lib/usage/terminal-usage-estimate"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
@@ -17,9 +19,13 @@ import {
   releaseEventKey,
   reservationPayloadFingerprint,
   reserveEventKey,
+  resolveTerminalUsageSettlement,
   settleEventKey,
   type PricingSnapshot,
   type SettlementBasis,
+  type TerminalReservationFacts,
+  type TerminalSettlementDecision,
+  type TerminalUsageEvidencePayload,
   type UsageTokens,
 } from "./domain/usage_accounting"
 import {
@@ -54,6 +60,17 @@ import { evaluateFixedWindow } from "./rateLimits"
 // legitimate holds a reservation this long. The reconciler applies the
 // provider-boundary rule; it never blindly releases attached reservations.
 export const STALE_RESERVATION_MS = 30 * 60 * 1000
+
+/**
+ * Cancellation-evidence window (ADR-0021 cancellation amendment): how long a
+ * Stop/supersession keeps its reservation held awaiting the stopped worker's
+ * terminal-usage receipt. Derived from the execution budget's settlement
+ * reserve (the worker's terminal writes fit inside it) plus one deadline
+ * reconciler interval of slack — the settlement-only grant expires at the
+ * same deadline, so the worker stays authorized for the whole window.
+ */
+export const TERMINAL_EVIDENCE_WINDOW_MS =
+  CHAT_TURN_EXECUTION_BUDGET.settlementReserveMs + 15_000
 
 function warnUsage(tag: string, fields: Record<string, unknown>): void {
   console.warn(JSON.stringify({ _tag: tag, ...fields }))
@@ -261,6 +278,16 @@ export async function reserveUsageForUser(
         })
         return { kind: "conflict" }
       }
+      // A reservation whose Stop/supersession left settlement pending is not
+      // replayable either — its run is already terminal, so re-admitting the
+      // request against it could only strand or double-attach.
+      if (existing.settlementDeadlineAt !== undefined) {
+        warnUsage("usage_reserve_replay_pending_settlement", {
+          requestId: args.requestId,
+          reservationId: existing._id,
+        })
+        return { kind: "conflict" }
+      }
       // Only a still-live reservation is a valid replay: a settled or
       // released row must never re-admit a request (that would resurrect
       // spent or refunded money without a new reservation).
@@ -327,6 +354,9 @@ export async function reserveUsageForUser(
         : {}),
       ...(args.titleEstimatedCredits !== undefined
         ? { titleEstimatedCredits: args.titleEstimatedCredits }
+        : {}),
+      ...(args.titleEstimatedInputTokens !== undefined
+        ? { titleEstimatedInputTokens: args.titleEstimatedInputTokens }
         : {}),
       pricingSnapshot: args.pricingSnapshot,
       payloadFingerprint: fingerprint,
@@ -626,6 +656,311 @@ async function settleReservation(
   }
 }
 
+// --- Cancellation-aware deferred settlement (ADR-0021 cancellation
+// amendment). A user Stop or supersession no longer converts the worst-case
+// admission reservation into final spend: the run terminalizes immediately,
+// the reservation stays held for a bounded evidence window, and either the
+// stopped worker's settlement-only receipt or the deadline reconciler
+// finalizes from the best available evidence.
+
+function reservationTerminalFacts(
+  reservation: Doc<"usageReservations">
+): TerminalReservationFacts {
+  return {
+    reservedCredits: reservation.reservedCredits,
+    estimatedInputTokens: reservation.estimatedInputTokens,
+    estimatedOutputTokens: reservation.estimatedOutputTokens,
+    titleEstimatedCredits: reservation.titleEstimatedCredits,
+    titleEstimatedInputTokens: reservation.titleEstimatedInputTokens,
+    pricingSnapshot: reservation.pricingSnapshot,
+  }
+}
+
+/**
+ * Could the provider have started billable work for this run? Any durable
+ * evidence answers yes; with none, the run may still have dispatched (the
+ * work-start write is fire-and-forget), so callers must treat this as a
+ * fallback discriminator, never as proof by itself.
+ */
+export function runProviderMayHaveStarted(run: Doc<"generationRuns">): boolean {
+  return (
+    run.workStartedAt !== undefined ||
+    (run.lastSnapshotSequence ?? 0) > 0 ||
+    (run.inputTokens ?? 0) > 0 ||
+    (run.outputTokens ?? 0) > 0
+  )
+}
+
+/** Apply one pure settlement decision to a still-reserved reservation. */
+async function applyTerminalSettlementDecision(
+  ctx: MutationCtx,
+  reservation: Doc<"usageReservations">,
+  decision: TerminalSettlementDecision,
+  reason: string,
+  now: number
+): Promise<void> {
+  if (decision.kind === "release") {
+    await releaseReservation(ctx, reservation, reason, now)
+  } else {
+    if (decision.titleRouteUnrecognized) {
+      warnUsage("usage_title_route_unrecognized", {
+        reservationId: reservation._id,
+        runId: reservation.generationRunId,
+        reason,
+      })
+    }
+    if (decision.uncappedCredits !== undefined) {
+      logUsage("usage_terminal_fallback_capped", {
+        reservationId: reservation._id,
+        uncappedCredits: decision.uncappedCredits,
+        reservedCredits: reservation.reservedCredits,
+      })
+    }
+    await settleReservation(
+      ctx,
+      reservation,
+      {
+        actualCredits: decision.actualCredits,
+        basis: decision.basis,
+        inputTokens: decision.inputTokens,
+        outputTokens: decision.outputTokens,
+        titleCredits: decision.titleCredits,
+        reason,
+      },
+      now
+    )
+  }
+  // Settlement-only authority ends with finalization; the pending/deadline
+  // timestamps stay behind as audit facts.
+  await ctx.db.patch(reservation._id, {
+    ...(decision.kind === "settle"
+      ? { titleSettlementBasis: decision.titleBasis }
+      : {}),
+    settlementGrantDigest: undefined,
+    settlementGrantExpiresAt: undefined,
+    updatedAt: now,
+  })
+}
+
+/**
+ * Mark a Stop/supersession's reservation ACCOUNTING-PENDING instead of
+ * settling it in the terminal transaction. Runs inside the same mutation that
+ * commits `aborted` and revokes the normal grant; the reservation keeps
+ * status "reserved" (still counted in bucket.reservedCredits, still blocking
+ * concurrent overspend) until the worker's receipt or the deadline
+ * reconciler finalizes. Returns true when accounting is handled here — the
+ * caller must then skip `settleUsageForTerminalRun`.
+ */
+export async function deferUsageSettlementForTerminalRun(
+  ctx: MutationCtx,
+  run: Doc<"generationRuns">,
+  terminalReason: Extract<
+    GenerationRunTerminalReason,
+    "user_stop" | "superseded"
+  >,
+  now: number
+): Promise<boolean> {
+  const reservation = await ctx.db
+    .query("usageReservations")
+    .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
+    .unique()
+  // No reservation (BYOK/anonymous) or already finalized (an approval pause
+  // settled it): nothing to defer, nothing for the legacy path to add.
+  if (!reservation || reservation.status !== "reserved") return true
+  if (reservation.settlementDeadlineAt !== undefined) return true
+
+  // Structural release: a run that never crossed the execution boundary
+  // cannot have dispatched provider work. (Committed runs are "streaming"+
+  // in practice, so cancellation almost always defers.)
+  if (run.status === "queued") {
+    await releaseReservation(ctx, reservation, terminalReason, now)
+    return true
+  }
+
+  // Durable partial-output fallback, captured NOW so message/run deletion
+  // cannot erase it. A later worker receipt may replace it with a larger
+  // final-snapshot estimate; the two are never added together.
+  const message = run.assistantMessageId
+    ? await ctx.db.get(run.assistantMessageId)
+    : null
+  const partialEstimate = message
+    ? estimatePartialOutputTokens(message.parts)
+    : 0
+  const terminalEstimatedOutputTokens =
+    reservation.estimatedOutputTokens !== undefined
+      ? Math.min(partialEstimate, reservation.estimatedOutputTokens)
+      : partialEstimate
+
+  const settlementDeadlineAt = now + TERMINAL_EVIDENCE_WINDOW_MS
+  await ctx.db.patch(reservation._id, {
+    terminalPendingAt: now,
+    settlementDeadlineAt,
+    // The stopped worker keeps ONE narrowly scoped capability: submitting the
+    // terminal-usage receipt for exactly this reservation, until the same
+    // deadline the reconciler enforces. Its normal run grant is revoked in
+    // this same transaction.
+    ...(run.grantDigest
+      ? {
+          settlementGrantDigest: run.grantDigest,
+          settlementGrantExpiresAt: settlementDeadlineAt,
+        }
+      : {}),
+    providerMayHaveStarted: runProviderMayHaveStarted(run),
+    terminalEstimatedOutputTokens,
+    updatedAt: now,
+  })
+  logUsage("usage_terminal_settlement_pending", {
+    reservationId: reservation._id,
+    runId: run._id,
+    terminalReason,
+    settlementDeadlineAt,
+    estimatedInputTokens: reservation.estimatedInputTokens,
+    terminalEstimatedOutputTokens,
+  })
+  return true
+}
+
+export type FinalizeTerminalUsageOutcome =
+  "settled" | "released" | "already-finalized"
+
+/**
+ * Finalize one pending cancellation settlement from normalized evidence —
+ * the ONE finalization path shared by the worker's settlement-only receipt
+ * and the deadline reconciler, so there are never two billing decision
+ * trees. First finalization wins; later evidence is logged and ignored.
+ */
+export async function finalizePendingTerminalUsage(
+  ctx: MutationCtx,
+  args: {
+    reservation: Doc<"usageReservations">
+    evidence: TerminalUsageEvidencePayload
+    source: "worker_receipt" | "deadline"
+    now: number
+  }
+): Promise<FinalizeTerminalUsageOutcome> {
+  const { reservation, evidence, source, now } = args
+  if (reservation.status !== "reserved") {
+    warnUsage("usage_terminal_late_evidence_ignored", {
+      reservationId: reservation._id,
+      storedBasis: reservation.settlementBasis,
+      status: reservation.status,
+      incomingPrimaryKind: evidence.primary.kind,
+      incomingTitleKind: evidence.title.kind,
+      source,
+    })
+    return "already-finalized"
+  }
+  const decision = resolveTerminalUsageSettlement(
+    reservationTerminalFacts(reservation),
+    evidence
+  )
+  const reason =
+    source === "worker_receipt"
+      ? "terminal_usage_receipt"
+      : "settlement_deadline_expired"
+  await applyTerminalSettlementDecision(ctx, reservation, decision, reason, now)
+  const eventTag =
+    source === "worker_receipt"
+      ? "usage_terminal_evidence_accepted"
+      : "usage_terminal_evidence_timed_out"
+  logUsage(eventTag, {
+    reservationId: reservation._id,
+    primaryKind: evidence.primary.kind,
+    primaryBasis: decision.kind === "settle" ? decision.basis : "released",
+    titleBasis: decision.kind === "settle" ? decision.titleBasis : "released",
+    finalCredits: decision.kind === "settle" ? decision.actualCredits : 0,
+    evidenceLatencyMs:
+      reservation.terminalPendingAt !== undefined
+        ? now - reservation.terminalPendingAt
+        : null,
+  })
+  return decision.kind === "settle" ? "settled" : "released"
+}
+
+/**
+ * Evidence for a pending reservation whose worker never reported: durable
+ * run facts when the run survives, the facts copied onto the reservation at
+ * Stop time when it did not.
+ */
+function terminalSettlementFallbackEvidence(
+  reservation: Doc<"usageReservations">,
+  run: Doc<"generationRuns"> | null
+): TerminalUsageEvidencePayload {
+  const observedInput = run?.inputTokens ?? 0
+  const observedOutput = run?.outputTokens ?? 0
+  if (observedInput > 0 || observedOutput > 0) {
+    return {
+      primary: {
+        kind: "completed-steps",
+        inputTokens: run?.inputTokens,
+        outputTokens: run?.outputTokens,
+        partialOutputTokens: reservation.terminalEstimatedOutputTokens,
+      },
+      title: { kind: "started-without-usage" },
+    }
+  }
+  const mayHaveStarted =
+    reservation.providerMayHaveStarted ??
+    (run ? runProviderMayHaveStarted(run) : true)
+  if (!mayHaveStarted) {
+    return { primary: { kind: "not-started" }, title: { kind: "not-run" } }
+  }
+  return {
+    primary: {
+      kind: "started-without-usage",
+      partialOutputTokens: reservation.terminalEstimatedOutputTokens,
+    },
+    title: { kind: "started-without-usage" },
+  }
+}
+
+/**
+ * Deadline reconciliation for pending cancellation settlements: bounded,
+ * idempotent, run on a second-level cadence so a due reservation converges
+ * within at most two intervals. The 30-minute stale reconciler below remains
+ * the final deployment/crash net.
+ */
+export async function reconcileDueTerminalSettlementsPass(
+  ctx: MutationCtx
+): Promise<{ finalized: number }> {
+  const now = Date.now()
+  const due = await ctx.db
+    .query("usageReservations")
+    .withIndex("by_status_settlement_deadline", (q) =>
+      q
+        .eq("status", "reserved")
+        .gt("settlementDeadlineAt", undefined)
+        .lte("settlementDeadlineAt", now)
+    )
+    .take(RECONCILE_BATCH_LIMIT)
+
+  let finalized = 0
+  for (const reservation of due) {
+    if (
+      reservation.settlementDeadlineAt === undefined ||
+      reservation.settlementDeadlineAt > now
+    ) {
+      continue
+    }
+    const run = reservation.generationRunId
+      ? await ctx.db.get(reservation.generationRunId)
+      : null
+    const outcome = await finalizePendingTerminalUsage(ctx, {
+      reservation,
+      evidence: terminalSettlementFallbackEvidence(reservation, run),
+      source: "deadline",
+      now,
+    })
+    if (outcome !== "already-finalized") finalized++
+  }
+  return { finalized }
+}
+
+export const reconcileDueTerminalSettlements = internalMutation({
+  args: {},
+  handler: async (ctx) => reconcileDueTerminalSettlementsPass(ctx),
+})
+
 type LegacyTitleUsageEvidence = UsageTokens & {
   routeId?: never
   pricingRole?: never
@@ -645,6 +980,12 @@ export type TerminalUsageEvidence = {
   usage?: UsageTokens
   /** Title-call evidence riding the completion write. */
   titleUsage?: TitleUsageEvidence
+  /**
+   * Normalized cancellation evidence riding a worker-owned aborted terminal
+   * write (ADR-0021 cancellation amendment). When present, settlement routes
+   * through the shared pure decision instead of the legacy estimate.
+   */
+  terminal?: TerminalUsageEvidencePayload
 }
 
 function resolveTitleUsageRate(
@@ -790,6 +1131,56 @@ export async function settleUsageForTerminalRun(
     return
   }
 
+  // Worker-owned cancellation with normalized evidence (a `request_aborted`
+  // terminal that beat any Stop): settle atomically through the shared pure
+  // decision — the same tree the receipt and deadline paths use.
+  if (evidence.terminal !== undefined) {
+    const decision = resolveTerminalUsageSettlement(
+      reservationTerminalFacts(reservation),
+      evidence.terminal
+    )
+    await applyTerminalSettlementDecision(
+      ctx,
+      reservation,
+      decision,
+      auditReason,
+      now
+    )
+    return
+  }
+
+  // A reaped lease has no live worker to acknowledge anything: settle
+  // immediately from durable completed-step and partial-output facts using
+  // the SAME fallback policy the deadline reconciler applies (never the
+  // legacy full-estimate charge).
+  if (terminalReason === "lease_expired") {
+    const message = run.assistantMessageId
+      ? await ctx.db.get(run.assistantMessageId)
+      : null
+    const partialEstimate = message
+      ? estimatePartialOutputTokens(message.parts)
+      : 0
+    const withPartial: Doc<"usageReservations"> = {
+      ...reservation,
+      terminalEstimatedOutputTokens:
+        reservation.estimatedOutputTokens !== undefined
+          ? Math.min(partialEstimate, reservation.estimatedOutputTokens)
+          : partialEstimate,
+    }
+    const decision = resolveTerminalUsageSettlement(
+      reservationTerminalFacts(reservation),
+      terminalSettlementFallbackEvidence(withPartial, run)
+    )
+    await applyTerminalSettlementDecision(
+      ctx,
+      reservation,
+      decision,
+      auditReason,
+      now
+    )
+    return
+  }
+
   // Abort/failure/reaper paths: per-step accumulated evidence when any step
   // completed. The title component is charged at its estimate (conservative;
   // documented in ADR-0021).
@@ -921,6 +1312,22 @@ export async function reconcileStaleUsageReservationsPass(
   let reconciled = 0
   let skipped = 0
   for (const reservation of candidates) {
+    if (reservation.settlementDeadlineAt !== undefined) {
+      // A pending cancellation settlement that somehow outlived its deadline
+      // AND the deadline reconciler: finalize through the same fallback path,
+      // never the legacy full-estimate charge.
+      const pendingRun = reservation.generationRunId
+        ? await ctx.db.get(reservation.generationRunId)
+        : null
+      await finalizePendingTerminalUsage(ctx, {
+        reservation,
+        evidence: terminalSettlementFallbackEvidence(reservation, pendingRun),
+        source: "deadline",
+        now,
+      })
+      reconciled++
+      continue
+    }
     if (reservation.generationRunId === undefined) {
       // No run was ever created — provider work structurally never began.
       await releaseReservation(ctx, reservation, "reconciled_unattached", now)

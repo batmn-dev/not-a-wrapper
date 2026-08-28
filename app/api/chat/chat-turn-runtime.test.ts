@@ -1315,6 +1315,50 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     }
   })
 
+  it("a zero-step abort reports started-without-usage, never zero actual usage", async () => {
+    // AI SDK 7 exposes only previously FINISHED steps at abort — an empty
+    // array is not evidence of zero provider usage (ADR-0021 amendment).
+    const harness = makeStreamHarness()
+    const wire = makeWorkerWire()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), { durableWorkerWire: wire }),
+    })
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    await harness.captured.streamOpts.onAbort({ steps: [] })
+
+    const aborted = wireCall(wire, "markGenerationRunAborted")
+    expect(aborted?.args.terminalUsage).toMatchObject({
+      primary: { kind: "started-without-usage" },
+      title: { kind: "not-run" },
+    })
+  })
+
+  it("an abort after finished steps aggregates their usage once", async () => {
+    const harness = makeStreamHarness()
+    const wire = makeWorkerWire()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), { durableWorkerWire: wire }),
+    })
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    await harness.captured.streamOpts.onAbort({
+      steps: [
+        { usage: { inputTokens: 300, outputTokens: 20 } },
+        { usage: { inputTokens: 200, outputTokens: 5 } },
+      ],
+    })
+
+    const aborted = wireCall(wire, "markGenerationRunAborted")
+    expect(aborted?.args.terminalUsage).toMatchObject({
+      primary: { kind: "completed-steps", inputTokens: 500, outputTokens: 25 },
+    })
+  })
+
   it("fail() persists one context-normalized error with the assistant message", async () => {
     // The route's outer catch path: a post-prepare error must reach
     // markGenerationRunFailed with the run AND its placeholder message id —

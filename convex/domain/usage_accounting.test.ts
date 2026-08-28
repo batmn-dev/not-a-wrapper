@@ -6,8 +6,11 @@ import {
   bucketInvariantHolds,
   computeUsageCredits,
   creditsForTokens,
+  isValidTerminalUsageEvidence,
   reservationPayloadFingerprint,
+  resolveTerminalUsageSettlement,
   type BucketBalances,
+  type TerminalReservationFacts,
 } from "./usage_accounting"
 
 describe("credit math (ADR-0021)", () => {
@@ -163,5 +166,246 @@ describe("reservation payload fingerprint", () => {
     expect(reservationPayloadFingerprint(base)).not.toBe(
       reservationPayloadFingerprint(cheaper)
     )
+  })
+
+  it("expands to the v4 shape only when the title input floor is present", () => {
+    // Rollout safety: old-server payloads (no titleEstimatedInputTokens)
+    // keep the exact v3 serialization; new payloads version-bump and cover
+    // the field.
+    expect(reservationPayloadFingerprint(base)).toContain(
+      "usage-reservation-fingerprint-v3"
+    )
+    const widened = { ...base, titleEstimatedInputTokens: 250 }
+    expect(reservationPayloadFingerprint(widened)).toContain(
+      "usage-reservation-fingerprint-v4"
+    )
+    expect(reservationPayloadFingerprint(widened)).not.toBe(
+      reservationPayloadFingerprint({
+        ...base,
+        titleEstimatedInputTokens: 251,
+      })
+    )
+  })
+})
+
+describe("cancellation terminal settlement decision (ADR-0021 amendment)", () => {
+  // Fixture rates: primary $0.75/M in, $4.50/M out; title $0.10/M in,
+  // $0.50/M out (integer micro-USD credits per MTok).
+  const facts: TerminalReservationFacts = {
+    reservedCredits: 100_000,
+    estimatedInputTokens: 1_000,
+    estimatedOutputTokens: 8_192,
+    titleEstimatedCredits: 1_000,
+    titleEstimatedInputTokens: 400,
+    pricingSnapshot: {
+      revision: "rev-1",
+      currency: "USD",
+      primary: {
+        modelId: "gpt-5-mini",
+        routeId: "gpt-5-mini",
+        providerId: "openai",
+        upstreamModelId: "gpt-5-mini",
+        inputCreditsPerMTok: 750_000,
+        outputCreditsPerMTok: 4_500_000,
+      },
+      title: {
+        modelId: "gpt-5-nano",
+        routeId: "gpt-5-nano",
+        providerId: "openai",
+        upstreamModelId: "gpt-5-nano",
+        inputCreditsPerMTok: 100_000,
+        outputCreditsPerMTok: 500_000,
+      },
+    },
+  }
+  const notRun = { kind: "not-run" } as const
+
+  it("releases when provider work never began and no title ran", () => {
+    expect(
+      resolveTerminalUsageSettlement(facts, {
+        primary: { kind: "not-started" },
+        title: notRun,
+      })
+    ).toEqual({ kind: "release" })
+  })
+
+  it("charges the input floor for a first-step stop with no output", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "started-without-usage" },
+      title: notRun,
+    })
+    // 1_000 estimated input × 0.75 = 750; no partial, no title.
+    expect(decision).toMatchObject({
+      kind: "settle",
+      basis: "estimated_input_floor",
+      actualCredits: 750,
+      titleCredits: 0,
+      titleBasis: "not_run",
+    })
+  })
+
+  it("adds bounded persisted partial output on top of the input floor", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "started-without-usage", partialOutputTokens: 2_000 },
+      title: notRun,
+    })
+    expect(decision).toMatchObject({
+      basis: "estimated_input_with_partial_output",
+      actualCredits: 750 + 9_000,
+      outputTokens: 2_000,
+    })
+  })
+
+  it("caps the partial-output estimate at the reserved output tokens", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "started-without-usage", partialOutputTokens: 100_000 },
+      title: notRun,
+    })
+    expect(decision).toMatchObject({ outputTokens: 8_192 })
+  })
+
+  it("caps total fallback credits at the reservation, recording the uncapped value", () => {
+    const tight = { ...facts, reservedCredits: 500 }
+    const decision = resolveTerminalUsageSettlement(tight, {
+      primary: { kind: "started-without-usage" },
+      title: { kind: "started-without-usage" },
+    })
+    // Floor 750 + title floor 40 = 790, clamped to the 500 reservation.
+    expect(decision).toMatchObject({
+      actualCredits: 500,
+      uncappedCredits: 790,
+    })
+  })
+
+  it("prices completed-step usage without double-counting the partial estimate", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      // The partial estimate covers ALL persisted output, completed steps
+      // included: output = max(observed, partial), never the sum.
+      primary: {
+        kind: "completed-steps",
+        inputTokens: 1_000,
+        outputTokens: 100,
+        partialOutputTokens: 500,
+      },
+      title: notRun,
+    })
+    expect(decision).toMatchObject({
+      basis: "observed_partial",
+      inputTokens: 1_000,
+      outputTokens: 500,
+      actualCredits: 750 + 2_250,
+    })
+  })
+
+  it("lets provider-reported actual usage honestly exceed the reservation", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "actual", inputTokens: 2_000_000_000, outputTokens: 0 },
+      title: notRun,
+    })
+    expect(decision).toMatchObject({ basis: "actual" })
+    expect(
+      decision.kind === "settle" ? decision.actualCredits : 0
+    ).toBeGreaterThan(facts.reservedCredits)
+    expect(decision.kind === "settle" && decision.uncappedCredits).toBeFalsy()
+  })
+
+  it("prices title actual usage at the pinned attempted route", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "started-without-usage" },
+      title: {
+        kind: "actual",
+        routeId: "gpt-5-nano",
+        pricingRole: "title",
+        inputTokens: 400,
+        outputTokens: 8,
+      },
+    })
+    expect(decision).toMatchObject({ titleCredits: 44, titleBasis: "actual" })
+  })
+
+  it("charges a started title at its input floor for the attempted route", () => {
+    // Fallback attempt on the PRIMARY route: the floor prices at the primary
+    // rate (400 × 0.75 = 300), still capped by the title reservation.
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "started-without-usage" },
+      title: {
+        kind: "started-without-usage",
+        routeId: "gpt-5-mini",
+        pricingRole: "primary",
+      },
+    })
+    expect(decision).toMatchObject({
+      titleCredits: 300,
+      titleBasis: "input_floor",
+      titleRouteUnrecognized: false,
+    })
+  })
+
+  it("flags an unpinned title route and falls back to the pinned title floor", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "started-without-usage" },
+      title: {
+        kind: "actual",
+        routeId: "unknown-route",
+        pricingRole: "title",
+        inputTokens: 400,
+        outputTokens: 8,
+      },
+    })
+    // 400 title-floor tokens × 0.10 = 40 at the pinned title rate.
+    expect(decision).toMatchObject({
+      titleCredits: 40,
+      titleBasis: "input_floor",
+      titleRouteUnrecognized: true,
+    })
+  })
+
+  it("settles only the title when it started but the primary never did", () => {
+    const decision = resolveTerminalUsageSettlement(facts, {
+      primary: { kind: "not-started" },
+      title: { kind: "started-without-usage" },
+    })
+    expect(decision).toMatchObject({ actualCredits: 40, titleCredits: 40 })
+  })
+
+  it("falls back to the legacy title estimate when no input floor was pinned", () => {
+    const legacy = { ...facts, titleEstimatedInputTokens: undefined }
+    const decision = resolveTerminalUsageSettlement(legacy, {
+      primary: { kind: "started-without-usage" },
+      title: { kind: "started-without-usage" },
+    })
+    expect(decision).toMatchObject({ titleCredits: 1_000 })
+  })
+
+  it("rejects malformed and negative token counts", () => {
+    expect(
+      isValidTerminalUsageEvidence({
+        primary: { kind: "started-without-usage", partialOutputTokens: -1 },
+        title: notRun,
+      })
+    ).toBe(false)
+    expect(
+      isValidTerminalUsageEvidence({
+        primary: { kind: "actual", inputTokens: Number.NaN },
+        title: notRun,
+      })
+    ).toBe(false)
+    expect(
+      isValidTerminalUsageEvidence({
+        primary: { kind: "completed-steps", inputTokens: 10, outputTokens: 2 },
+        title: {
+          kind: "actual",
+          routeId: "gpt-5-nano",
+          pricingRole: "title",
+          inputTokens: 1.5,
+        },
+      })
+    ).toBe(false)
+    expect(
+      isValidTerminalUsageEvidence({
+        primary: { kind: "not-started" },
+        title: notRun,
+      })
+    ).toBe(true)
   })
 })

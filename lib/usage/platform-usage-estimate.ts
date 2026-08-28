@@ -2,6 +2,12 @@ import {
   computeUsageCredits,
   type PricingSnapshot,
 } from "@/convex/domain/usage_accounting"
+import { CHAT_TITLE_MAX_OUTPUT_TOKENS } from "@/lib/chat-title-prompt"
+import {
+  CHARS_PER_TOKEN,
+  estimateTitleInputTokens,
+  PER_MESSAGE_OVERHEAD_TOKENS,
+} from "@/lib/usage/terminal-usage-estimate"
 import type { UIMessage } from "ai"
 
 /**
@@ -66,18 +72,25 @@ export function platformOutputTokenBudget(
   return PLATFORM_OUTPUT_TOKEN_RESERVATION + fixedThinking
 }
 
-const CHARS_PER_TOKEN = 4
-const PER_MESSAGE_OVERHEAD_TOKENS = 12
+// Character/token vocabulary shared with the terminal-usage estimators —
+// declared once in lib/usage/terminal-usage-estimate.ts.
 const IMAGE_ATTACHMENT_TOKENS = 1_100
 const TOOL_ALLOWANCE_TOKENS = 2_000
 const TITLE_INPUT_TOKENS_MAX = 1_000 // 4000-char title input cap / 4
-const TITLE_OUTPUT_TOKENS = 48
+const TITLE_OUTPUT_TOKENS = CHAT_TITLE_MAX_OUTPUT_TOKENS
 
 export type PlatformUsageEstimate = {
   estimatedInputTokens: number
   estimatedOutputTokens: number
-  /** Title component, priced at the title route's own rates. */
+  /** Title component ceiling, priced at the title route's own rates. */
   titleEstimatedCredits: number
+  /**
+   * Input-only title floor for the ACTUAL prompt this turn's title call
+   * would send (clipped user text + instructions + wrapper). Pinned on the
+   * reservation so a cancelled title attempt settles at its input floor
+   * instead of the full title estimate (ADR-0021 cancellation amendment).
+   */
+  titleEstimatedInputTokens: number
   /** Total admission-control reservation, title included. */
   estimatedCredits: number
 }
@@ -142,8 +155,13 @@ export function estimatePlatformUsage(args: {
     outputTokens,
   })
   const titleRate = args.pricingSnapshot.title ?? args.pricingSnapshot.primary
+  // Floor from the actual title prompt; ceiling from whichever is larger, so
+  // the reserved title component always covers a settled input floor.
+  const titleEstimatedInputTokens = estimateTitleInputTokens(
+    firstUserMessageText(args.messages)
+  )
   const titleEstimatedCredits = computeUsageCredits(titleRate, {
-    inputTokens: TITLE_INPUT_TOKENS_MAX,
+    inputTokens: Math.max(TITLE_INPUT_TOKENS_MAX, titleEstimatedInputTokens),
     outputTokens: TITLE_OUTPUT_TOKENS,
   })
 
@@ -151,6 +169,22 @@ export function estimatePlatformUsage(args: {
     estimatedInputTokens: inputTokens,
     estimatedOutputTokens: outputTokens,
     titleEstimatedCredits,
+    titleEstimatedInputTokens,
     estimatedCredits: primaryCredits + titleEstimatedCredits,
   }
+}
+
+/** The text the title call names the chat from: the first user message. */
+function firstUserMessageText(messages: UIMessage[]): string {
+  for (const message of messages) {
+    if (message.role !== "user") continue
+    let text = ""
+    for (const part of message.parts ?? []) {
+      if (part.type === "text" && typeof part.text === "string") {
+        text += part.text
+      }
+    }
+    return text
+  }
+  return ""
 }

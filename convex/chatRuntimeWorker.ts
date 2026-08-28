@@ -12,8 +12,14 @@ import {
   recordToolInvocationsForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
+import { isTerminalGenerationRunStatus } from "./domain/message_contract"
+import {
+  isValidTerminalUsageEvidence,
+  type TerminalUsageEvidencePayload,
+} from "./domain/usage_accounting"
 import type { AuthenticatedRunOwner } from "./lib/auth"
 import { timingSafeEqualHex } from "./lib/sha256"
+import { finalizePendingTerminalUsage } from "./usageAllowance"
 
 // Chat-turn worker mutations (ADR-0011): the execution-grant half of durable
 // settlement. The /chat-turn/worker HTTP action authenticates a Bearer secret
@@ -191,4 +197,94 @@ export const heartbeatGenerationRun = internalMutation({
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return heartbeatGenerationRunForChat(ctx, owner)
   },
+})
+
+/** Terminal reasons whose reservation may await a settlement-only receipt. */
+const RECEIPT_ELIGIBLE_TERMINAL_REASONS = new Set(["user_stop", "superseded"])
+
+function rejectTerminalUsageReceipt(
+  reason: string,
+  code: GrantRejectionCode = "grant_unauthorized"
+): never {
+  console.warn(
+    JSON.stringify({ _tag: "usage_terminal_evidence_rejected", reason })
+  )
+  throw grantRejection(code)
+}
+
+/**
+ * The settlement-only terminal-usage receipt (ADR-0021 cancellation
+ * amendment). Authenticates the SAME raw worker secret against the
+ * reservation's `settlementGrantDigest` — copied there by the Stop/supersede
+ * transaction that revoked the normal run grant — so a stopped worker keeps
+ * exactly one capability: finalizing allowance for its own run's pending
+ * reservation before the evidence deadline. It can patch no message, run,
+ * chat, tool, approval, lease, or grant state.
+ */
+export async function finalizeTerminalUsageWithSettlementGrant(
+  ctx: MutationCtx,
+  {
+    runId,
+    grantDigest,
+    reservationId,
+    terminalUsage,
+  }: GrantAuthArgs & DurableWorkerPayloads["finalizeTerminalUsage"]
+): Promise<{ outcome: "settled" | "released" | "already-finalized" }> {
+  {
+    const now = Date.now()
+    const reservation = await ctx.db.get(reservationId)
+    if (!reservation) rejectTerminalUsageReceipt("reservation_missing")
+
+    // A cleared digest with a finalized reservation is the benign
+    // double-delivery case (the receipt raced the deadline reconciler, or
+    // both terminal writes attempted it): acknowledge, never 401-storm.
+    if (reservation.settlementGrantDigest === undefined) {
+      if (reservation.status !== "reserved") {
+        return { outcome: "already-finalized" as const }
+      }
+      rejectTerminalUsageReceipt("settlement_not_pending")
+    }
+    if (!timingSafeEqualHex(reservation.settlementGrantDigest, grantDigest)) {
+      rejectTerminalUsageReceipt("digest_mismatch")
+    }
+    if (
+      reservation.settlementGrantExpiresAt === undefined ||
+      reservation.settlementGrantExpiresAt <= now
+    ) {
+      rejectTerminalUsageReceipt("settlement_grant_expired", "grant_expired")
+    }
+    // Exact linkage: the receipt may target only the run/reservation pair the
+    // Stop transaction bound together, and only while that run is terminal
+    // for a cancellation-like reason.
+    if (reservation.generationRunId !== runId) {
+      rejectTerminalUsageReceipt("wrong_run")
+    }
+    const run = await ctx.db.get(runId)
+    if (
+      !run ||
+      !isTerminalGenerationRunStatus(run.status) ||
+      !run.terminalReason ||
+      !RECEIPT_ELIGIBLE_TERMINAL_REASONS.has(run.terminalReason)
+    ) {
+      rejectTerminalUsageReceipt("run_not_receipt_eligible")
+    }
+    if (!isValidTerminalUsageEvidence(terminalUsage)) {
+      throw new Error("Invalid terminal usage evidence")
+    }
+
+    const evidence: TerminalUsageEvidencePayload = terminalUsage
+    const outcome = await finalizePendingTerminalUsage(ctx, {
+      reservation,
+      evidence,
+      source: "worker_receipt",
+      now,
+    })
+    return { outcome }
+  }
+}
+
+export const finalizeTerminalUsage = internalMutation({
+  args: { ...grantArgs, ...generationRunWriteArgs.finalizeTerminalUsage },
+  handler: async (ctx, args) =>
+    finalizeTerminalUsageWithSettlementGrant(ctx, args),
 })

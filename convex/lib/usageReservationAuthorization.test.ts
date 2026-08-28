@@ -110,6 +110,39 @@ describe("usage reservation authorization", () => {
     ).toBe(false)
   })
 
+  it("covers the title input floor with a versioned proof expansion", () => {
+    // New payloads sign the widened v2 tuple; a payload WITHOUT the field
+    // keeps the exact v1 serialization (the rollout window's old-server
+    // proofs stay verifiable — pinned by the tests above, which omit it).
+    const widened = { ...payload, titleEstimatedInputTokens: 250 }
+    const proof = signUsageReservationAuthorization(widened, SECRET)
+    expect(
+      verifyUsageReservationAuthorization(widened, proof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(true)
+    // Tampering with, adding, or stripping the field breaks the proof.
+    for (const tampered of [
+      { ...widened, titleEstimatedInputTokens: 251 },
+      { ...widened, titleEstimatedInputTokens: undefined },
+    ]) {
+      expect(
+        verifyUsageReservationAuthorization(tampered, proof, {
+          secret: SECRET,
+          now: NOW,
+        })
+      ).toBe(false)
+    }
+    expect(
+      verifyUsageReservationAuthorization(
+        widened,
+        signUsageReservationAuthorization(payload, SECRET),
+        { secret: SECRET, now: NOW }
+      )
+    ).toBe(false)
+  })
+
   it("rejects expired and materially future-dated authorizations", () => {
     const proof = signUsageReservationAuthorization(payload, SECRET)
 

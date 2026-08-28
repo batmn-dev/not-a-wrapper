@@ -70,6 +70,7 @@ function serializeAuthorization(
     estimatedInputTokens,
     estimatedOutputTokens,
     titleEstimatedCredits,
+    titleEstimatedInputTokens,
     pricingSnapshot,
     issuedAt,
     ...unserialized
@@ -79,8 +80,7 @@ function serializeAuthorization(
     pricingSnapshot
   unserializedPricing satisfies Record<string, never>
 
-  return JSON.stringify([
-    "usage-reservation-authorization-v1",
+  const base = [
     workosUserId,
     usageReservationAuthorizationAudience(deploymentUrl),
     requestId,
@@ -99,7 +99,21 @@ function serializeAuthorization(
       title ? serializePricingRate(title) : null,
     ],
     issuedAt,
-  ])
+  ] as const
+  // Versioned expansion (rollout safety): payloads without the title input
+  // floor keep the exact v1 serialization, so proofs signed by the previous
+  // server build verify across the deploy; payloads carrying it sign the
+  // widened v2 tuple. Both sides derive the version from the same payload,
+  // so signer and verifier can never disagree.
+  return JSON.stringify(
+    titleEstimatedInputTokens === undefined
+      ? ["usage-reservation-authorization-v1", ...base]
+      : [
+          "usage-reservation-authorization-v2",
+          ...base,
+          titleEstimatedInputTokens,
+        ]
+  )
 }
 
 /** Sign one server-derived allowance reservation for one authenticated user. */

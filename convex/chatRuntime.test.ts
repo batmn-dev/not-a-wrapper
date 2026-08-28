@@ -5542,6 +5542,97 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
     })
   })
 
+  it("a user Stop marks accounting pending instead of charging the estimate", async () => {
+    // Cancellation amendment: Stop commits aborted/user_stop and revokes the
+    // run grant immediately, but the reservation stays HELD — the stopped
+    // worker's receipt or the deadline reconciler settles from evidence.
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    fixture.tables.generationRuns[0] = {
+      ...fixture.tables.generationRuns[0]!,
+      grantDigest: "grant-digest-1",
+      grantExpiresAt: Date.now() + 60_000,
+    }
+    fixture.chat.statusRunId = fixture.runId
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    const result = await stopGenerationRunForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId)
+    )
+    expect(result.outcome).toBe("stopped")
+    // Visible terminality + normal-authority revocation are immediate…
+    expect(tables.generationRuns[0]).toMatchObject({
+      status: "aborted",
+      terminalReason: "user_stop",
+      grantDigest: undefined,
+    })
+    // …while accounting defers: still reserved (blocking overspend), with
+    // the settlement-only capability copied before revocation.
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "reserved",
+      settlementGrantDigest: "grant-digest-1",
+      providerMayHaveStarted: true,
+    })
+    expect(
+      tables.usageReservations[0]!.settlementDeadlineAt
+    ).toBeGreaterThan(Date.now())
+    expect(tables.usageBuckets[0]).toMatchObject({
+      reservedCredits: 100_000,
+      spentCredits: 0,
+    })
+    expect(
+      tables.usageLedgerEntries.filter(
+        (entry) => entry.type === "settle" || entry.type === "release"
+      )
+    ).toHaveLength(0)
+  })
+
+  it("a worker abort carrying terminal evidence settles from it atomically", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        reason: "stream aborted",
+        terminalUsage: {
+          primary: {
+            kind: "completed-steps",
+            inputTokens: 1_000,
+            outputTokens: 100,
+          },
+          title: { kind: "not-run" },
+        },
+      }
+    )
+
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "observed_partial",
+      actualCredits: 1_200,
+      titleSettlementBasis: "not_run",
+    })
+  })
+
+  it("rejects malformed terminal evidence before any state change", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await expect(
+      markGenerationRunAbortedForChat(ctx, await runOwner(ctx, fixture.runId), {
+        messageId: fixture.messageId,
+        terminalUsage: {
+          primary: { kind: "actual", inputTokens: -5 },
+          title: { kind: "not-run" },
+        },
+      })
+    ).rejects.toThrow("Invalid terminal usage evidence")
+    expect(tables.generationRuns[0]!.status).toBe("streaming")
+    expect(tables.usageReservations[0]!.status).toBe("reserved")
+  })
+
   it("a post-provider-work abort without usage settles the estimate", async () => {
     const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
     const { ctx, tables } = createMutationCtx(fixture.tables)
@@ -5632,7 +5723,10 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
     })
   })
 
-  it("the lease reaper settles a dead worker's reservation conservatively", async () => {
+  it("the lease reaper settles a dead worker's reservation at the input floor", async () => {
+    // Cancellation amendment: a reaped lease has no worker to report usage,
+    // so it settles from durable facts — estimated input plus the title
+    // input floor — never the legacy full-reservation charge.
     const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
     fixture.tables.generationRuns[0] = {
       ...fixture.tables.generationRuns[0]!,
@@ -5643,9 +5737,13 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
 
     const { reaped } = await reapExpiredGenerationRunsPass(ctx)
     expect(reaped).toBe(1)
+    // No estimatedInputTokens on the fixture → primary floor 0; title floor
+    // falls back to titleEstimatedCredits (500). Far below the 100k reserve.
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
-      settlementBasis: "estimated_after_unknown_usage",
+      settlementBasis: "estimated_input_floor",
+      titleSettlementBasis: "input_floor",
+      actualCredits: 500,
     })
   })
 

@@ -47,6 +47,18 @@ crons.interval(
   internal.deletionCleanup.reconcileStalledDeletionJobs
 )
 
+// Pending cancellation settlements (ADR-0021 cancellation amendment): a user
+// Stop/supersession keeps its reservation held for a bounded evidence window;
+// this pass finalizes any whose worker receipt never arrived by the deadline.
+// Second-level cadence so a due reservation converges within at most two
+// intervals; bounded per tick and idempotent.
+crons.interval(
+  "finalize due cancellation settlements",
+  { seconds: 15 },
+  internal.usageAllowance.reconcileDueTerminalSettlements,
+  {}
+)
+
 // Stale platform-usage reservations (ADR-0021): the final accounting net for
 // reservations whose settlement was lost (exhausted retries, crash, deploy).
 // Bounded per tick; applies the provider-boundary rule — it never blindly

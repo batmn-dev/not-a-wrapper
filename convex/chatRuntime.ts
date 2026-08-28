@@ -77,8 +77,14 @@ import {
   type PersistedReasoningEffort,
 } from "./lib/reasoningEffort"
 import { sha256Hex, timingSafeEqualHex } from "./lib/sha256"
+import { vTerminalUsageEvidence } from "./lib/usageValidators"
+import {
+  isValidTerminalUsageEvidence,
+  type TerminalUsageEvidencePayload,
+} from "./domain/usage_accounting"
 import {
   attachReservationToRun,
+  deferUsageSettlementForTerminalRun,
   settleUsageForTerminalRun,
   type TitleUsageEvidence,
 } from "./usageAllowance"
@@ -213,10 +219,25 @@ export const generationRunWriteArgs = {
     messageId: v.optional(v.id("messages")),
     reason: v.optional(v.string()),
     workDurationMs: v.optional(v.number()),
+    // Cancellation terminal-usage evidence (ADR-0021 cancellation
+    // amendment): completed-step aggregates, partial-output estimate, and
+    // title attempt facts, settled atomically when this worker still owns
+    // the run. Optional for active old workers during the deployment window.
+    terminalUsage: v.optional(vTerminalUsageEvidence),
   },
   // The lease heartbeat (gameplan §6) — no payload beyond the run identity
   // the wire adds; the server clock is authoritative.
   heartbeatGenerationRun: {},
+  // Settlement-only terminal-usage receipt (ADR-0021 cancellation
+  // amendment). UNLIKE every op above, this one does NOT authenticate
+  // against the run's execution grant — a Stop/supersession revoked that —
+  // but against the settlement digest the Stop transaction copied onto the
+  // reservation. It can settle or release allowance for exactly this
+  // run/reservation pair and nothing else.
+  finalizeTerminalUsage: {
+    reservationId: v.id("usageReservations"),
+    terminalUsage: vTerminalUsageEvidence,
+  },
 }
 
 const vStoredMessage = v.object({
@@ -702,8 +723,13 @@ async function applyLifecycleVerdict(
   verdict: Extract<LifecycleVerdict, { kind: "transition" }>,
   resolved: ResolvedAssistantMessage | null,
   now: number,
-  explicitWorkDurationMs?: number
+  explicitWorkDurationMs?: number,
+  terminalUsage?: TerminalUsageEvidencePayload
 ): Promise<Id<"messages"> | undefined> {
+  // The accounting hooks below read PRE-terminal run facts (grant digest,
+  // usage, boundary markers). Snapshot them before the terminal patch so the
+  // grant revocation can never race the settlement-capability copy.
+  const preTerminalRun: Doc<"generationRuns"> = { ...run }
   const workDurationMs = resolveWorkDurationMs(run, now, explicitWorkDurationMs)
   let assistantMessageId = run.assistantMessageId
   if (resolved) {
@@ -753,17 +779,29 @@ async function applyLifecycleVerdict(
   // Allowance accounting rides the SAME transaction as the terminal commit
   // (ADR-0021): every lifecycle-verdict terminal (fail/abort/stop/supersede/
   // lease-expired/approval-expired/continuation-lost) applies the provider-
-  // boundary rule — release before workStartedAt, settle observed or
-  // estimated usage after. Idempotent; BYOK/anonymous runs have no
-  // reservation and no-op structurally.
+  // boundary rule — release before provider work structurally began, settle
+  // observed or estimated usage after. Idempotent; BYOK/anonymous runs have
+  // no reservation and no-op structurally.
+  //
+  // Cancellation amendment: a user Stop or supersession carries no usage
+  // evidence by design, so instead of settling here it marks the reservation
+  // accounting-pending — the stopped worker's settlement-only receipt or the
+  // deadline reconciler finalizes from real evidence. The visible run is
+  // already `aborted` above; only the reservation defers.
   if (verdict.run.settle) {
-    await settleUsageForTerminalRun(
-      ctx,
-      run,
-      {},
-      verdict.run.terminalReason ?? verdict.run.status,
-      verdict.run.terminalReason
-    )
+    const reason = verdict.run.terminalReason
+    const deferred =
+      (reason === "user_stop" || reason === "superseded") &&
+      (await deferUsageSettlementForTerminalRun(ctx, preTerminalRun, reason, now))
+    if (!deferred) {
+      await settleUsageForTerminalRun(
+        ctx,
+        preTerminalRun,
+        terminalUsage ? { terminal: terminalUsage } : {},
+        verdict.run.terminalReason ?? verdict.run.status,
+        verdict.run.terminalReason
+      )
+    }
   }
 
   return assistantMessageId
@@ -885,6 +923,10 @@ async function closeSupersededGenerationsForChat(
           { kind: "supersede", reason }
         )
         if (verdict.kind === "transition") {
+          // Pre-terminal snapshot for the accounting hooks (see
+          // applyLifecycleVerdict): the patch below revokes the grant the
+          // deferral must copy.
+          const preTerminalRun: Doc<"generationRuns"> = { ...run }
           await ctx.db.patch(run._id, {
             status: verdict.run.status,
             error: verdict.run.error,
@@ -899,13 +941,25 @@ async function closeSupersededGenerationsForChat(
             assistantMessageId: supersededMessageId,
           })
           if (verdict.run.settle) {
-            await settleUsageForTerminalRun(
-              ctx,
-              run,
-              {},
-              "superseded",
-              verdict.run.terminalReason
-            )
+            // Same deferral as the in-window supersede: cancellation-like
+            // terminals mark accounting pending instead of settling blind.
+            const deferred =
+              verdict.run.terminalReason === "superseded" &&
+              (await deferUsageSettlementForTerminalRun(
+                ctx,
+                preTerminalRun,
+                "superseded",
+                now
+              ))
+            if (!deferred) {
+              await settleUsageForTerminalRun(
+                ctx,
+                preTerminalRun,
+                {},
+                "superseded",
+                verdict.run.terminalReason
+              )
+            }
           }
         }
       }
@@ -2574,10 +2628,16 @@ export async function markGenerationRunAbortedForChat(
     messageId?: Id<"messages">
     reason?: string
     workDurationMs?: number
+    terminalUsage?: TerminalUsageEvidencePayload
   }
 ) {
   const { run } = owner
   const now = nowMs()
+  // Malformed or negative token counts are rejected before any pricing math
+  // (ADR-0021 cancellation amendment).
+  if (args.terminalUsage && !isValidTerminalUsageEvidence(args.terminalUsage)) {
+    throw new Error("Invalid terminal usage evidence")
+  }
   // First-terminal-wins and the empty-placeholder policy both live in the
   // Generation run lifecycle's `abort` rule. Gate before gathering: the ignore
   // decision reads only the run status, and the double-terminal race (onAbort
@@ -2595,7 +2655,8 @@ export async function markGenerationRunAbortedForChat(
     verdict,
     resolved,
     now,
-    args.workDurationMs
+    args.workDurationMs,
+    args.terminalUsage
   )
 }
 

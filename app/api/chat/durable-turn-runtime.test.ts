@@ -1684,3 +1684,124 @@ describe("durable turn runtime — fail() at each phase", () => {
     }
   })
 })
+
+describe("durable turn runtime — cancellation terminal-usage evidence (ADR-0021 amendment)", () => {
+  const RESERVATION_ID = "res1" as Id<"usageReservations">
+
+  it("ships abort evidence with the terminal write, adding the partial estimate", async () => {
+    const { turn, wire } = await makePreparedTurn({
+      input: { reservationId: RESERVATION_ID },
+    })
+    const binding = turn.bind(makeToolFacts())
+    binding.stream.onChunk({
+      type: "text-delta",
+      text: "partial answer!!",
+    } as TextStreamPart<ToolSet>)
+
+    await binding.stream.onAbort("stream aborted", 1_000, {
+      primary: { kind: "completed-steps", inputTokens: 500, outputTokens: 20 },
+      title: {
+        kind: "started-without-usage",
+        routeId: "title-route",
+        pricingRole: "title",
+      },
+    })
+
+    const aborts = wireCalls(wire, "markGenerationRunAborted")
+    expect(aborts).toHaveLength(1)
+    // 16 persisted characters → 4 estimated partial-output tokens.
+    expect(aborts[0]!.args.terminalUsage).toEqual({
+      primary: {
+        kind: "completed-steps",
+        inputTokens: 500,
+        outputTokens: 20,
+        partialOutputTokens: 4,
+      },
+      title: {
+        kind: "started-without-usage",
+        routeId: "title-route",
+        pricingRole: "title",
+      },
+    })
+    // The terminal write landed the evidence — no settlement-only receipt.
+    expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
+  })
+
+  it("submits the settlement-only receipt exactly once when Stop settled first", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new DurableWorkerWriteError({
+              op: "markGenerationRunAborted",
+              status: 401,
+              detail: "",
+              grantRejection: "grant_unauthorized",
+            })
+          },
+          finalizeTerminalUsage: () => ({
+            ok: true,
+            result: { outcome: "settled" },
+          }),
+        },
+      })
+      const { turn } = await makePreparedTurn({
+        wire,
+        input: { reservationId: RESERVATION_ID },
+      })
+      const binding = turn.bind(makeToolFacts())
+
+      await binding.stream.onAbort("stream aborted", 1_000, {
+        primary: { kind: "started-without-usage" },
+        title: { kind: "not-run" },
+      })
+      // The envelope's second abort resolves settled-elsewhere via the local
+      // gate — it must NOT submit a second receipt.
+      await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        terminalFacts: { title: { kind: "not-run" } },
+      })
+
+      const receipts = wireCalls(wire, "finalizeTerminalUsage")
+      expect(receipts).toHaveLength(1)
+      expect(receipts[0]!.args).toMatchObject({
+        runId: "run1",
+        reservationId: RESERVATION_ID,
+      })
+      expect(receipts[0]!.args.terminalUsage.primary).toMatchObject({
+        kind: "started-without-usage",
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("skips the receipt entirely for turns without a reservation", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new DurableWorkerWriteError({
+              op: "markGenerationRunAborted",
+              status: 401,
+              detail: "",
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      await binding.stream.onAbort("stream aborted", 1_000, {
+        primary: { kind: "started-without-usage" },
+        title: { kind: "not-run" },
+      })
+      expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})

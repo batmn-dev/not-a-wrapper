@@ -1,7 +1,11 @@
 import type { Infer } from "convex/values"
 import type {
   vPricingSnapshot,
+  vPrimaryTerminalUsageEvidence,
   vRoutePricingRate,
+  vTerminalUsageEvidence,
+  vTitleSettlementBasis,
+  vTitleTerminalUsageEvidence,
   vUsageReservationArgs,
 } from "../lib/usageValidators"
 
@@ -71,9 +75,215 @@ export type SettlementBasis =
   /** Terminal without an onEnd aggregate; settled from per-step accumulated
    * usage evidence (abort/failure mid-stream). */
   | "observed_partial"
-  /** Provider work started but no usage evidence survived; the reserved
-   * estimate is charged rather than silently refunded. */
+  /** LEGACY: provider work started but no usage evidence survived; the full
+   * reserved estimate was charged. Historical rows remain readable, but new
+   * user_stop/superseded settlements never write it (cancellation
+   * amendment) — they use the two bases below instead. */
   | "estimated_after_unknown_usage"
+  /** Cancellation with no completed step and no persisted output: only the
+   * estimated input is charged. */
+  | "estimated_input_floor"
+  /** Cancellation with persisted partial assistant output: estimated input
+   * plus a bounded estimate of the partial output. */
+  | "estimated_input_with_partial_output"
+
+export type TitleSettlementBasis = Infer<typeof vTitleSettlementBasis>
+
+// Cancellation terminal-usage evidence (ADR-0021 amendment): the normalized
+// domain shapes both the live worker receipt and the deadline reconciler
+// settle through. One decision tree — never two billing paths.
+export type PrimaryTerminalUsageEvidence = Infer<
+  typeof vPrimaryTerminalUsageEvidence
+>
+export type TitleTerminalUsageEvidence = Infer<
+  typeof vTitleTerminalUsageEvidence
+>
+export type TerminalUsageEvidencePayload = Infer<typeof vTerminalUsageEvidence>
+
+/** Reservation facts the terminal settlement decision prices against. */
+export type TerminalReservationFacts = {
+  reservedCredits: number
+  estimatedInputTokens?: number
+  estimatedOutputTokens?: number
+  titleEstimatedCredits?: number
+  titleEstimatedInputTokens?: number
+  pricingSnapshot: PricingSnapshot
+}
+
+export type TerminalSettlementDecision =
+  | { kind: "release" }
+  | {
+      kind: "settle"
+      actualCredits: number
+      basis: SettlementBasis
+      titleCredits: number
+      titleBasis: TitleSettlementBasis
+      inputTokens?: number
+      outputTokens?: number
+      /** Present when the reservation cap clamped a fallback total. */
+      uncappedCredits?: number
+      /** Evidence named a route the pinned snapshot does not know. */
+      titleRouteUnrecognized: boolean
+    }
+
+/** Reject malformed or negative token counts before any pricing math. */
+export function isValidTerminalUsageEvidence(
+  evidence: TerminalUsageEvidencePayload
+): boolean {
+  const { primary, title } = evidence
+  const primaryValid =
+    primary.kind === "not-started" ||
+    (primary.kind === "actual"
+      ? isValidTokenEstimate(primary.inputTokens) &&
+        isValidTokenEstimate(primary.outputTokens)
+      : primary.kind === "completed-steps"
+        ? isValidTokenEstimate(primary.inputTokens) &&
+          isValidTokenEstimate(primary.outputTokens) &&
+          isValidTokenEstimate(primary.partialOutputTokens)
+        : isValidTokenEstimate(primary.partialOutputTokens))
+  const titleValid =
+    title.kind !== "actual" ||
+    (isValidTokenEstimate(title.inputTokens) &&
+      isValidTokenEstimate(title.outputTokens))
+  return primaryValid && titleValid
+}
+
+/**
+ * The ONE cancellation-settlement decision (ADR-0021 amendment §9): maps a
+ * reservation's pinned facts plus normalized terminal evidence to a settle or
+ * release. Deterministic evidence order — authoritative usage beats
+ * estimates, estimates are never added on top of the observed component they
+ * approximate, and locally estimated fallbacks are capped by the reservation
+ * while provider-reported usage may honestly exceed it.
+ */
+export function resolveTerminalUsageSettlement(
+  reservation: TerminalReservationFacts,
+  evidence: TerminalUsageEvidencePayload
+): TerminalSettlementDecision {
+  const snapshot = reservation.pricingSnapshot
+  const pinnedTitleRate = snapshot.title ?? snapshot.primary
+
+  // --- Title component: independent basis, priced only at pinned rates.
+  const title = evidence.title
+  let titleCredits = 0
+  let titleBasis: TitleSettlementBasis = "not_run"
+  let titleRouteUnrecognized = false
+  const titleFloorCredits = (rate: RoutePricingRate): number => {
+    const floor =
+      reservation.titleEstimatedInputTokens !== undefined
+        ? computeUsageCredits(rate, {
+            inputTokens: reservation.titleEstimatedInputTokens,
+          })
+        : (reservation.titleEstimatedCredits ?? 0)
+    return reservation.titleEstimatedCredits !== undefined
+      ? Math.min(floor, reservation.titleEstimatedCredits)
+      : floor
+  }
+  if (title.kind !== "not-run") {
+    const claimedRate =
+      title.pricingRole === "primary" ? snapshot.primary : pinnedTitleRate
+    const routeMatches =
+      title.routeId === undefined || claimedRate.routeId === title.routeId
+    titleRouteUnrecognized = !routeMatches
+    const rate = routeMatches ? claimedRate : pinnedTitleRate
+    if (
+      title.kind === "actual" &&
+      routeMatches &&
+      (typeof title.inputTokens === "number" ||
+        typeof title.outputTokens === "number")
+    ) {
+      titleCredits = computeUsageCredits(rate, {
+        inputTokens: title.inputTokens,
+        outputTokens: title.outputTokens,
+      })
+      titleBasis = "actual"
+    } else {
+      titleCredits = titleFloorCredits(rate)
+      titleBasis = "input_floor"
+    }
+  }
+
+  // --- Primary component.
+  const cappedPartial = (partialOutputTokens: number | undefined): number => {
+    const partial = normalizeTokenCount(partialOutputTokens)
+    return reservation.estimatedOutputTokens !== undefined
+      ? Math.min(partial, reservation.estimatedOutputTokens)
+      : partial
+  }
+
+  let basis: SettlementBasis
+  let primaryCredits = 0
+  let inputTokens: number | undefined
+  let outputTokens: number | undefined
+  let estimateBased = false
+  switch (evidence.primary.kind) {
+    case "not-started": {
+      // Provider work never began. Release outright unless a title attempt
+      // still needs charging, in which case only the title settles.
+      if (title.kind === "not-run") return { kind: "release" }
+      basis = "estimated_input_floor"
+      estimateBased = true
+      break
+    }
+    case "actual": {
+      inputTokens = evidence.primary.inputTokens
+      outputTokens = evidence.primary.outputTokens
+      primaryCredits = computeUsageCredits(snapshot.primary, {
+        inputTokens,
+        outputTokens,
+      })
+      basis = "actual"
+      break
+    }
+    case "completed-steps": {
+      // The partial estimate covers ALL persisted output, completed steps
+      // included — max(), never sum, so the two are not double-counted.
+      inputTokens = normalizeTokenCount(evidence.primary.inputTokens)
+      outputTokens = Math.max(
+        normalizeTokenCount(evidence.primary.outputTokens),
+        cappedPartial(evidence.primary.partialOutputTokens)
+      )
+      primaryCredits = computeUsageCredits(snapshot.primary, {
+        inputTokens,
+        outputTokens,
+      })
+      basis = "observed_partial"
+      break
+    }
+    case "started-without-usage": {
+      inputTokens = reservation.estimatedInputTokens ?? 0
+      outputTokens = cappedPartial(evidence.primary.partialOutputTokens)
+      primaryCredits = computeUsageCredits(snapshot.primary, {
+        inputTokens,
+        outputTokens,
+      })
+      basis =
+        outputTokens > 0
+          ? "estimated_input_with_partial_output"
+          : "estimated_input_floor"
+      estimateBased = true
+      break
+    }
+  }
+
+  let actualCredits = primaryCredits + titleCredits
+  let uncappedCredits: number | undefined
+  if (estimateBased && actualCredits > reservation.reservedCredits) {
+    uncappedCredits = actualCredits
+    actualCredits = reservation.reservedCredits
+  }
+  return {
+    kind: "settle",
+    actualCredits,
+    basis,
+    titleCredits,
+    titleBasis,
+    inputTokens,
+    outputTokens,
+    ...(uncappedCredits !== undefined ? { uncappedCredits } : {}),
+    titleRouteUnrecognized,
+  }
+}
 
 export type BucketBalances = {
   grantedCredits: number
@@ -205,6 +415,7 @@ export function reservationPayloadFingerprint(
     estimatedInputTokens,
     estimatedOutputTokens,
     titleEstimatedCredits,
+    titleEstimatedInputTokens,
     pricingSnapshot,
     ...unserialized
   } = args
@@ -212,8 +423,7 @@ export function reservationPayloadFingerprint(
   // within that key. Every other mutable fact must be serialized.
   unserialized satisfies Record<string, never>
 
-  return JSON.stringify([
-    "usage-reservation-fingerprint-v3",
+  const base = [
     chatId,
     modelId,
     routeId,
@@ -223,7 +433,16 @@ export function reservationPayloadFingerprint(
     estimatedOutputTokens ?? null,
     titleEstimatedCredits ?? null,
     pricingSnapshotFingerprintValue(pricingSnapshot),
-  ])
+  ] as const
+  // Versioned expansion (rollout safety): a payload WITHOUT the title input
+  // floor serializes byte-identically to the historical v3 shape, so
+  // reservations created by the previous server build replay cleanly across
+  // the deploy; payloads carrying it get the widened v4 shape.
+  return JSON.stringify(
+    titleEstimatedInputTokens === undefined
+      ? ["usage-reservation-fingerprint-v3", ...base]
+      : ["usage-reservation-fingerprint-v4", ...base, titleEstimatedInputTokens]
+  )
 }
 
 /** Validate an integer credit amount crossing a trust boundary. */
@@ -268,6 +487,7 @@ export function isValidUsageReservationArgs(
     isValidTokenEstimate(args.estimatedOutputTokens) &&
     (args.titleEstimatedCredits === undefined ||
       isValidCreditAmount(args.titleEstimatedCredits)) &&
+    isValidTokenEstimate(args.titleEstimatedInputTokens) &&
     isValidPricingSnapshot(args.pricingSnapshot)
   )
 }

@@ -1,6 +1,8 @@
 # Cancellation-aware platform usage settlement
 
-> **Status:** Approved implementation plan
+> **Status:** Implemented 2026-08-28 (Phases 1–6; ADR-0021 amended). The
+> rollout "Contract" step (removing legacy proof acceptance) remains
+> deliberately open until rollback no longer needs it.
 > **Date:** 2026-08-28
 > **Scope:** Platform-funded durable chat turns only
 > **Required architecture update:** Amend

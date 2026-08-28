@@ -5,13 +5,17 @@ import type { PricingSnapshot } from "./domain/usage_accounting"
 import { signUsageReservationAuthorization } from "./lib/usageReservationAuthorization"
 import {
   attachReservationToRun,
+  deferUsageSettlementForTerminalRun,
   ensureCurrentUsageBucket,
+  finalizePendingTerminalUsage,
+  reconcileDueTerminalSettlementsPass,
   reconcileStaleUsageReservationsPass,
   releaseUnattachedForUser,
   reserveAuthorizedHandler,
   reserveUsageForUser,
   settleUsageForTerminalRun,
   STALE_RESERVATION_MS,
+  TERMINAL_EVIDENCE_WINDOW_MS,
   type AuthorizedReserveUsageArgs,
   type ReserveUsageArgs,
 } from "./usageAllowance"
@@ -63,7 +67,11 @@ function createCtx(input: Partial<Tables> = {}) {
       query: (tableName: keyof Tables) => ({
         withIndex: (_index: string, build: (q: unknown) => unknown) => {
           const filters = new Map<string, unknown>()
-          const ranges: Array<{ field: string; op: "lt"; value: number }> = []
+          const ranges: Array<{
+            field: string
+            op: "lt" | "lte" | "gt"
+            value: number | undefined
+          }> = []
           const q = {
             eq: (field: string, value: unknown) => {
               filters.set(field, value)
@@ -71,6 +79,16 @@ function createCtx(input: Partial<Tables> = {}) {
             },
             lt: (field: string, value: number) => {
               ranges.push({ field, op: "lt", value })
+              return q
+            },
+            lte: (field: string, value: number) => {
+              ranges.push({ field, op: "lte", value })
+              return q
+            },
+            // Convex orders undefined below every number, so
+            // `.gt(field, undefined)` means "field is defined".
+            gt: (field: string, value: number | undefined) => {
+              ranges.push({ field, op: "gt", value })
               return q
             },
           }
@@ -83,7 +101,18 @@ function createCtx(input: Partial<Tables> = {}) {
             }
             for (const range of ranges) {
               const current = doc[range.field]
-              if (typeof current !== "number" || current >= range.value) {
+              if (range.op === "gt" && range.value === undefined) {
+                if (current === undefined) return false
+                continue
+              }
+              if (typeof current !== "number") return false
+              if (range.op === "lt" && current >= (range.value as number)) {
+                return false
+              }
+              if (range.op === "lte" && current > (range.value as number)) {
+                return false
+              }
+              if (range.op === "gt" && current <= (range.value as number)) {
                 return false
               }
             }
@@ -721,7 +750,10 @@ describe("provider rejection before any output", () => {
     })
   })
 
-  it("never applies the rejection release to a user Stop", async () => {
+  it("never applies the rejection release to a user Stop (legacy rows)", async () => {
+    // Direct settle with a user_stop reason only happens for LEGACY rows
+    // (pre-amendment strands the stale reconciler finds without pending
+    // fields). New Stops defer instead — see the cancellation describe.
     const { ctx, tables } = createCtx({ users: [user] })
     const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
     await settleUsageForTerminalRun(ctx, run, {}, "user_stop", "user_stop")
@@ -744,6 +776,277 @@ describe("title evidence edge cases", () => {
       settlementBasis: "actual_with_estimated_title",
       titleCredits: 1_000,
     })
+  })
+})
+
+describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
+  /** Reserve (with pinned floors) + attach + defer as a user Stop would. */
+  async function pendingStopFixture(
+    ctx: MutationCtx,
+    tables: Tables,
+    options: {
+      runFields?: Partial<Doc<"generationRuns">>
+      skipDefer?: boolean
+    } = {}
+  ) {
+    const reserved = await reserveUsageForUser(
+      ctx,
+      user,
+      reserveArgs({
+        estimatedInputTokens: 1_000,
+        estimatedOutputTokens: 8_192,
+        titleEstimatedInputTokens: 400,
+      })
+    )
+    expect(reserved.kind).toBe("reserved")
+    const reservationId = (
+      reserved as { reservationId: Id<"usageReservations"> }
+    ).reservationId
+    const runId = (await ctx.db.insert("generationRuns", {
+      chatId: "chats_1" as Id<"chats">,
+      userId: user._id,
+      requestId: "req-1",
+      model: "gpt-5-mini",
+      provider: "openai",
+      status: "streaming",
+      workStartedAt: 1,
+      grantDigest: "digest-1",
+      updatedAt: Date.now(),
+      ...options.runFields,
+    } as never)) as Id<"generationRuns">
+    await attachReservationToRun(ctx, {
+      reservationId,
+      requestId: "req-1",
+      userId: user._id,
+      runId,
+      now: Date.now(),
+    })
+    const run = (await ctx.db.get(runId))!
+    if (!options.skipDefer) {
+      const deferred = await deferUsageSettlementForTerminalRun(
+        ctx,
+        run as Doc<"generationRuns">,
+        "user_stop",
+        Date.now()
+      )
+      expect(deferred).toBe(true)
+    }
+    const reservation = tables.usageReservations[0]!
+    return { run: run as Doc<"generationRuns">, reservation }
+  }
+
+  it("a Stop keeps the reservation held and pending, blocking overspend", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables)
+    expect(reservation).toMatchObject({
+      status: "reserved",
+      settlementGrantDigest: "digest-1",
+      providerMayHaveStarted: true,
+    })
+    expect(reservation.settlementDeadlineAt).toBe(
+      reservation.terminalPendingAt! + TERMINAL_EVIDENCE_WINDOW_MS
+    )
+    expect(reservation.settlementGrantExpiresAt).toBe(
+      reservation.settlementDeadlineAt
+    )
+    // Still counted against admission until finalized.
+    expect(bucketOf(tables).reservedCredits).toBe(100_000)
+    expect(
+      tables.usageLedgerEntries.filter((entry) => entry.type !== "grant")
+    ).toHaveLength(1) // only the reserve entry
+  })
+
+  it("releases immediately when the run never crossed the execution boundary", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    await pendingStopFixture(ctx, tables, {
+      runFields: { status: "queued", workStartedAt: undefined },
+    })
+    expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
+    expect(bucketOf(tables).reservedCredits).toBe(0)
+  })
+
+  it("a worker receipt settles actual usage and clears settlement authority", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables)
+    const outcome = await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      evidence: {
+        primary: { kind: "actual", inputTokens: 1_000, outputTokens: 100 },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    expect(outcome).toBe("settled")
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "actual",
+      actualCredits: 1_200,
+      titleSettlementBasis: "not_run",
+      settlementGrantDigest: undefined,
+      settlementGrantExpiresAt: undefined,
+    })
+    const bucket = bucketOf(tables)
+    expect(bucket.reservedCredits).toBe(0)
+    expect(bucket.spentCredits).toBe(1_200)
+  })
+
+  it("a first-step receipt settles the input floor, never the legacy estimate", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables)
+    await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      evidence: {
+        primary: { kind: "started-without-usage" },
+        title: { kind: "started-without-usage" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    // 1_000 input × 0.75 + 400 title-floor × 0.10 = 790 of the 100k reserve.
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_input_floor",
+      titleSettlementBasis: "input_floor",
+      actualCredits: 790,
+    })
+  })
+
+  it("a partial-output receipt settles input plus bounded partial output", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables)
+    await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      evidence: {
+        primary: { kind: "started-without-usage", partialOutputTokens: 2_000 },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    expect(tables.usageReservations[0]).toMatchObject({
+      settlementBasis: "estimated_input_with_partial_output",
+      actualCredits: 750 + 9_000,
+    })
+  })
+
+  it("duplicate receipts and receipt/reaper races produce exactly one ledger entry", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables)
+    await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      evidence: {
+        primary: { kind: "actual", inputTokens: 1_000, outputTokens: 100 },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    // Late duplicate with CONFLICTING evidence: logged, ignored, no rebill.
+    const replay = await finalizePendingTerminalUsage(ctx, {
+      reservation: tables.usageReservations[0] as Doc<"usageReservations">,
+      evidence: {
+        primary: { kind: "actual", inputTokens: 9_999_999 },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    expect(replay).toBe("already-finalized")
+    // The deadline reaper finds nothing pending either.
+    await ctx.db.patch(run._id, { status: "aborted" })
+    const { finalized } = await reconcileDueTerminalSettlementsPass(ctx)
+    expect(finalized).toBe(0)
+    expect(
+      tables.usageLedgerEntries.filter((entry) => entry.type === "settle")
+    ).toHaveLength(1)
+    expect(
+      warn.mock.calls.some((call) =>
+        String(call[0]).includes("usage_terminal_late_evidence_ignored")
+      )
+    ).toBe(true)
+    warn.mockRestore()
+  })
+
+  it("the deadline reaper settles the same floor a receipt would have", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables)
+    await ctx.db.patch(reservation._id, {
+      settlementDeadlineAt: Date.now() - 1,
+    })
+    const { finalized } = await reconcileDueTerminalSettlementsPass(ctx)
+    expect(finalized).toBe(1)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_input_floor",
+      titleSettlementBasis: "input_floor",
+      actualCredits: 790,
+      settlementGrantDigest: undefined,
+    })
+  })
+
+  it("the deadline reaper releases when provider work provably never began", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables, {
+      runFields: { workStartedAt: undefined },
+    })
+    expect(reservation.providerMayHaveStarted).toBe(false)
+    await ctx.db.patch(reservation._id, {
+      settlementDeadlineAt: Date.now() - 1,
+    })
+    await reconcileDueTerminalSettlementsPass(ctx)
+    expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
+    expect(bucketOf(tables).spentCredits).toBe(0)
+  })
+
+  it("the deadline reaper settles from copied facts when the run vanished", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables)
+    tables.generationRuns.splice(
+      tables.generationRuns.findIndex((doc) => doc._id === run._id),
+      1
+    )
+    await ctx.db.patch(reservation._id, {
+      settlementDeadlineAt: Date.now() - 1,
+    })
+    await reconcileDueTerminalSettlementsPass(ctx)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_input_floor",
+    })
+  })
+
+  it("the stale reconciler routes pending rows through the fallback, not the legacy estimate", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation } = await pendingStopFixture(ctx, tables)
+    await ctx.db.patch(reservation._id, {
+      reservedAt: Date.now() - STALE_RESERVATION_MS - 1,
+    })
+    const { reconciled } = await reconcileStaleUsageReservationsPass(ctx)
+    expect(reconciled).toBe(1)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_input_floor",
+      actualCredits: 790,
+    })
+  })
+
+  it("a pending reservation rejects an idempotent-replay re-admission", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const { ctx, tables } = createCtx({ users: [user] })
+    await pendingStopFixture(ctx, tables)
+    const replay = await reserveUsageForUser(
+      ctx,
+      user,
+      reserveArgs({
+        estimatedInputTokens: 1_000,
+        estimatedOutputTokens: 8_192,
+        titleEstimatedInputTokens: 400,
+      })
+    )
+    expect(replay).toEqual({ kind: "conflict" })
+    warn.mockRestore()
   })
 })
 
