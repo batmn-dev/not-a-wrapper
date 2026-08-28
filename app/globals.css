@@ -1947,6 +1947,25 @@ code {
   --inline-code-surface: var(--secondary);
 }
 
+/* Off-screen markdown blocks skip style recalc and layout entirely
+   (measured 2026-08-28, docs/performance/2026-08-28-rendering-attribution-
+   b1-b2.md): Chromium invalidates ::highlight rule matching DOCUMENT-WIDE on
+   every streaming-decay paint tick, which re-walked the whole layout tree
+   (~5.8 µs/object) per streamed commit — 10.4 s of layout / 4.0 s TBT on a
+   100 KB stream. Locking settled off-screen blocks caps that walk at the
+   visible content: TBT 4,021 ms → 3 ms with the fade intact. The growing
+   block is the container's :last-child by construction and stays unlocked.
+   `contain-intrinsic-size: auto` memoizes each block's real rendered height,
+   so blocks rendered once re-lock at exact size (no scroll jumps); the 3rem
+   fallback only sizes blocks that were never rendered. Guarded so browsers
+   without content-visibility never see the intrinsic-size hint. */
+@supports (content-visibility: auto) {
+  .markdown > :not(:last-child) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3rem;
+  }
+}
+
 .markdown p {
   margin-top: 0.5rem;
   margin-bottom: 0.25rem;

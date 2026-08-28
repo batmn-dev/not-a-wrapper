@@ -1,5 +1,11 @@
 # B1/B2 rendering attribution — layout, not JavaScript
 
+> **Resolved 2026-08-28** — see the experiment log at the end: the layout
+> storm was Chromium's document-wide invalidation on CSS Custom Highlight
+> mutation (the streaming decay overlay), fixed by `content-visibility:
+> auto` on settled markdown blocks. B1 TBT 3,916 → 40 ms, B2 571 → 291 ms
+> in the standard suite, all correctness gates green.
+
 Date: 2026-08-28 · Build: `.next-perf` (instrumented, split flag on — the
 flag touches no rendering path) · Tool:
 `benchmarks/chat-performance/browser/trace-attribution.ts` (Chrome tracing
@@ -75,3 +81,49 @@ settle correctness), on this branch, one change at a time.
 
 Artifacts: `results/traces/*.analysis.json` (per-task buckets, top tasks,
 marks-inside); raw traces alongside (gitignored).
+
+## Experiment log — from attribution to fix (2026-08-28)
+
+Each step used the same tool; probes were runtime CSS/media injections
+(`INJECT_CSS_FILE` / `EMULATE_REDUCED_MOTION`), so hypotheses were tested
+without a rebuild. B1 TBT per step:
+
+| step | B1 TBT | verdict |
+|---|---|---|
+| baseline | 4,021 ms | 78% layout |
+| probe: `contain: layout` on settled blocks | 4,324 ms | **rejected** — settled siblings were not being re-laid (Blink fragment caching already skips them) |
+| probe: turn `content-visibility` disabled | 3,692 ms | minor; the turn-level c-v/:has() machinery is a real but secondary cost (B2 742 → 476 ms) |
+| invalidation-tracking trace | — | the mechanism: per-commit layout cost correlates with TOTAL layout objects at r = 0.984 (~5.8 µs/object, dirtyObjects ~22) — a whole-tree walk; mass `Related style rule` style recalc; the same sr-only/KaTeX `position:absolute` nodes re-attached per commit |
+| probe: `prefers-reduced-motion` emulated | **10 ms** | conviction: everything motion-gated off — the streaming decay overlay is the driver |
+| fix attempt: persistent `Highlight` objects, ranges mutated in place | 3,698 ms | kept (registry keys must not churn; B2 742 → 487 ms) but insufficient — Chromium invalidates document-wide on highlight CONTENT mutation too |
+| probe: `animation: none` everywhere, overlay live | 4,742 ms | animations exonerated |
+| probe → **fix**: `content-visibility: auto` + `contain-intrinsic-size: auto 3rem` on settled markdown blocks (`.markdown > :not(:last-child)`, `@supports`-guarded) | **8 ms** | locked off-screen blocks are skipped by the invalidation walk; the fade stays fully live |
+
+**Root cause.** The streaming decay overlay repaints via the CSS Custom
+Highlight API every ≤24 ms tick. Chromium invalidates `::highlight` rule
+matching document-wide on ANY highlight registry/content mutation — every
+element's style recalcs, absolutely-positioned/hidden elements re-attach,
+and layout re-walks the entire tree at ~5.8 µs/object. Cost therefore
+scaled with the accumulated answer, which is why long streams degraded
+superlinearly while the overlay itself remained "paint-only" by design.
+
+**The shipped fix** attacks the walk, not the overlay: settled markdown
+blocks (`:not(:last-child)` — the growing block is last by construction)
+get `content-visibility: auto`, so off-screen settled content is skipped by
+style recalc and layout entirely. `contain-intrinsic-size: auto 3rem`
+memoizes each block's real rendered height after first render (no scroll
+jumps; the 3 rem fallback only sizes never-rendered blocks). The persistent
+`Highlight` objects change is kept as hygiene.
+
+**Verification.** Standard suite (RUNS=10, all 11 scenarios): correctness
+green everywhere; `long-markdown-100` TBT 3,916 → 40 ms (long tasks
+192 → 2), `cpu4` TBT 571 → 291 ms, DOM growth byte-identical in every
+scenario, projection advance and send→visible unchanged, Shiki totals
+slightly down. Full unit suite (2,572 tests) green. Visual check on the
+perf build: streaming render, spacing, table/KaTeX/code, and the decay
+fade all intact; computed styles confirm `auto` on settled blocks and
+`visible` on the growing block.
+
+**Residual B2 (291 ms TBT at 4× throttle)** is now ordinary work
+(viewport-visible layout, JS, Shiki) plus the turn-level c-v/:has() cost
+the no-cv probe isolated — a candidate for a later, smaller experiment.

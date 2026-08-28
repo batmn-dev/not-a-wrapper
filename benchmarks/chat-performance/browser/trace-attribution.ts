@@ -15,7 +15,10 @@
  *   NEXT_DIST_DIR=.next-perf build present, then
  *   bun run benchmarks/chat-performance/browser/trace-attribution.ts
  * Env: BASE_URL (reuse a running perf server), CASE (one case id), OUT_DIR
- * (default: this directory's results/traces, gitignored with results/).
+ * (default: this directory's results/traces, gitignored with results/),
+ * INJECT_CSS_FILE (stylesheet injected into the page before the send —
+ * probes a CSS containment hypothesis without a source change or rebuild;
+ * LABEL suffixes the output filenames so variants don't overwrite baseline).
  */
 import { deterministicScenarioText } from "@/app/api/chat/deterministic-provider"
 import { spawn, type ChildProcess } from "node:child_process"
@@ -61,6 +64,9 @@ const TRACE_CATEGORIES = [
   "devtools.timeline",
   "blink.user_timing",
   "v8.execute",
+  // e.g. disabled-by-default-devtools.timeline.invalidationTracking to see
+  // WHICH nodes dirty layout/style each frame (fat traces; one-off digs only).
+  ...(process.env.EXTRA_CATEGORIES?.split(",") ?? []),
 ]
 
 // Trace-event name → attribution bucket. Everything else inside a task is
@@ -328,6 +334,13 @@ async function runCase(
       rate: traceCase.cpuThrottle,
     })
   }
+  // Probe knob: prefers-reduced-motion disables the streaming decay overlay
+  // (and motion-gated CSS) without a source change — isolates their cost.
+  if (process.env.EMULATE_REDUCED_MOTION) {
+    await cdp.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+    })
+  }
   const oracle = deterministicScenarioText(traceCase.scenario)
   const timeoutMs =
     Math.round(
@@ -340,8 +353,13 @@ async function runCase(
     await clearGuestIdentity(page)
     const editor = page.locator('[contenteditable="true"]').first()
     await editor.waitFor({ state: "visible", timeout: 15000 })
+    // After the reload above, so an injected probe stylesheet survives the run.
+    if (process.env.INJECT_CSS_FILE) {
+      await page.addStyleTag({ path: process.env.INJECT_CSS_FILE })
+    }
 
-    const tracePath = path.join(OUT_DIR, `${traceCase.id}.trace.json`)
+    const label = process.env.LABEL ? `.${process.env.LABEL}` : ""
+    const tracePath = path.join(OUT_DIR, `${traceCase.id}${label}.trace.json`)
     await browser.startTracing(page, {
       path: tracePath,
       screenshots: false,
@@ -383,7 +401,7 @@ async function runCase(
         shikiHighlightTotalMs: sum("shiki_highlight"),
       },
     }
-    const outPath = path.join(OUT_DIR, `${traceCase.id}.analysis.json`)
+    const outPath = path.join(OUT_DIR, `${traceCase.id}${label}.analysis.json`)
     writeFileSync(outPath, JSON.stringify(analysis, null, 2))
     log(
       `${traceCase.id}: window ${Math.round(analysis.streamWindowMs)}ms, ` +
