@@ -194,6 +194,20 @@ async function waitForMark(
   )
 }
 
+/**
+ * Delivered-content length for the durable fallback bound: the markdown
+ * containers' textContent, NOT body.innerText — settled off-screen blocks
+ * carry `content-visibility: auto` (the B1 layout fix), and innerText is
+ * layout-aware so it excludes locked blocks even though their content is
+ * fully delivered in the DOM.
+ */
+function readDeliveredMarkdownLength(): number {
+  return Array.from(document.querySelectorAll(".markdown")).reduce(
+    (total, element) => total + (element.textContent?.length ?? 0),
+    0
+  )
+}
+
 /** Clears storage and reloads so the next send mints a fresh guest id. */
 async function clearGuestIdentity(page: Page): Promise<void> {
   await page.evaluate(async () => {
@@ -555,9 +569,7 @@ async function runScenarioOnce(
       if (settlementOutcome !== "completed") {
         detail = `settlement outcome ${settlementOutcome} (expected completed)`
       }
-      const renderedLength = await page.evaluate(
-        () => document.body.innerText.length
-      )
+      const renderedLength = await page.evaluate(readDeliveredMarkdownLength)
       if (correctnessOk && renderedLength < oracle.text.length * 0.4) {
         correctnessOk = false
         detail = `reloaded page rendered only ${renderedLength} chars`
@@ -591,7 +603,7 @@ async function runScenarioOnce(
           detail = `settlement outcome ${settlementOutcome} (expected completed)`
         } else {
           const renderedLength = await page.evaluate(
-            () => document.body.innerText.length
+            readDeliveredMarkdownLength
           )
           if (renderedLength < oracle.text.length * 0.4) {
             correctnessOk = false

@@ -667,6 +667,19 @@ type DurableSnapshotTrackerOptions = {
   persist: (args: SnapshotPersistArgs) => Promise<unknown>
 }
 
+/**
+ * Snapshot cadence, env-tunable for the cadence experiment (measurement plan
+ * Experiment 3): `CHAT_SNAPSHOT_THROTTLE_MS` overrides the 750 ms default,
+ * clamped to [100, 5000] — the historical write storm ran at ~59 ms, and the
+ * clamp keeps a typo from recreating it. Read per turn so a perf server can
+ * be relaunched at a new cadence without a rebuild.
+ */
+export function snapshotThrottleMs(): number {
+  const raw = Number(process.env.CHAT_SNAPSHOT_THROTTLE_MS)
+  if (!Number.isFinite(raw) || raw <= 0) return 750
+  return Math.min(5000, Math.max(100, Math.round(raw)))
+}
+
 export function createDurableSnapshotTracker(
   options: DurableSnapshotTrackerOptions
 ) {
@@ -1456,6 +1469,7 @@ export function createConvexDurableTurn(args: {
         order: generation.assistantOrder,
       }
       snapshotTracker = createDurableSnapshotTracker({
+        throttleMs: snapshotThrottleMs(),
         persist: (snapshotArgs) => {
           // Checkpoint counters (PR 0b step 5): attempts/accepted/lost/failed
           // plus cumulative payload bytes. Sizes and enums only — the
