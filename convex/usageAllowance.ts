@@ -820,6 +820,40 @@ export async function deferUsageSettlementForTerminalRun(
   return true
 }
 
+/**
+ * Observed per-step usage on the run row outranks a no-usage claim
+ * (invariant: authoritative usage always beats estimates). A worker whose
+ * abort raced its own step accounting — or claimed "not started" against a
+ * run that provably accumulated tokens — must not downgrade the charge to
+ * the input floor.
+ */
+function upgradeEvidenceWithRunUsage(
+  evidence: TerminalUsageEvidencePayload,
+  run: Doc<"generationRuns"> | null
+): TerminalUsageEvidencePayload {
+  if (
+    evidence.primary.kind !== "started-without-usage" &&
+    evidence.primary.kind !== "not-started"
+  ) {
+    return evidence
+  }
+  if (!run || ((run.inputTokens ?? 0) === 0 && (run.outputTokens ?? 0) === 0)) {
+    return evidence
+  }
+  return {
+    primary: {
+      kind: "completed-steps",
+      inputTokens: run.inputTokens,
+      outputTokens: run.outputTokens,
+      ...(evidence.primary.kind === "started-without-usage" &&
+      evidence.primary.partialOutputTokens !== undefined
+        ? { partialOutputTokens: evidence.primary.partialOutputTokens }
+        : {}),
+    },
+    title: evidence.title,
+  }
+}
+
 export type FinalizeTerminalUsageOutcome =
   "settled" | "released" | "already-finalized"
 
@@ -833,12 +867,16 @@ export async function finalizePendingTerminalUsage(
   ctx: MutationCtx,
   args: {
     reservation: Doc<"usageReservations">
+    /** The linked run when it still exists — its accumulated per-step usage
+     * upgrades a no-usage evidence claim (see upgradeEvidenceWithRunUsage). */
+    run: Doc<"generationRuns"> | null
     evidence: TerminalUsageEvidencePayload
     source: "worker_receipt" | "deadline"
     now: number
   }
 ): Promise<FinalizeTerminalUsageOutcome> {
-  const { reservation, evidence, source, now } = args
+  const { reservation, run, source, now } = args
+  const evidence = upgradeEvidenceWithRunUsage(args.evidence, run)
   if (reservation.status !== "reserved") {
     warnUsage("usage_terminal_late_evidence_ignored", {
       reservationId: reservation._id,
@@ -880,7 +918,9 @@ export async function finalizePendingTerminalUsage(
 /**
  * Evidence for a pending reservation whose worker never reported: durable
  * run facts when the run survives, the facts copied onto the reservation at
- * Stop time when it did not.
+ * Stop time when it did not. Convex cannot know whether a title attempt ever
+ * started, so once provider work may have begun the title charges its input
+ * floor — bounded, and strictly below the legacy full title estimate.
  */
 function terminalSettlementFallbackEvidence(
   reservation: Doc<"usageReservations">,
@@ -947,6 +987,7 @@ export async function reconcileDueTerminalSettlementsPass(
       : null
     const outcome = await finalizePendingTerminalUsage(ctx, {
       reservation,
+      run,
       evidence: terminalSettlementFallbackEvidence(reservation, run),
       source: "deadline",
       now,
@@ -1133,11 +1174,12 @@ export async function settleUsageForTerminalRun(
 
   // Worker-owned cancellation with normalized evidence (a `request_aborted`
   // terminal that beat any Stop): settle atomically through the shared pure
-  // decision — the same tree the receipt and deadline paths use.
+  // decision — the same tree the receipt and deadline paths use. Run-row
+  // accumulated usage upgrades a no-usage claim first.
   if (evidence.terminal !== undefined) {
     const decision = resolveTerminalUsageSettlement(
       reservationTerminalFacts(reservation),
-      evidence.terminal
+      upgradeEvidenceWithRunUsage(evidence.terminal, run)
     )
     await applyTerminalSettlementDecision(
       ctx,
@@ -1212,9 +1254,11 @@ export async function settleUsageForTerminalRun(
   // never began: either the work-start boundary was never crossed, or the
   // provider rejected the request before producing ANY output (failed
   // requests are not billed; `lastSnapshotSequence` counts accepted content
-  // checkpoints, so zero means no text or reasoning ever streamed). A user
-  // Stop or a reaped lease keeps the conservative estimate — the provider
-  // may have generated tokens nobody observed.
+  // checkpoints, so zero means no text or reasoning ever streamed). The
+  // remaining strands (legacy pending-less rows, evidence-free
+  // request_aborted, approval strands) keep the legacy conservative
+  // estimate — new user_stop/superseded settlements never reach this tail
+  // (they defer), and lease_expired settles via the fallback branch above.
   if (run.workStartedAt === undefined) {
     await releaseReservation(ctx, reservation, auditReason, now)
     return
@@ -1321,6 +1365,7 @@ export async function reconcileStaleUsageReservationsPass(
         : null
       await finalizePendingTerminalUsage(ctx, {
         reservation,
+        run: pendingRun,
         evidence: terminalSettlementFallbackEvidence(reservation, pendingRun),
         source: "deadline",
         now,

@@ -867,9 +867,10 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
 
   it("a worker receipt settles actual usage and clears settlement authority", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
-    const { reservation } = await pendingStopFixture(ctx, tables)
+    const { reservation, run } = await pendingStopFixture(ctx, tables)
     const outcome = await finalizePendingTerminalUsage(ctx, {
       reservation: reservation as Doc<"usageReservations">,
+      run,
       evidence: {
         primary: { kind: "actual", inputTokens: 1_000, outputTokens: 100 },
         title: { kind: "not-run" },
@@ -893,9 +894,10 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
 
   it("a first-step receipt settles the input floor, never the legacy estimate", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
-    const { reservation } = await pendingStopFixture(ctx, tables)
+    const { reservation, run } = await pendingStopFixture(ctx, tables)
     await finalizePendingTerminalUsage(ctx, {
       reservation: reservation as Doc<"usageReservations">,
+      run,
       evidence: {
         primary: { kind: "started-without-usage" },
         title: { kind: "started-without-usage" },
@@ -914,9 +916,10 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
 
   it("a partial-output receipt settles input plus bounded partial output", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
-    const { reservation } = await pendingStopFixture(ctx, tables)
+    const { reservation, run } = await pendingStopFixture(ctx, tables)
     await finalizePendingTerminalUsage(ctx, {
       reservation: reservation as Doc<"usageReservations">,
+      run,
       evidence: {
         primary: { kind: "started-without-usage", partialOutputTokens: 2_000 },
         title: { kind: "not-run" },
@@ -930,12 +933,38 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     })
   })
 
+  it("run-row usage upgrades a no-usage receipt to observed_partial", async () => {
+    // Invariant: authoritative usage always beats estimates. A worker whose
+    // abort raced its own step accounting cannot downgrade the charge to the
+    // input floor while the run row holds accumulated per-step tokens.
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables, {
+      runFields: { inputTokens: 1_000, outputTokens: 100 },
+    })
+    await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      run,
+      evidence: {
+        primary: { kind: "started-without-usage" },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "observed_partial",
+      actualCredits: 1_200,
+    })
+  })
+
   it("duplicate receipts and receipt/reaper races produce exactly one ledger entry", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const { ctx, tables } = createCtx({ users: [user] })
     const { reservation, run } = await pendingStopFixture(ctx, tables)
     await finalizePendingTerminalUsage(ctx, {
       reservation: reservation as Doc<"usageReservations">,
+      run,
       evidence: {
         primary: { kind: "actual", inputTokens: 1_000, outputTokens: 100 },
         title: { kind: "not-run" },
@@ -946,6 +975,7 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     // Late duplicate with CONFLICTING evidence: logged, ignored, no rebill.
     const replay = await finalizePendingTerminalUsage(ctx, {
       reservation: tables.usageReservations[0] as Doc<"usageReservations">,
+      run,
       evidence: {
         primary: { kind: "actual", inputTokens: 9_999_999 },
         title: { kind: "not-run" },

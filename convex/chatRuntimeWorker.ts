@@ -275,6 +275,7 @@ export async function finalizeTerminalUsageWithSettlementGrant(
     const evidence: TerminalUsageEvidencePayload = terminalUsage
     const outcome = await finalizePendingTerminalUsage(ctx, {
       reservation,
+      run,
       evidence,
       source: "worker_receipt",
       now,
