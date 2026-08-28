@@ -44,8 +44,8 @@ import {
 } from "./result-schema"
 import {
   ensurePerfAuthUser,
+  getPerfAuthPassword,
   PERF_AUTH_EMAIL,
-  PERF_AUTH_PASSWORD,
 } from "./ensure-auth-user"
 import {
   directiveFor,
@@ -275,13 +275,14 @@ async function acquireAuthState(
   browser: Browser,
   baseUrl: string
 ): Promise<Awaited<ReturnType<BrowserContext["storageState"]>>> {
+  const password = getPerfAuthPassword()
   await ensurePerfAuthUser()
   const context = await browser.newContext()
   const page = await context.newPage()
   try {
     await page.goto(`${baseUrl}/auth/login`, { waitUntil: "domcontentloaded" })
     await page.locator("#email").fill(PERF_AUTH_EMAIL)
-    await page.locator("#password").fill(PERF_AUTH_PASSWORD)
+    await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Log in" }).click()
     // The action redirects home; the composer appearing proves the session
     // is live (and the users.createOrUpdate bootstrap has a chance to run).
@@ -1032,10 +1033,10 @@ async function main() {
     )
   }
 
-  const buildId = readFileSync(
-    path.join(REPO_ROOT, DIST_DIR, "BUILD_ID"),
-    "utf8"
-  ).trim()
+  const buildIdPath = path.join(REPO_ROOT, DIST_DIR, "BUILD_ID")
+  const buildId = existsSync(buildIdPath)
+    ? readFileSync(buildIdPath, "utf8").trim()
+    : "unknown"
   const commit = execSync("git rev-parse --short HEAD", {
     cwd: REPO_ROOT,
   })

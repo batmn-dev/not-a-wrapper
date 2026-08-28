@@ -8,17 +8,27 @@
  * so the harness's real /auth/login flow mints a genuine RS256 access token
  * that the Convex dev deployment accepts — the durable path runs for real.
  *
- * Override identity via PERF_AUTH_EMAIL / PERF_AUTH_PASSWORD; the defaults
- * below are deliberately fixed, dev-environment-only credentials.
+ * Override identity via PERF_AUTH_EMAIL. PERF_AUTH_PASSWORD is always
+ * required so this real account never receives a source-controlled password.
  */
 import { WorkOS } from "@workos-inc/node"
 
 export const PERF_AUTH_EMAIL =
   process.env.PERF_AUTH_EMAIL ?? "chat-perf-harness@nawbench.dev"
-export const PERF_AUTH_PASSWORD =
-  process.env.PERF_AUTH_PASSWORD ?? "NawPerfHarness!2026"
+
+export function getPerfAuthPassword(): string {
+  const password = process.env.PERF_AUTH_PASSWORD
+  if (!password) {
+    throw new Error(
+      "PERF_AUTH_PASSWORD missing from the environment — cannot provision " +
+        "the harness test user"
+    )
+  }
+  return password
+}
 
 export async function ensurePerfAuthUser(): Promise<void> {
+  const password = getPerfAuthPassword()
   const apiKey = process.env.WORKOS_API_KEY
   const clientId = process.env.WORKOS_CLIENT_ID
   if (!apiKey || !clientId) {
@@ -37,7 +47,7 @@ export async function ensurePerfAuthUser(): Promise<void> {
   if (!user) {
     await workos.userManagement.createUser({
       email: PERF_AUTH_EMAIL,
-      password: PERF_AUTH_PASSWORD,
+      password,
       emailVerified: true,
       firstName: "Perf",
       lastName: "Harness",
@@ -50,13 +60,13 @@ export async function ensurePerfAuthUser(): Promise<void> {
     await workos.userManagement.authenticateWithPassword({
       clientId,
       email: PERF_AUTH_EMAIL,
-      password: PERF_AUTH_PASSWORD,
+      password,
     })
     console.log(`[ensure-auth-user] ${PERF_AUTH_EMAIL} ok (password verified)`)
   } catch {
     await workos.userManagement.updateUser({
       userId: user.id,
-      password: PERF_AUTH_PASSWORD,
+      password,
       emailVerified: true,
     })
     console.log(`[ensure-auth-user] reset password for ${PERF_AUTH_EMAIL}`)

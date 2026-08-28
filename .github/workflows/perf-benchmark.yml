@@ -11,7 +11,9 @@
 #      server: NEXT_PUBLIC_CONVEX_URL (a dev/CI Convex deployment), the
 #      platform provider keys the admission path expects, and — only if you
 #      run SUITE=durable — the WorkOS envs the harness auth user needs.
-#   2. After the first green run, download the results artifact and commit it
+#   2. Secret PERF_AUTH_PASSWORD — a strong, unique password for the WorkOS
+#      benchmark user. Required only for SUITE=durable.
+#   3. After the first green run, download the results artifact and commit it
 #      as benchmarks/chat-performance/browser/baselines/ci-<suite>.json to
 #      arm regression gating (compare-results.ts reports-only until then).
 #      Regenerate that baseline whenever fixtures change (the pinned-hash
@@ -39,11 +41,11 @@ concurrency:
 
 jobs:
   benchmark:
-    name: Browser benchmark (${{ inputs.suite || 'smoke' }})
+    name: Browser benchmark (${{ github.event_name == 'schedule' && 'durable' || inputs.suite || 'smoke' }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      SUITE: ${{ inputs.suite || 'smoke' }}
+      SUITE: ${{ github.event_name == 'schedule' && 'durable' || inputs.suite || 'smoke' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -85,7 +87,14 @@ jobs:
       # the scenario oracle, and exits non-zero on ANY correctness failure —
       # that alone gates, baseline or not.
       - name: Run browser benchmark
-        run: bun run bench:browser
+        run: |
+          if [ "$SUITE" = "durable" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
+            echo "::error title=Missing PERF_AUTH_PASSWORD::Set the GitHub Actions secret PERF_AUTH_PASSWORD to a strong, unique benchmark-user password."
+            exit 1
+          fi
+          bun run bench:browser
+        env:
+          PERF_AUTH_PASSWORD: ${{ secrets.PERF_AUTH_PASSWORD }}
 
       - name: Compare against baseline
         run: |

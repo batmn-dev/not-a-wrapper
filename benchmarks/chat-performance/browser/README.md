@@ -53,16 +53,17 @@ failure exits non-zero and the timings must be discarded.
 harness's exit code), and `compare-results.ts` against the checked-in
 runner-class baseline in `baselines/` (report-only until a baseline is
 committed; see `baselines/README.md`). One-time setup: the `PERF_ENV_FILE`
-secret with the perf server's `.env.local` contents. Per-PR CI is untouched
-— `bun run test` already carries the projection correctness gates and the
-pinned fixture payload hashes.
+secret with the perf server's `.env.local` contents, plus a dedicated
+`PERF_AUTH_PASSWORD` secret for durable runs. Per-PR CI is untouched —
+`bun run test` already carries the projection correctness gates and the pinned
+fixture payload hashes.
 
 ## Scope and known limitations
 
 - **Durable scenarios: `SUITE=durable`.** The harness provisions a WorkOS
-  test user via the API (`ensure-auth-user.ts`; override with
-  `PERF_AUTH_EMAIL`/`PERF_AUTH_PASSWORD`), signs in once through the real
-  `/auth/login` form, and reuses the storage state. Durable runs measure
+  test user via the API (`ensure-auth-user.ts`; `PERF_AUTH_PASSWORD` is
+  required and `PERF_AUTH_EMAIL` can override the default identity), signs in
+  once through the real `/auth/login` form, and reuses the storage state. Durable runs measure
   settlement, per-op worker-write durations, second-tab freshness, and
   reload recovery. Two durable caveats: the hard navigation to `/c/<chatId>`
   flushes Chromium's network buffer, so correctness falls back to

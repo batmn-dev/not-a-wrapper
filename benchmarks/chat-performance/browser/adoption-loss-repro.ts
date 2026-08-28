@@ -26,8 +26,8 @@ import path from "node:path"
 import { chromium, type Page } from "playwright"
 import {
   ensurePerfAuthUser,
+  getPerfAuthPassword,
   PERF_AUTH_EMAIL,
-  PERF_AUTH_PASSWORD,
 } from "./ensure-auth-user"
 
 const REPO_ROOT = path.resolve(
@@ -117,6 +117,7 @@ async function hasMark(page: Page, name: string): Promise<boolean> {
 async function main() {
   const externalBaseUrl = process.env.BASE_URL
   const baseUrl = externalBaseUrl ?? `http://localhost:${PERF_PORT}`
+  const password = getPerfAuthPassword()
   await ensureServer(baseUrl, Boolean(externalBaseUrl))
   await ensurePerfAuthUser()
 
@@ -160,7 +161,7 @@ async function main() {
   // Sign in once through the real form.
   await page.goto(`${baseUrl}/auth/login`, { waitUntil: "domcontentloaded" })
   await page.locator("#email").fill(PERF_AUTH_EMAIL)
-  await page.locator("#password").fill(PERF_AUTH_PASSWORD)
+  await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Log in" }).click()
   await page.waitForURL((url) => !url.pathname.startsWith("/auth"), {
     timeout: 30000,

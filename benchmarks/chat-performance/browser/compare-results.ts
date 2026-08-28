@@ -14,10 +14,7 @@
  * or threshold breach.
  */
 import { existsSync, readFileSync } from "node:fs"
-import type {
-  BenchmarkResultFile,
-  ScenarioResult,
-} from "./result-schema"
+import type { BenchmarkResultFile, ScenarioResult } from "./result-schema"
 
 type Threshold = {
   /** p50 may regress by this fraction of the baseline… */
@@ -84,6 +81,31 @@ if (baseline.schemaVersion !== current.schemaVersion) {
 const baselineByKey = new Map(
   baseline.scenarios.map((s) => [scenarioKey(s), s])
 )
+const currentByKey = new Map(current.scenarios.map((s) => [scenarioKey(s), s]))
+const missingBaselineScenarios = [...baselineByKey.keys()].filter(
+  (key) => !currentByKey.has(key)
+)
+if (missingBaselineScenarios.length > 0) {
+  fail(
+    `baseline scenario(s) missing from current results: ${missingBaselineScenarios.join(", ")}`
+  )
+}
+const missingCurrentP50s = [...baselineByKey].flatMap(([key, base]) => {
+  const scenario = currentByKey.get(key)
+  if (!scenario) return []
+  return Object.keys(GATES)
+    .filter(
+      (metric) =>
+        base.metrics[metric]?.p50 !== undefined &&
+        scenario.metrics[metric]?.p50 === undefined
+    )
+    .map((metric) => `${key} ${metric}`)
+})
+if (missingCurrentP50s.length > 0) {
+  fail(
+    `baseline metric p50(s) missing from current results: ${missingCurrentP50s.join(", ")}`
+  )
+}
 const breaches: string[] = []
 let compared = 0
 

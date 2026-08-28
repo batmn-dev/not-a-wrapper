@@ -15,6 +15,7 @@ regression gate (`compare-results.ts`). One file per suite, named
 ## Activation status (2026-08-28)
 
 - `PERF_ENV_FILE` repo secret: **set** (from the perf server's `.env.local`).
+- `PERF_AUTH_PASSWORD` repo secret: **set** (dedicated benchmark credential).
 - First run + baseline: `workflow_dispatch` requires the workflow file on the
   default branch, so this happens right after the branch merges to `main`:
 
