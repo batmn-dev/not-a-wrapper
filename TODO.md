@@ -100,21 +100,10 @@ and implement it within ADR-0011's settle-never-rejects and ADR-0021's
 reserve-then-settle contracts. Add a regression test that a first-beat Stop
 settles for far less than the full estimate.
 - ~~**Intermittent live-stream adoption loss after the first durable send's
-hard navigation**~~ — RESOLVED 2026-08-28: root cause was NOT the ADR-0013
-binding machinery (adoption succeeded every time) but the route structure —
-both `(chat)` page segments rendered their own `<Chat/>`, and when the router
-intermittently committed the `/c/[chatId]` segment 30–90ms after the shallow
-pushState handoff, the page-subtree swap remounted Chat and orphaned the live
-binding. Fixed by mounting `<Chat/>` in the persistent `(chat)/layout.tsx`
-(pages render null, keep the /c auth redirect); verified 0/90 losses post-fix
-vs ~7% before, and `liveStreamNotAdoptedRuns > 0` now FAILS the harness
-scenario as the regression gate. Full forensics:
-`docs/performance/2026-08-28-adoption-loss-root-cause.md`. The project
-variant (`/p/[projectId]` first sends crossing into the `(chat)` layout) is
-fixed too: the stream owner is module-scoped with detach-on-unmount +
-readopt-on-mount, so ANY Chat remount re-adopts the live stream — verified
-40/40 in the reproducer's `MODE=project` (including runs where the remount
-demonstrably occurred and was survived).
+hard navigation**~~ — RESOLVED 2026-08-28 (home + project variants); the
+harness fails any scenario with `liveStreamNotAdoptedRuns > 0` as the
+regression gate. Full forensics and both fixes:
+`docs/performance/2026-08-28-adoption-loss-root-cause.md`.
 
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting
