@@ -1,0 +1,104 @@
+# Scheduled + on-demand performance benchmark (measurement plan Phase 6).
+#
+# Separate from ci-cd.yml on purpose: this needs a real Convex deployment and
+# a server env (secret PERF_ENV_FILE), takes minutes of browser time, and its
+# numbers are runner-class-relative — none of which belongs in the per-PR
+# gate. Per-PR protection stays in ci-cd.yml's `bun run test`, which already
+# runs the projection correctness gates and the pinned fixture hashes.
+#
+# Setup (one-time):
+#   1. Secret PERF_ENV_FILE — the contents of a .env.local for the perf
+#      server: NEXT_PUBLIC_CONVEX_URL (a dev/CI Convex deployment), the
+#      platform provider keys the admission path expects, and — only if you
+#      run SUITE=durable — the WorkOS envs the harness auth user needs.
+#   2. After the first green run, download the results artifact and commit it
+#      as benchmarks/chat-performance/browser/baselines/ci-<suite>.json to
+#      arm regression gating (compare-results.ts reports-only until then).
+#      Regenerate that baseline whenever fixtures change (the pinned-hash
+#      test in fixtures.test.ts will remind you).
+name: Perf benchmark
+
+on:
+  schedule:
+    # Weekly, Monday 09:13 UTC (off the top-of-hour crunch).
+    - cron: "13 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Benchmark suite"
+        type: choice
+        default: smoke
+        options: [smoke, standard, durable]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Browser benchmark (${{ inputs.suite || 'smoke' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUITE: ${{ inputs.suite || 'smoke' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The gate file's timing half runs only here (CHAT_PERF_GATES), per its
+      # own contract: blocking in the benchmark environment, never in the
+      # per-PR lane. Local p95 is ~0.5 ms against the 5 ms budget, so a
+      # shared runner's 3-4x slowdown still leaves wide margin.
+      - name: Micro-benchmark timing gates
+        run: CHAT_PERF_GATES=true bunx vitest run benchmarks/chat-performance/branch-projection-gate.test.ts benchmarks/chat-performance/markdown-projection-gate.test.ts
+
+      - name: Write server env
+        run: |
+          if [ -z "${PERF_ENV_FILE:-}" ]; then
+            echo "::error title=Missing PERF_ENV_FILE::Set the GitHub Actions secret PERF_ENV_FILE to the perf server's .env.local contents (see the header of this workflow)."
+            exit 1
+          fi
+          printf '%s' "$PERF_ENV_FILE" > .env.local
+        env:
+          PERF_ENV_FILE: ${{ secrets.PERF_ENV_FILE }}
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Build instrumented bundle
+        run: NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf bun run build:next
+
+      # The harness spawns the perf server itself, folds every stream against
+      # the scenario oracle, and exits non-zero on ANY correctness failure —
+      # that alone gates, baseline or not.
+      - name: Run browser benchmark
+        run: bun run bench:browser
+
+      - name: Compare against baseline
+        run: |
+          CURRENT=$(ls -t benchmarks/chat-performance/browser/results/*.json | head -1)
+          echo "current results: $CURRENT"
+          bun run benchmarks/chat-performance/browser/compare-results.ts \
+            "benchmarks/chat-performance/browser/baselines/ci-${SUITE}.json" \
+            "$CURRENT"
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
+          path: benchmarks/chat-performance/browser/results/*.json
+          retention-days: 90

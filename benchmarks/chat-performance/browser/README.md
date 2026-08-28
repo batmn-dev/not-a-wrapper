@@ -45,6 +45,18 @@ which may not expose a body), the terminal outcome must match, and any
 `markdown_projection_settle_mismatch` fails the scenario. A correctness
 failure exits non-zero and the timings must be discarded.
 
+## CI (Phase 6)
+
+`.github/workflows/perf-benchmark.yml` runs weekly and on demand
+(`workflow_dispatch`, suite choice): micro-benchmark timing gates
+(`CHAT_PERF_GATES=true`), the browser suite (correctness-blocking via this
+harness's exit code), and `compare-results.ts` against the checked-in
+runner-class baseline in `baselines/` (report-only until a baseline is
+committed; see `baselines/README.md`). One-time setup: the `PERF_ENV_FILE`
+secret with the perf server's `.env.local` contents. Per-PR CI is untouched
+— `bun run test` already carries the projection correctness gates and the
+pinned fixture payload hashes.
+
 ## Scope and known limitations
 
 - **Durable scenarios: `SUITE=durable`.** The harness provisions a WorkOS
