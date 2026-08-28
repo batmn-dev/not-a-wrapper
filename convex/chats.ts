@@ -331,34 +331,12 @@ async function insertChatForUser(
   return { chatId, project }
 }
 
-/**
- * Create a new chat.
- *
- * NOT the first-turn path: the app's first turn creates its chat through
- * `createWithFirstTurn` below. Kept for API compatibility (clients running
- * pre-atomic bundles during a deploy still call it) — which is also why "no
- * chat without its first message" is an invariant of the first-turn path, not
- * of the schema.
- */
-export const create = authenticatedMutation({
-  args: {
-    title: v.optional(v.string()),
-    model: v.optional(v.string()),
-    systemPrompt: v.optional(v.string()),
-    projectId: v.optional(v.id("projects")),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const { chatId, project } = await insertChatForUser(
-      ctx,
-      ctx.user,
-      args,
-      now
-    )
-    await recordKnownProjectActivity(ctx, project, now)
-    return chatId
-  },
-})
+// The standalone `chats.create` mutation (pre-ADR-0012 chat creation, kept
+// as deploy-window compatibility for clients on pre-atomic bundles) was
+// removed 2026-08-28: no code has called it since the atomic first-turn
+// path shipped in early July, and the compatibility window is long past.
+// "No chat without its first message" remains a first-turn-path invariant,
+// not a schema one.
 
 type CreateWithFirstTurnArgs = NewChatArgs & {
   message: { clientMessageId: string; text: string }
@@ -583,7 +561,7 @@ export const markChatRead = authenticatedMutation({
  * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
  * no null keys. Idempotent.
  *
- * `chats.create` has always set `updatedAt`, so in practice no live row lacks it
+ * Chat creation (`insertChatForUser`) has always set `updatedAt`, so in practice no live row lacks it
  * and the required-schema push succeeds directly. This exists only as a fallback
  * if a deployment somehow holds legacy rows: run it (via
  * `scripts/backfill-chat-updated-at.mjs`) while `updatedAt` is still optional,

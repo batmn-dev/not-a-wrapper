@@ -1,5 +1,12 @@
 # Streaming regression suspects — 2026-08-20
 
+> **Status update 2026-08-28:** suspect 3 (sequential pre-stream Convex
+> roundtrips) is RESOLVED — Experiment 1 (`8ebaa7ae`) overlapped the
+> independent admission reads: receipt→provider-start 405 → 317 ms p50
+> (details: `docs/performance/2026-08-28-experiment-1-prestream-roundtrips.md`).
+> Suspects 1, 2, and 4 remain open and are tracked by TODO.md's "Assistant
+> responsiveness" item.
+
 Perceived text-streaming degradation investigated against the last two changes:
 `b1e3ce8c` (platform usage allowance, ADR-0021) and `eea6a30d` (#143, logical
 model identities + server-owned route selection).

@@ -94,8 +94,9 @@ export default defineSchema({
     pinned: v.boolean(),
     pinnedAt: v.optional(v.number()), // Unix timestamp
     // Required so recency indexes never sort null keys to the tail (which would
-    // hide chats from paginated history/sidebar windows). chats.create has
-    // always set this; backfill: scripts/backfill-chat-updated-at.mjs.
+    // hide chats from paginated history/sidebar windows). Chat creation
+    // (insertChatForUser) has always set this; backfill:
+    // scripts/backfill-chat-updated-at.mjs.
     updatedAt: v.number(), // Unix timestamp — last activity (turn start)
     // --- Sidebar status projection (CONTEXT.md "Sidebar status projection")
     // A few run-lifecycle fields mirrored onto the chat doc so each sidebar row
