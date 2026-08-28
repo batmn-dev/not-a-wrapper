@@ -158,3 +158,7 @@ unchanged, TBT unchanged, snapshot write mean unchanged. Result file
 The prerequisites this report listed are met, the win in the pause class is
 ~50× per event per subscriber, and the rollback (atomic query, flag off)
 stays registered per ADR-0027.
+
+**Adopted 2026-08-28:** user approved; the default is now ON
+(`NEXT_PUBLIC_SPLIT_SELECTED_QUERY=false` at build time restores the atomic
+query).

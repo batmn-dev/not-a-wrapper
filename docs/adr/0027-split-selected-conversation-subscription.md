@@ -1,7 +1,8 @@
 # ADR-0027: Split the selected-conversation subscription
 
-**Status:** Proposed — implemented behind `NEXT_PUBLIC_SPLIT_SELECTED_QUERY`
-(default off; the atomic query is the rollback path)
+**Status:** Accepted 2026-08-28 — default ON; building with
+`NEXT_PUBLIC_SPLIT_SELECTED_QUERY=false` restores the atomic query (the
+rollback path, kept registered)
 **Date:** 2026-08-28
 
 ## Context

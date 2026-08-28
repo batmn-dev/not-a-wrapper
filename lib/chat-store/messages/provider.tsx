@@ -68,11 +68,13 @@ type MessagesContextType = {
 
 /**
  * Experiment 2 rollout seam (build-time): split the selected-conversation
- * subscription into path + run-state queries. Default OFF — the atomic
- * query stays authoritative until the experiment's numbers are reviewed.
+ * subscription into path + run-state queries. Default ON since the adoption
+ * evidence closed (ADR-0027, accepted 2026-08-28: pause-window delivery
+ * −98.6%, regression suite in noise). Rollback: build with
+ * NEXT_PUBLIC_SPLIT_SELECTED_QUERY=false to restore the atomic query.
  */
 const SPLIT_SELECTED_QUERY =
-  process.env.NEXT_PUBLIC_SPLIT_SELECTED_QUERY === "true"
+  process.env.NEXT_PUBLIC_SPLIT_SELECTED_QUERY !== "false"
 
 const MessagesContext = createContext<MessagesContextType | null>(null)
 
