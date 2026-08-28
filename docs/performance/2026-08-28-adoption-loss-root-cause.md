@@ -71,12 +71,28 @@ so route-segment swaps cannot remount it").
 - The harness now FAILS any scenario with `liveStreamNotAdoptedRuns > 0`
   (the TODO's regression gate; expected 0 permanently).
 
-## Residual (noted, not fixed)
+## Second half — remounts made survivable (project variant, same day)
 
 A project-originated first send (`/p/[projectId]` → `/c/<chatId>`) crosses a
-LAYOUT boundary into `(chat)`, so a mid-stream router commit there still
-remounts Chat — the same class, reachable only from project onboarding.
-Recorded in TODO.md; fix when project first sends matter.
+LAYOUT boundary into `(chat)`, so a mid-stream router commit there remounts
+Chat no matter which segment owns the surface. Fixed at the stream layer by
+generalizing ADR-0013's nav-return re-adoption to EVERY remount:
+
+- the detachable-stream owner is **module-scoped** (one shared
+  `detachedByOrigin` registry instead of one per Chat instance),
+- Chat's unmount cleanup **detaches** its binding into that registry
+  (previously the binding leaked as attached — the `attachedCount 2` gauge
+  signature),
+- a mounting Chat attempts **readopt for its chatId** once per mount, and an
+  `ensureAttached` heal covers StrictMode's mount→cleanup→mount handing the
+  same binding back.
+
+Verified with the reproducer's `MODE=project` (creates a real project via
+the UI, sends from `/p/<projectId>`): **40/40 adopted, 0 lost** — and runs
+10/33/34 show `bindingsCreated=2`: the remount DID occur (~7.5%, matching
+the original loss rate) and the second instance re-adopted the live stream.
+The fix does not prevent the remount; it makes it harmless. Full durable
+suite (adoption gate armed) and the 2,574-test unit suite green.
 
 Also observed once in early reproduction (run 21 of the first batch): a loss
 run whose final URL was the PREVIOUS run's chat — consistent with a stale

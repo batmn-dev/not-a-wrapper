@@ -119,6 +119,7 @@ export const DETACHED_BINDING_GAUGE_EVENTS = [
   "finished_attached",
   "finished_detached",
   "watchdog_stop",
+  "reattached",
 ] as const
 
 export type DetachedBindingGaugeEvent =

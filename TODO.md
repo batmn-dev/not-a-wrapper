@@ -109,11 +109,12 @@ binding. Fixed by mounting `<Chat/>` in the persistent `(chat)/layout.tsx`
 (pages render null, keep the /c auth redirect); verified 0/90 losses post-fix
 vs ~7% before, and `liveStreamNotAdoptedRuns > 0` now FAILS the harness
 scenario as the regression gate. Full forensics:
-`docs/performance/2026-08-28-adoption-loss-root-cause.md`. Known residual
-(small, separate): a project-originated first send crosses from `/p/[projectId]`
-into the `(chat)` layout, which still remounts Chat if the router commits
-mid-stream — same class, different layout boundary; fix when project first
-sends matter.
+`docs/performance/2026-08-28-adoption-loss-root-cause.md`. The project
+variant (`/p/[projectId]` first sends crossing into the `(chat)` layout) is
+fixed too: the stream owner is module-scoped with detach-on-unmount +
+readopt-on-mount, so ANY Chat remount re-adopts the live stream — verified
+40/40 in the reproducer's `MODE=project` (including runs where the remount
+demonstrably occurred and was survived).
 
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting

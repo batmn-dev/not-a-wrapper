@@ -16,6 +16,9 @@
  *
  * Usage: RUNS=30 bun run benchmarks/chat-performance/browser/adoption-loss-repro.ts
  * (spawns the perf server like the harness; BASE_URL reuses one).
+ * MODE=project sends from a project surface (/p/<projectId>, created once via
+ * the UI) instead of home — the project first send crosses the /p → (chat)
+ * LAYOUT boundary, the remount class the shared-owner readopt must survive.
  */
 import { spawn, type ChildProcess } from "node:child_process"
 import { existsSync } from "node:fs"
@@ -34,6 +37,7 @@ const REPO_ROOT = path.resolve(
 const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next-perf"
 const PERF_PORT = Number(process.env.PERF_PORT ?? 3111)
 const RUNS = Number(process.env.RUNS ?? 30)
+const MODE = process.env.MODE === "project" ? "project" : "home"
 const DIRECTIVE = "[[perf:text-only:60:fixed]]"
 
 function log(message: string): void {
@@ -176,12 +180,26 @@ async function main() {
     if (message.type() === "error") consoleErrors.push(message.text())
   })
 
+  let sendUrl = baseUrl
+  if (MODE === "project") {
+    // Create one project through the real dialog; every run reuses it.
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+    await page.locator('[aria-label="New project"]').first().click()
+    await page
+      .getByPlaceholder("Project name")
+      .fill(`adoption-repro-${Date.now()}`)
+    await page.getByRole("button", { name: "Create Project" }).click()
+    await page.waitForURL(/\/p\//, { timeout: 20000 })
+    sendUrl = page.url()
+    log(`project surface: ${sendUrl}`)
+  }
+
   let adopted = 0
   let lost = 0
   const lossDetails: string[] = []
 
   for (let run = 1; run <= RUNS; run++) {
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+    await page.goto(sendUrl, { waitUntil: "domcontentloaded" })
     const editor = page.locator('[contenteditable="true"]').first()
     await editor.waitFor({ state: "visible", timeout: 15000 })
     // Reset channels AFTER the onboarding load settles.

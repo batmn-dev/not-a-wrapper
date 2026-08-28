@@ -12,6 +12,7 @@
 // chatTurn.finishChatTurn for ALL THREE turn outcomes — normal completion,
 // stop() mid-stream (isAbort), and a transport error (isError).
 
+import { resetSharedChatStreamOwnersForTests } from "./use-detachable-chat-stream"
 import { clearLocallyResolvedApprovals } from "@/lib/chat-runs/approval-auto-send-gate"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { UserProfile } from "@/lib/user/types"
@@ -36,6 +37,12 @@ import {
   vi,
 } from "vitest"
 import type { useChatCore as UseChatCore } from "./use-chat-core"
+
+beforeEach(() => {
+  // The shared stream owner is process-lived; without a reset, one test's
+  // live mock binding leaks into the next test's mount-time readopt.
+  resetSharedChatStreamOwnersForTests()
+})
 
 let useChatCore: typeof UseChatCore
 
