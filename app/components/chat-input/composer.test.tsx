@@ -678,7 +678,6 @@ describe("Composer primary action", () => {
         assistantMessageId: "msg_previous" as Id<"messages">,
         status: "completed",
         terminalReason: "completed",
-        activeToolNames: [],
         pendingApproval: null,
       },
       pendingStopRunId: null,

@@ -869,7 +869,35 @@ async function main() {
     try {
       for (let index = 0; index < WARMUPS + RUNS; index++) {
         const kind = index < WARMUPS ? "warmup" : "run"
-        const run = await runScenarioOnce(context, baseUrl, config, timeoutMs)
+        let run: RunMetrics
+        try {
+          run = await runScenarioOnce(context, baseUrl, config, timeoutMs)
+        } catch (error) {
+          // A crashed run (timeout, navigation failure, admission rejection)
+          // fails the scenario's correctness but must not abort the suite —
+          // the other scenarios' samples and the result file still land.
+          run = {
+            longTaskCount: 0,
+            longTaskMaxMs: 0,
+            totalBlockingTimeMs: 0,
+            rafGapCount: 0,
+            rafGapMaxMs: 0,
+            markdownProjectionCount: 0,
+            markdownProjectionMaxMs: 0,
+            shikiHighlightCount: 0,
+            shikiHighlightTotalMs: 0,
+            domNodesBefore: 0,
+            domNodesAfter: 0,
+            correctness: {
+              ok: false,
+              foldedTextHash: hashValue(""),
+              expectedTextHash: hashValue(""),
+              terminalOutcome: null,
+              settleMismatchCount: 0,
+              detail: `run crashed: ${String(error).split("\n")[0]}`,
+            },
+          }
+        }
         log(
           `  ${kind} ${index + 1}/${WARMUPS + RUNS}: ` +
             `${run.correctness.ok ? "ok" : `CORRECTNESS FAILED (${run.correctness.detail ?? "unknown"})`}`

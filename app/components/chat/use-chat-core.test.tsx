@@ -974,7 +974,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_live",
       assistantMessageId: "msg_live",
       status: "streaming",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()
@@ -1002,7 +1001,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_accepted",
       assistantMessageId: "msg_accepted",
       status: "streaming",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()
@@ -1025,7 +1023,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_done",
       assistantMessageId: "msg_done",
       status: "completed",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()
@@ -1050,7 +1047,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
         runId: "run_too_late",
         assistantMessageId: "msg_late",
         status: "streaming",
-        activeToolNames: [],
         pendingApproval: null,
       }
       render()
@@ -1073,7 +1069,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_previous",
       assistantMessageId: "msg_previous",
       status: "completed",
-      activeToolNames: [],
       pendingApproval: null,
     }
     chatCoreMocks.selectedRun = previousTerminalRun
@@ -1093,7 +1088,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_new_dispatch",
       assistantMessageId: "msg_new",
       status: "streaming",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()

@@ -66,6 +66,14 @@ type MessagesContextType = {
   selectMessageBranch: (messageId: string) => Promise<void>
 }
 
+/**
+ * Experiment 2 rollout seam (build-time): split the selected-conversation
+ * subscription into path + run-state queries. Default OFF — the atomic
+ * query stays authoritative until the experiment's numbers are reviewed.
+ */
+const SPLIT_SELECTED_QUERY =
+  process.env.NEXT_PUBLIC_SPLIT_SELECTED_QUERY === "true"
+
 const MessagesContext = createContext<MessagesContextType | null>(null)
 
 export function useMessages() {
@@ -83,22 +91,58 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   const isValidConvexId = messagePersistenceMode === "server"
 
-  // Convex real-time query for the selected conversation — messages AND the
-  // linked current run in one atomic projection (gameplan §7; independent
-  // subscriptions would tear). The Per-user subscription seam gates it on
-  // Convex auth readiness — avoiding a throw if the subscription opens before
-  // the JWT is synced.
-  const {
-    data: selectedConversation,
-    isAuthReady: canSubscribeToMessages,
-    isLoading: isMessagesLoading,
-  } = usePerUserQuery(
+  // Selected-conversation subscription(s). Split mode (Experiment 2): the
+  // message path and the tiny run state subscribe separately, so run-doc
+  // writes (deduped beats, heartbeats, tool steps) no longer re-deliver the
+  // whole path. Both queries are keyed on chatId only and live on one Convex
+  // client, so their values always come from one transition — no value-level
+  // tearing (see the note on getSelectedConversation in convex/messages.ts).
+  // The atomic query remains the rollback path. Either way, the Per-user
+  // subscription seam gates on Convex auth readiness.
+  const atomic = usePerUserQuery(
     api.messages.getSelectedConversation,
-    isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
+    isValidConvexId && !SPLIT_SELECTED_QUERY
+      ? { chatId: chatId as Id<"chats"> }
+      : "skip"
   )
-  const convexMessages = selectedConversation?.selectedMessages
-  const selectedRun =
-    (canSubscribeToMessages ? selectedConversation?.selectedRun : null) ?? null
+  const splitPath = usePerUserQuery(
+    api.messages.getSelectedPath,
+    isValidConvexId && SPLIT_SELECTED_QUERY
+      ? { chatId: chatId as Id<"chats"> }
+      : "skip"
+  )
+  const splitRun = usePerUserQuery(
+    api.messages.getSelectedRunState,
+    isValidConvexId && SPLIT_SELECTED_QUERY
+      ? { chatId: chatId as Id<"chats"> }
+      : "skip"
+  )
+  const canSubscribeToMessages = SPLIT_SELECTED_QUERY
+    ? splitPath.isAuthReady
+    : atomic.isAuthReady
+  const isMessagesLoading = SPLIT_SELECTED_QUERY
+    ? splitPath.isLoading || splitRun.isLoading
+    : atomic.isLoading
+  const convexMessages = SPLIT_SELECTED_QUERY
+    ? splitPath.data?.selectedMessages
+    : atomic.data?.selectedMessages
+  const rawSelectedRun = SPLIT_SELECTED_QUERY
+    ? (splitRun.data ?? null)
+    : (atomic.data?.selectedRun ?? null)
+  // Client half of the §7 validation gauntlet in split mode: a run may drive
+  // presentation only while its assistant message is on the DELIVERED
+  // selected path (the points-back half stayed server-side). Same-transition
+  // delivery makes this check sound; "run known, path unknown" resolves to
+  // null exactly as the atomic query resolved it.
+  const selectedRun = useMemo(() => {
+    if (!canSubscribeToMessages || !rawSelectedRun) return null
+    if (!SPLIT_SELECTED_QUERY) return rawSelectedRun
+    const onDeliveredPath =
+      convexMessages?.some(
+        (message) => message._id === rawSelectedRun.assistantMessageId
+      ) ?? false
+    return onDeliveredPath ? rawSelectedRun : null
+  }, [canSubscribeToMessages, rawSelectedRun, convexMessages])
 
   const addMessageMutation = useMutation(api.messages.add)
   const selectBranchMutation = useMutation(api.messages.selectBranch)
