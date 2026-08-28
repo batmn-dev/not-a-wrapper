@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values"
 import { CHAT_TURN_EXECUTION_BUDGET } from "../lib/chat-turn/execution-budget"
+import { estimatePartialOutputTokens } from "../lib/usage/terminal-usage-estimate"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
@@ -826,7 +827,7 @@ function resolveWorkDurationMs(
   )
 }
 
-async function closeSupersededGenerationsForChat(
+export async function closeSupersededGenerationsForChat(
   ctx: MutationCtx,
   chatId: Id<"chats">,
   userId: Id<"users">,
@@ -2014,6 +2015,7 @@ export async function prepareGenerationForChat(
   let assistantOrder: number
   let includeAssistantInModelHistory = false
   let preparedModelHistory: Doc<"messages">[] | null = null
+  let resumedOutputTokensBaseline: number | undefined
 
   if (args.regeneration) {
     const preparedRegeneration = await applyRegenerationIntentForGeneration(
@@ -2112,6 +2114,13 @@ export async function prepareGenerationForChat(
     assistantMessageId = continuationMessage._id
     assistantOrder = continuationMessage.orderId
     includeAssistantInModelHistory = true
+    // The reused message's existing parts were billed to the PAUSED run's
+    // settled reservation. Freeze their partial-output estimate as this run's
+    // baseline so cancellation settlement only ever charges the delta this
+    // run produced (ADR-0021 cancellation amendment).
+    resumedOutputTokensBaseline = estimatePartialOutputTokens(
+      continuationMessage.parts
+    )
     await ctx.db.patch(assistantMessageId, {
       generationRunId: runId,
       requestId: args.requestId,
@@ -2136,6 +2145,10 @@ export async function prepareGenerationForChat(
     status: "streaming",
     assistantMessageId,
     activeStreamId: assistantMessageId,
+    ...(resumedOutputTokensBaseline !== undefined &&
+    resumedOutputTokensBaseline > 0
+      ? { resumedOutputTokensBaseline }
+      : {}),
     updatedAt: now,
   })
   // Claim the chat's status slot for this run (run start → live spinner). This
@@ -3117,6 +3130,16 @@ export async function recordToolInvocationsForChat(
   const stepInputTokens = args.usage?.inputTokens ?? 0
   const stepOutputTokens = args.usage?.outputTokens ?? 0
   const hasStepUsage = stepInputTokens > 0 || stepOutputTokens > 0
+  // Idempotency for money-bearing accumulation: steps are numbered
+  // monotonically within a run, so a redelivered step (retry after a lost
+  // response) at or below the high-water mark must not double-add its tokens.
+  // A usage payload without a step number (legacy worker) keeps the old
+  // accumulate-always behavior.
+  const stepAlreadyAccumulated =
+    args.stepNumber !== undefined &&
+    run.lastUsageStepNumber !== undefined &&
+    args.stepNumber <= run.lastUsageStepNumber
+  const accumulateStepUsage = hasStepUsage && !stepAlreadyAccumulated
 
   if (args.invocations.length > 0 || hasStepUsage) {
     // Accepted tool activity is progress evidence (gameplan §5) — not
@@ -3124,10 +3147,13 @@ export async function recordToolInvocationsForChat(
     await ctx.db.patch(run._id, {
       lastProgressAt: now,
       updatedAt: now,
-      ...(hasStepUsage
+      ...(accumulateStepUsage
         ? {
             inputTokens: (run.inputTokens ?? 0) + stepInputTokens,
             outputTokens: (run.outputTokens ?? 0) + stepOutputTokens,
+            ...(args.stepNumber !== undefined
+              ? { lastUsageStepNumber: args.stepNumber }
+              : {}),
           }
         : {}),
     })

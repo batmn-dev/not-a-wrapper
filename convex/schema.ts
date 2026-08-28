@@ -251,6 +251,17 @@ export default defineSchema({
     finishReason: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
+    // High-water mark for per-step usage accumulation: a redelivered step
+    // (worker retry after a lost response) must not double-add its tokens
+    // into the settlement-evidence totals above (ADR-0021).
+    lastUsageStepNumber: v.optional(v.number()),
+    // Approval continuations reuse the paused assistant message, whose parts
+    // were already billed to the PREVIOUS run's settled reservation. This
+    // baseline (the partial-output estimate over the reused parts at prepare)
+    // is subtracted from every partial-output estimate for THIS run so a
+    // stopped continuation never rebills the prior run's output (ADR-0021
+    // cancellation amendment).
+    resumedOutputTokensBaseline: v.optional(v.number()),
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
     activeStreamId: v.optional(v.string()),

@@ -3,6 +3,15 @@
 > **Status:** Implemented 2026-08-28 (Phases 1–6; ADR-0021 amended). The
 > rollout "Contract" step (removing legacy proof acceptance) remains
 > deliberately open until rollback no longer needs it.
+> Post-review hardening 2026-08-28: dispatched runs always stamp
+> `providerMayHaveStarted: true` (§15 — marker absence is not proof; only the
+> worker's not-started receipt releases); deadline/lease fallbacks settle the
+> title at zero absent start evidence (§7.7); per-step usage accumulation is
+> idempotent via a step high-water mark; approval continuations freeze a
+> partial-output baseline so a stopped continuation never rebills the paused
+> run's parts; chat deletion closes live runs (terminalize + defer) before
+> tombstoning; the reservation cap excludes a provider-reported actual title
+> component.
 > **Date:** 2026-08-28
 > **Scope:** Platform-funded durable chat turns only
 > **Required architecture update:** Amend
@@ -741,6 +750,13 @@ Operational checks after deployment:
 2. Confirm old callers still reserve and settle normally.
 3. Deploy the Next worker that sends the new proof field and terminal evidence.
 4. Confirm receipt observability before enabling deferred Stop settlement.
+
+Ordering is Convex-first and MANDATORY, not merely polite: a new Next build
+always sends `titleEstimatedInputTokens`, which a pre-amendment Convex
+validator rejects. This repository's deploy pipeline (`convex deploy` runs
+before the Next build in the same command) enforces the forward direction
+structurally; rollback must follow the staged procedure below rather than
+redeploying an old commit directly.
 
 ### Activate
 

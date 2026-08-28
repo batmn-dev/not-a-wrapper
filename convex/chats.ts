@@ -8,6 +8,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
+import { closeSupersededGenerationsForChat } from "./chatRuntime"
 import { ensureChatDeletionJob } from "./domain/chat_deletion"
 import {
   collectLinkedChats,
@@ -612,6 +613,13 @@ export async function removeChatForOwner(
 ): Promise<void> {
   const now = Date.now()
   const project = await requireLinkedProject(ctx, ctx.chat)
+  // Close any live run BEFORE tombstoning (ADR-0021 cancellation amendment):
+  // the supersede sweep terminalizes it and defers its platform reservation
+  // with pending facts and the settlement digest, so the worker's receipt (or
+  // the deadline reconciler) settles honestly. Without this, the deletion
+  // batch purges the run and strands a still-reserved reservation for the
+  // stale reconciler's legacy full-estimate charge.
+  await closeSupersededGenerationsForChat(ctx, ctx.chat._id, ctx.user._id, now)
   await ctx.db.patch(ctx.chat._id, {
     deletingAt: now,
     public: false, // revoke share links in the same commit

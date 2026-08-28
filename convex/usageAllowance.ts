@@ -677,18 +677,48 @@ function reservationTerminalFacts(
 }
 
 /**
- * Could the provider have started billable work for this run? Any durable
- * evidence answers yes; with none, the run may still have dispatched (the
- * work-start write is fire-and-forget), so callers must treat this as a
- * fallback discriminator, never as proof by itself.
+ * Continuation runs reuse the paused run's assistant message, whose existing
+ * parts were already billed to THAT run's settled reservation. Every partial-
+ * output estimate for this run must subtract the baseline frozen at prepare
+ * so a stopped continuation never rebills the prior run's output.
  */
-export function runProviderMayHaveStarted(run: Doc<"generationRuns">): boolean {
-  return (
-    run.workStartedAt !== undefined ||
-    (run.lastSnapshotSequence ?? 0) > 0 ||
-    (run.inputTokens ?? 0) > 0 ||
-    (run.outputTokens ?? 0) > 0
+function continuationAdjustedPartialEstimate(
+  run: Doc<"generationRuns">,
+  parts: unknown
+): number {
+  return Math.max(
+    0,
+    estimatePartialOutputTokens(parts) - (run.resumedOutputTokensBaseline ?? 0)
   )
+}
+
+/**
+ * Apply the same continuation baseline to worker-supplied evidence: the
+ * binding estimates over the full parts array it holds, prior-run parts
+ * included, so Convex — which knows the baseline — normalizes it here before
+ * the pure decision prices it.
+ */
+function adjustEvidenceForContinuationBaseline(
+  evidence: TerminalUsageEvidencePayload,
+  run: Doc<"generationRuns"> | null
+): TerminalUsageEvidencePayload {
+  const baseline = run?.resumedOutputTokensBaseline ?? 0
+  if (baseline <= 0) return evidence
+  const primary = evidence.primary
+  if (
+    (primary.kind === "completed-steps" ||
+      primary.kind === "started-without-usage") &&
+    primary.partialOutputTokens !== undefined
+  ) {
+    return {
+      primary: {
+        ...primary,
+        partialOutputTokens: Math.max(0, primary.partialOutputTokens - baseline),
+      },
+      title: evidence.title,
+    }
+  }
+  return evidence
 }
 
 /** Apply one pure settlement decision to a still-reserved reservation. */
@@ -784,7 +814,7 @@ export async function deferUsageSettlementForTerminalRun(
     ? await ctx.db.get(run.assistantMessageId)
     : null
   const partialEstimate = message
-    ? estimatePartialOutputTokens(message.parts)
+    ? continuationAdjustedPartialEstimate(run, message.parts)
     : 0
   const terminalEstimatedOutputTokens =
     reservation.estimatedOutputTokens !== undefined
@@ -805,7 +835,12 @@ export async function deferUsageSettlementForTerminalRun(
           settlementGrantExpiresAt: settlementDeadlineAt,
         }
       : {}),
-    providerMayHaveStarted: runProviderMayHaveStarted(run),
+    // A dispatched (non-queued) run MAY have reached the provider regardless
+    // of missing markers — `workStartedAt` is fire-and-forget and its absence
+    // is not proof (gameplan §15). Only the worker's explicit not-started
+    // receipt can prove otherwise and release; the deadline fallback must
+    // charge the conservative floor, never refund possibly-real work.
+    providerMayHaveStarted: true,
     terminalEstimatedOutputTokens,
     updatedAt: now,
   })
@@ -876,7 +911,16 @@ export async function finalizePendingTerminalUsage(
   }
 ): Promise<FinalizeTerminalUsageOutcome> {
   const { reservation, run, source, now } = args
-  const evidence = upgradeEvidenceWithRunUsage(args.evidence, run)
+  // Structural guard: evidence from an unrelated run must never influence a
+  // reservation's billing. Callers all pair these correctly today; a mismatch
+  // is a programming error, not a billing decision.
+  if (run && reservation.generationRunId !== run._id) {
+    throw new Error("Terminal usage run does not match reservation")
+  }
+  const evidence = upgradeEvidenceWithRunUsage(
+    adjustEvidenceForContinuationBaseline(args.evidence, run),
+    run
+  )
   if (reservation.status !== "reserved") {
     warnUsage("usage_terminal_late_evidence_ignored", {
       reservationId: reservation._id,
@@ -918,9 +962,10 @@ export async function finalizePendingTerminalUsage(
 /**
  * Evidence for a pending reservation whose worker never reported: durable
  * run facts when the run survives, the facts copied onto the reservation at
- * Stop time when it did not. Convex cannot know whether a title attempt ever
- * started, so once provider work may have begun the title charges its input
- * floor — bounded, and strictly below the legacy full title estimate.
+ * Stop time when it did not. Convex holds NO evidence that a title attempt
+ * ever started — only the worker's receipt carries that — so per invariant 7
+ * (a title is charged only from actual usage or explicit start evidence) the
+ * fallback always settles the title at zero.
  */
 function terminalSettlementFallbackEvidence(
   reservation: Doc<"usageReservations">,
@@ -936,12 +981,14 @@ function terminalSettlementFallbackEvidence(
         outputTokens: run?.outputTokens,
         partialOutputTokens: reservation.terminalEstimatedOutputTokens,
       },
-      title: { kind: "started-without-usage" },
+      title: { kind: "not-run" },
     }
   }
-  const mayHaveStarted =
-    reservation.providerMayHaveStarted ??
-    (run ? runProviderMayHaveStarted(run) : true)
+  // Rows deferred by current code always carry the stamp (true — a dispatched
+  // run may have started regardless of markers, gameplan §15). An unstamped
+  // pending row (deploy-overlap legacy) gets the same conservative answer:
+  // never refund possibly-real work on marker absence alone.
+  const mayHaveStarted = reservation.providerMayHaveStarted ?? true
   if (!mayHaveStarted) {
     return { primary: { kind: "not-started" }, title: { kind: "not-run" } }
   }
@@ -950,9 +997,15 @@ function terminalSettlementFallbackEvidence(
       kind: "started-without-usage",
       partialOutputTokens: reservation.terminalEstimatedOutputTokens,
     },
-    title: { kind: "started-without-usage" },
+    title: { kind: "not-run" },
   }
 }
+
+// Sized for the documented two-interval convergence promise: each
+// finalization is a handful of small writes (bucket, reservation, one ledger
+// row), so 100 per 15 s tick stays far inside Convex mutation limits while
+// absorbing cancellation bursts the stale reconciler's 25 could not.
+const TERMINAL_SETTLEMENT_BATCH_LIMIT = 100
 
 /**
  * Deadline reconciliation for pending cancellation settlements: bounded,
@@ -972,7 +1025,7 @@ export async function reconcileDueTerminalSettlementsPass(
         .gt("settlementDeadlineAt", undefined)
         .lte("settlementDeadlineAt", now)
     )
-    .take(RECONCILE_BATCH_LIMIT)
+    .take(TERMINAL_SETTLEMENT_BATCH_LIMIT)
 
   let finalized = 0
   for (const reservation of due) {
@@ -1179,7 +1232,10 @@ export async function settleUsageForTerminalRun(
   if (evidence.terminal !== undefined) {
     const decision = resolveTerminalUsageSettlement(
       reservationTerminalFacts(reservation),
-      upgradeEvidenceWithRunUsage(evidence.terminal, run)
+      upgradeEvidenceWithRunUsage(
+        adjustEvidenceForContinuationBaseline(evidence.terminal, run),
+        run
+      )
     )
     await applyTerminalSettlementDecision(
       ctx,
@@ -1200,7 +1256,7 @@ export async function settleUsageForTerminalRun(
       ? await ctx.db.get(run.assistantMessageId)
       : null
     const partialEstimate = message
-      ? estimatePartialOutputTokens(message.parts)
+      ? continuationAdjustedPartialEstimate(run, message.parts)
       : 0
     const withPartial: Doc<"usageReservations"> = {
       ...reservation,

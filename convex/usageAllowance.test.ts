@@ -802,7 +802,9 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     const reservationId = (
       reserved as { reservationId: Id<"usageReservations"> }
     ).reservationId
-    const runId = (await ctx.db.insert("generationRuns", {
+    // Typed seed (no structural casts): schema drift in these billing
+    // fixtures must fail compilation, not hide behind `as never`.
+    const runSeed: Omit<Doc<"generationRuns">, "_id" | "_creationTime"> = {
       chatId: "chats_1" as Id<"chats">,
       userId: user._id,
       requestId: "req-1",
@@ -813,7 +815,11 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
       grantDigest: "digest-1",
       updatedAt: Date.now(),
       ...options.runFields,
-    } as never)) as Id<"generationRuns">
+    }
+    const runId = (await ctx.db.insert(
+      "generationRuns",
+      runSeed
+    )) as Id<"generationRuns">
     await attachReservationToRun(ctx, {
       reservationId,
       requestId: "req-1",
@@ -999,7 +1005,7 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     warn.mockRestore()
   })
 
-  it("the deadline reaper settles the same floor a receipt would have", async () => {
+  it("the deadline reaper settles the primary floor and zero title without start evidence", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     const { reservation } = await pendingStopFixture(ctx, tables)
     await ctx.db.patch(reservation._id, {
@@ -1007,27 +1013,82 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     })
     const { finalized } = await reconcileDueTerminalSettlementsPass(ctx)
     expect(finalized).toBe(1)
+    // 1_000 input × 0.75 = 750. Convex holds no evidence a title attempt ever
+    // started, so the fallback charges zero title (invariant 7) — only the
+    // worker's receipt can carry title-start evidence.
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
       settlementBasis: "estimated_input_floor",
-      titleSettlementBasis: "input_floor",
-      actualCredits: 790,
+      titleSettlementBasis: "not_run",
+      actualCredits: 750,
       settlementGrantDigest: undefined,
     })
   })
 
-  it("the deadline reaper releases when provider work provably never began", async () => {
+  it("marker absence is not proof: a marker-less Stop still charges the floor at deadline", async () => {
+    // Gameplan §15: `workStartedAt` is fire-and-forget, so its absence on a
+    // dispatched run must never refund possibly-real provider work. Only the
+    // worker's explicit not-started receipt (next test) can release.
     const { ctx, tables } = createCtx({ users: [user] })
     const { reservation } = await pendingStopFixture(ctx, tables, {
       runFields: { workStartedAt: undefined },
     })
-    expect(reservation.providerMayHaveStarted).toBe(false)
+    expect(reservation.providerMayHaveStarted).toBe(true)
     await ctx.db.patch(reservation._id, {
       settlementDeadlineAt: Date.now() - 1,
     })
     await reconcileDueTerminalSettlementsPass(ctx)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_input_floor",
+      actualCredits: 750,
+    })
+  })
+
+  it("a worker's not-started receipt releases the reservation in full", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables, {
+      runFields: { workStartedAt: undefined },
+    })
+    const outcome = await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      run,
+      evidence: {
+        primary: { kind: "not-started" },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    expect(outcome).toBe("released")
     expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
     expect(bucketOf(tables).spentCredits).toBe(0)
+    expect(bucketOf(tables).reservedCredits).toBe(0)
+  })
+
+  it("a continuation receipt's partial output is clamped by the resumed baseline", async () => {
+    // The paused run's settled reservation already paid for the reused
+    // message's parts; the worker's estimate covers the FULL parts array, so
+    // Convex subtracts the baseline frozen at continuation prepare.
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables, {
+      runFields: { resumedOutputTokensBaseline: 1_500 },
+    })
+    await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      run,
+      evidence: {
+        primary: { kind: "started-without-usage", partialOutputTokens: 2_000 },
+        title: { kind: "not-run" },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    // 1_000 input × 0.75 + (2_000 − 1_500) baseline-adjusted output × 4.5.
+    expect(tables.usageReservations[0]).toMatchObject({
+      settlementBasis: "estimated_input_with_partial_output",
+      actualCredits: 750 + 2_250,
+    })
   })
 
   it("the deadline reaper settles from copied facts when the run vanished", async () => {
@@ -1058,7 +1119,7 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
       settlementBasis: "estimated_input_floor",
-      actualCredits: 790,
+      actualCredits: 750,
     })
   })
 

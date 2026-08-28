@@ -266,11 +266,19 @@ export function resolveTerminalUsageSettlement(
     }
   }
 
+  // The reservation caps ESTIMATED cost only (invariant 6): provider-reported
+  // actual usage — a title attempt's included — may honestly exceed it, so an
+  // actual title component rides on top of the capped estimate instead of
+  // being swallowed by it.
   let actualCredits = primaryCredits + titleCredits
   let uncappedCredits: number | undefined
-  if (estimateBased && actualCredits > reservation.reservedCredits) {
-    uncappedCredits = actualCredits
-    actualCredits = reservation.reservedCredits
+  if (estimateBased) {
+    const actualTitleCredits = titleBasis === "actual" ? titleCredits : 0
+    const estimatedCredits = actualCredits - actualTitleCredits
+    if (estimatedCredits > reservation.reservedCredits) {
+      uncappedCredits = actualCredits
+      actualCredits = reservation.reservedCredits + actualTitleCredits
+    }
   }
   return {
     kind: "settle",

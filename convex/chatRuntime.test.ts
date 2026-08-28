@@ -5725,25 +5725,29 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
 
   it("the lease reaper settles a dead worker's reservation at the input floor", async () => {
     // Cancellation amendment: a reaped lease has no worker to report usage,
-    // so it settles from durable facts — estimated input plus the title
-    // input floor — never the legacy full-reservation charge.
+    // so it settles from durable facts — the estimated input floor, with ZERO
+    // title (invariant 7: no evidence a title attempt ever started) — never
+    // the legacy full-reservation charge.
     const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
     fixture.tables.generationRuns[0] = {
       ...fixture.tables.generationRuns[0]!,
       heartbeatAt: 1_000,
       leaseExpiresAt: Date.now() - 60_000,
     }
+    fixture.tables.usageReservations[0] = {
+      ...fixture.tables.usageReservations[0]!,
+      estimatedInputTokens: 2_000,
+    }
     const { ctx, tables } = createMutationCtx(fixture.tables)
 
     const { reaped } = await reapExpiredGenerationRunsPass(ctx)
     expect(reaped).toBe(1)
-    // No estimatedInputTokens on the fixture → primary floor 0; title floor
-    // falls back to titleEstimatedCredits (500). Far below the 100k reserve.
+    // 2_000 input × 0.75 = 1_500. Far below the 100k reserve.
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
       settlementBasis: "estimated_input_floor",
-      titleSettlementBasis: "input_floor",
-      actualCredits: 500,
+      titleSettlementBasis: "not_run",
+      actualCredits: 1_500,
     })
   })
 
@@ -5787,6 +5791,28 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
       status: "settled",
       settlementBasis: "observed_partial",
       actualCredits: 1_200 + 500,
+    })
+  })
+
+  it("a redelivered step's usage is not double-counted", async () => {
+    // Money-bearing accumulation must be idempotent: a worker retry after a
+    // lost response redelivers the same step number, and the high-water mark
+    // rejects the duplicate add.
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    const step = {
+      messageId: fixture.messageId,
+      stepNumber: 1,
+      usage: { inputTokens: 600, outputTokens: 40 },
+      invocations: [],
+    }
+    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), step)
+    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), step)
+    expect(tables.generationRuns[0]).toMatchObject({
+      inputTokens: 600,
+      outputTokens: 40,
+      lastUsageStepNumber: 1,
     })
   })
 })

@@ -12,6 +12,7 @@ import {
   recordToolInvocationsForChat,
   updateAssistantSnapshotForChat,
 } from "./chatRuntime"
+import type { GenerationRunTerminalReason } from "./domain/generation_run_lifecycle"
 import { isTerminalGenerationRunStatus } from "./domain/message_contract"
 import {
   isValidTerminalUsageEvidence,
@@ -200,7 +201,8 @@ export const heartbeatGenerationRun = internalMutation({
 })
 
 /** Terminal reasons whose reservation may await a settlement-only receipt. */
-const RECEIPT_ELIGIBLE_TERMINAL_REASONS = new Set(["user_stop", "superseded"])
+const RECEIPT_ELIGIBLE_TERMINAL_REASONS: ReadonlySet<GenerationRunTerminalReason> =
+  new Set(["user_stop", "superseded"])
 
 function rejectTerminalUsageReceipt(
   reason: string,

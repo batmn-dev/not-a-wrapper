@@ -243,11 +243,12 @@ export type StreamFinishFacts = {
  * write (or the settlement-only receipt when Stop already won).
  */
 export type TerminalUsageFacts = {
-  primary:
-    | { kind: "not-started" }
-    | { kind: "actual"; inputTokens?: number; outputTokens?: number }
-    | { kind: "completed-steps"; inputTokens?: number; outputTokens?: number }
-    | { kind: "started-without-usage" }
+  /**
+   * The canonical evidence union (one contract, no drift). The parent never
+   * sets `partialOutputTokens` — the binding owns that estimate and stamps it
+   * in `toTerminalUsagePayload` from the parts it holds.
+   */
+  primary: TerminalUsageEvidencePayload["primary"]
   title: TitleTerminalUsageEvidence
 }
 

@@ -277,6 +277,30 @@ describe("cancellation terminal settlement decision (ADR-0021 amendment)", () =>
     })
   })
 
+  it("an actual title component rides above the capped estimate, never inside it", () => {
+    // The cap bounds ESTIMATED cost only (invariant 6): provider-reported
+    // title usage is honest overrun and must not be swallowed by the clamp —
+    // which would also persist titleCredits > actualCredits.
+    const tight = { ...facts, reservedCredits: 500 }
+    const decision = resolveTerminalUsageSettlement(tight, {
+      primary: { kind: "started-without-usage" },
+      title: {
+        kind: "actual",
+        routeId: "gpt-5-nano",
+        pricingRole: "title",
+        inputTokens: 400,
+        outputTokens: 8,
+      },
+    })
+    // Primary floor 750 → capped at 500; actual title 44 added on top.
+    expect(decision).toMatchObject({
+      actualCredits: 544,
+      titleCredits: 44,
+      titleBasis: "actual",
+      uncappedCredits: 794,
+    })
+  })
+
   it("prices completed-step usage without double-counting the partial estimate", () => {
     const decision = resolveTerminalUsageSettlement(facts, {
       // The partial estimate covers ALL persisted output, completed steps
