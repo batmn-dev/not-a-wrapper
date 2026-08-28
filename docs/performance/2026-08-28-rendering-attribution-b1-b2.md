@@ -155,3 +155,19 @@ Shipped anyway as hygiene (the invalidation surface, not a rescue):
 Post-fix traces: B2 190 ms TBT, B1 3 ms TBT. A conversation test pins the
 contract (live turn c-v-free while streaming, settled turns keep c-v, no
 `:has(` in section classes).
+
+**Harness verification + a measurement lesson.** Standard harness RUNS=10:
+long-markdown TBT p50 40 → 34 ms; cpu4 came back 358–363 ms against the
+earlier session's 291 ms — which triggered a same-session A/B bisect via
+temporary `NEXT_DIST_DIR=.next-ab` builds at `cf200df1` (377 ms),
+`9cd26e45` (380 ms), `d69861b8` (365 ms), and this change (358–363 ms,
+fewest long tasks). Verdict: flat across commits — no code regression, and
+this change is the best of the group. The 291 → ~370 gap is CROSS-SESSION
+ambient load (another project's dev server + turbopack workers were
+running during the later session), which shifts the 4×-throttled scenario
+~25%. Also note the two TBT definitions differ: the trace tool's window
+ends at `stream_terminal`, while the harness's in-app long-task observer
+covers the page lifetime including the post-terminal decay-fade window.
+Absolute TBT numbers are only comparable within one session on this
+machine — for regressions, A/B on the same session (or the pinned CI
+runner with relative thresholds).
