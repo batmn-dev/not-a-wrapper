@@ -53,7 +53,24 @@ describe("Button visually disabled state", () => {
     expect(button.className).toContain("text-foreground")
     expect(button.className).not.toContain("hover:bg-interactive-hover")
     expect(button.className).not.toContain("active:bg-interactive-pressed")
-    expect(button.className).toContain("active:scale-[0.96]")
+    expect(button.className).toContain("press-motion")
+
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  it("allows interaction owners to opt out of shared press motion", () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    act(() => {
+      root.render(<Button pressMotion="none">Stable anchor</Button>)
+    })
+
+    expect(container.querySelector("button")?.className).not.toContain(
+      "press-motion"
+    )
 
     act(() => root.unmount())
     container.remove()

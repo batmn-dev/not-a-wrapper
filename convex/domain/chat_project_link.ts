@@ -7,8 +7,8 @@ type ChatProjectLinkCtx = Pick<QueryCtx, "db">
  * The single sanctioned Chat<->Project traversal.
  *
  * `chat.projectId` is established under `requireOwnedProject` at its only
- * write site (chats.create), so a stored link always joins documents with the
- * same owner. Consumers must not re-derive the join from `chat.projectId` or
+ * write site (chats.ts `insertChatForUser`), so a stored link always joins
+ * documents with the same owner. Consumers must not re-derive the join from `chat.projectId` or
  * the `by_project` indexes directly: every traversal here re-checks the owner
  * pair and fails closed, so corrupted or legacy cross-owner links surface as
  * errors instead of silently reading or mutating another user's data. This is

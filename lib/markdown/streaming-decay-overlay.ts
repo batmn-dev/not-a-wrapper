@@ -244,6 +244,33 @@ class StreamingDecayManager {
   private states = new Map<Element, ContainerState>()
   private rafHandle: number | null = null
   private lastPaintAt = Number.NEGATIVE_INFINITY
+  private bucketHighlights: Highlight[] | null = null
+
+  /**
+   * Persistent per-bucket Highlight objects, registered in `CSS.highlights`
+   * ONCE and mutated in place thereafter. Registering/deleting registry
+   * entries per paint tick invalidates `::highlight()` rule matching
+   * DOCUMENT-WIDE in Chromium: every paint recalced style for every element
+   * and reattached layout, which made the browser re-walk the entire layout
+   * tree (~5.8 µs/object) on every streamed commit — measured at 10.4 s of
+   * layout (78% of all main-thread blocking) across one 100 KB stream, and
+   * confirmed by the reduced-motion probe collapsing TBT 4,021 ms → 10 ms
+   * (docs/performance/2026-08-28-rendering-attribution-b1-b2.md). In-place
+   * range mutation keeps the registry keys stable so the overlay stays what
+   * it was designed to be: paint-only.
+   */
+  private ensureBucketHighlights(): Highlight[] {
+    if (this.bucketHighlights) return this.bucketHighlights
+    this.bucketHighlights = Array.from(
+      { length: DECAY_BUCKET_COUNT },
+      (_, bucket) => {
+        const highlight = new Highlight()
+        CSS.highlights.set(highlightName(bucket), highlight)
+        return highlight
+      }
+    )
+    return this.bucketHighlights
+  }
 
   /**
    * Observe one committed render of a streaming container. Idempotent per
@@ -285,9 +312,20 @@ class StreamingDecayManager {
       cancelAnimationFrame(this.rafHandle)
       this.rafHandle = null
     }
-    if (this.states.size === 0) return
-    this.states.clear()
-    this.paint(performance.now())
+    if (this.states.size > 0) {
+      this.states.clear()
+      this.paint(performance.now())
+    }
+    // Unregister and drop the persistent highlights: a later re-enable
+    // re-registers against the then-current globals (this also keeps a test's
+    // stubbed Highlight/CSS globals from outliving the stub through the
+    // module singleton).
+    if (this.bucketHighlights && isSupported()) {
+      for (let bucket = 0; bucket < DECAY_BUCKET_COUNT; bucket++) {
+        CSS.highlights.delete(highlightName(bucket))
+      }
+    }
+    this.bucketHighlights = null
   }
 
   private ensureLoop(): void {
@@ -333,13 +371,11 @@ class StreamingDecayManager {
         buckets
       )
     }
+    const highlights = this.ensureBucketHighlights()
     for (let bucket = 0; bucket < DECAY_BUCKET_COUNT; bucket++) {
-      const ranges = buckets[bucket]!
-      if (ranges.length === 0) {
-        CSS.highlights.delete(highlightName(bucket))
-      } else {
-        CSS.highlights.set(highlightName(bucket), new Highlight(...ranges))
-      }
+      const highlight = highlights[bucket]!
+      highlight.clear()
+      for (const range of buckets[bucket]!) highlight.add(range)
     }
   }
 }

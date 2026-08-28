@@ -14,6 +14,7 @@ import type * as chats from "../chats.js";
 import type * as crons from "../crons.js";
 import type * as deletionCleanup from "../deletionCleanup.js";
 import type * as domain_chat_deletion from "../domain/chat_deletion.js";
+import type * as domain_chat_perf from "../domain/chat_perf.js";
 import type * as domain_chat_project_link from "../domain/chat_project_link.js";
 import type * as domain_generation_run_lifecycle from "../domain/generation_run_lifecycle.js";
 import type * as domain_generation_run_liveness from "../domain/generation_run_liveness.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   deletionCleanup: typeof deletionCleanup;
   "domain/chat_deletion": typeof domain_chat_deletion;
+  "domain/chat_perf": typeof domain_chat_perf;
   "domain/chat_project_link": typeof domain_chat_project_link;
   "domain/generation_run_lifecycle": typeof domain_generation_run_lifecycle;
   "domain/generation_run_liveness": typeof domain_generation_run_liveness;

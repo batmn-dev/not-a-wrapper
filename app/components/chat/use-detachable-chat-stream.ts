@@ -8,10 +8,16 @@ import { LOCAL_CHAT_ID_PREFIX } from "@/lib/chat-store/identity"
 import { isSelectedPathDivergent } from "@/lib/chat-store/turns/selected-path"
 import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 import {
+  isChatPerfClientEnabled,
   markChatPerf,
   type DetachedBindingGaugeEvent,
 } from "@/lib/observability/chat-performance"
-import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
+import {
+  markChatPerfFirstStreamChunk,
+  markChatPerfFirstTextDelta,
+  markChatPerfRequestDispatched,
+  takeChatPerfHeader,
+} from "@/lib/observability/chat-performance-client"
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
 import {
@@ -21,7 +27,7 @@ import {
   type DataUIPart,
   type UIDataTypes,
 } from "ai"
-import { useCallback, useLayoutEffect, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 
 export type ChatStreamFinishEvent = {
   message: UIMessage
@@ -118,6 +124,40 @@ function preservePausedApprovalEffort(
     : { ...continuationBody, reasoningEffort: pausedEffort }
 }
 
+type TransportStream = Awaited<
+  ReturnType<ChatTransport<UIMessage>["sendMessages"]>
+>
+
+/**
+ * Identity tap for the accepted response stream (measurement plan Phase 2):
+ * marks the first parsed chunk and the first text-delta chunk. Reads only the
+ * chunk's `type` discriminant, retains nothing, and is skipped entirely when
+ * instrumentation is off — the SDK then consumes the original stream.
+ */
+function instrumentAcceptedStream(stream: TransportStream): TransportStream {
+  if (!isChatPerfClientEnabled()) return stream
+  let sawFirstChunk = false
+  let sawFirstTextDelta = false
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        if (!sawFirstChunk) {
+          sawFirstChunk = true
+          markChatPerfFirstStreamChunk()
+        }
+        if (
+          !sawFirstTextDelta &&
+          (chunk as { type?: string } | null)?.type === "text-delta"
+        ) {
+          sawFirstTextDelta = true
+          markChatPerfFirstTextDelta()
+        }
+        controller.enqueue(chunk)
+      },
+    })
+  ) as TransportStream
+}
+
 class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
   constructor(
     private readonly acceptances: RequestAcceptanceRegistry,
@@ -151,6 +191,9 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
       ? { ...options, body: { ...sdkBody, ...(callBody ?? {}) } }
       : options
     try {
+      // The true fetch-dispatch mark (measurement plan Phase 2): the next
+      // statement performs the HTTP request. No-op unless instrumented.
+      markChatPerfRequestDispatched()
       // HttpChatTransport resolves here only after fetch returned an OK
       // response with a body. The route performs durable prepareGeneration —
       // including the idempotent first-message claim — before constructing
@@ -158,7 +201,7 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
       // itself remains unconsumed and can continue independently.
       const stream = await super.sendMessages(dispatchOptions)
       this.acceptances.accept(options.messageId)
-      return stream
+      return instrumentAcceptedStream(stream)
     } catch (error) {
       this.acceptances.reject(options.messageId, error)
       throw error
@@ -174,6 +217,13 @@ type DetachableChatStreamOwner = {
   detach: (binding: StreamBinding) => void
   adopt: (binding: StreamBinding, chatId: string) => void
   readopt: (chatId: string, selectedPath: UIMessage[]) => ReadoptResult
+  /**
+   * Heal a binding that was detached by an unmount cleanup but is being
+   * committed again by a mounted instance (StrictMode's mount→cleanup→mount,
+   * or any future remount that hands the same binding back). No-op for an
+   * already-attached binding.
+   */
+  ensureAttached: (binding: StreamBinding, chatId: string | null) => void
   setHandlers: (handlers: ChatStreamHandlers) => void
   setFallbackTurnBodyProvider: (
     provider: (() => ChatTurnBodyFields | null) | null
@@ -424,6 +474,28 @@ function createDetachableChatStreamOwner(
       return { state: "readopted", binding }
     },
 
+    ensureAttached(binding, chatId) {
+      const lifecycle = lifecycles.get(binding)
+      if (lifecycle?.state !== "detached") return
+      clearWatchdog(binding)
+      if (
+        lifecycle.originChatId !== null &&
+        detachedByOrigin.get(lifecycle.originChatId) === binding
+      ) {
+        detachedByOrigin.delete(lifecycle.originChatId)
+      }
+      if (isStreamLive(binding)) {
+        detachedBindingCount = Math.max(0, detachedBindingCount - 1)
+      }
+      lifecycles.set(binding, {
+        state: "attached",
+        ownerChatId: chatId ?? lifecycle.originChatId,
+        finished: false,
+      })
+      attachedBindingCount += 1
+      emitBindingGauge("reattached", chatId ?? lifecycle.originChatId)
+    },
+
     setHandlers(nextHandlers) {
       handlers = nextHandlers
     },
@@ -452,6 +524,44 @@ function createDetachableChatStreamOwner(
       await accepted
     },
   }
+}
+
+/**
+ * The owner is MODULE-scoped, not instance-scoped (adoption-loss fix,
+ * project variant, 2026-08-28): a per-instance owner meant any Chat REMOUNT
+ * — the /p/[projectId] → (chat) layout crossing on a project first send, a
+ * router segment commit, `key={projectId}` project switches — created a
+ * fresh owner whose `detachedByOrigin` map could not see the previous
+ * instance's live binding, so a mid-stream remount silently orphaned the
+ * stream. With one shared owner, the unmount cleanup detaches the binding
+ * into the shared registry and the next mounted instance re-adopts it —
+ * ADR-0013's nav-return re-adoption generalized to every remount. Handlers
+ * and the fallback-body provider stay last-mounted-instance-wins, which is
+ * the same routing the per-instance design had for detached finishes.
+ */
+const sharedOwners = new Map<string, DetachableChatStreamOwner>()
+
+/**
+ * Test-only: the shared owners (and their detached-binding registries) are
+ * process-lived by design, which crosses test boundaries — a prior test's
+ * still-"streaming" mock binding would be re-adopted by the next test's
+ * mount. Call from beforeEach in suites that mount the chat surface.
+ */
+export function resetSharedChatStreamOwnersForTests(): void {
+  sharedOwners.clear()
+}
+
+function getSharedOwner(
+  streamTimeoutMs: number,
+  api: string
+): DetachableChatStreamOwner {
+  const key = `${streamTimeoutMs}|${api}`
+  let owner = sharedOwners.get(key)
+  if (!owner) {
+    owner = createDetachableChatStreamOwner(streamTimeoutMs, api)
+    sharedOwners.set(key, owner)
+  }
+  return owner
 }
 
 export type DetachableChatStream = {
@@ -487,9 +597,7 @@ export function useDetachableChatStream({
    */
   getFallbackTurnBody?: () => ChatTurnBodyFields | null
 }): DetachableChatStream {
-  const [owner] = useState(() =>
-    createDetachableChatStreamOwner(streamTimeoutMs, api)
-  )
+  const [owner] = useState(() => getSharedOwner(streamTimeoutMs, api))
   useLayoutEffect(() => {
     owner.setFallbackTurnBodyProvider(getFallbackTurnBody ?? null)
   }, [owner, getFallbackTurnBody])
@@ -539,8 +647,37 @@ export function useCommitDetachableChatStream({
     nextChatId: string | null
   ) => void
 }): void {
+  // One readopt attempt per MOUNT (not per transition): a remounted Chat
+  // starts with committedChatId === chatId, so the transition branches below
+  // never run — but the previous instance's unmount cleanup may have parked
+  // this chat's live stream in the shared owner's detached registry.
+  const attemptedMountReadopt = useRef(false)
+  const latestStreamRef = useRef(stream)
   useLayoutEffect(() => {
     const { owner, chatId: committedChatId, binding } = stream.commit
+
+    if (committedChatId === chatId) {
+      let readopted = false
+      if (!attemptedMountReadopt.current) {
+        attemptedMountReadopt.current = true
+        const currentStreamIsLive =
+          binding.chat.status === "submitted" ||
+          binding.chat.status === "streaming"
+        const readopt =
+          chatId !== null && !currentStreamIsLive
+            ? owner.readopt(chatId, initialMessages)
+            : null
+        if (readopt?.state === "readopted") {
+          owner.detach(binding)
+          stream.commit.replace(chatId, readopt.binding)
+          readopted = true
+        }
+      }
+      // Outside the once-guard (refs survive StrictMode's mount→cleanup→
+      // mount): the cleanup detached this very binding, so flip it attached
+      // again. No-op for an already-attached binding.
+      if (!readopted) owner.ensureAttached(binding, chatId)
+    }
 
     if (committedChatId !== chatId) {
       if (committedChatId === null && chatId !== null) {
@@ -592,5 +729,20 @@ export function useCommitDetachableChatStream({
     }
 
     owner.setHandlers(handlers)
+    latestStreamRef.current = stream
   })
+
+  // Unmount cleanup: park the binding in the shared owner's detached
+  // registry instead of dropping it. If the stream is live, the NEXT mounted
+  // instance for the same chat re-adopts it (the remount half of the
+  // adoption-loss fix); if idle, detach is bookkeeping only. Ref-read (kept
+  // current by the every-commit effect above) so this effect never re-runs
+  // on render — stream is a fresh object per render.
+  useLayoutEffect(
+    () => () => {
+      const { owner, binding } = latestStreamRef.current.commit
+      owner.detach(binding)
+    },
+    []
+  )
 }

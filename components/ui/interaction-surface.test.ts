@@ -22,4 +22,13 @@ describe("shared interaction surface CSS", () => {
       "scrollbar-color: var(--scrollbar-color-hover) transparent;"
     )
   })
+
+  it("owns one snap-and-release recipe for button-like controls", () => {
+    expect(globalCss).toContain("@utility press-motion {")
+    expect(globalCss).toContain("--press-motion-scale: 0.96;")
+    expect(globalCss).toContain("--press-motion-release-duration: 75ms;")
+    expect(globalCss).toContain("&:active:not(")
+    expect(globalCss).toContain("transition-duration: 0ms;")
+    expect(globalCss).toContain("@media (prefers-reduced-motion: reduce)")
+  })
 })

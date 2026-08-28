@@ -5,6 +5,15 @@ benchmark half (branch/Markdown/Shiki, PR 0a) is covered by
 `2026-07-22-chat-performance-baseline.md`; this runbook covers live
 browser/server measurement.
 
+> **Status note (2026-08-27).** An automated production-browser benchmark now
+> exists: `bun run bench:browser` (`benchmarks/chat-performance/browser/`,
+> deterministic scripted provider, guest path). It replaces the manual
+> protocol below for the scenarios it covers; the manual protocol remains the
+> tool for authenticated/durable scenarios (cross-tab, reload, snapshot
+> cadence) and for trace-level paint truth. Contract and current numbers:
+> `docs/performance/metric-dictionary.md`,
+> `docs/performance/2026-08-27-system-performance-baseline.md`.
+
 > **Status note (2026-07-23).** The verified PR 1/2/3/7b behaviors covered by
 > the flag collapse now run unconditionally. The diagnostic instrumentation
 > switches below remain. A later 2026-07-27 decision used

@@ -103,6 +103,9 @@ type ButtonPlusMenuProps = {
   onOpenActionMenu?: () => void
   /** End the active action-query session (synthetic Escape / focus-out). */
   onCloseActionQuery?: () => void
+  /** Coordinates every background tooltip owned by the composer. */
+  tooltipDisabled?: boolean
+  onMenuOpenChange?: (open: boolean) => void
 }
 
 type ComposerActionMenuRowProps = {
@@ -195,6 +198,8 @@ export function ButtonPlusMenu({
   onToggleConnector,
   onOpenActionMenu,
   onCloseActionQuery,
+  tooltipDisabled = false,
+  onMenuOpenChange,
 }: ButtonPlusMenuProps) {
   const { openFilePicker, addFiles } = useFileUpload()
   const isMobile = useBreakpoint(768)
@@ -290,13 +295,17 @@ export function ButtonPlusMenu({
     onOpenActionMenu,
     onCloseActionQuery,
     onRunAction: runAction,
+    onMenuOpenChange,
   })
 
   // Unauthenticated: show auth popover instead of dropdown
   if (!isUserAuthenticated) {
     return (
       <Popover open={isTriggerMenuOpen} onOpenChange={handleAuthPopoverOpenChange}>
-        <Tooltip disableHoverablePopup disabled={isTriggerMenuOpen}>
+        <Tooltip
+          disableHoverablePopup
+          disabled={isTriggerMenuOpen || tooltipDisabled}
+        >
           <TooltipTrigger render={<span className="inline-flex" />}>
             <PopoverTrigger
               render={
@@ -425,7 +434,10 @@ export function ButtonPlusMenu({
           onOpenChange={handleTriggerMenuOpenChange}
           modal
         >
-          <Tooltip disableHoverablePopup disabled={isMenuOpen}>
+          <Tooltip
+            disableHoverablePopup
+            disabled={isMenuOpen || tooltipDisabled}
+          >
             <TooltipTrigger render={<span className="inline-flex" />}>
               <DropdownMenuTrigger
                 render={
@@ -701,7 +713,10 @@ export function ButtonPlusMenu({
   // that typing "@" does, and typing filters it.
   return (
     <Popover open={isActionQueryOpen} onOpenChange={handleActionQueryOpenChange}>
-      <Tooltip disableHoverablePopup disabled={isActionQueryOpen}>
+      <Tooltip
+        disableHoverablePopup
+        disabled={isActionQueryOpen || tooltipDisabled}
+      >
         <TooltipTrigger
           render={<span className="inline-flex" />}
         >

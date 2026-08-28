@@ -283,6 +283,12 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       constructor(...ranges: unknown[]) {
         this.ranges = ranges
       }
+      clear() {
+        this.ranges = []
+      }
+      add(range: unknown) {
+        this.ranges.push(range)
+      }
     }
     class FakeStaticRange {
       startContainer: Node
@@ -311,9 +317,18 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       const container = document.createElement("div")
       document.body.appendChild(container)
       container.textContent = "Hello"
-      // First observation seeds the baseline — nothing painted.
+      // First observation seeds the baseline — the persistent bucket
+      // highlights register once (empty), and nothing is painted: registry
+      // KEYS must never churn per paint (Chromium invalidates ::highlight
+      // matching document-wide on registry mutation — the B1 layout storm).
       observeStreamingDecay(container)
-      expect(highlights.size).toBe(0)
+      const emptyRangeCount = () =>
+        [...highlights.values()].reduce(
+          (total, highlight) => total + highlight.ranges.length,
+          0
+        )
+      expect(highlights.size).toBe(12)
+      expect(emptyRangeCount()).toBe(0)
 
       container.textContent = "Hello world"
       observeStreamingDecay(container)
@@ -327,9 +342,11 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       expect(Math.max(...ranges.map((r) => r.endOffset))).toBe(11)
       expect(ranges[0]!.startContainer).toBe(container.firstChild)
 
-      // Settlement clears every bucket synchronously.
+      // Settlement clears every bucket's ranges synchronously; the
+      // registered highlights persist (mutated in place, never re-keyed).
       settleStreamingDecay(container)
-      expect(highlights.size).toBe(0)
+      expect(highlights.size).toBe(12)
+      expect(emptyRangeCount()).toBe(0)
       container.remove()
     } finally {
       // The manager is a module singleton: reset its rAF handle (armed with

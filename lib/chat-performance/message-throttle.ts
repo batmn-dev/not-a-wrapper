@@ -1,3 +1,4 @@
+import { markChatPerf } from "@/lib/observability/chat-performance"
 import type { Chat, UIMessage } from "@ai-sdk/react"
 
 type ScheduledPublication =
@@ -21,6 +22,29 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
 ): () => void {
   let scheduled: ScheduledPublication = null
   let pending = false
+  // Per-streaming-session accounting (measurement plan Phase 2): SDK message
+  // callbacks observed vs publications delivered while streaming. Emitted as
+  // ONE summary mark when the session leaves `streaming`; proves the
+  // ≤1-publication-per-frame invariant. markChatPerf is a no-op unless the
+  // instrumentation build flag is on.
+  let streamingCallbackCount = 0
+  let streamingPublicationCount = 0
+  let inStreamingSession = false
+
+  const flushStreamingSummary = () => {
+    if (!inStreamingSession) return
+    inStreamingSession = false
+    markChatPerf("stream_publication_summary", {
+      callbackCount: streamingCallbackCount,
+      publicationCount: streamingPublicationCount,
+      coalescedCount: Math.max(
+        0,
+        streamingCallbackCount - streamingPublicationCount
+      ),
+    })
+    streamingCallbackCount = 0
+    streamingPublicationCount = 0
+  }
 
   const cancelScheduledPublication = () => {
     if (scheduled?.kind === "frame") {
@@ -37,6 +61,7 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
     cancelScheduledPublication()
     if (!pending) return
     pending = false
+    if (chat.status === "streaming") streamingPublicationCount++
     onChange()
   }
 
@@ -61,14 +86,20 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
   }
 
   const unsubscribeMessages = chat["~registerMessagesCallback"](() => {
-    if (chat.status === "streaming") schedule()
-    else {
+    if (chat.status === "streaming") {
+      inStreamingSession = true
+      streamingCallbackCount++
+      schedule()
+    } else {
       pending = true
       publish()
     }
   })
   const unsubscribeStatus = chat["~registerStatusCallback"](() => {
-    if (chat.status !== "streaming") publish()
+    if (chat.status !== "streaming") {
+      publish()
+      flushStreamingSummary()
+    }
   })
   const unsubscribeError = chat["~registerErrorCallback"](publish)
 

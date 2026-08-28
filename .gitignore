@@ -87,3 +87,7 @@ bun-debug.log*
 # Note: the 52 docs/measurements files already tracked before this rule remain
 # tracked; this only keeps NEW measurement artifacts out of commits.
 docs/measurements/
+
+# Chat-performance browser harness (isolated perf build + results)
+.next-perf/
+benchmarks/chat-performance/browser/results/

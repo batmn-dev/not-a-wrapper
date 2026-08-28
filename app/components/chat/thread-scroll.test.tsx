@@ -12,23 +12,11 @@ import {
   vi,
 } from "vitest"
 import {
-  captureTurnReflowAnchor,
   createTurnCenterIntersectionObserver,
-  createTurnRenderIntersectionObserver,
-  estimateTurnPlaceholderHeight,
-  isTurnAlwaysRendered,
-  resolveSubmitTurnScrollBehavior,
-  restoreTurnReflowAnchor,
+  createTurnIntersectionObserver,
   ThreadScrollEdge,
-  TURN_ACTIVE_RENDER_RADIUS,
-  TURN_ALWAYS_RENDER_COUNT,
   TURN_CENTER_INTERSECTION_ROOT_MARGIN,
   TURN_CENTER_INTERSECTION_THRESHOLD,
-  TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE,
-  TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE,
-  TURN_REFLOW_EDGE_INSET_PX,
-  TURN_RENDER_INTERSECTION_ROOT_MARGIN,
-  TURN_RENDER_INTERSECTION_THRESHOLD,
   useSubmitTurnScrollRef,
   useTurnIntersectionRef,
 } from "./thread-scroll"
@@ -85,7 +73,7 @@ class IntersectionObserverStub implements IntersectionObserver {
 function SubmitTarget({ active }: { active: boolean }) {
   const ref = useSubmitTurnScrollRef(active)
   return (
-    <div data-is-intersecting="true" data-turn-id-container="user-1">
+    <div data-turn-id-container="user-1">
       <section ref={ref} data-turn-id-container="user-1" />
     </div>
   )
@@ -98,7 +86,7 @@ function IntersectionTarget({
 }) {
   const ref = useTurnIntersectionRef(onChange)
   return (
-    <div data-is-intersecting="true" data-turn-id-container="turn-1">
+    <div data-turn-id-container="turn-1">
       <section ref={ref} data-turn-id-container="turn-1" />
     </div>
   )
@@ -189,26 +177,29 @@ describe("thread scroll contract", () => {
     vi.unstubAllGlobals()
   })
 
-  it("shares the exact render-intersection observer values per scroll root", () => {
+  it("gates the shared observer by threshold and tears down per scroll root", () => {
     const turn = document.createElement("div")
     container.appendChild(turn)
     const onChange = vi.fn()
-    const observer = createTurnRenderIntersectionObserver()
+    const observer = createTurnIntersectionObserver({
+      rootMargin: "10px",
+      threshold: 0.5,
+    })
 
     const cleanup = observer.observe(turn, onChange)
     const instance = IntersectionObserverStub.instances[0]
     expect(instance?.root).toBe(container)
-    expect(instance?.rootMargin).toBe(TURN_RENDER_INTERSECTION_ROOT_MARGIN)
-    expect(instance?.thresholds).toEqual([TURN_RENDER_INTERSECTION_THRESHOLD])
+    expect(instance?.rootMargin).toBe("10px")
+    expect(instance?.thresholds).toEqual([0.5])
 
     instance?.trigger({
-      intersectionRatio: TURN_RENDER_INTERSECTION_THRESHOLD - 0.001,
+      intersectionRatio: 0.499,
       isIntersecting: true,
       target: turn,
     })
     expect(onChange.mock.calls.at(-1)?.[0]).toBe(false)
     instance?.trigger({
-      intersectionRatio: TURN_RENDER_INTERSECTION_THRESHOLD,
+      intersectionRatio: 0.5,
       isIntersecting: true,
       target: turn,
     })
@@ -239,62 +230,6 @@ describe("thread scroll contract", () => {
     expect(instance?.disconnect).not.toHaveBeenCalled()
     cleanupSecond()
     expect(instance?.disconnect).toHaveBeenCalledOnce()
-  })
-
-  it("uses the recovered turn window and text-height estimator", () => {
-    expect(TURN_ALWAYS_RENDER_COUNT).toBe(5)
-    expect(TURN_ACTIVE_RENDER_RADIUS).toBe(5)
-    expect(isTurnAlwaysRendered(14, 20, -1)).toBe(false)
-    expect(isTurnAlwaysRendered(15, 20, -1)).toBe(true)
-    expect(isTurnAlwaysRendered(7, 20, 2)).toBe(true)
-    expect(isTurnAlwaysRendered(8, 20, 2)).toBe(false)
-
-    expect(
-      estimateTurnPlaceholderHeight(
-        ["a".repeat(TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE + 1)],
-        TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE
-      )
-    ).toBe(92)
-    expect(
-      estimateTurnPlaceholderHeight(
-        ["one\r\ntwo\n"],
-        TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE
-      )
-    ).toBe(110)
-    expect(estimateTurnPlaceholderHeight([], 88)).toBeNull()
-  })
-
-  it("restores the captured visible edge after a virtualized turn reflow", () => {
-    expect(TURN_REFLOW_EDGE_INSET_PX).toBe(4)
-    let turnRect = { top: 140, bottom: 260 }
-    const turn = document.createElement("div")
-    turn.dataset.turnIdContainer = "turn-1"
-    turn.dataset.isIntersecting = "true"
-    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
-      top: 100,
-      bottom: 600,
-    } as DOMRect)
-    vi.spyOn(turn, "getBoundingClientRect").mockImplementation(
-      () => turnRect as DOMRect
-    )
-    container.appendChild(turn)
-    container.scrollTop = 300
-
-    const anchor = captureTurnReflowAnchor(container)
-    expect(anchor).toMatchObject({
-      turnId: "turn-1",
-      edge: "top",
-      edgePosition: 140,
-    })
-
-    turnRect = { top: 176, bottom: 296 }
-    if (anchor) restoreTurnReflowAnchor(anchor)
-    expect(container.scrollTop).toBe(336)
-
-    const secondAnchor = captureTurnReflowAnchor(container)
-    turnRect = { top: 150, bottom: 270 }
-    if (secondAnchor) restoreTurnReflowAnchor(secondAnchor)
-    expect(container.scrollTop).toBe(336)
   })
 
   function flushOneFrame() {
@@ -343,36 +278,11 @@ describe("thread scroll contract", () => {
     expect(scrollIntoView).toHaveBeenCalledOnce()
   })
 
-  it("gates center-band behavior behind the recovered experiment default", () => {
-    act(() => {
-      root.render(
-        <>
-          <div data-is-intersecting="true" data-turn-id-container="turn-1" />
-          <div data-is-intersecting="false" data-turn-id-container="turn-2" />
-          <div data-is-intersecting="true" data-turn-id-container="turn-3">
-            <section data-turn-id-container="turn-3" />
-          </div>
-        </>
-      )
-    })
-    const target = container.querySelector<HTMLElement>(
-      'section[data-turn-id-container="turn-3"]'
-    )
-    expect(target && resolveSubmitTurnScrollBehavior(target)).toBe("smooth")
-    expect(target && resolveSubmitTurnScrollBehavior(target, false)).toBe(
-      "smooth"
-    )
-    expect(target && resolveSubmitTurnScrollBehavior(target, true)).toBe(
-      "instant"
-    )
-  })
-
   it("observes the turn section through the exact center band", () => {
     const onChange = vi.fn()
     act(() => root.render(<IntersectionTarget onChange={onChange} />))
 
     const section = container.querySelector("section")
-    const owner = section?.parentElement
     const observer = IntersectionObserverStub.instances[0]
 
     expect(observer?.root).toBe(container)
@@ -382,7 +292,6 @@ describe("thread scroll contract", () => {
 
     act(() => observer?.trigger({ isIntersecting: false }))
     expect(onChange).toHaveBeenCalledWith(false)
-    expect(owner?.dataset.isIntersecting).toBe("true")
   })
 
   it("matches the fixed sentinel and entry-owned gutter observers", () => {

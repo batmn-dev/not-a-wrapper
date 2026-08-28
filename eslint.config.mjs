@@ -3,7 +3,7 @@ import nextConfig from "eslint-config-next"
 const eslintConfig = [
   ...nextConfig,
   {
-    ignores: ["convex/_generated/**"],
+    ignores: ["convex/_generated/**", ".next-perf/**"],
   },
   {
     // Icon system enforcement: use Remix Icons React components for UI icons.

@@ -23,6 +23,7 @@ import {
 
 let currentTurnId: string | undefined
 let pendingHeaderTurnId: string | undefined
+let stopIntentNoted = false
 
 /**
  * Starts a new instrumented turn: mints a fresh correlation id (never reused
@@ -33,8 +34,38 @@ export function beginChatPerfTurn(): string | undefined {
   if (!isChatPerfClientEnabled()) return undefined
   currentTurnId = createChatPerfCorrelationId()
   pendingHeaderTurnId = currentTurnId
+  stopIntentNoted = false
   markChatPerf("chat_send_intent", { correlationId: currentTurnId })
   return currentTurnId
+}
+
+/**
+ * Records the user's Stop click at the earliest synchronous point, before any
+ * mutation dispatch or deferred-stop arming. Also lets `stream_terminal`
+ * report `abort` truthfully instead of collapsing a user Stop into `finish`.
+ */
+export function noteChatPerfStopIntent(): void {
+  if (!isChatPerfClientEnabled()) return
+  stopIntentNoted = true
+  markChatPerf("stop_intent", turnFields())
+}
+
+/**
+ * The true fetch-dispatch mark, emitted by the chat transport immediately
+ * before the HTTP request (not the AI SDK status-transition proxy it
+ * replaced — that fired a React commit after the fact).
+ */
+export function markChatPerfRequestDispatched(): void {
+  markChatPerf("request_dispatched", turnFields())
+}
+
+/** First parsed stream chunk / first text-delta observed by the transport. */
+export function markChatPerfFirstStreamChunk(): void {
+  markChatPerf("client_first_stream_bytes", turnFields())
+}
+
+export function markChatPerfFirstTextDelta(): void {
+  markChatPerf("client_first_text_delta_received", turnFields())
 }
 
 /**
@@ -136,10 +167,11 @@ type TurnPerfInput = {
 
 /**
  * Emits the turn marks from observable stream-state transitions:
- * `request_dispatched` (→ submitted), `first_chunk_received` (→ streaming),
- * `optimistic_message_painted` (new trailing user message during a live
- * turn), `first_visible_text` (first nonempty assistant text), and
- * `stream_terminal` (streaming/submitted → ready|error).
+ * `first_chunk_received` (→ streaming), `optimistic_message_painted` (new
+ * trailing user message during a live turn), `first_visible_text` (first
+ * nonempty assistant text), and `stream_terminal` (streaming/submitted →
+ * ready|error, with `abort` when a Stop intent was noted this turn).
+ * `request_dispatched` moved to the transport (the actual fetch).
  */
 export function useChatTurnPerfMarks(input: TurnPerfInput): void {
   const previousStatus = useRef<ChatStreamStatus>(input.status)
@@ -154,14 +186,16 @@ export function useChatTurnPerfMarks(input: TurnPerfInput): void {
     previousStatus.current = next
 
     if (next === "submitted") {
-      markChatPerf("request_dispatched", turnFields())
+      // `request_dispatched` now fires from the transport at the actual
+      // fetch; this transition only resets per-turn state.
       sawVisibleText.current = false
     } else if (next === "streaming") {
       markChatPerf("first_chunk_received", turnFields())
     } else if (previous === "streaming" || previous === "submitted") {
       markChatPerf("stream_terminal", {
         ...turnFields(),
-        outcome: next === "error" ? "error" : "finish",
+        outcome:
+          next === "error" ? "error" : stopIntentNoted ? "abort" : "finish",
       })
     }
   }, [input.status])

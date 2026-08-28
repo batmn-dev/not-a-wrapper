@@ -92,6 +92,20 @@ export const CHAT_PERF_SPAN_NAMES = [
   "history_adaptation",
   "stream_start",
   "prepare_total",
+  // The platform allowance reservation alone (`reserveAuthorized`), split
+  // out of `credential_resolution` (Experiment 1).
+  "usage_reservation",
+  // Receipt-anchored lifecycle spans (measurement plan Phase 2): all measured
+  // from HTTP request receipt, unlike `stream_start` (see its note below).
+  "provider_request_started",
+  "server_first_stream_write",
+  "response_stream_closed",
+  // Provider-anchored: measured from the `streamText` call. Kept separate
+  // because reasoning/source/tool events can precede the first text delta.
+  "provider_first_event",
+  "provider_first_text_delta",
+  // Whole-settlement duration (drain + final flush + terminal write).
+  "settlement_total",
 ] as const
 
 export type ChatPerfSpanName = (typeof CHAT_PERF_SPAN_NAMES)[number]
@@ -105,10 +119,27 @@ export const DETACHED_BINDING_GAUGE_EVENTS = [
   "finished_attached",
   "finished_detached",
   "watchdog_stop",
+  "reattached",
 ] as const
 
 export type DetachedBindingGaugeEvent =
   (typeof DETACHED_BINDING_GAUGE_EVENTS)[number]
+
+/**
+ * Every durable worker-wire op (convex/chatRuntime.ts generationRunWriteArgs),
+ * pinned here so `durable_write` events carry a closed enum. A new worker op
+ * must be added here before its write duration can be observed.
+ */
+export const DURABLE_WORKER_WRITE_OPS = [
+  "markGenerationWorkStarted",
+  "updateAssistantSnapshot",
+  "recordToolInvocations",
+  "createToolApprovalRequest",
+  "markGenerationRunCompleted",
+  "markGenerationRunFailed",
+  "markGenerationRunAborted",
+  "heartbeatGenerationRun",
+] as const
 
 /**
  * Every event this module can emit, with its complete field allow-list.
@@ -128,6 +159,26 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     correlationId: CORRELATION,
     outcome: oneOf(...TERMINAL_OUTCOMES),
   },
+  // First parsed stream chunk / first text-delta chunk observed by the client
+  // transport tap (measurement plan Phase 2). "Bytes" per the plan's naming:
+  // the tap sits on the parsed-chunk stream, one sync hop after byte arrival.
+  client_first_stream_bytes: { correlationId: CORRELATION },
+  client_first_text_delta_received: { correlationId: CORRELATION },
+  // Stop instrumentation: the user's stop click, before any async work.
+  stop_intent: { correlationId: CORRELATION },
+  // One summary per streaming session from the rAF coalescer: SDK message
+  // callbacks observed, publications actually delivered to React, and the
+  // difference (coalesced). Proves the ≤1-publication-per-frame invariant.
+  stream_publication_summary: {
+    callbackCount: REQUIRED_NUMBER,
+    publicationCount: REQUIRED_NUMBER,
+    coalescedCount: REQUIRED_NUMBER,
+  },
+  // Rendering-cost marks (durations only, never content).
+  markdown_projection_advance: { durationMs: REQUIRED_NUMBER },
+  shiki_highlight: { durationMs: REQUIRED_NUMBER },
+  long_task: { durationMs: REQUIRED_NUMBER },
+  raf_gap: { durationMs: REQUIRED_NUMBER },
   durable_settlement_receipt: {
     outcome: oneOf("completed", "failed", "aborted"),
   },
@@ -180,6 +231,12 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     kind: oneOf(
       "attempt",
       "accepted",
+      // A write that landed but changed nothing (content-unchanged dedupe in
+      // updateAssistantSnapshotForChat). Without this kind the reconciliation
+      // invariant `attempt = accepted + deduped + authority_lost + failed`
+      // cannot hold — the emitter at durable-turn-runtime.ts sent it from the
+      // start and the validator silently dropped it.
+      "deduped",
       "authority_lost",
       "failed",
       "final_flush",
@@ -187,6 +244,14 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
       "settlement_receipt_degraded"
     ),
     payloadBytes: NUMBER,
+    correlationId: CORRELATION,
+  },
+  // Per-op durable worker-wire write duration (snapshot, step, approval,
+  // heartbeat, terminal). Op names are a closed enum; no payload ever.
+  durable_write: {
+    op: oneOf(...DURABLE_WORKER_WRITE_OPS),
+    durationMs: REQUIRED_NUMBER,
+    ok: BOOLEAN,
     correlationId: CORRELATION,
   },
 }
@@ -290,11 +355,20 @@ export type ChatPerfServerSession = {
    */
   span<T>(name: ChatPerfSpanName, fn: () => Promise<T>): Promise<T>
   /**
-   * Records a span whose duration was measured externally (e.g.
-   * `stream_start` = request receipt → immediately before `streamText`).
+   * Records a span whose duration was measured externally. Anchor caveat:
+   * `stream_start` measures runtime-construction → `streamText` (its clock is
+   * `turnStartedAtMs`, set AFTER auth/parse/admission); the receipt-anchored
+   * equivalent is `provider_request_started`. Do not sum `stream_start` with
+   * the admission spans as if they shared an anchor.
    */
   record(name: ChatPerfSpanName, durationMs: number, ok?: boolean): void
   counter(kind: string, payloadBytes?: number): void
+  /**
+   * Emits one schema-validated event that is neither a span nor a checkpoint
+   * counter (e.g. `durable_write`). Same allow-list gate as everything else;
+   * no-op when the request is unsampled.
+   */
+  event(name: ChatPerfEventName, fields?: ChatPerfFields): void
 }
 
 function emitServerEvent(name: ChatPerfEventName, fields: ChatPerfFields) {
@@ -312,6 +386,7 @@ const NOOP_SESSION: ChatPerfServerSession = {
   span: (_name, fn) => fn(),
   record: () => {},
   counter: () => {},
+  event: () => {},
 }
 
 /**
@@ -372,6 +447,9 @@ export function createChatPerfServerSession(
             : {}),
         })
       )
+    },
+    event(name, fields = {}) {
+      emitServerEvent(name, withCorrelation(fields))
     },
   }
 }

@@ -2,10 +2,13 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { isServerChatId } from "@/lib/chat-store/identity"
 import {
+  reserveAuthorizedPlatformUsage,
   resolveModelRoute,
   type ResolvedModelRoute,
   type RouteResolutionFailure,
+  type RouteResolverDeps,
 } from "@/lib/model-route-resolver"
+import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import {
   resolveLogicalModelEffortLevels,
   resolveLogicalModelSearchMode,
@@ -140,6 +143,14 @@ type ChatCredentialAdmissionParams = {
   reasoningEffort?: ModelReasoningEffort
   /** Server-planned approval continuation pin, when this is one. */
   pinnedProviderId?: Provider
+  /**
+   * Key-settings read started earlier in admission (Experiment 1): a pure
+   * read of the caller's own settings, safe to overlap with the abuse check.
+   * The resolver awaits it in place of its own round-trip.
+   */
+  keySettingsPromise?: ReturnType<RouteResolverDeps["getKeySettings"]>
+  /** Sampled perf session; adds the `usage_reservation` sub-span. */
+  perf?: ChatPerfServerSession
 }
 
 export type ChatRouteAdmission = {
@@ -265,6 +276,8 @@ export async function validateAndResolveChatCredential({
   enableSearch,
   reasoningEffort,
   pinnedProviderId: plannedPinnedProviderId,
+  keySettingsPromise,
+  perf,
 }: ChatCredentialAdmissionParams): Promise<ChatRouteAdmission> {
   const pinnedProviderId =
     plannedPinnedProviderId ??
@@ -299,25 +312,40 @@ export async function validateAndResolveChatCredential({
       : {}),
   }
 
-  const resolution = await resolveModelRoute({
-    modelId: model,
-    isAuthenticated,
-    token: isAuthenticated ? token : undefined,
-    requiredCapabilities,
-    pinnedProviderId,
-    ...(platformFundingIdentity
-      ? {
-          platformFunding: {
-            workosUserId: platformFundingIdentity.workosUserId,
-            requestId,
-            chatId,
-            messages,
-            systemPrompt,
-            toolsLikely: effectiveEnableSearch,
-          },
-        }
-      : {}),
-  })
+  const resolution = await resolveModelRoute(
+    {
+      modelId: model,
+      isAuthenticated,
+      token: isAuthenticated ? token : undefined,
+      requiredCapabilities,
+      pinnedProviderId,
+      ...(platformFundingIdentity
+        ? {
+            platformFunding: {
+              workosUserId: platformFundingIdentity.workosUserId,
+              requestId,
+              chatId,
+              messages,
+              systemPrompt,
+              toolsLikely: effectiveEnableSearch,
+            },
+          }
+        : {}),
+    },
+    {
+      ...(keySettingsPromise
+        ? { getKeySettings: () => keySettingsPromise }
+        : {}),
+      ...(perf
+        ? {
+            reservePlatformUsage: (reserveArgs) =>
+              perf.span("usage_reservation", () =>
+                reserveAuthorizedPlatformUsage(reserveArgs)
+              ),
+          }
+        : {}),
+    }
+  )
 
   if (!resolution.ok) {
     throw toAdmissionError(resolution)

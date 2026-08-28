@@ -39,6 +39,10 @@ import {
   observeStreamingDecay,
   settleStreamingDecay,
 } from "@/lib/markdown/streaming-decay-overlay"
+import {
+  isChatPerfClientEnabled,
+  markChatPerf,
+} from "@/lib/observability/chat-performance"
 import { markMarkdownProjectionAnomaly } from "@/lib/observability/chat-performance-client"
 import { cn } from "@/lib/utils"
 import { RiCodeLine } from "@remixicon/react"
@@ -107,6 +111,22 @@ export type MarkdownBlockRecord = {
  */
 const MarkdownBlockStabilityContext =
   createContext<MarkdownBlockStability>("stable")
+
+/**
+ * Projection-advance duration capture (measurement plan Phase 2): keyed by
+ * result identity so only the committed projection's duration is emitted —
+ * an abandoned concurrent render's result never reaches the effect that
+ * reads this map. Instrumentation builds only; render stays pure (no refs).
+ */
+const projectionAdvanceDurations = new WeakMap<MarkdownProjectionResult, number>()
+
+const timedAdvance: typeof advanceMarkdownProjection = (args) => {
+  if (!isChatPerfClientEnabled()) return advanceMarkdownProjection(args)
+  const start = performance.now()
+  const result = advanceMarkdownProjection(args)
+  projectionAdvanceDurations.set(result, performance.now() - start)
+  return result
+}
 
 /**
  * Legacy full-source splitter, retained as the reference implementation and
@@ -403,7 +423,7 @@ function MarkdownComponent({
   // `advanceMarkdownProjection` is pure and deterministic, and the setState
   // below re-runs the render with the adjusted state before committing.
   const [projection, setProjection] = useState<MarkdownProjectionResult>(() =>
-    advanceMarkdownProjection({
+    timedAdvance({
       previous: null,
       source: children,
       streaming,
@@ -416,7 +436,7 @@ function MarkdownComponent({
     current.state.identity !== blockId ||
     current.state.settled === streaming
   ) {
-    current = advanceMarkdownProjection({
+    current = timedAdvance({
       previous: projection.state,
       source: children,
       streaming,
@@ -433,6 +453,13 @@ function MarkdownComponent({
     if (lastMarkedRef.current === projection) return
     lastMarkedRef.current = projection
     markMarkdownProjectionAnomaly(projection)
+    const advanceDurationMs = projectionAdvanceDurations.get(projection)
+    if (advanceDurationMs !== undefined) {
+      projectionAdvanceDurations.delete(projection)
+      markChatPerf("markdown_projection_advance", {
+        durationMs: advanceDurationMs,
+      })
+    }
   }, [projection])
 
   const mergedComponents = useMemo(

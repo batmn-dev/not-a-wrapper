@@ -21,7 +21,8 @@ export function SettingsSignOutButton() {
     <Button
       variant="ghost"
       size="sm"
-      className="sidebar-row sidebar-menu-row sidebar-row-content sidebar-row-primary-control menu-item-hoverable text-destructive hover:text-destructive w-full justify-start gap-0 text-left font-normal hover:bg-[var(--sidebar-row-active-background)] focus-visible:shadow-none! focus-visible:ring-0! active:scale-100 active:bg-[var(--sidebar-row-active-background)]"
+      pressMotion="none"
+      className="sidebar-row sidebar-menu-row sidebar-row-content sidebar-row-primary-control menu-item-hoverable text-destructive hover:text-destructive w-full justify-start gap-0 text-left font-normal hover:bg-[var(--sidebar-row-active-background)] focus-visible:shadow-none! focus-visible:ring-0! active:bg-[var(--sidebar-row-active-background)]"
       onClick={handleSignOut}
     >
       <SidebarLeadingIcon icon={RiLogoutBoxRLine} />

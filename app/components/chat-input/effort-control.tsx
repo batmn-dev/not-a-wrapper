@@ -13,7 +13,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useComposerPopoverPress } from "@/components/ui/use-composer-popover-press"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import {
   isReasoningEffortControlEnabled,
@@ -21,7 +20,7 @@ import {
 } from "@/lib/reasoning-effort"
 import { cn } from "@/lib/utils"
 import { RiCheckLine } from "@remixicon/react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 type EffortControlProps = {
   /** The selected model's level menu (logical union across routes). */
@@ -32,6 +31,9 @@ type EffortControlProps = {
    * override, and picking it clears the override. */
   defaultLevel?: ModelReasoningEffort
   onChange: (effort: ModelReasoningEffort | undefined) => void
+  /** Lets the segmented model control coordinate every composer tooltip. */
+  tooltipDisabled?: boolean
+  onOpenChange?: (open: boolean) => void
   onSelectionCommitted?: () => void
 }
 
@@ -77,10 +79,17 @@ function EffortControl({
   value,
   defaultLevel,
   onChange,
+  tooltipDisabled = false,
+  onOpenChange,
   onSelectionCommitted,
 }: EffortControlProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const { anchorRef, handlePressPointerDown } = useComposerPopoverPress()
+  const anchorRef = useRef<HTMLDivElement>(null)
+
+  const setOpen = (open: boolean) => {
+    setIsOpen(open)
+    onOpenChange?.(open)
+  }
 
   if (!isReasoningEffortControlEnabled() || levels.length === 0) return null
 
@@ -100,7 +109,7 @@ function EffortControl({
     // Picking the model's own default is "no override": keep the canonical
     // absent state so Default semantics (send nothing) stay representable.
     onChange(level === defaultLevel ? undefined : level)
-    setIsOpen(false)
+    setOpen(false)
     onSelectionCommitted?.()
   }
 
@@ -110,19 +119,19 @@ function EffortControl({
       data-slot="effort-control-desktop-anchor"
       className="inline-flex shrink-0"
     >
-      <DropdownMenu open={isOpen} onOpenChange={setIsOpen} modal={false}>
+      <DropdownMenu open={isOpen} onOpenChange={setOpen} modal={false}>
         <div
-          data-slot="effort-control-press-surface"
+          data-slot="effort-control-visual-surface"
           className="inline-flex min-w-0"
           tabIndex={-1}
-          onPointerDown={handlePressPointerDown}
         >
-          <Tooltip disabled={isOpen}>
+          <Tooltip disabled={isOpen || tooltipDisabled}>
             <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
               <DropdownMenuTrigger
                 render={
                   <ComposerControl
                     type="button"
+                    pressMotion="none"
                     data-effort-control=""
                     aria-label={
                       effectiveLabel
@@ -153,8 +162,8 @@ function EffortControl({
                     // button (its hover bridge continuity) is untouched. Hovering
                     // either half reveals the seam center-out instead: this pill
                     // translates +3px while the model trigger translates -3px,
-                    // 200ms easeOutQuint (transition-transform spans the v4
-                    // translate/scale properties, so press-scale still animates).
+                    // 200ms easeOutQuint. This trigger intentionally opts out
+                    // of press scale so only the seam translation can move it.
                     // While either half's popover is open (aria-expanded anywhere
                     // in the group), the group-has variant pins the revealed
                     // position independent of hover: the pointer wandering into
@@ -162,7 +171,7 @@ function EffortControl({
                     // since hover and pin target the same value the handoff never
                     // animates. Touch devices have no hover to reveal the seam,
                     // so they sit flush permanently.
-                    className="can-hover:-ms-1.5 can-hover:group-hover/segmented:translate-x-[3px] can-hover:group-has-[[aria-expanded=true]]/segmented:translate-x-[3px] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl py-0 ps-1.5 pe-3 text-base leading-[26px] font-normal text-[var(--text-tertiary)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-100 motion-reduce:transition-none"
+                    className="can-hover:-ms-1.5 can-hover:group-hover/segmented:translate-x-[3px] can-hover:group-has-[[aria-expanded=true]]/segmented:translate-x-[3px] h-9 shrink-0 overflow-visible rounded-s-md rounded-e-2xl py-0 ps-1.5 pe-3 text-base leading-[26px] font-normal text-[var(--text-tertiary)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
                   />
                 }
               >

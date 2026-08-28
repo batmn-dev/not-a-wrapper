@@ -20,6 +20,33 @@ import {
   type StreamChunkEvent,
 } from "./fixtures"
 
+// Phase 6 (measurement plan): the payload hashes are PINNED, not just
+// printed. Every cross-commit comparison — checked-in CI baselines, dated
+// reports, the browser harness's correctness oracle — assumes these bytes
+// never drift. Changing a fixture is allowed but must be deliberate: update
+// the constant here AND regenerate any stored baseline in the same change.
+const PINNED_PAYLOAD_HASHES = {
+  markdown: "f42a045150755c72",
+  longMarkdown: "7eac4d6cfe004f8b",
+  code: "14211443cdfb3464",
+  codeStress: "8fe6b2d0232f534b",
+  manyShortBlocks: "c26e29ecbbe52bd5",
+  shortProse: "8ff1d190a914ef01",
+} as const
+
+describe("pinned payload hashes (cross-commit comparability)", () => {
+  it("fixture payloads are byte-identical to the pinned baseline generation", () => {
+    expect({
+      markdown: hashValue(buildMarkdownPayload()),
+      longMarkdown: hashValue(buildLongMarkdownPayload()),
+      code: hashValue(buildCodePayload()),
+      codeStress: hashValue(buildCodeStressPayload()),
+      manyShortBlocks: hashValue(buildManyShortBlocksPayload()),
+      shortProse: hashValue(buildShortProsePayload()),
+    }).toEqual(PINNED_PAYLOAD_HASHES)
+  })
+})
+
 describe("seeded reproducibility", () => {
   it("produces identical random sequences for the same seed", () => {
     const a = createSeededRandom(42)

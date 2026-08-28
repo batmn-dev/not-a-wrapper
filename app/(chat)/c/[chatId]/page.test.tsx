@@ -3,10 +3,6 @@ import { redirect } from "next/navigation"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import Page from "./page"
 
-vi.mock("@/app/components/chat/chat", () => ({
-  Chat: () => <div data-testid="chat" />,
-}))
-
 vi.mock("@/lib/auth/workos", () => ({
   getAuthenticatedWorkosSession: vi.fn(),
 }))
@@ -28,9 +24,11 @@ describe("/c/[chatId] page", () => {
   })
 
   it("renders local chat routes without requiring WorkOS auth", async () => {
+    // The segment renders null — the Chat surface lives in the persistent
+    // (chat)/layout.tsx (adoption-loss fix). Not throwing IS the pass.
     await expect(
       Page({ params: Promise.resolve({ chatId: "local-123" }) })
-    ).resolves.toBeTruthy()
+    ).resolves.toBeNull()
 
     expect(mockGetAuthenticatedWorkosSession).not.toHaveBeenCalled()
     expect(mockRedirect).not.toHaveBeenCalled()

@@ -667,6 +667,19 @@ type DurableSnapshotTrackerOptions = {
   persist: (args: SnapshotPersistArgs) => Promise<unknown>
 }
 
+/**
+ * Snapshot cadence, env-tunable for the cadence experiment (measurement plan
+ * Experiment 3): `CHAT_SNAPSHOT_THROTTLE_MS` overrides the 750 ms default,
+ * clamped to [100, 5000] — the historical write storm ran at ~59 ms, and the
+ * clamp keeps a typo from recreating it. Read per turn so a perf server can
+ * be relaunched at a new cadence without a rebuild.
+ */
+export function snapshotThrottleMs(): number {
+  const raw = Number(process.env.CHAT_SNAPSHOT_THROTTLE_MS)
+  if (!Number.isFinite(raw) || raw <= 0) return 750
+  return Math.min(5000, Math.max(100, Math.round(raw)))
+}
+
 export function createDurableSnapshotTracker(
   options: DurableSnapshotTrackerOptions
 ) {
@@ -1008,7 +1021,31 @@ export function createConvexDurableTurn(args: {
     }
     // Safe by construction: the generic signature correlates `op` with its
     // payload; TS cannot carry that correlation into the union.
-    return wire({ op, args: { runId, ...opArgs } } as DurableWorkerCall)
+    const write = () =>
+      wire({ op, args: { runId, ...opArgs } } as DurableWorkerCall)
+    const perfSession = deps.perf
+    // Per-op write duration (measurement plan Phase 2): the one seam every
+    // post-prepare durable write crosses. Unsampled requests return the raw
+    // promise — the snapshot persist path's rejection handler attaches at a
+    // depth callers rely on, so the timing hop exists only when it can emit.
+    if (!perfSession?.sampled) return write()
+    const writeStartedAtMs = Date.now()
+    const recordWrite = (ok: boolean) =>
+      perfSession.event("durable_write", {
+        op,
+        durationMs: Date.now() - writeStartedAtMs,
+        ok,
+      })
+    return write().then(
+      (result) => {
+        recordWrite(true)
+        return result
+      },
+      (error: unknown) => {
+        recordWrite(false)
+        throw error
+      }
+    )
   }
 
   type TerminalWriteResult = "landed" | "settled-elsewhere" | "failed"
@@ -1432,6 +1469,7 @@ export function createConvexDurableTurn(args: {
         order: generation.assistantOrder,
       }
       snapshotTracker = createDurableSnapshotTracker({
+        throttleMs: snapshotThrottleMs(),
         persist: (snapshotArgs) => {
           // Checkpoint counters (PR 0b step 5): attempts/accepted/lost/failed
           // plus cumulative payload bytes. Sizes and enums only — the
@@ -1682,6 +1720,7 @@ export function createConvexDurableTurn(args: {
             finishReason,
             titleUsage,
           }) {
+            const settleStartedAtMs = Date.now()
             // Heartbeat policy (gameplan §10 "Runtime terminal convergence"):
             // stay alive through the bounded terminal retries — a mid-retry
             // reaping would race the write — then stop on EVERY exit. A
@@ -1810,6 +1849,11 @@ export function createConvexDurableTurn(args: {
                     : ("settled-elsewhere" as const),
               }
             } finally {
+              // Drain + final flush + terminal write, whatever the outcome.
+              deps.perf?.record(
+                "settlement_total",
+                Date.now() - settleStartedAtMs
+              )
               stopHeartbeat()
             }
           },

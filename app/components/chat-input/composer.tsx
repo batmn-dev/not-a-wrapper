@@ -236,6 +236,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // facing paddings and squared inner corners on the shared edge.
     const hasEffortControl =
       isReasoningEffortControlEnabled() && effortLevels.length > 0
+    const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false)
+    const [isEffortMenuOpen, setIsEffortMenuOpen] = useState(false)
+    const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
+    const isComposerOverlayOpen =
+      isModelSelectorOpen || isEffortMenuOpen || isActionMenuOpen
     const editorRef = useRef<PromptInputEditorHandle>(null)
     const [actionQuery, setActionQuery] =
       useState<PromptInputActionQuery | null>(null)
@@ -270,6 +275,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleCloseActionQuery = useCallback(() => {
       editorRef.current?.endActionQuery()
     }, [])
+    const handleActionQueryChange = (query: PromptInputActionQuery | null) => {
+      setActionQuery(query)
+      setIsActionMenuOpen(query !== null)
+    }
 
     // Anonymous chat cannot use authenticated storage, so guests' generated
     // pastes cross the turn seam as ordinary turn text.
@@ -616,6 +625,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onFileRemove={handleAttachmentRemove}
                   onRestoreLargePaste={handleRestoreLargePaste}
                   onRetry={handleAttachmentRetry}
+                  tooltipDisabled={isComposerOverlayOpen}
                 />
               </div>
               <PromptInputActions
@@ -637,18 +647,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onToggleConnector={handleToggleConnector}
                   onOpenActionMenu={handleOpenActionMenu}
                   onCloseActionQuery={handleCloseActionQuery}
+                  tooltipDisabled={isComposerOverlayOpen}
+                  onMenuOpenChange={setIsActionMenuOpen}
                 />
                 <WebSearchControl
                   enabled={enableSearch}
                   mode={searchMode}
                   onEnabledChange={setEnableSearch}
+                  tooltipDisabled={isComposerOverlayOpen}
                 />
               </PromptInputActions>
               <PromptInputTextarea
                 ref={editorRef}
                 placeholder={placeholder}
                 aria-label={ariaLabel}
-                onActionQueryChange={setActionQuery}
+                onActionQueryChange={handleActionQueryChange}
                 onPaste={handlePaste}
                 containerClassName="[grid-area:primary]"
               />
@@ -690,9 +703,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     // thinking pill translates +3px (center-out reveal), and
                     // an open popover on either half pins the revealed
                     // position independent of hover — see EffortControl.
-                    // transition-transform also displaces the composer
-                    // variant's gesture-press transition-none via the cn
-                    // merge — deliberate, the translate must animate.
+                    // transition-transform owns only this seam translation;
+                    // the Model and Thinking controls opt out of press scale.
                     className={
                       hasEffortControl
                         ? "can-hover:after:-start-1 can-hover:after:end-0 can-hover:group-hover/segmented:-translate-x-[3px] can-hover:group-has-[[aria-expanded=true]]/segmented:-translate-x-[3px] rounded-s-2xl rounded-e-md pe-1.5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
@@ -702,6 +714,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     setSelectedModelId={handleModelChange}
                     isUserAuthenticated={isUserAuthenticated}
                     onLockedGuestModelSelect={onLockedGuestModelSelect}
+                    tooltipDisabled={isComposerOverlayOpen}
+                    onOpenChange={setIsModelSelectorOpen}
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                   <EffortControl
@@ -709,11 +723,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     value={reasoningEffort}
                     defaultLevel={selectModelConfig?.defaultEffort}
                     onChange={setReasoningEffort}
+                    tooltipDisabled={isComposerOverlayOpen}
+                    onOpenChange={setIsEffortMenuOpen}
                     onSelectionCommitted={handleModelSelectionCommitted}
                   />
                 </div>
                 <div className="ms-auto flex shrink-0 items-center gap-2">
                   <PromptInputAction
+                    disabled={isComposerOverlayOpen || undefined}
                     tooltip={
                       primaryAction.mode === "send" &&
                       !primaryAction.disabled ? (

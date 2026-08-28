@@ -203,7 +203,7 @@ describe("validateAndResolveChatCredential", () => {
       token: "convex-token",
       requiredCapabilities: { webSearch: false },
       pinnedProviderId: undefined,
-    })
+    }, expect.any(Object))
   })
 
   it("maps resolver failures to the public admission contract", async () => {
@@ -332,7 +332,7 @@ describe("validateAndResolveChatCredential", () => {
           toolsLikely: true,
         },
       })
-    )
+    , expect.any(Object))
     expect(admitted.reservationId).toBe("res-1")
   })
 
@@ -368,7 +368,7 @@ describe("validateAndResolveChatCredential", () => {
       expect.objectContaining({
         requiredCapabilities: { vision: true, webSearch: false },
       })
-    )
+    , expect.any(Object))
   })
 
   it("requires web-search routes when search is enabled", async () => {
@@ -391,7 +391,7 @@ describe("validateAndResolveChatCredential", () => {
       expect.objectContaining({
         requiredCapabilities: { webSearch: true },
       })
-    )
+    , expect.any(Object))
   })
 
   it("requires both capabilities for image search turns", async () => {
@@ -427,7 +427,7 @@ describe("validateAndResolveChatCredential", () => {
       expect.objectContaining({
         requiredCapabilities: { vision: true, webSearch: true },
       })
-    )
+    , expect.any(Object))
   })
 
   it("does not require vision for earlier images and forces Sonar search on", async () => {
@@ -470,7 +470,7 @@ describe("validateAndResolveChatCredential", () => {
 
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({ requiredCapabilities: { webSearch: true } })
-    )
+    , expect.any(Object))
   })
 
   it("pins an approval continuation to the paused run's provider", async () => {
@@ -515,7 +515,7 @@ describe("validateAndResolveChatCredential", () => {
     )
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({ pinnedProviderId: "anthropic" })
-    )
+    , expect.any(Object))
   })
 
   it("continues without a provider pin when the approval lookup fails", async () => {
@@ -562,7 +562,7 @@ describe("validateAndResolveChatCredential", () => {
 
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({ pinnedProviderId: undefined })
-    )
+    , expect.any(Object))
     expect(warn).toHaveBeenCalledWith(
       JSON.stringify({
         _tag: "approval_route_facts_lookup_failed",

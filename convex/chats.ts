@@ -583,7 +583,7 @@ export const markChatRead = authenticatedMutation({
  * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
  * no null keys. Idempotent.
  *
- * `chats.create` has always set `updatedAt`, so in practice no live row lacks it
+ * Chat creation (`insertChatForUser`) has always set `updatedAt`, so in practice no live row lacks it
  * and the required-schema push succeeds directly. This exists only as a fallback
  * if a deployment somehow holds legacy rows: run it (via
  * `scripts/backfill-chat-updated-at.mjs`) while `updatedAt` is still optional,

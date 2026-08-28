@@ -273,8 +273,12 @@ function orderTier(
 
 export async function resolveModelRoute(
   args: ResolveModelRouteArgs,
-  deps: RouteResolverDeps = defaultDeps
+  depsOverride: Partial<RouteResolverDeps> = {}
 ): Promise<RouteResolution> {
+  // Partial overrides merge over the real implementations so a caller can
+  // swap one seam (a prefetched key-settings read, an instrumented
+  // reservation) without restating the rest.
+  const deps: RouteResolverDeps = { ...defaultDeps, ...depsOverride }
   const result = await resolveModelRouteOnce(args, deps)
   const preferredEffort = args.requiredCapabilities?.reasoningEffort
   if (result.ok || preferredEffort === undefined) return result

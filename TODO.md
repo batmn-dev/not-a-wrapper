@@ -86,6 +86,25 @@ demonstrated threat gap.
 
 ## Correctness and maintenance
 
+- **Stopped turns are billed the full reserved estimate:** a user Stop before
+any step usage is captured settles with
+`settlementBasis: "estimated_after_unknown_usage"`, charging the entire
+reservation — measured ~18.6k credits for a ~5-second stopped turn (this is
+how the perf-harness user exhausted a 1M-credit allowance mid-suite; see
+`docs/performance/2026-08-28-experiment-2-reactive-read-split.md`, finding 2).
+Investigate fully and resolve: trace where the abort path loses (or never
+receives) provider usage for the partial stream, decide the product policy for
+usage-unknown aborts (charge actuals when recoverable; otherwise a bounded
+floor or time/output-proportional estimate rather than the full reservation),
+and implement it within ADR-0011's settle-never-rejects and ADR-0021's
+reserve-then-settle contracts. Add a regression test that a first-beat Stop
+settles for far less than the full estimate.
+- ~~**Intermittent live-stream adoption loss after the first durable send's
+hard navigation**~~ — RESOLVED 2026-08-28 (home + project variants); the
+harness fails any scenario with `liveStreamNotAdoptedRuns > 0` as the
+regression gate. Full forensics and both fixes:
+`docs/performance/2026-08-28-adoption-loss-root-cause.md`.
+
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting
 animations from narrowly approved, behavior-critical exceptions. Require a

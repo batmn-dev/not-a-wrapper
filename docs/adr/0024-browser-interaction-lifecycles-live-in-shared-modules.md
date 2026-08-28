@@ -35,7 +35,6 @@ changing. This decision is about where browser lifecycle knowledge lives.
    ProseMirror callback-ref lifecycle creates and disposes it; editor updates
    and committed Composer updates are its only two signals. It stays behind
    the existing off-by-default, content-free Chat-performance allow-list.
-
 No Module introduces a React `useEffect`; browser ownership is event-driven or
 callback-ref-owned.
 

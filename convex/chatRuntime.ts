@@ -39,6 +39,11 @@ import {
   isTerminalMessageStatus,
   type GenerationRunStatus,
 } from "./domain/message_contract"
+import {
+  bucketPow2,
+  logChatPerfConvex,
+  shouldSampleChatPerfConvex,
+} from "./domain/chat_perf"
 import { extractTextFromMessageParts } from "./domain/message_parts"
 import {
   hasSemanticAssistantParts,
@@ -2261,11 +2266,32 @@ export async function updateAssistantSnapshotForChat(
   const { run } = owner
   const message = await requireAssistantMessageForRun(ctx, run, args.messageId)
 
+  // Sampled outcome telemetry (measurement plan Phase 2 §2.3): the
+  // Convex-side mirror of the Next-side checkpoint counters, so
+  // accepted-vs-rejected accounting closes end to end. Buckets/enums only.
+  const perfSampled = shouldSampleChatPerfConvex()
+  const logSnapshotOutcome = (
+    outcome: "applied" | "deduped" | "stale" | "lost"
+  ) => {
+    if (!perfSampled) return
+    let payloadBytes = args.textSnapshot.length
+    try {
+      payloadBytes += JSON.stringify(args.partsSnapshot).length
+    } catch {
+      // Size estimate only.
+    }
+    logChatPerfConvex("snapshot_write", {
+      outcome,
+      payloadBytesBucket: bucketPow2(payloadBytes),
+    })
+  }
+
   // A terminal run accepts no further snapshots. A streamer that lost the
   // abort/supersede race must become read-only here — its continued writes
   // to the run and message docs are what OCC-starve the next turn's
   // prepareGeneration on the same chat.
   if (isTerminalGenerationRunStatus(run.status)) {
+    logSnapshotOutcome("lost")
     return { kind: "lost" as const, reason: "terminal" as const }
   }
 
@@ -2275,6 +2301,7 @@ export async function updateAssistantSnapshotForChat(
   // dead row and a write conflict surface behind.
   const lastSequence = run.lastSnapshotSequence ?? 0
   if (args.sequence <= lastSequence) {
+    logSnapshotOutcome("stale")
     return { kind: "stale" as const, lastSequence }
   }
 
@@ -2342,6 +2369,7 @@ export async function updateAssistantSnapshotForChat(
       updatedAt: now,
     })
   }
+  logSnapshotOutcome(contentUnchanged ? "deduped" : "applied")
   return { kind: "applied" as const, deduped: contentUnchanged }
 }
 

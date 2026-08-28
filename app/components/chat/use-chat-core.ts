@@ -29,6 +29,7 @@ import { buildChatTurnRequestBody } from "@/lib/chat-turn/turn-plans"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
+import { useChatResponsivenessMarks } from "@/lib/observability/chat-responsiveness"
 import {
   beginChatPerfTurn,
   clearArmedChatPerfHeader,
@@ -359,6 +360,9 @@ export function useChatCore({
     visibleAssistantTextLength: chatPerfTurnFacts.visibleAssistantTextLength,
     lastUserMessageId: chatPerfTurnFacts.lastUserMessageId,
   })
+  // Long-task + rAF-gap marks (measurement plan Phase 2). This hook is the
+  // chat surface's single mount — a second mount would double-count.
+  useChatResponsivenessMarks(status === "streaming")
 
   const { selectedRun } = useMessages()
   const connectionState = useConvexConnectionState()

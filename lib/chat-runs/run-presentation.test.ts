@@ -24,9 +24,6 @@ function makeRun(
     status: "streaming",
     terminalReason: undefined,
     leaseExpiresAt: NOW + 30_000,
-    lastSnapshotSequence: 2,
-    lastProgressAt: NOW - 1_000,
-    activeToolNames: [],
     pendingApproval: null,
     ...overrides,
   } as unknown as SelectedRunProjection

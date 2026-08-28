@@ -9,6 +9,7 @@ type FileListProps = {
   onFileRemove: (attachment: PendingAttachment) => void
   onRestoreLargePaste: (attachment: PendingAttachment) => void
   onRetry: (attachment: PendingAttachment) => void
+  tooltipDisabled?: boolean
 }
 
 const NO_LOCKED_ATTACHMENTS: ReadonlySet<string> = new Set()
@@ -25,6 +26,7 @@ export const FileList = memo(function FileList({
   onFileRemove,
   onRestoreLargePaste,
   onRetry,
+  tooltipDisabled = false,
 }: FileListProps) {
   const [edges, setEdges] = useState({ left: false, right: false })
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -87,6 +89,7 @@ export const FileList = memo(function FileList({
                     onRemove={onFileRemove}
                     onRestoreLargePaste={onRestoreLargePaste}
                     onRetry={onRetry}
+                    tooltipDisabled={tooltipDisabled}
                   />
                 </motion.div>
               ))}

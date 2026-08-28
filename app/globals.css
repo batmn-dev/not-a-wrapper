@@ -37,6 +37,37 @@
 @custom-variant data-horizontal (&[data-orientation="horizontal"]);
 @custom-variant data-vertical (&[data-orientation="vertical"]);
 
+/* Shared button-like press feedback. Controls that should stay still opt out
+   through the Button primitive instead of overriding this recipe locally. */
+@utility press-motion {
+  --press-motion-scale: 0.96;
+  --press-motion-release-duration: 75ms;
+  --press-motion-release-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  scale: 1;
+  transition-property: scale;
+  transition-duration: var(--press-motion-release-duration);
+  transition-timing-function: var(--press-motion-release-easing);
+
+  &:active:not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-visually-disabled]
+    ) {
+    scale: var(--press-motion-scale);
+    transition-duration: 0ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &,
+    &:active {
+      scale: 1;
+      transition: none;
+    }
+  }
+}
+
 @keyframes collapsible-down {
   from {
     height: 0;
@@ -1945,6 +1976,25 @@ code {
 .dark .markdown {
   --code-block-surface: var(--card);
   --inline-code-surface: var(--secondary);
+}
+
+/* Off-screen markdown blocks skip style recalc and layout entirely
+   (measured 2026-08-28, docs/performance/2026-08-28-rendering-attribution-
+   b1-b2.md): Chromium invalidates ::highlight rule matching DOCUMENT-WIDE on
+   every streaming-decay paint tick, which re-walked the whole layout tree
+   (~5.8 µs/object) per streamed commit — 10.4 s of layout / 4.0 s TBT on a
+   100 KB stream. Locking settled off-screen blocks caps that walk at the
+   visible content: TBT 4,021 ms → 3 ms with the fade intact. The growing
+   block is the container's :last-child by construction and stays unlocked.
+   `contain-intrinsic-size: auto` memoizes each block's real rendered height,
+   so blocks rendered once re-lock at exact size (no scroll jumps); the 3rem
+   fallback only sizes blocks that were never rendered. Guarded so browsers
+   without content-visibility never see the intrinsic-size hint. */
+@supports (content-visibility: auto) {
+  .markdown > :not(:last-child) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3rem;
+  }
 }
 
 .markdown p {

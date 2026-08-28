@@ -1,5 +1,12 @@
 # Streaming regression suspects — 2026-08-20
 
+> **Status update 2026-08-28:** suspect 3 (sequential pre-stream Convex
+> roundtrips) is RESOLVED — Experiment 1 (`8ebaa7ae`) overlapped the
+> independent admission reads: receipt→provider-start 405 → 317 ms p50
+> (details: `docs/performance/2026-08-28-experiment-1-prestream-roundtrips.md`).
+> Suspects 1, 2, and 4 remain open and are tracked by TODO.md's "Assistant
+> responsiveness" item.
+
 Perceived text-streaming degradation investigated against the last two changes:
 `b1e3ce8c` (platform usage allowance, ADR-0021) and `eea6a30d` (#143, logical
 model identities + server-owned route selection).
@@ -32,11 +39,6 @@ model identities + server-owned route selection).
    (`app/api/chat/api.ts`), so **the first turn of a new chat (local optimistic
    id) can never take the platform tier** and may select an eligible priority
    or fallback BYOK route; otherwise, route resolution fails.
-3. **Time-to-first-token grew by 1–2 sequential Convex roundtrips.**
-   `usageAllowance.reserveAuthorized` mutation now sits on the admission
-   critical path (`lib/model-route-resolver.ts`), and #143 added a per-turn
-   `getKeySettings` query plus per-candidate `getUserKey` lookups —
-   ~50–150 ms each, all before `streamText` starts.
 4. **End-of-stream settle waits on the title call** (platform runs,
    `chat-turn-runtime.ts` `onEnd`). First turns can hold terminal settlement
    — and UI keyed off it (stop button, run status) — up to ~8 s after the
@@ -50,5 +52,4 @@ model identities + server-owned route selection).
 | --- | --- |
 | Answers cut off / stream dies early | 1 (check `finishReason: "length"`) |
 | Same model fast one turn, slow the next | 2 (check `credentialSource`/`routeReason` on runs) |
-| Slow to start streaming | 3 |
 | Spinner lingers after answer finished | 4 |

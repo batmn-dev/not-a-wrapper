@@ -50,6 +50,7 @@ type ComposerActionMenuOptions = {
   /** Direct (non-query) activation of a registry action. The product behavior
    * switch stays with the shell that owns the corresponding props. */
   onRunAction: (actionId: ComposerActionId) => void
+  onMenuOpenChange?: (open: boolean) => void
 }
 
 type PopoverOpenChangeHandler = NonNullable<
@@ -66,6 +67,7 @@ function useComposerActionMenu({
   onOpenActionMenu,
   onCloseActionQuery,
   onRunAction,
+  onMenuOpenChange,
 }: ComposerActionMenuOptions) {
   const [isTriggerMenuOpen, setIsTriggerMenuOpen] = useState(false)
   const [dismissedActionQueryId, setDismissedActionQueryId] = useState<
@@ -149,6 +151,7 @@ function useComposerActionMenu({
         }
       }
       setIsTriggerMenuOpen(false)
+      onMenuOpenChange?.(false)
       setHighlightedItemId(null)
       focusEditor()
     },
@@ -159,6 +162,7 @@ function useComposerActionMenu({
       itemsById,
       onActivateActionQuery,
       onActivateConnector,
+      onMenuOpenChange,
       onRunAction,
     ]
   )
@@ -201,7 +205,8 @@ function useComposerActionMenu({
     } else {
       setDismissedActionQueryId(actionQuery.id)
     }
-  }, [actionQuery, onCloseActionQuery])
+    onMenuOpenChange?.(false)
+  }, [actionQuery, onCloseActionQuery, onMenuOpenChange])
 
   const handleComposerKeyDown = useCallback(
     (event: KeyboardEvent) => {
@@ -325,10 +330,14 @@ function useComposerActionMenu({
     // ChatGPT parity: the + handler defers opening past keyboard collapse in
     // both auth states.
     if (open && isVirtualKeyboardOpen()) {
-      closeVirtualKeyboard(() => setIsTriggerMenuOpen(true))
+      closeVirtualKeyboard(() => {
+        setIsTriggerMenuOpen(true)
+        onMenuOpenChange?.(true)
+      })
       return
     }
     setIsTriggerMenuOpen(open)
+    onMenuOpenChange?.(open)
     if (open) focusEditor()
   }
 
@@ -339,18 +348,21 @@ function useComposerActionMenu({
     if (open && isVirtualKeyboardOpen()) {
       closeVirtualKeyboard(() => {
         setIsTriggerMenuOpen(true)
+        onMenuOpenChange?.(true)
         setHighlightedItemId(initialItemId)
       })
       return
     }
     setIsTriggerMenuOpen(open)
+    onMenuOpenChange?.(open)
     setHighlightedItemId(open ? initialItemId : null)
   }
 
   const handleSyntheticSessionToggle = useCallback(() => {
     setHighlightedItemId(null)
+    onMenuOpenChange?.(!isActionQueryOpen)
     onOpenActionMenu?.()
-  }, [onOpenActionMenu])
+  }, [isActionQueryOpen, onMenuOpenChange, onOpenActionMenu])
 
   return {
     activateItem,

@@ -19,7 +19,7 @@ describe("ComposerControl", () => {
     expect(button.hasAttribute("data-composer-control")).toBe(true)
     expect(button.className).toContain("composer-btn")
     expect(button.className).toContain("text-foreground")
-    expect(button.className).toContain("active:scale-[0.96]")
+    expect(button.className).toContain("press-motion")
     expect(button.className).not.toContain("hover:bg-interactive-hover")
     expect(button.getAttribute("aria-expanded")).toBe("true")
 

@@ -17,6 +17,7 @@ type WebSearchControlProps = {
   enabled: boolean
   mode: SearchMode
   onEnabledChange: (enabled: boolean) => void
+  tooltipDisabled?: boolean
 }
 
 function getWebSearchControlState({
@@ -51,6 +52,7 @@ function WebSearchControl({
   enabled,
   mode,
   onEnabledChange,
+  tooltipDisabled = false,
 }: WebSearchControlProps) {
   const [canRevealDisableOnHover, setCanRevealDisableOnHover] = useState(true)
   const [pointerHovering, setPointerHovering] = useState(false)
@@ -65,7 +67,7 @@ function WebSearchControl({
     : tooltip
 
   return (
-    <Tooltip>
+    <Tooltip disabled={tooltipDisabled}>
       <TooltipTrigger
         render={
           <ComposerControl

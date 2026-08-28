@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { resetSharedChatStreamOwnersForTests } from "./use-detachable-chat-stream"
 import type { UIMessage } from "@ai-sdk/react"
 import {
   clearLocallyResolvedApprovals,
@@ -21,6 +22,12 @@ import {
   useDetachableChatStream,
   type ChatStreamFinishEvent,
 } from "./use-detachable-chat-stream"
+
+beforeEach(() => {
+  // The shared stream owner is process-lived; without a reset, one test's
+  // live mock binding leaks into the next test's mount-time readopt.
+  resetSharedChatStreamOwnersForTests()
+})
 
 const lifecycleMocks = vi.hoisted(() => ({
   bindings: [] as Array<{

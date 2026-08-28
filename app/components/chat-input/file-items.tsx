@@ -45,6 +45,7 @@ type FileTileSurfaceProps = {
   primaryActionRef?: Ref<HTMLButtonElement>
   secondaryAction?: { label: string; onClick: () => void }
   isLocked?: boolean
+  tooltipDisabled?: boolean
   onRemove: () => void
   onRetry?: () => void
 }
@@ -66,6 +67,7 @@ function FileTileSurface({
   primaryActionRef,
   secondaryAction,
   isLocked = false,
+  tooltipDisabled = false,
   onRemove,
   onRetry,
 }: FileTileSurfaceProps) {
@@ -239,7 +241,7 @@ function FileTileSurface({
         </button>
       ) : null}
 
-      <Tooltip disableHoverablePopup>
+      <Tooltip disableHoverablePopup disabled={tooltipDisabled}>
         <TooltipTrigger
           render={
             <button
@@ -269,6 +271,7 @@ type FileTileProps = {
   attachment: PendingAttachment
   index: number
   isLocked?: boolean
+  tooltipDisabled?: boolean
   onRemove: (attachment: PendingAttachment) => void
   onRestoreLargePaste: (attachment: PendingAttachment) => void
   onRetry: (attachment: PendingAttachment) => void
@@ -278,6 +281,7 @@ export function FileTile({
   attachment,
   index,
   isLocked = false,
+  tooltipDisabled = false,
   onRemove,
   onRestoreLargePaste,
   onRetry,
@@ -361,6 +365,7 @@ export function FileTile({
             : undefined
         }
         isLocked={isLocked}
+        tooltipDisabled={tooltipDisabled}
         onRemove={() => onRemove(attachment)}
         onRetry={
           attachment.status !== "failed" || attachment.retryable

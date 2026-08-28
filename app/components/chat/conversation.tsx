@@ -1,5 +1,3 @@
-import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
-import { useBreakpoint } from "@/hooks/use-breakpoint"
 import {
   deriveAssistantTurnView,
   type AssistantTurnView,
@@ -18,11 +16,7 @@ import { UIMessage as MessageType } from "@ai-sdk/react"
 import {
   Fragment,
   useCallback,
-  useMemo,
-  useRef,
-  useState,
   useSyncExternalStore,
-  type CSSProperties,
   type ReactNode,
 } from "react"
 import {
@@ -36,13 +30,8 @@ import {
   TURN_SCROLL_MARGIN_BOTTOM,
 } from "./thread-bounds"
 import {
-  CHATGPT_TURN_INTERSECTION_EXPERIMENT,
-  estimateTurnPlaceholderHeight,
-  isTurnAlwaysRendered,
   ThreadScrollEdge,
-  TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE,
-  TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE,
-  useConversationTurnVirtualization,
+  useConversationTurnObservation,
   useSubmitTurnScrollRef,
   type TurnIntersectionObserver,
 } from "./thread-scroll"
@@ -87,26 +76,6 @@ function getMessageText(message: MessageType): string {
   return extractTextFromMessageParts(message.parts)
 }
 
-function getMessageTextParts(message: MessageType): string[] {
-  const textParts: string[] = []
-  for (const part of message.parts ?? []) {
-    if (part.type === "text" && part.text.length > 0) textParts.push(part.text)
-  }
-  return textParts
-}
-
-/**
- * Asset-bearing turns are always rendered for real so scrolling to them never
- * jumps. The reference detector (conv.beauty.js `aZn`/`sZn`) is
- * `(metadata.attachments?.length ?? 0) > 0 || parts.some(isAssetPointer)` over
- * a content-type set (Image/ImageAssetPointer/Audio/Video/...). In this data
- * model both user attachments and generated media arrive as `file` parts, so
- * one part-type check is the whole translation.
- */
-function hasTurnAssetContent(message: MessageType): boolean {
-  return message.parts?.some((part) => part.type === "file") ?? false
-}
-
 // Extract file attachments from parts array (user rows; assistant rows render
 // no attachments)
 function getMessageAttachments(
@@ -127,13 +96,12 @@ function getMessageAttachments(
  * pending-assistant placeholder. Pending and real assistant content reconcile
  * through this same DOM node; only its data identity and contents update.
  *
- * Two DOM shapes, mirroring the reference's two turn lists (virt.beauty.js
- * `EagerConversationTurns`/`VirtualizedConversationTurns`): the virtualized
- * shape keeps an outer wrapper div carrying `data-is-intersecting` and the
- * placeholder height; the eager shape (the shipped default arm) renders the
- * section directly with no wrapper — the section itself carries
- * `data-turn-id-container` and the center observation attaches to it, exactly
- * as the reference `Fkn` section does.
+ * One DOM shape: the reference's wrapper-free eager turn (`Fkn` section) —
+ * the section itself carries `data-turn-id-container` and hosts the center
+ * (table-of-contents) observation. The reference's virtualized arm (wrapper
+ * div, `data-is-intersecting`, placeholder heights) was removed 2026-08-28:
+ * its gate was compile-time false and its reflow correction killed touch
+ * momentum (see thread-scroll.tsx).
  */
 function TurnRow({
   className,
@@ -141,16 +109,9 @@ function TurnRow({
   dataTurnId,
   dataTestId,
   beforeTurn,
-  alwaysShow,
   contentVisibility = false,
   centerIntersectionObserver,
-  eager = false,
-  estimatedTextParts,
-  forceRender = false,
   hasDisplayableContent = true,
-  hasTurnAssets = false,
-  onRenderIntersectingChange,
-  renderIntersectionObserver,
   onCenterIntersectionChange,
   scrollOnSubmit = false,
   verticalPadding = "none",
@@ -161,119 +122,15 @@ function TurnRow({
   dataTurnId: string
   dataTestId?: string
   beforeTurn?: ReactNode
-  alwaysShow: boolean
   contentVisibility?: boolean
   centerIntersectionObserver: TurnIntersectionObserver
-  /** Render the reference's wrapper-free eager shape. */
-  eager?: boolean
-  estimatedTextParts: readonly string[]
-  forceRender?: boolean
   hasDisplayableContent?: boolean
-  hasTurnAssets?: boolean
-  onRenderIntersectingChange: (
-    turnId: string,
-    intersecting: boolean,
-    entry?: IntersectionObserverEntry
-  ) => void
-  renderIntersectionObserver: TurnIntersectionObserver
   onCenterIntersectionChange?: (turnId: string, intersecting: boolean) => void
   scrollOnSubmit?: boolean
   verticalPadding?: "none" | "first" | "large" | "last"
   children: ReactNode
 }) {
-  const compactEstimate = useBreakpoint(640)
-  const [renderIntersecting, setRenderIntersecting] = useState(false)
-  const turnRef = useRef<HTMLDivElement | null>(null)
-  const wasRenderIntersectingRef = useRef(false)
-  const charactersPerLine = compactEstimate
-    ? TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE
-    : TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE
-  const shouldAlwaysRender = alwaysShow || hasTurnAssets
-  const shouldRender = shouldAlwaysRender || renderIntersecting || forceRender
-  const shouldRenderContent = hasDisplayableContent && shouldRender
-  const isIntersecting = shouldAlwaysRender || renderIntersecting
-  const estimatedHeight = useMemo(
-    () =>
-      shouldRender || !hasDisplayableContent
-        ? null
-        : estimateTurnPlaceholderHeight(estimatedTextParts, charactersPerLine),
-    [charactersPerLine, estimatedTextParts, hasDisplayableContent, shouldRender]
-  )
-
-  const rememberHeight = useCallback((height: number) => {
-    if (height > 10) {
-      turnRef.current?.style.setProperty("--last-known-height", `${height}px`)
-    }
-  }, [])
-
-  useBrowserLayoutEffect(() => {
-    if (eager || !alwaysShow || renderIntersecting) return
-    wasRenderIntersectingRef.current = true
-    setRenderIntersecting(true)
-    onRenderIntersectingChange(dataTurnId, true)
-  }, [
-    alwaysShow,
-    dataTurnId,
-    eager,
-    onRenderIntersectingChange,
-    renderIntersecting,
-  ])
-
-  useBrowserLayoutEffect(() => {
-    if (!forceRender || renderIntersecting || shouldAlwaysRender) return
-    const turn = turnRef.current
-    if (turn) rememberHeight(turn.getBoundingClientRect().height)
-  }, [forceRender, rememberHeight, renderIntersecting, shouldAlwaysRender])
-
-  const turnRefCallback = useCallback(
-    (turn: HTMLElement | null) => {
-      turnRef.current = turn as HTMLDivElement | null
-      if (!turn) return
-      const cleanups: Array<() => void> = []
-
-      if (!shouldAlwaysRender) {
-        cleanups.push(
-          renderIntersectionObserver.observe(turn, (intersecting, entry) => {
-            const wasIntersecting = wasRenderIntersectingRef.current
-            if (wasIntersecting && !intersecting && entry) {
-              rememberHeight(entry.boundingClientRect.height)
-            }
-            if (wasIntersecting === intersecting) return
-            wasRenderIntersectingRef.current = intersecting
-            onRenderIntersectingChange(dataTurnId, intersecting, entry)
-            setRenderIntersecting(intersecting)
-          })
-        )
-      }
-
-      if (onCenterIntersectionChange) {
-        cleanups.push(
-          centerIntersectionObserver.observe(turn, (intersecting) => {
-            onCenterIntersectionChange(dataTurnId, intersecting)
-          })
-        )
-      }
-
-      return () => {
-        for (const cleanup of cleanups) cleanup()
-        onCenterIntersectionChange?.(dataTurnId, false)
-        if (turnRef.current === turn) turnRef.current = null
-      }
-    },
-    [
-      centerIntersectionObserver,
-      dataTurnId,
-      onCenterIntersectionChange,
-      onRenderIntersectingChange,
-      rememberHeight,
-      renderIntersectionObserver,
-      shouldAlwaysRender,
-    ]
-  )
   const submitScrollRef = useSubmitTurnScrollRef(scrollOnSubmit)
-  // Eager sections own their observation directly: the reference `Fkn` runs the
-  // center (table-of-contents) observer against the section node in both arms,
-  // and the eager arm has no wrapper to host it.
   const eagerSectionRef = useCallback(
     (section: HTMLElement | null) => {
       const submitCleanup = submitScrollRef(section)
@@ -298,23 +155,27 @@ function TurnRow({
       submitScrollRef,
     ]
   )
-  const placeholderStyle:
-    | (CSSProperties & {
-        "--estimated-turn-height"?: string
-      })
-    | undefined = estimatedHeight
-    ? { "--estimated-turn-height": `${estimatedHeight}px` }
-    : undefined
+  if (!hasDisplayableContent) return null
 
-  const turnContent = shouldRenderContent ? (
+  return (
     <>
       {beforeTurn}
+      {/* The reference section also carries :has([data-writing-block])
+          pointer-events rules and a :has([data-dotball-loading-indicator])
+          content-visibility escape. Neither is here on purpose: nothing in
+          this app renders data-writing-block (dead rules), and the dotball
+          escape is vacuous because the LIVE turn — the only place the
+          indicator shows — never gets content-visibility (see the
+          contentVisibility call sites). The :has() rules were measured as
+          per-commit style-invalidation cost during streaming
+          (docs/performance/2026-08-28-rendering-attribution-b1-b2.md,
+          residual-B2 follow-up). */}
       <section
-        ref={eager ? eagerSectionRef : submitScrollRef}
+        ref={eagerSectionRef}
         className={cn(
-          "text-foreground w-full focus:outline-none has-data-writing-block:pointer-events-none [&:has([data-writing-block])>*]:pointer-events-auto",
+          "text-foreground w-full focus:outline-none",
           contentVisibility &&
-            "[content-visibility:auto] has-[[data-dotball-loading-indicator]]:[content-visibility:visible]! supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
+            "[content-visibility:auto] supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
           className
         )}
         data-turn-id-container={dataTurnId}
@@ -351,31 +212,6 @@ function TurnRow({
         </div>
       </section>
     </>
-  ) : null
-
-  // The eager shape drops the wrapper entirely (reference `fGn` → `L4`): no
-  // `data-is-intersecting`, no placeholder height — a hidden turn renders
-  // nothing at all.
-  if (eager) return turnContent
-
-  return (
-    <div
-      ref={
-        shouldAlwaysRender && !onCenterIntersectionChange
-          ? undefined
-          : turnRefCallback
-      }
-      className={cn(
-        hasDisplayableContent &&
-          !shouldRender &&
-          "h-[var(--last-known-height,var(--estimated-turn-height,50vh))] min-h-14"
-      )}
-      data-is-intersecting={isIntersecting}
-      data-turn-id-container={dataTurnId}
-      style={placeholderStyle}
-    >
-      {turnContent}
-    </div>
   )
 }
 
@@ -450,8 +286,7 @@ type ConversationProps = {
   /** Message deep-link value from the route. The two final-turn sentinels
    * target the final assistant turn rather than a particular message node. */
   scrollToMessageId?: string | null
-  /** Optional table-of-contents observer. Its center-band state is separate
-   * from the outer turn's render/virtualization intersection. */
+  /** Optional table-of-contents (center-band) observer state. */
   onCenterIntersectionChange?: (turnId: string, intersecting: boolean) => void
 }
 
@@ -461,22 +296,19 @@ export function shouldUseAssistantContentVisibility({
   audioSurfaceActive = false,
   hasHtmlWidget = false,
   scrollToMessageId,
-  experimentEnabled = CHATGPT_TURN_INTERSECTION_EXPERIMENT.enabled,
 }: {
   supported: boolean
   isUser: boolean
   audioSurfaceActive?: boolean
   hasHtmlWidget?: boolean
   scrollToMessageId?: string | null
-  experimentEnabled?: boolean
 }) {
   return (
     supported &&
     !isUser &&
     !audioSurfaceActive &&
     (scrollToMessageId == null || scrollToMessageId === "finalAgentTurn") &&
-    !hasHtmlWidget &&
-    !experimentEnabled
+    !hasHtmlWidget
   )
 }
 
@@ -535,15 +367,7 @@ export function Conversation({
     messages,
     scrollToMessageId
   )
-  // The reference selects Eager vs Virtualized turns once at mount:
-  // `J = !deepLinkAtMount && experimentGate()`. A finalAgentTurnStart arrival
-  // or a disabled gate renders the whole thread eagerly.
-  const [renderAllTurns] = useState(
-    () =>
-      scrollToMessageId === "finalAgentTurnStart" ||
-      !CHATGPT_TURN_INTERSECTION_EXPERIMENT.enabled
-  )
-  const virtualization = useConversationTurnVirtualization(scrollTarget?.turnId)
+  const observation = useConversationTurnObservation()
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
 
@@ -609,26 +433,12 @@ export function Conversation({
     })
   }
 
-  const activeTurnIndex = scrollTarget
-    ? renderRows.findIndex(
-        (row) => renderRowTurnId(row) === scrollTarget.turnId
-      )
-    : -1
-
   return (
     <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
       <div className="keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))] flex w-full flex-col text-sm">
-        <span ref={virtualization.markerRef} style={{ display: "none" }} />
-        {renderRows.map((row, renderIndex) => {
+        <span ref={observation.markerRef} style={{ display: "none" }} />
+        {renderRows.map((row) => {
           const rowTurnId = renderRowTurnId(row)
-          const alwaysShow =
-            renderAllTurns ||
-            isTurnAlwaysRendered(
-              renderIndex,
-              renderRows.length,
-              activeTurnIndex
-            )
-          const forceRender = rowTurnId === scrollTarget?.turnId
           if (row.kind === "root") {
             return (
               <TurnRow
@@ -636,18 +446,10 @@ export function Conversation({
                 className=""
                 dataTurn="assistant"
                 dataTurnId={rowTurnId}
-                alwaysShow={alwaysShow}
-                eager={renderAllTurns}
                 centerIntersectionObserver={
-                  virtualization.centerIntersectionObserver
+                  observation.centerIntersectionObserver
                 }
-                estimatedTextParts={[]}
-                forceRender={false}
                 hasDisplayableContent={false}
-                onRenderIntersectingChange={virtualization.onIntersectingChange}
-                renderIntersectionObserver={
-                  virtualization.renderIntersectionObserver
-                }
               >
                 {null}
               </TurnRow>
@@ -665,21 +467,10 @@ export function Conversation({
                   dataTurn="assistant"
                   dataTurnId={rowTurnId}
                   dataTestId={`conversation-turn-${row.index + 1}`}
-                  alwaysShow={alwaysShow}
-                  eager={renderAllTurns}
                   centerIntersectionObserver={
-                    virtualization.centerIntersectionObserver
+                    observation.centerIntersectionObserver
                   }
-                  contentVisibility={contentVisibilityEnabled}
-                  estimatedTextParts={[]}
-                  forceRender={forceRender}
                   onCenterIntersectionChange={onCenterIntersectionChange}
-                  onRenderIntersectingChange={
-                    virtualization.onIntersectingChange
-                  }
-                  renderIntersectionObserver={
-                    virtualization.renderIntersectionObserver
-                  }
                   verticalPadding="last"
                 >
                   <Message
@@ -812,20 +603,21 @@ export function Conversation({
                 dataTurn={message.role}
                 dataTurnId={rowTurnId}
                 dataTestId={`conversation-turn-${index + 1}`}
-                alwaysShow={alwaysShow}
-                eager={renderAllTurns}
                 centerIntersectionObserver={
-                  virtualization.centerIntersectionObserver
+                  observation.centerIntersectionObserver
                 }
-                contentVisibility={isAssistant && contentVisibilityEnabled}
-                estimatedTextParts={getMessageTextParts(message)}
-                forceRender={forceRender}
-                hasTurnAssets={hasTurnAssetContent(message)}
+                contentVisibility={
+                  // The live turn is on-screen by definition and mutates on
+                  // every stream commit; content-visibility there buys no
+                  // skip but pays per-commit relevancy + last-remembered-size
+                  // bookkeeping (and made the reference's dotball :has()
+                  // escape necessary at all). Settled turns re-gain it on the
+                  // render after the stream ends.
+                  isAssistant &&
+                  contentVisibilityEnabled &&
+                  !(isLast && generationActive)
+                }
                 onCenterIntersectionChange={onCenterIntersectionChange}
-                onRenderIntersectingChange={virtualization.onIntersectingChange}
-                renderIntersectionObserver={
-                  virtualization.renderIntersectionObserver
-                }
                 beforeTurn={
                   timestampHeader ? (
                     <ConversationTimestamp header={timestampHeader} now={now} />

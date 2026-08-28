@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { resetSharedChatStreamOwnersForTests } from "./use-detachable-chat-stream"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import { takeChatPerfHeader } from "@/lib/observability/chat-performance-client"
 import type { UIMessage } from "@ai-sdk/react"
@@ -14,6 +15,12 @@ import {
   it,
   vi,
 } from "vitest"
+
+beforeEach(() => {
+  // The shared stream owner is process-lived; without a reset, one test's
+  // live mock binding leaks into the next test's mount-time readopt.
+  resetSharedChatStreamOwnersForTests()
+})
 
 let useChatCore: (typeof import("./use-chat-core"))["useChatCore"]
 
@@ -974,7 +981,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_live",
       assistantMessageId: "msg_live",
       status: "streaming",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()
@@ -1002,7 +1008,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_accepted",
       assistantMessageId: "msg_accepted",
       status: "streaming",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()
@@ -1025,7 +1030,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_done",
       assistantMessageId: "msg_done",
       status: "completed",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()
@@ -1050,7 +1054,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
         runId: "run_too_late",
         assistantMessageId: "msg_late",
         status: "streaming",
-        activeToolNames: [],
         pendingApproval: null,
       }
       render()
@@ -1073,7 +1076,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_previous",
       assistantMessageId: "msg_previous",
       status: "completed",
-      activeToolNames: [],
       pendingApproval: null,
     }
     chatCoreMocks.selectedRun = previousTerminalRun
@@ -1093,7 +1095,6 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       runId: "run_new_dispatch",
       assistantMessageId: "msg_new",
       status: "streaming",
-      activeToolNames: [],
       pendingApproval: null,
     }
     render()

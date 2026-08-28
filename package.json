@@ -32,7 +32,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bench": "vitest bench --run",
-    "bench:chat": "vitest bench --run benchmarks/chat-performance"
+    "bench:chat": "vitest bench --run benchmarks/chat-performance",
+    "bench:browser": "bun run benchmarks/chat-performance/browser/harness.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.40",
@@ -123,6 +124,7 @@
     "concurrently": "^10.0.3",
     "eslint": "^9",
     "eslint-config-next": "^16.3.1",
+    "playwright": "^1.62.1",
     "prettier": "^3.9.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.3.2",

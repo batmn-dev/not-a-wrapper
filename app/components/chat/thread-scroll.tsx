@@ -80,31 +80,17 @@ export function addScrollEndListener(
     if (timer !== null) window.clearTimeout(timer)
   }
 }
-export const CHATGPT_TURN_INTERSECTION_EXPERIMENT = {
-  id: "1841171328",
-  key: "is_enabled",
-  defaultValue: false,
-  // The shipped code default: `Jo('1841171328').get('is_enabled', !1)`. Local
-  // has no Statsig namespace, so the bundle's hardcoded default (control arm)
-  // is authoritative: eager turns + assistant content-visibility. The
-  // treatment arm's reflow correction writes scrollTop while placeholders
-  // materialize above the viewport, which cancels in-flight touch momentum —
-  // an upward flick through unvisited turns dies at each materialization.
-  enabled: false,
-} as const
-
-export const TURN_RENDER_INTERSECTION_ROOT_MARGIN = "1000px 0px 1000px 0px"
-export const TURN_RENDER_INTERSECTION_THRESHOLD = 0.01
+// The reference's turn-virtualization experiment (Statsig 1841171328) was
+// removed 2026-08-28: its gate was a hardcoded compile-time `false` (no
+// Statsig namespace exists locally, and the treatment arm's reflow
+// correction cancels in-flight touch momentum — see the
+// turn-virtualization memory/audit), so the wrapper/placeholder/
+// render-intersection machinery was statically dead. The eager arm — plain
+// sections plus assistant content-visibility — is the only arm, exactly as
+// the reference ships it. Git history (pre-2026-08-28) holds the full port
+// if virtualization is ever revisited.
 export const TURN_CENTER_INTERSECTION_ROOT_MARGIN = "-49% 0px -49% 0px"
 export const TURN_CENTER_INTERSECTION_THRESHOLD = 0
-export const TURN_ALWAYS_RENDER_COUNT = 5
-export const TURN_ACTIVE_RENDER_RADIUS = 5
-export const TURN_REFLOW_EDGE_INSET_PX = 4
-export const TURN_ESTIMATE_MOBILE_CHARACTERS_PER_LINE = 46
-export const TURN_ESTIMATE_DESKTOP_CHARACTERS_PER_LINE = 88
-export const TURN_ESTIMATE_LINE_HEIGHT_PX = 18
-export const TURN_ESTIMATE_BASE_HEIGHT_PX = 56
-export const TURN_ESTIMATE_MAX_HEIGHT_PX = 100_000
 
 type TurnIntersectionChange = (
   intersecting: boolean,
@@ -118,12 +104,12 @@ export type TurnIntersectionObserver = {
 
 /** Shares one observer per scroll root and one callback registry per target. */
 export function createTurnIntersectionObserver({
-  rootMargin = TURN_RENDER_INTERSECTION_ROOT_MARGIN,
-  threshold = TURN_RENDER_INTERSECTION_THRESHOLD,
+  rootMargin,
+  threshold,
 }: {
-  rootMargin?: string
-  threshold?: number
-} = {}): TurnIntersectionObserver {
+  rootMargin: string
+  threshold: number
+}): TurnIntersectionObserver {
   const roots = new Map<
     HTMLElement,
     {
@@ -182,10 +168,6 @@ export function createTurnIntersectionObserver({
   }
 }
 
-export function createTurnRenderIntersectionObserver() {
-  return createTurnIntersectionObserver()
-}
-
 export function createTurnCenterIntersectionObserver() {
   return createTurnIntersectionObserver({
     rootMargin: TURN_CENTER_INTERSECTION_ROOT_MARGIN,
@@ -193,195 +175,28 @@ export function createTurnCenterIntersectionObserver() {
   })
 }
 
-export function isTurnAlwaysRendered(
-  index: number,
-  turnCount: number,
-  activeTurnIndex: number
-) {
-  return (
-    index >= turnCount - TURN_ALWAYS_RENDER_COUNT ||
-    (activeTurnIndex !== -1 &&
-      Math.abs(index - activeTurnIndex) <= TURN_ACTIVE_RENDER_RADIUS)
-  )
-}
-
-export function estimateTurnPlaceholderHeight(
-  textParts: readonly string[],
-  charactersPerLine: number
-): number | null {
-  let lineCount = 0
-
-  for (const text of textParts) {
-    if (text.length === 0) continue
-    let lineStart = 0
-    while (lineStart <= text.length) {
-      const newline = text.indexOf("\n", lineStart)
-      const lineEnd = newline === -1 ? text.length : newline
-      const carriageReturn = Number(
-        lineEnd > lineStart && text.charCodeAt(lineEnd - 1) === 13
-      )
-      lineCount += Math.max(
-        1,
-        Math.ceil((lineEnd - lineStart - carriageReturn) / charactersPerLine)
-      )
-      if (newline === -1) break
-      lineStart = newline + 1
-    }
-  }
-
-  return lineCount === 0
-    ? null
-    : Math.min(
-        TURN_ESTIMATE_MAX_HEIGHT_PX,
-        TURN_ESTIMATE_BASE_HEIGHT_PX + lineCount * TURN_ESTIMATE_LINE_HEIGHT_PX
-      )
-}
-
-export type TurnReflowAnchor = {
-  root: HTMLElement
-  turnId: string
-  edge: "top" | "bottom"
-  edgePosition: number
-}
-
-export function captureTurnReflowAnchor(
-  root: HTMLElement
-): TurnReflowAnchor | null {
-  const rootRect = root.getBoundingClientRect()
-  const intersectingTurns = root.querySelectorAll<HTMLElement>(
-    '[data-is-intersecting="true"]'
-  )
-
-  for (const turn of intersectingTurns) {
-    const rect = turn.getBoundingClientRect()
-    const turnId = turn.dataset.turnIdContainer
-    if (!turnId) continue
-
-    if (
-      (rect.top < rootRect.top && rect.bottom > rootRect.bottom) ||
-      (rect.top >= rootRect.top &&
-        rect.top < rootRect.bottom - TURN_REFLOW_EDGE_INSET_PX)
-    ) {
-      return {
-        root,
-        turnId,
-        edge: "top",
-        edgePosition: rect.top,
-      }
-    }
-
-    if (
-      rect.bottom > rootRect.top + TURN_REFLOW_EDGE_INSET_PX &&
-      rect.bottom <= rootRect.bottom
-    ) {
-      return {
-        root,
-        turnId,
-        edge: "bottom",
-        edgePosition: rect.bottom,
-      }
-    }
-  }
-
-  return null
-}
-
-export function restoreTurnReflowAnchor(anchor: TurnReflowAnchor): void {
-  const turn = anchor.root.querySelector<HTMLElement>(
-    `[data-turn-id-container="${CSS.escape(anchor.turnId)}"]`
-  )
-  if (!turn) return
-  const rect = turn.getBoundingClientRect()
-  const nextEdge = anchor.edge === "top" ? rect.top : rect.bottom
-  const delta = nextEdge - anchor.edgePosition
-  if (delta > 0) anchor.root.scrollTop += delta
-}
-
-export function useConversationTurnVirtualization(
-  forceRenderedTurnId?: string | null
-) {
-  const [renderIntersectionObserver] = useState(
-    createTurnRenderIntersectionObserver
-  )
+/**
+ * The conversation's shared center-band observation (table of contents).
+ * The marker span anchors observer teardown to the conversation's unmount.
+ */
+export function useConversationTurnObservation() {
   const [centerIntersectionObserver] = useState(
     createTurnCenterIntersectionObserver
-  )
-  const markerNodeRef = useRef<HTMLSpanElement | null>(null)
-  const intersectionsRef = useRef(new Map<string, boolean>())
-  const reflowAnchorRef = useRef<TurnReflowAnchor | null>(null)
-  const reflowCapturedRef = useRef(false)
-  const [layoutVersion, setLayoutVersion] = useState(0)
-
-  useBrowserLayoutEffect(() => {
-    reflowCapturedRef.current = false
-    const anchor = reflowAnchorRef.current
-    reflowAnchorRef.current = null
-    if (forceRenderedTurnId || !anchor) return
-    restoreTurnReflowAnchor(anchor)
-  }, [forceRenderedTurnId, layoutVersion])
-
-  const captureReflowAnchor = useCallback(() => {
-    if (reflowCapturedRef.current || reflowAnchorRef.current) return
-    const marker = markerNodeRef.current
-    const root =
-      closestScrollRoot(marker) ??
-      document.querySelector<HTMLElement>("[data-scroll-root]")
-    if (!root) return
-    reflowCapturedRef.current = true
-    reflowAnchorRef.current = captureTurnReflowAnchor(root)
-  }, [])
-
-  const onIntersectingChange = useCallback(
-    (
-      turnId: string,
-      intersecting: boolean,
-      entry?: IntersectionObserverEntry
-    ) => {
-      const intersections = intersectionsRef.current
-      if (intersections.get(turnId) === intersecting) return
-      intersections.set(turnId, intersecting)
-      if (forceRenderedTurnId || !entry) return
-
-      const root =
-        intersecting && entry.rootBounds
-          ? closestScrollRoot(markerNodeRef.current)
-          : null
-      if (
-        intersecting &&
-        entry.rootBounds &&
-        root &&
-        entry.boundingClientRect.top >= root.getBoundingClientRect().bottom
-      ) {
-        return
-      }
-
-      captureReflowAnchor()
-      setLayoutVersion((version) => version + 1)
-    },
-    [captureReflowAnchor, forceRenderedTurnId]
   )
 
   const markerRef = useCallback(
     (node: HTMLSpanElement | null) => {
-      markerNodeRef.current = node
       if (!node) return
       return () => {
-        if (markerNodeRef.current === node) markerNodeRef.current = null
-        renderIntersectionObserver.disconnect()
         centerIntersectionObserver.disconnect()
-        intersectionsRef.current.clear()
-        reflowAnchorRef.current = null
-        reflowCapturedRef.current = false
       }
     },
-    [centerIntersectionObserver, renderIntersectionObserver]
+    [centerIntersectionObserver]
   )
 
   return {
     centerIntersectionObserver,
     markerRef,
-    onIntersectingChange,
-    renderIntersectionObserver,
   }
 }
 
@@ -393,38 +208,10 @@ function setScrollFromEnd(root: HTMLElement, scrolledFromEnd: boolean) {
   root.toggleAttribute("data-scroll-from-end", scrolledFromEnd)
 }
 
-/**
- * The authenticated front end defaults to smooth scrolling. Its gated path
- * falls back to instant only when a non-intersecting turn separates the first
- * visible turn from the submit target.
- */
-export function resolveSubmitTurnScrollBehavior(
-  turn: HTMLElement,
-  gapAwareBehaviorEnabled: boolean = CHATGPT_TURN_INTERSECTION_EXPERIMENT.enabled
-): ScrollBehavior {
-  if (!gapAwareBehaviorEnabled) return "smooth"
-  const target = turn.closest<HTMLElement>(
-    "[data-turn-id-container][data-is-intersecting]"
-  )
-  if (!target) return "smooth"
-  const parent = target.parentElement
-  if (!parent) return "instant"
-  const turns = Array.from(parent.children).filter(
-    (element): element is HTMLElement =>
-      element instanceof HTMLElement && Boolean(element.dataset.turnIdContainer)
-  )
-  const firstIntersectingIndex = turns.findIndex(
-    (element) => element.dataset.isIntersecting === "true"
-  )
-  const targetIndex = turns.findIndex((element) => element === target)
-  if (firstIntersectingIndex === -1 || targetIndex === -1) return "instant"
-  const start = Math.min(firstIntersectingIndex, targetIndex)
-  const end = Math.max(firstIntersectingIndex, targetIndex)
-  for (let index = start; index < end; index += 1) {
-    if (turns[index]?.dataset.isIntersecting !== "true") return "instant"
-  }
-  return "smooth"
-}
+// Submit and deep-link scrolls are always smooth: the reference's gap-aware
+// instant fallback belonged to the removed virtualization arm (it walked
+// `data-is-intersecting` wrappers, which the eager shape never renders).
+const SUBMIT_TURN_SCROLL_BEHAVIOR: ScrollBehavior = "smooth"
 
 function scheduleSubmitTurnScroll(turn: HTMLElement) {
   let innerFrame: number | null = null
@@ -434,7 +221,7 @@ function scheduleSubmitTurnScroll(turn: HTMLElement) {
       const root = closestScrollRoot(turn)
       if (root) setScrollFromEnd(root, false)
       turn.scrollIntoView({
-        behavior: resolveSubmitTurnScrollBehavior(turn),
+        behavior: SUBMIT_TURN_SCROLL_BEHAVIOR,
         block: "end",
       })
     })
@@ -456,9 +243,7 @@ export function useSubmitTurnScrollRef(active: boolean) {
   )
 }
 
-/** Publishes the separate center-band intersection used by the table of
- * contents. Render/virtualization intersection remains owned by the outer
- * turn wrapper and is not overwritten by this observer. */
+/** Publishes the center-band intersection used by the table of contents. */
 export function useTurnIntersectionRef(
   onChange?: (intersecting: boolean) => void
 ) {
@@ -594,7 +379,7 @@ export function ThreadScrollEdge({
 
   // (3) Stream lifecycle: `data-stream-active` gives descendants such as the
   // gutter and scroll control their streaming presentation. The root keeps
-  // native scroll anchoring; virtualized replacement owns explicit correction.
+  // native scroll anchoring.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return
@@ -612,7 +397,7 @@ export function ThreadScrollEdge({
     return followThreadScrollTarget(
       rootEl,
       scrollTarget,
-      resolveSubmitTurnScrollBehavior
+      () => SUBMIT_TURN_SCROLL_BEHAVIOR
     )
   }, [hydrated, scrollTarget?.messageId, scrollTarget?.turnId])
 
