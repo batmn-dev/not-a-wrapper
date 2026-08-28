@@ -61,6 +61,18 @@ Question: Plugin-composable agent harnesses, reversible runtime composition, dur
 
 Description: An everything-is-a-plugin Cordis tree where profiles, bundles, and patch layers compose model adapters, the agent loop, tools, persistence, sandboxing, approvals, and UI; registrations are reversible effects and live configuration can recompose through HMR. Its append-only `SessionEvent` log is the source of model context and drives replay, resume, fork, transcripts, telemetry, and UI, while capability seams swap LLM, filesystem, subprocess, sandbox, subagent, workflow, and tool providers. It ships Web and headless profiles plus TypeScript/Python JSON-RPC and ACP surfaces. It is a developer preview with breaking formats, E2B remains a POC, and it is not evidence for a production multi-tenant cloud control plane.
 
+## Trigger.dev
+
+Source Path: `/Users/andresgonzalez/Github/Projects/trigger.dev`
+
+Github URL: https://github.com/triggerdotdev/trigger.dev
+
+Reference Priority:
+
+Question: Durable TypeScript background tasks, checkpoint-and-resume workflows, human approval waits, queues and concurrency, idempotent retries, realtime run updates, or versioned isolated deployments
+
+Description: A production-grade durable execution reference: long-running TypeScript tasks use CRIU-backed process checkpoints around waits and child-task joins, release compute while suspended, then restore memory, registers, and file descriptors to continue. Idempotency keys and cached child results bound retry work; queues, concurrency limits, cron schedules, waitpoints, realtime subscriptions, OpenTelemetry traces, atomic task versions, and Docker/Kubernetes self-hosting complete the control plane. Use it for workflow durability and operator-facing run infrastructure, not agent reasoning loops, chat state, memory, or computer-use mechanics.
+
 ## OpenHands Agent Canvas
 
 Source Path: `/Users/andresgonzalez/Github/Projects/OpenHands`
