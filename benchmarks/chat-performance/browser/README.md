@@ -59,7 +59,12 @@ failure exits non-zero and the timings must be discarded.
   that lose live-stream adoption (a real, intermittent product behavior) are
   counted per scenario as `liveStreamNotAdoptedRuns` rather than failed.
   Convex-side cost sampling needs `CHAT_PERF_CONVEX_SAMPLE_RATE` set on the
-  deployment.
+  deployment. The `durable-text-30-paused` scenario (shape `paused`: four
+  fixed-cadence segments split by three 20 s zero-delta gaps) exercises the
+  live-run-no-content event class behind ADR-0027's split subscription —
+  ~70 s wall clock per run, so trim `RUNS` when iterating; measure the
+  Convex side by capturing `bunx convex logs --success --jsonl` around the
+  run.
 - Scenarios needing real tools (the fixture `interleaved` script) are not
   replayed; the deterministic provider covers text/reasoning/code/error/stop
   shapes plus the payload stress variants.

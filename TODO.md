@@ -86,6 +86,36 @@ demonstrated threat gap.
 
 ## Correctness and maintenance
 
+- **Stopped turns are billed the full reserved estimate:** a user Stop before
+any step usage is captured settles with
+`settlementBasis: "estimated_after_unknown_usage"`, charging the entire
+reservation — measured ~18.6k credits for a ~5-second stopped turn (this is
+how the perf-harness user exhausted a 1M-credit allowance mid-suite; see
+`docs/performance/2026-08-28-experiment-2-reactive-read-split.md`, finding 2).
+Investigate fully and resolve: trace where the abort path loses (or never
+receives) provider usage for the partial stream, decide the product policy for
+usage-unknown aborts (charge actuals when recoverable; otherwise a bounded
+floor or time/output-proportional estimate rather than the full reservation),
+and implement it within ADR-0011's settle-never-rejects and ADR-0021's
+reserve-then-settle contracts. Add a regression test that a first-beat Stop
+settles for far less than the full estimate.
+- **Intermittent live-stream adoption loss after the first durable send's hard
+navigation:** in ~2/10 reload-style runs the client lands on `/c/<chatId>` and
+never adopts the in-flight live stream — no error, the turn completes and
+settles correctly, but content arrives only via the 750ms durable snapshots
+(visibly chunky streaming). Split-independent (reproduced with the atomic
+query, before Experiment 2) and counted by the browser harness as
+`liveStreamNotAdoptedRuns` (SUITE=durable, `durable-text-30-reload`; see
+`docs/performance/2026-08-28-experiment-2-reactive-read-split.md` and the B5
+addendum in `docs/performance/2026-08-27-system-performance-baseline.md`).
+Investigate fully and resolve: trace the ADR-0013 per-instance
+ChatStreamBinding adoption path across the hard navigation (binding lifetime
+vs. remount timing, the same-tab-only adoption rule, and any race between the
+run reaching a terminal-adjacent state and the new Chat instance attaching),
+find why the loss is silent, and either make adoption reliable or make the
+snapshot fallback explicit and observable. Add the harness counter as a
+regression gate (expected 0) once fixed.
+
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting
 animations from narrowly approved, behavior-critical exceptions. Require a

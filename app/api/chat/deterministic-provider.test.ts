@@ -53,7 +53,7 @@ describe("deterministic part script", () => {
   it("reproduces the scenario text byte-identically under every delivery shape", () => {
     for (const scenario of DETERMINISTIC_PERF_SCENARIOS) {
       const oracle = deterministicScenarioText(scenario)
-      for (const shape of ["fixed", "bursty", "slab"] as const) {
+      for (const shape of ["fixed", "bursty", "slab", "paused"] as const) {
         const script = buildDeterministicPartScript({
           scenario,
           chunksPerSecond: 100,
@@ -89,6 +89,28 @@ describe("deterministic part script", () => {
     expect(a.map(({ delayMs, part }) => [delayMs, part.type])).toEqual(
       b.map(({ delayMs, part }) => [delayMs, part.type])
     )
+  })
+
+  it("paused shape inserts exactly three segment gaps over the fixed cadence", () => {
+    const build = (shape: "fixed" | "paused") =>
+      buildDeterministicPartScript({
+        scenario: "text-only",
+        chunksPerSecond: 30,
+        shape,
+      })
+    const totalDelay = (script: ReturnType<typeof build>) =>
+      script.reduce((sum, { delayMs }) => sum + delayMs, 0)
+    const fixed = build("fixed")
+    const paused = build("paused")
+    // Same parts in the same order — pauses are silence, not content.
+    expect(paused.map(({ part }) => part.type)).toEqual(
+      fixed.map(({ part }) => part.type)
+    )
+    // Four segments → three 20 s gaps on top of the fixed schedule.
+    expect(totalDelay(paused) - totalDelay(fixed)).toBe(3 * 20_000)
+    expect(
+      paused.filter(({ delayMs }) => delayMs >= 20_000)
+    ).toHaveLength(3)
   })
 
   it("keeps total scheduled time at the cadence the directive names", () => {

@@ -91,3 +91,70 @@ pause-heavy scenario measurement to quantify the real-conversation win,
 on finding 1's trim. Experiment 2b (range-bounded settled-history
 pagination — the only lever that reduces per-execution DB reads) stays
 gated on prefix-derivability property tests per the dossier.
+
+## Addendum 2026-08-28 — adoption evidence (a)+(b)+(c) closed
+
+All three prerequisites above are now done: the pause-heavy measurement
+below, ADR-0027 (`docs/adr/0027-split-selected-conversation-subscription.md`,
+the no-tearing basis and its scope), and finding 1's trim (points-back
+short-circuits on `run.activeStreamId === run.assistantMessageId` — stamped
+at stream start, cleared at terminal — so a LIVE run's run-state execution
+never reads the message doc; a spy test pins the read set).
+
+**Setup.** New delivery shape `paused` (deterministic provider): four
+fixed-cadence segments split by three 20 s zero-delta gaps — the run stays
+live with no content flowing, so a gap's only durable writes are heartbeats
+(the tracker is content-versioned and writes nothing during silence). Suite
+scenario `durable-text-30-paused`; Convex side captured via
+`convex logs --success --jsonl` around ONLY-runs (1 warmup + 3 runs) on two
+builds differing only in `NEXT_PUBLIC_SPLIT_SELECTED_QUERY`. Writer traffic
+was identical in both captures (72 snapshot writes, 24 heartbeats), so the
+subscription-side numbers are directly comparable.
+
+**Pause windows (12 windows, 243 s of live-run silence in each capture):**
+
+| | atomic | split |
+|---|---|---|
+| pause-caused re-executions | 24 full path re-collects (heartbeat-driven) | 24 run-state only |
+| bytes delivered for them | ~305 KB (12.7 KB each) | 4.2 KB (177 B each) — **−98.6%** |
+| path-query executions | n/a (atomic is the path query) | **0** |
+
+(Both captures also show 12 in-window executions ≤40 ms after the
+window-opening snapshot write — the delivery of the final pre-pause content
+beat, a window-boundary artifact, excluded above.)
+
+**Whole scenario (~315 s window):** atomic delivered 1.64 MB across 124
+executions; split delivered 1.25 MB (92 path × ~13.4 KB + 124 run-state ×
+166 B mean) — −24% even in a content-dominated scenario. Real conversations
+skew much further toward the pause class (tool waits and approval waits run
+minutes, not 20 s), and every additional tab multiplies the atomic cost but
+adds only 177 B deliveries under the split.
+
+**Trim effect.** Live run-state executions now read ~2.0 KB (chat + run +
+approval index) instead of ~13 KB+ — 116 of 124 executions in the capture.
+The 8 remaining large reads (~25.7 KB: the settled message doc carries
+content AND parts) are the post-terminal fallback, which runs only until the
+subscription goes quiet — expected and bounded. Execution COUNT is
+unchanged by the trim: applied content beats patch the run doc too
+(`lastSnapshotSequence`), so run-state re-executes per beat either way; the
+trim changes what each execution costs, not how often it runs.
+
+**Client side:** correctness green in both modes; rendering metrics
+(TBT, projection, long tasks, publication counts) identical; pre-stream
+metrics at n=3 are variance-dominated (see the regression suite below for
+the n=10 read). Adoption-loss runs: 1 in each mode (pre-existing,
+split-independent).
+
+**Regression suite (four original durable scenarios, RUNS=10, split+trim
+build, vs the pre-trim split baseline `2026-08-28T00-44-32`):** all
+correctness gates green; every p50 within noise — send→first-visible
+748→755 ms, snapshot→second-tab median 38→37 ms, reload→authoritative
+211→217 ms, stop→terminal 7.7→7.1 ms, terminal→settlement receipt
+unchanged, TBT unchanged, snapshot write mean unchanged. Result file
+`2026-08-28T01-43-30-durable.json`; paused-scenario files
+`2026-08-28T01-27-22` (atomic) and `2026-08-28T01-33-14` (split).
+
+**Recommendation:** flip `NEXT_PUBLIC_SPLIT_SELECTED_QUERY` to default-on.
+The prerequisites this report listed are met, the win in the pause class is
+~50× per event per subscriber, and the rollback (atomic query, flag off)
+stays registered per ADR-0027.

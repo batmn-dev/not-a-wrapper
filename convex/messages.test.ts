@@ -726,6 +726,36 @@ describe("getSelectedConversation (gameplan §7, PR 4)", () => {
     expect(onDeliveredPath).toBe(false)
   })
 
+  it("split run half never reads the message doc while the run is live", async () => {
+    // The trim's read-set property (Experiment 2 finding 1): with
+    // `activeStreamId` stamped, points-back is decided from the run doc
+    // alone — so content beats, which write only the message doc, cannot
+    // re-execute the run half. The message read survives only as the
+    // settled-run fallback (covered by the point-back-null test, which
+    // clears `activeStreamId`).
+    const world = createRunWorld()
+    const { ctx } = createMutationCtx({
+      users: [world.user],
+      chats: [world.chat],
+      messages: world.messages,
+      generationRuns: [world.run],
+    })
+    const readIds: string[] = []
+    const rawGet = ctx.db.get
+    ctx.db.get = (async (id: string) => {
+      readIds.push(id)
+      return rawGet(id as Parameters<typeof rawGet>[0])
+    }) as typeof rawGet
+
+    const runState = await getSelectedRunStateForViewer(ctx, {
+      chat: world.chat,
+      viewer: world.user,
+    })
+
+    expect(runState?.runId).toBe(world.runId)
+    expect(readIds).toEqual([world.runId])
+  })
+
   it("split run half returns null when the linked message does not point back", async () => {
     const world = createRunWorld()
     world.messages[1] = {

@@ -32,7 +32,11 @@ import { MockLanguageModelV4 } from "ai/test"
  * stop-during-text (streams like text-only; the harness issues the Stop) |
  * short-prose | long-markdown | many-blocks | code-stress.
  * Shapes: fixed (even cadence) | bursty (10-chunk bursts at burst-period
- * gaps) | slab (~4 KB merged slabs at their accumulated cadence time).
+ * gaps) | slab (~4 KB merged slabs at their accumulated cadence time) |
+ * paused (fixed cadence split into segments separated by long zero-delta
+ * gaps — the run stays live with NO content flowing, so the only durable
+ * writes in a gap are run-doc bookkeeping like heartbeats: the event class
+ * behind tool waits and approval pauses in real conversations).
  */
 
 export const DETERMINISTIC_PERF_SCENARIOS = [
@@ -50,7 +54,7 @@ export const DETERMINISTIC_PERF_SCENARIOS = [
 export type DeterministicPerfScenario =
   (typeof DETERMINISTIC_PERF_SCENARIOS)[number]
 
-export type DeterministicDeliveryShape = "fixed" | "bursty" | "slab"
+export type DeterministicDeliveryShape = "fixed" | "bursty" | "slab" | "paused"
 
 export type DeterministicPerfDirective = {
   scenario: DeterministicPerfScenario
@@ -58,7 +62,8 @@ export type DeterministicPerfDirective = {
   shape: DeterministicDeliveryShape
 }
 
-const DIRECTIVE_PATTERN = /\[\[perf:([a-z-]+):(\d{1,4}):(fixed|bursty|slab)\]\]/
+const DIRECTIVE_PATTERN =
+  /\[\[perf:([a-z-]+):(\d{1,4}):(fixed|bursty|slab|paused)\]\]/
 
 export function isDeterministicPerfProviderEnabled(): boolean {
   return process.env.CHAT_PERF_DETERMINISTIC_PROVIDER === "1"
@@ -151,6 +156,13 @@ export function deterministicScenarioText(
 const DELTA_SIZE = 40
 const BURST_SIZE = 10
 const SLAB_TARGET_BYTES = 4096
+// Paused shape: the text streams as PAUSE_SEGMENTS fixed-cadence segments
+// with a PAUSE_GAP_MS silent gap before each segment after the first. Gaps
+// are provider silence, not cadence: the durable run stays live (heartbeats,
+// lease renewal) while the snapshot tracker — content-versioned — writes
+// nothing at all.
+const PAUSE_SEGMENTS = 4
+const PAUSE_GAP_MS = 20_000
 
 const STEP_USAGE = {
   inputTokens: {
@@ -202,7 +214,11 @@ export function buildDeterministicPartScript(
   const parts: TimedPart[] = []
   let cadenceIndex = 0
   let emittedInBurst = 0
-  const pushTimed = (part: LanguageModelV4StreamPart, sourceDeltas: number) => {
+  const pushTimed = (
+    part: LanguageModelV4StreamPart,
+    sourceDeltas: number,
+    extraDelayMs = 0
+  ) => {
     const previousAt = Math.round(cadenceIndex * intervalMs)
     cadenceIndex += sourceDeltas
     let delayMs = Math.round(cadenceIndex * intervalMs) - previousAt
@@ -214,7 +230,7 @@ export function buildDeterministicPartScript(
         emittedInBurst = 0
       }
     }
-    parts.push({ delayMs, part })
+    parts.push({ delayMs: delayMs + extraDelayMs, part })
   }
 
   parts.push({ delayMs: 0, part: { type: "stream-start", warnings: [] } })
@@ -226,8 +242,18 @@ export function buildDeterministicPartScript(
     parts.push({ delayMs: 0, part: { type: "reasoning-end", id: "r1" } })
   }
   parts.push({ delayMs: 0, part: { type: "text-start", id: "t1" } })
-  for (const delta of textDeltas) {
-    pushTimed({ type: "text-delta", id: "t1", delta }, sourceDeltasPerText)
+  const pausedSegmentLength =
+    directive.shape === "paused"
+      ? Math.ceil(textDeltas.length / PAUSE_SEGMENTS)
+      : 0
+  for (const [index, delta] of textDeltas.entries()) {
+    const startsPausedSegment =
+      pausedSegmentLength > 0 && index > 0 && index % pausedSegmentLength === 0
+    pushTimed(
+      { type: "text-delta", id: "t1", delta },
+      sourceDeltasPerText,
+      startsPausedSegment ? PAUSE_GAP_MS : 0
+    )
   }
   if (terminal === "error") {
     parts.push({

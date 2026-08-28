@@ -420,11 +420,24 @@ export async function getSelectedRunStateForViewer(
   }
   const assistantMessageId = run.assistantMessageId
   if (!assistantMessageId) return null
-  const linkedMessage = await ctx.db.get(assistantMessageId)
-  const pointsBack =
-    linkedMessage !== null &&
-    (linkedMessage.generationRunId === run._id ||
-      run.activeStreamId === linkedMessage._id)
+  // Points-back short-circuit (Experiment 2 finding 1): while the run is
+  // live, `activeStreamId` IS the linked message id (stamped at stream start,
+  // cleared on terminal transitions), so the back-pointer is decidable from
+  // the run doc alone. Reading the message here would not only cost the
+  // growing live doc per execution — it would put the message in this query's
+  // READ SET, re-executing the run half on every content beat and erasing
+  // the split's point. The message read remains only as the settled-run
+  // fallback (`generationRunId` stamp), where the doc is no longer written
+  // per beat. Divergence from the atomic query: when `activeStreamId`
+  // matches, the linked message's existence is not verified — a dangling id
+  // can never appear in the delivered path, so the client's on-path check
+  // nulls exactly the cases the atomic query's existence check caught.
+  let pointsBack = run.activeStreamId === assistantMessageId
+  if (!pointsBack) {
+    const linkedMessage = await ctx.db.get(assistantMessageId)
+    pointsBack =
+      linkedMessage !== null && linkedMessage.generationRunId === run._id
+  }
   if (!pointsBack) return null
 
   const pendingApproval = await ctx.db

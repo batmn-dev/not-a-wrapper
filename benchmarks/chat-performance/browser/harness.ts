@@ -18,7 +18,10 @@
  *      running perf server instead of spawning; server-span join unavailable),
  *      PW_CHANNEL (e.g. "chrome" to use installed Chrome).
  */
-import { deterministicScenarioText } from "@/app/api/chat/deterministic-provider"
+import {
+  buildDeterministicPartScript,
+  deterministicScenarioText,
+} from "@/app/api/chat/deterministic-provider"
 import { execSync, spawn, type ChildProcess } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import os from "node:os"
@@ -809,10 +812,15 @@ function acceptedCheckpointStamps(correlationId: string): number[] {
 }
 
 function scenarioTimeoutMs(config: BrowserScenarioConfig): number {
-  const oracle = deterministicScenarioText(config.scenario)
-  const deltas = Math.ceil((oracle.reasoning.length + oracle.text.length) / 40)
-  const streamMs = (deltas / config.chunksPerSecond) * 1000
-  return Math.round(streamMs * (config.cpuThrottle > 1 ? 2 : 1.5)) + 60_000
+  // Sum the actual part script's scheduled delays — exact by construction,
+  // and the only formula that survives shapes whose wall-clock diverges from
+  // delta-count cadence (paused gaps, bursty regrouping).
+  const scheduledMs = buildDeterministicPartScript({
+    scenario: config.scenario,
+    chunksPerSecond: config.chunksPerSecond,
+    shape: config.shape,
+  }).reduce((sum, timed) => sum + timed.delayMs, 0)
+  return Math.round(scheduledMs * (config.cpuThrottle > 1 ? 2 : 1.5)) + 60_000
 }
 
 async function main() {
@@ -825,7 +833,8 @@ async function main() {
           ? DURABLE_SUITE
           : fail(`unknown SUITE: ${SUITE_NAME}`)
   if (process.env.ONLY) {
-    suite = suite.filter((config) => config.id === process.env.ONLY)
+    const wanted = process.env.ONLY.split(",").map((id) => id.trim())
+    suite = suite.filter((config) => wanted.includes(config.id))
     if (suite.length === 0) fail(`ONLY matched no scenario: ${process.env.ONLY}`)
   }
 
