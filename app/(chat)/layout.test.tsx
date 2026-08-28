@@ -29,6 +29,10 @@ vi.mock("@/lib/chat-store/messages/provider", () => ({
   MessagesProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
 
+vi.mock("@/app/components/chat/chat", () => ({
+  Chat: () => <div data-chat-surface="" />,
+}))
+
 describe("chat route layout ownership", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
@@ -80,5 +84,33 @@ describe("chat route layout ownership", () => {
     expect(container.querySelector("[data-chat-chrome-header]")).not.toBeNull()
     expect(container.querySelector("[data-route='first']")).toBeNull()
     expect(container.querySelector("[data-route='second']")).not.toBeNull()
+  })
+
+  it("owns the Chat surface so route-segment swaps cannot remount it", () => {
+    // Adoption-loss fix (2026-08-28): the surface must be the LAYOUT's child,
+    // not the pages' — a segment commit mid-first-turn tore down a page-owned
+    // Chat and orphaned the live stream binding.
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    act(() => {
+      root?.render(
+        <ChatLayout>
+          <div data-route="first" />
+        </ChatLayout>
+      )
+    })
+    const surface = container.querySelector("[data-chat-surface]")
+    expect(surface).not.toBeNull()
+
+    act(() => {
+      root?.render(
+        <ChatLayout>
+          <div data-route="second" />
+        </ChatLayout>
+      )
+    })
+    expect(container.querySelector("[data-chat-surface]")).toBe(surface)
   })
 })

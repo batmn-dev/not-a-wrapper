@@ -68,8 +68,11 @@ pinned fixture payload hashes.
   flushes Chromium's network buffer, so correctness falls back to
   settlement-outcome + settle-mismatch + rendered-length rules when the SSE
   body is unreadable (byte fidelity is proven by the guest suite); and runs
-  that lose live-stream adoption (a real, intermittent product behavior) are
-  counted per scenario as `liveStreamNotAdoptedRuns` rather than failed.
+  that lose live-stream adoption are counted per scenario as
+  `liveStreamNotAdoptedRuns` AND fail the scenario — since the 2026-08-28
+  layout-owned-Chat fix (see
+  `docs/performance/2026-08-28-adoption-loss-root-cause.md`) the expected
+  count is 0, and any recurrence is a regression.
   Convex-side cost sampling needs `CHAT_PERF_CONVEX_SAMPLE_RATE` set on the
   deployment. The `durable-text-30-paused` scenario (shape `paused`: four
   fixed-cadence segments split by three 20 s zero-delta gaps) exercises the

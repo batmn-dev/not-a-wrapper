@@ -99,22 +99,21 @@ floor or time/output-proportional estimate rather than the full reservation),
 and implement it within ADR-0011's settle-never-rejects and ADR-0021's
 reserve-then-settle contracts. Add a regression test that a first-beat Stop
 settles for far less than the full estimate.
-- **Intermittent live-stream adoption loss after the first durable send's hard
-navigation:** in ~2/10 reload-style runs the client lands on `/c/<chatId>` and
-never adopts the in-flight live stream — no error, the turn completes and
-settles correctly, but content arrives only via the 750ms durable snapshots
-(visibly chunky streaming). Split-independent (reproduced with the atomic
-query, before Experiment 2) and counted by the browser harness as
-`liveStreamNotAdoptedRuns` (SUITE=durable, `durable-text-30-reload`; see
-`docs/performance/2026-08-28-experiment-2-reactive-read-split.md` and the B5
-addendum in `docs/performance/2026-08-27-system-performance-baseline.md`).
-Investigate fully and resolve: trace the ADR-0013 per-instance
-ChatStreamBinding adoption path across the hard navigation (binding lifetime
-vs. remount timing, the same-tab-only adoption rule, and any race between the
-run reaching a terminal-adjacent state and the new Chat instance attaching),
-find why the loss is silent, and either make adoption reliable or make the
-snapshot fallback explicit and observable. Add the harness counter as a
-regression gate (expected 0) once fixed.
+- ~~**Intermittent live-stream adoption loss after the first durable send's
+hard navigation**~~ — RESOLVED 2026-08-28: root cause was NOT the ADR-0013
+binding machinery (adoption succeeded every time) but the route structure —
+both `(chat)` page segments rendered their own `<Chat/>`, and when the router
+intermittently committed the `/c/[chatId]` segment 30–90ms after the shallow
+pushState handoff, the page-subtree swap remounted Chat and orphaned the live
+binding. Fixed by mounting `<Chat/>` in the persistent `(chat)/layout.tsx`
+(pages render null, keep the /c auth redirect); verified 0/90 losses post-fix
+vs ~7% before, and `liveStreamNotAdoptedRuns > 0` now FAILS the harness
+scenario as the regression gate. Full forensics:
+`docs/performance/2026-08-28-adoption-loss-root-cause.md`. Known residual
+(small, separate): a project-originated first send crosses from `/p/[projectId]`
+into the `(chat)` layout, which still remounts Chat if the router commits
+mid-stream — same class, different layout boundary; fix when project first
+sends matter.
 
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting

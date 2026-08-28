@@ -929,11 +929,22 @@ async function main() {
       await context.close()
     }
 
-    const correctnessOk = runs.every((run) => run.correctness.ok)
-    if (!correctnessOk) anyCorrectnessFailure = true
+    let correctnessOk = runs.every((run) => run.correctness.ok)
     const liveStreamNotAdoptedRuns = runs.filter(
       (run) => run.liveStreamNotAdopted
     ).length
+    // Regression gate (adoption-loss fix, 2026-08-28): the Chat surface now
+    // lives in the persistent (chat)/layout.tsx, so a route-segment commit
+    // can no longer remount it mid-first-turn and orphan the live binding.
+    // Verified 0/90 losses post-fix (vs ~7% before) — any recurrence is a
+    // real regression, not noise.
+    if (liveStreamNotAdoptedRuns > 0) {
+      correctnessOk = false
+      log(
+        `  GATE: ${liveStreamNotAdoptedRuns} run(s) lost live-stream adoption (expected 0 since the layout-owned Chat fix)`
+      )
+    }
+    if (!correctnessOk) anyCorrectnessFailure = true
 
     const numeric = (
       pick: (run: RunMetrics) => number | undefined
