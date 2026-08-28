@@ -309,12 +309,22 @@ function TurnRow({
   const turnContent = shouldRenderContent ? (
     <>
       {beforeTurn}
+      {/* The reference section also carries :has([data-writing-block])
+          pointer-events rules and a :has([data-dotball-loading-indicator])
+          content-visibility escape. Neither is here on purpose: nothing in
+          this app renders data-writing-block (dead rules), and the dotball
+          escape is vacuous because the LIVE turn — the only place the
+          indicator shows — never gets content-visibility (see the
+          contentVisibility call sites). The :has() rules were measured as
+          per-commit style-invalidation cost during streaming
+          (docs/performance/2026-08-28-rendering-attribution-b1-b2.md,
+          residual-B2 follow-up). */}
       <section
         ref={eager ? eagerSectionRef : submitScrollRef}
         className={cn(
-          "text-foreground w-full focus:outline-none has-data-writing-block:pointer-events-none [&:has([data-writing-block])>*]:pointer-events-auto",
+          "text-foreground w-full focus:outline-none",
           contentVisibility &&
-            "[content-visibility:auto] has-[[data-dotball-loading-indicator]]:[content-visibility:visible]! supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
+            "[content-visibility:auto] supports-[content-visibility:auto]:[contain-intrinsic-size:auto_100lvh]",
           className
         )}
         data-turn-id-container={dataTurnId}
@@ -670,7 +680,6 @@ export function Conversation({
                   centerIntersectionObserver={
                     virtualization.centerIntersectionObserver
                   }
-                  contentVisibility={contentVisibilityEnabled}
                   estimatedTextParts={[]}
                   forceRender={forceRender}
                   onCenterIntersectionChange={onCenterIntersectionChange}
@@ -817,7 +826,17 @@ export function Conversation({
                 centerIntersectionObserver={
                   virtualization.centerIntersectionObserver
                 }
-                contentVisibility={isAssistant && contentVisibilityEnabled}
+                contentVisibility={
+                  // The live turn is on-screen by definition and mutates on
+                  // every stream commit; content-visibility there buys no
+                  // skip but pays per-commit relevancy + last-remembered-size
+                  // bookkeeping (and made the reference's dotball :has()
+                  // escape necessary at all). Settled turns re-gain it on the
+                  // render after the stream ends.
+                  isAssistant &&
+                  contentVisibilityEnabled &&
+                  !(isLast && generationActive)
+                }
                 estimatedTextParts={getMessageTextParts(message)}
                 forceRender={forceRender}
                 hasTurnAssets={hasTurnAssetContent(message)}

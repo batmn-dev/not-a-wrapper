@@ -127,3 +127,31 @@ fade all intact; computed styles confirm `auto` on settled blocks and
 **Residual B2 (291 ms TBT at 4× throttle)** is now ordinary work
 (viewport-visible layout, JS, Shiki) plus the turn-level c-v/:has() cost
 the no-cv probe isolated — a candidate for a later, smaller experiment.
+
+## Residual-B2 follow-up — turn-level c-v/:has() (2026-08-28, later)
+
+Re-probed on the CURRENT build (the settled-block c-v fix shipped): the
+pre-fix 742 → 476 ms delta no longer exists — the block-level fix already
+absorbed most of the turn machinery's cost. Fresh single-run traces at
+cpu4: rebaseline TBT 218 ms (style 38 ms), turn-c-v-off probe 217 ms
+(style 5 ms), cis-only-off probe 232 ms (style 6 ms). The marginal cost is
+now ~30 ms of long-task style recalc, driven by `contain-intrinsic-size:
+auto` last-remembered-size bookkeeping plus `:has()` invalidation on the
+mutating live section.
+
+Shipped anyway as hygiene (the invalidation surface, not a rescue):
+
+- the two `:has([data-writing-block])` pointer-events rules on every turn
+  section were DEAD — nothing in this app renders `data-writing-block`
+  (reference parity residue from ChatGPT's canvas feature);
+- the live (last, generation-active) turn no longer gets
+  `content-visibility: auto` — it is on-screen by definition and mutates
+  every commit, so c-v there pays relevancy + intrinsic-size bookkeeping
+  for zero skip; settled turns re-gain it after the stream ends;
+- with the live turn c-v-free, the `:has([data-dotball-loading-indicator])`
+  content-visibility escape became vacuous and was deleted (the dotball
+  only shows on a live turn).
+
+Post-fix traces: B2 190 ms TBT, B1 3 ms TBT. A conversation test pins the
+contract (live turn c-v-free while streaming, settled turns keep c-v, no
+`:has(` in section classes).

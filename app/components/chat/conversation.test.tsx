@@ -20,6 +20,7 @@ import {
   Conversation,
   shouldUseAssistantContentVisibility,
 } from "./conversation"
+import { CHATGPT_TURN_INTERSECTION_EXPERIMENT } from "./thread-scroll"
 import { PENDING_ACTIVITY_TURN_ID } from "./use-activity-panel"
 
 const HOUR = 60 * 60 * 1000
@@ -269,6 +270,71 @@ describe("Conversation recovered turn contracts", () => {
         ?.querySelector('[data-testid="thread-scroll-edge"]')
         ?.getAttribute("data-scroll-target")
     ).toBe("assistant-turn:user-1:assistant-1")
+  })
+
+  it("keeps content-visibility off the live turn and free of :has() rules", () => {
+    vi.stubGlobal("CSS", {
+      supports: vi.fn(
+        (declaration: string) => declaration === "content-visibility: auto"
+      ),
+    })
+    const experiment = CHATGPT_TURN_INTERSECTION_EXPERIMENT as unknown as {
+      enabled: boolean
+    }
+    experiment.enabled = false
+    const twoTurns = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "One" }] },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "First answer" }],
+      },
+      { id: "user-2", role: "user", parts: [{ type: "text", text: "Two" }] },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Streaming answer" }],
+      },
+    ] satisfies UIMessage[]
+
+    try {
+      container = document.createElement("div")
+      document.body.append(container)
+      root = createRoot(container)
+      const renderWithStatus = (status: "streaming" | "ready") =>
+        act(() => {
+          root?.render(
+            <Conversation
+              messages={twoTurns}
+              status={status}
+              onEdit={vi.fn()}
+              onReload={vi.fn()}
+            />
+          )
+        })
+
+      renderWithStatus("streaming")
+      const sections = () =>
+        Array.from(
+          container?.querySelectorAll<HTMLElement>(
+            'section[data-turn="assistant"]'
+          ) ?? []
+        )
+      expect(sections()).toHaveLength(2)
+      expect(sections()[0].className).toContain("[content-visibility:auto]")
+      expect(sections()[1].className).not.toContain("[content-visibility:auto]")
+      // The reference's :has() section rules (writing-block pointer-events,
+      // dotball content-visibility escape) are deliberately absent — they were
+      // measured as per-commit style-invalidation cost during streaming.
+      for (const section of sections()) {
+        expect(section.className).not.toContain(":has(")
+      }
+
+      renderWithStatus("ready")
+      expect(sections()[1].className).toContain("[content-visibility:auto]")
+    } finally {
+      experiment.enabled = true
+    }
   })
 
   it("keeps the final five outer turn owners intersecting", () => {
