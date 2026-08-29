@@ -141,6 +141,8 @@ type ChatCredentialAdmissionParams = {
   enableSearch: boolean
   /** Per-turn effort selection (ADR-0026); parser-validated, still soft. */
   reasoningEffort?: ModelReasoningEffort
+  /** Optional user-selected total generation allowance (ADR-0028). */
+  generationBudget?: number
   /** Server-planned approval continuation pin, when this is one. */
   pinnedProviderId?: Provider
   /**
@@ -211,6 +213,13 @@ async function getPinnedContinuationProvider(
 function toAdmissionError(
   failure: RouteResolutionFailure
 ): PublicChatHttpError {
+  if (failure.reason === "invalid_generation_budget") {
+    return new PublicChatHttpError({
+      message: `This model needs a generation budget of at least ${failure.minimumGenerationBudget.toLocaleString()} tokens when fixed reasoning is enabled.`,
+      statusCode: 400,
+      code: "INVALID_GENERATION_BUDGET",
+    })
+  }
   if (failure.reason === "insufficient_allowance") {
     // Reached only when no usable fallback BYOK route existed — allowance
     // exhaustion WITH a valid fallback key transparently chose BYOK instead.
@@ -275,6 +284,7 @@ export async function validateAndResolveChatCredential({
   systemPrompt,
   enableSearch,
   reasoningEffort,
+  generationBudget,
   pinnedProviderId: plannedPinnedProviderId,
   keySettingsPromise,
   perf,
@@ -328,6 +338,7 @@ export async function validateAndResolveChatCredential({
               messages,
               systemPrompt,
               toolsLikely: effectiveEnableSearch,
+              ...(generationBudget !== undefined ? { generationBudget } : {}),
             },
           }
         : {}),

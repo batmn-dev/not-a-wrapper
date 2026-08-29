@@ -208,12 +208,10 @@ lifecycle writes. Wrong-run, wrong-digest, expired, malformed, and replayed
 receipts are rejected without balance changes; a receipt against an
 already-finalized reservation is acknowledged as a benign no-op.
 
-**Protocol contract.** New reservation authorizations require the pinned title
-input floor, and new chat admission proofs always bind cancellation-settlement
-protocol v1. The retired proof formats are rejected. Optional protocol fields,
-legacy settlement literals, and conservative stale-row reconciliation remain
-so historical production documents stay readable without keeping an old
-worker request path alive.
+**Protocol contract.** Reservation authorizations require the pinned title
+input floor, and chat admission proof v4 binds both generation-budget and
+cancellation-settlement facts. Older proof formats are rejected. Optional
+fields represent genuinely absent runtime facts, not a migration path.
 
 **Evidence order (deterministic, shared by receipt and reaper —
 `resolveTerminalUsageSettlement`):**
@@ -341,16 +339,17 @@ when the active Next build depends on the old signature.
 
 `estimatePlatformUsage` (pure, documented heuristics): input ≈
 ⌈chars/4⌉ across system prompt + history + attachments allowance + a flat
-tool allowance when search/tools are enabled; output = the route-aware
-per-turn budget `platformOutputTokenBudget(route)` — **8,192 tokens** base,
-plus fixed-thinking headroom for routes whose provider takes a fixed thinking
-budget (Anthropic today: `max_tokens` must EXCEED `thinking.budget_tokens`,
-and thinking tokens are billed output). The SAME number is passed to the
-provider call as `maxOutputTokens` for platform-funded runs so the
-reservation and the runtime limit always agree (BYOK runs are uncapped,
-unchanged). Multi-step tool turns may exceed the reservation; the overrun
-settles honestly (negative balance allowed). Estimation is admission
-control, not the final charge.
+tool allowance when search/tools are enabled; output comes from ADR-0028's
+route-aware generation-budget resolver. The platform response policy allows
+**8,192 tokens**. Fixed Anthropic thinking adds separately billed reservation
+headroom, while the provider adapter receives only the visible-answer portion
+because the AI SDK adds the thinking budget itself. This prevents the old
+double-addition bug. An explicit smaller user budget lowers the reservation;
+it cannot raise the platform ceiling. The runtime spends that output allowance
+cumulatively across all model steps, so a tool loop cannot multiply the
+reserved output budget. Repeated input and other estimated dimensions can
+still overrun; settlement records the actual charge honestly and may make the
+balance negative. Estimation is admission control, not the final charge.
 
 ## Platform-paid operation inventory
 

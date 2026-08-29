@@ -27,6 +27,11 @@ export type ChatAdmissionProofPayload = {
     requested?: PersistedReasoningEffort
     applied?: PersistedReasoningEffort
   }
+  /** Total generation allowance receipt (ADR-0028). */
+  generationBudget?: {
+    requested?: number
+    applied?: number
+  }
   grantDigest?: string
   /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
    * makes a forged or swapped reservation attach unrepresentable. */
@@ -64,13 +69,19 @@ function serializeAdmission(payload: ChatAdmissionProofPayload): string {
           payload.reasoningEffort.applied ?? null,
         ]
       : null,
+    payload.generationBudget
+      ? [
+          payload.generationBudget.requested ?? null,
+          payload.generationBudget.applied ?? null,
+        ]
+      : null,
     payload.grantDigest ?? null,
     payload.reservationId ?? null,
     payload.generationInputHash ?? null,
     payload.issuedAt,
   ] as const
   return JSON.stringify([
-    "chat-admission-v3",
+    "chat-admission-v4",
     ...base,
     payload.cancellationSettlementVersion,
   ])

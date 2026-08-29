@@ -6,13 +6,11 @@ import {
 } from "@/convex/lib/usageReservationAuthorization"
 import type { UsageReservationArgs } from "@/convex/lib/usageValidators"
 import type { ReserveUsageResult } from "@/convex/usageAllowance"
+import { resolveGenerationBudget } from "@/lib/openproviders/output-budget"
 import { getProviderStrategy } from "@/lib/openproviders/provider-strategy"
 import type { Provider } from "@/lib/provider-identity"
 import { buildPricingSnapshot } from "@/lib/usage/billable-pricing"
-import {
-  estimatePlatformUsage,
-  platformOutputTokenBudget,
-} from "@/lib/usage/platform-usage-estimate"
+import { estimatePlatformUsage } from "@/lib/usage/platform-usage-estimate"
 import { getUserKeyFromConvex } from "@/lib/user-keys"
 import type { UIMessage } from "ai"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
@@ -60,15 +58,8 @@ export type ResolvedModelRoute = {
   routeReason: RouteReason
 }
 
-export type RouteResolutionFailure = {
+type RouteResolutionFailureBase = {
   ok: false
-  reason:
-    | "model_not_found"
-    | "auth_required"
-    | "no_eligible_route"
-    /** Platform allowance could not cover any platform candidate and no
-     * usable BYOK route existed (ADR-0021). */
-    | "insufficient_allowance"
   modelId: string
   /**
    * Providers whose key would unlock a capability-eligible route — the
@@ -76,6 +67,23 @@ export type RouteResolutionFailure = {
    */
   keyProviders: Provider[]
 }
+
+export type RouteResolutionFailure = RouteResolutionFailureBase &
+  (
+    | {
+        reason:
+          | "model_not_found"
+          | "auth_required"
+          | "no_eligible_route"
+          /** Platform allowance could not cover any platform candidate and no
+           * usable BYOK route existed (ADR-0021). */
+          | "insufficient_allowance"
+      }
+    | {
+        reason: "invalid_generation_budget"
+        minimumGenerationBudget: number
+      }
+  )
 
 export type RouteResolutionSuccess = {
   ok: true
@@ -124,6 +132,8 @@ export type PlatformFundingContext = {
   systemPrompt?: string
   /** Tools may run this turn (search enabled); widens the input estimate. */
   toolsLikely: boolean
+  /** Optional user-selected total generation allowance. */
+  generationBudget?: number
 }
 
 export type ReservePlatformUsageArgs = Omit<
@@ -324,7 +334,10 @@ async function resolveModelRouteOnce(
     ...new Set(capableRoutes.map((route) => route.providerId)),
   ]
   const fail = (
-    reason: RouteResolutionFailure["reason"]
+    reason: Exclude<
+      RouteResolutionFailure["reason"],
+      "invalid_generation_budget"
+    >
   ): RouteResolutionFailure => ({
     ok: false,
     reason,
@@ -394,6 +407,7 @@ async function resolveModelRouteOnce(
   ]
 
   let sawInsufficientAllowance = false
+  let minimumGenerationBudget: number | undefined
 
   for (const candidate of tiers) {
     const apiKey =
@@ -418,12 +432,27 @@ async function resolveModelRouteOnce(
       if (!funding || !args.token) continue
       const pricingSnapshot = buildPricingSnapshot(candidate.route)
       if (!pricingSnapshot) continue
+      const outputBudget = resolveGenerationBudget({
+        route: candidate.route.config,
+        credentialSource: "platform",
+        requestedGenerationBudget: funding.generationBudget,
+        searchToolsActive: funding.toolsLikely,
+      })
+      if (!outputBudget.ok) {
+        minimumGenerationBudget = Math.max(
+          minimumGenerationBudget ?? 0,
+          outputBudget.minimumGenerationBudget
+        )
+        continue
+      }
+      const outputTokenBudget = outputBudget.platformOutputTokenReservation
+      if (outputTokenBudget === undefined) continue
       const estimate = estimatePlatformUsage({
         messages: funding.messages,
         systemPrompt: funding.systemPrompt,
         toolsLikely: funding.toolsLikely,
         pricingSnapshot,
-        outputTokenBudget: platformOutputTokenBudget(candidate.route.config),
+        outputTokenBudget,
       })
       const reserved = await deps.reservePlatformUsage({
         token: args.token,
@@ -471,6 +500,16 @@ async function resolveModelRouteOnce(
           ? "legacy_route_hint"
           : candidate.tierReason,
       },
+    }
+  }
+
+  if (minimumGenerationBudget !== undefined) {
+    return {
+      ok: false,
+      reason: "invalid_generation_budget",
+      modelId: model.id,
+      keyProviders,
+      minimumGenerationBudget,
     }
   }
 

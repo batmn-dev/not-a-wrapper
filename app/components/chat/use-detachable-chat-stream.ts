@@ -1,5 +1,8 @@
 import type { ChatTurnBodyFields } from "@/lib/chat-messages/chat-turn-contract"
-import { getReasoningEffort } from "@/lib/chat-messages/metadata"
+import {
+  getGenerationBudget,
+  getReasoningEffort,
+} from "@/lib/chat-messages/metadata"
 import {
   consumeLocallyResolvedApprovals,
   restoreLocallyResolvedApprovals,
@@ -117,11 +120,18 @@ function preservePausedApprovalEffort(
     return fallbackBody
   }
 
-  const { reasoningEffort: _liveEffort, ...continuationBody } = fallbackBody
+  const {
+    reasoningEffort: _liveEffort,
+    generationBudget: _liveBudget,
+    ...continuationBody
+  } = fallbackBody
   const pausedEffort = getReasoningEffort(messages.at(-1)?.metadata)
-  return pausedEffort === undefined
-    ? continuationBody
-    : { ...continuationBody, reasoningEffort: pausedEffort }
+  const pausedBudget = getGenerationBudget(messages.at(-1)?.metadata)
+  return {
+    ...continuationBody,
+    ...(pausedEffort !== undefined ? { reasoningEffort: pausedEffort } : {}),
+    ...(pausedBudget !== undefined ? { generationBudget: pausedBudget } : {}),
+  }
 }
 
 type TransportStream = Awaited<

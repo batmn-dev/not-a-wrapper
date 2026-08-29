@@ -229,6 +229,9 @@ export const generationRunWriteArgs = {
   markGenerationRunFailed: {
     messageId: v.optional(v.id("messages")),
     error: v.string(),
+    errorRecovery: v.optional(
+      v.literal("retry_with_shorter_generation_budget")
+    ),
     workDurationMs: v.optional(v.number()),
   },
   markGenerationRunAborted: {
@@ -623,6 +626,7 @@ async function applyMessageResolution(
       await ctx.db.patch(message._id, {
         status: "completed",
         error: undefined,
+        errorRecovery: undefined,
         updatedAt: now,
       })
       return message._id
@@ -631,6 +635,7 @@ async function applyMessageResolution(
       await ctx.db.patch(message._id, {
         status: resolution.status,
         error: resolution.error,
+        errorRecovery: undefined,
         updatedAt: now,
       })
       return message._id
@@ -1872,6 +1877,11 @@ type PrepareGenerationForChatArgs = {
     requested?: PersistedReasoningEffort
     applied?: PersistedReasoningEffort
   }
+  /** Total generation allowance receipt (ADR-0028). */
+  generationBudget?: {
+    requested?: number
+    applied?: number
+  }
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -1996,6 +2006,12 @@ export async function prepareGenerationForChat(
       : {}),
     ...(args.reasoningEffort?.applied !== undefined
       ? { appliedReasoningEffort: args.reasoningEffort.applied }
+      : {}),
+    ...(args.generationBudget?.requested !== undefined
+      ? { requestedGenerationBudget: args.generationBudget.requested }
+      : {}),
+    ...(args.generationBudget?.applied !== undefined
+      ? { appliedGenerationBudget: args.generationBudget.applied }
       : {}),
     status: "running",
     startedAt: now,
@@ -2228,6 +2244,7 @@ export async function prepareGenerationWithVerifiedAdmission(
       provider: args.provider,
       route: args.route,
       reasoningEffort: args.reasoningEffort,
+      generationBudget: args.generationBudget,
       grantDigest: args.grantDigest,
       reservationId: args.reservationId,
       cancellationSettlementVersion: args.cancellationSettlementVersion,
@@ -2268,6 +2285,12 @@ export const prepareGeneration = mutation({
       v.object({
         requested: v.optional(vReasoningEffort),
         applied: v.optional(vReasoningEffort),
+      })
+    ),
+    generationBudget: v.optional(
+      v.object({
+        requested: v.optional(v.number()),
+        applied: v.optional(v.number()),
       })
     ),
     expectedVisibleMessageCount: v.optional(v.number()),
@@ -2651,6 +2674,8 @@ export async function markGenerationRunCompletedForChat(
     status,
     finishReason: args.finishReason,
     usage: args.usage,
+    error: undefined,
+    errorRecovery: undefined,
     updatedAt: now,
   })
   await ctx.db.patch(run._id, {
@@ -2714,6 +2739,7 @@ export async function markGenerationRunFailedForChat(
   args: {
     messageId?: Id<"messages">
     error: string
+    errorRecovery?: "retry_with_shorter_generation_budget"
     workDurationMs?: number
   }
 ) {
@@ -2730,7 +2756,7 @@ export async function markGenerationRunFailedForChat(
     { kind: "fail", error: args.error }
   )
   if (verdict.kind === "ignore") return
-  await applyLifecycleVerdict(
+  const assistantMessageId = await applyLifecycleVerdict(
     ctx,
     run,
     verdict,
@@ -2738,6 +2764,12 @@ export async function markGenerationRunFailedForChat(
     now,
     args.workDurationMs
   )
+  await ctx.db.patch(run._id, { errorRecovery: args.errorRecovery })
+  if (assistantMessageId) {
+    await ctx.db.patch(assistantMessageId, {
+      errorRecovery: args.errorRecovery,
+    })
+  }
 }
 
 export async function markGenerationRunAbortedForChat(

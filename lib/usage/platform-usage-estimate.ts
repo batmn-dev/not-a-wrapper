@@ -20,11 +20,10 @@ import type { UIMessage } from "ai"
  *    per-message structural overhead, a flat per-image allowance, and a flat
  *    tool allowance when search/tools are active (tool definitions plus
  *    expected tool-step re-sends).
- *  - Output tokens: the per-turn output reservation policy below — the SAME
- *    number is passed to the provider call as `maxOutputTokens` for
- *    platform-funded runs, so the reservation and the runtime limit agree.
- *    We deliberately do NOT reserve the theoretical context window (that
- *    would make expensive models unusable).
+ *  - Output tokens: the route-aware funding reservation resolved in
+ *    `lib/openproviders/output-budget.ts`. It can differ from the AI SDK's
+ *    `maxOutputTokens` value when a provider adapter adds fixed reasoning
+ *    tokens. We deliberately do NOT reserve the theoretical context window.
  *  - Title generation: always included (first-turn detection is not reliable
  *    at admission time); a turn that runs no title call settles that
  *    component back to zero.
@@ -32,45 +31,6 @@ import type { UIMessage } from "ai"
  * Multi-step tool turns can exceed the reservation; the overrun settles
  * honestly (negative balances are recorded, never clamped).
  */
-
-/** Base per-turn output-token reservation for the visible answer. */
-export const PLATFORM_OUTPUT_TOKEN_RESERVATION = 8_192
-
-/**
- * Fixed-thinking headroom, mirroring Request shaping's default budget
- * (lib/openproviders/request-shaping.ts DEFAULT_THINKING_BUDGET_TOKENS):
- * Anthropic fixed-budget thinking requires max_tokens to EXCEED the thinking
- * budget, and thinking tokens are billed output — so both the runtime cap and
- * the reservation must grow by the budget or every platform-funded turn on
- * such a route would 400 after reserving.
- */
-const DEFAULT_FIXED_THINKING_BUDGET_TOKENS = 10_000
-
-type OutputBudgetRouteFacts = {
-  providerId: string
-  reasoningText?: boolean
-  thinkingBudget?: number
-}
-
-/**
- * The per-turn output-token budget for one platform-funded route: the SAME
- * number is reserved (admission) and passed to the provider call as
- * `maxOutputTokens` (runtime), so the two always agree. Effort-based
- * reasoning (OpenAI et al.) fits inside the base cap; only fixed-budget
- * thinking (Anthropic today) adds headroom.
- */
-export function platformOutputTokenBudget(
-  route: OutputBudgetRouteFacts
-): number {
-  const fixedThinking =
-    route.reasoningText === true && route.providerId === "anthropic"
-      ? Math.max(
-          route.thinkingBudget ?? DEFAULT_FIXED_THINKING_BUDGET_TOKENS,
-          DEFAULT_FIXED_THINKING_BUDGET_TOKENS
-        )
-      : 0
-  return PLATFORM_OUTPUT_TOKEN_RESERVATION + fixedThinking
-}
 
 // Character/token vocabulary shared with the terminal-usage estimators —
 // declared once in lib/usage/terminal-usage-estimate.ts.
@@ -134,8 +94,8 @@ export function estimatePlatformUsage(args: {
   /** Tools may run this turn (search enabled or tool layers active). */
   toolsLikely: boolean
   pricingSnapshot: PricingSnapshot
-  /** Route-specific per-turn output budget (platformOutputTokenBudget). */
-  outputTokenBudget?: number
+  /** Route-specific worst-case billable output reservation. */
+  outputTokenBudget: number
 }): PlatformUsageEstimate {
   let inputTokens = Math.ceil(
     (args.systemPrompt?.length ?? 0) / CHARS_PER_TOKEN
@@ -147,8 +107,7 @@ export function estimatePlatformUsage(args: {
     inputTokens += TOOL_ALLOWANCE_TOKENS
   }
 
-  const outputTokens =
-    args.outputTokenBudget ?? PLATFORM_OUTPUT_TOKEN_RESERVATION
+  const outputTokens = args.outputTokenBudget
 
   const primaryCredits = computeUsageCredits(args.pricingSnapshot.primary, {
     inputTokens,

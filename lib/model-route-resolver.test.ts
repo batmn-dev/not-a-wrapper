@@ -279,6 +279,48 @@ describe("resolveModelRoute", () => {
     )
   })
 
+  it("lets an explicit smaller generation budget lower the platform reservation", async () => {
+    const deps = makeDeps()
+    const result = await resolveModelRoute(
+      {
+        modelId: "gpt-5-mini",
+        ...authed,
+        platformFunding: { ...funding, generationBudget: 4_096 },
+      },
+      deps
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      route: { credentialSource: "platform" },
+    })
+    expect(deps.reserveCalls[0]?.estimatedOutputTokens).toBe(4_096)
+  })
+
+  it("returns the fixed-reasoning minimum when no platform route accepts the budget", async () => {
+    const deps = makeDeps({
+      platformKeys: ["anthropic"],
+      freeModels: ["claude-sonnet-4-5-20250929"],
+    })
+    const result = await resolveModelRoute(
+      {
+        modelId: "claude-sonnet-4-5-20250929",
+        ...authed,
+        platformFunding: { ...funding, generationBudget: 12_000 },
+      },
+      deps
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "invalid_generation_budget",
+      modelId: "claude-sonnet-4-5-20250929",
+      keyProviders: ["anthropic", "openrouter"],
+      minimumGenerationBudget: 12_001,
+    })
+    expect(deps.reserveCalls).toHaveLength(0)
+  })
+
   it("priority BYOK bypasses platform reservation entirely", async () => {
     const deps = makeDeps({
       userKeys: { openai: { key: "sk-user", preference: "priority" } },

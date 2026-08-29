@@ -252,6 +252,20 @@ describe("validateAndResolveChatCredential", () => {
         },
         expected: { statusCode: 400, code: "INVALID_REQUEST" },
       },
+      {
+        failure: {
+          ok: false,
+          reason: "invalid_generation_budget",
+          modelId: "claude-sonnet-4-5-20250929",
+          keyProviders: ["anthropic"],
+          minimumGenerationBudget: 12_001,
+        },
+        expected: {
+          statusCode: 400,
+          code: "INVALID_GENERATION_BUDGET",
+          message: expect.stringContaining("12,001"),
+        },
+      },
     ]
 
     for (const testCase of cases) {

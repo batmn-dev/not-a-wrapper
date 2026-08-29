@@ -2,7 +2,10 @@ import {
   turnRowModelsEqual,
   type TurnRowModel,
 } from "@/lib/chat-messages/turn-row"
-import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
+import type {
+  EditTurnResult,
+  RegenerationTurnOverrides,
+} from "@/lib/chat-turn/chat-turn-controller"
 import React, { useEffect, useRef, useState } from "react"
 import { MessageAssistant } from "./message-assistant"
 import { MessageUser } from "./message-user"
@@ -13,7 +16,7 @@ type MessageProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
-  onReload?: (messageId: string) => void
+  onReload?: (messageId: string, overrides?: RegenerationTurnOverrides) => void
   onSelectBranch?: (messageId: string) => void
   onQuote?: (text: string, messageId: string) => void
 }

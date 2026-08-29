@@ -48,6 +48,8 @@ export const vToolInvocationStreamMetadata = v.object({
   workDurationMs: v.optional(v.number()),
   // Applied per-turn reasoning effort (ADR-0026); shared vocabulary mirror.
   reasoningEffort: v.optional(vReasoningEffort),
+  // Applied total generation allowance (ADR-0028), including reasoning.
+  generationBudget: v.optional(v.number()),
   toolMetadataByName: v.optional(
     v.record(v.string(), vToolInvocationDisplayMetadata)
   ),
@@ -161,6 +163,15 @@ export function projectPersistedMessageMetadata(
     typeof raw.reasoningEffort === "string" &&
       REASONING_EFFORTS.has(raw.reasoningEffort)
       ? raw.reasoningEffort
+      : undefined
+  )
+  setIfDefined(
+    result,
+    "generationBudget",
+    typeof raw.generationBudget === "number" &&
+      Number.isSafeInteger(raw.generationBudget) &&
+      raw.generationBudget > 0
+      ? raw.generationBudget
       : undefined
   )
   setIfDefined(

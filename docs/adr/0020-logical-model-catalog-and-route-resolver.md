@@ -108,10 +108,12 @@ messages keep `model` + `provider` for replay and link to the run's full
 receipt via `generationRunId`. All new fields are optional for compatibility
 with existing production documents.
 
-The Next.js server signs the complete trusted admission tuple immediately
-before calling `prepareGeneration`: chat id, request id, logical model,
-provider, route receipt, execution-grant digest, and issuance time. The public
-Convex mutation verifies the HMAC-SHA-256 proof with the shared
+The Next.js server signs the trusted admission tuple immediately before calling
+`prepareGeneration`. The original tuple covered chat id, request id, logical
+model, provider, route receipt, execution-grant digest, and issuance time;
+ADR-0021, ADR-0026, and ADR-0028 extend it with their reservation, reasoning,
+settlement, input-plan, and generation-budget receipts. The public Convex
+mutation verifies the HMAC-SHA-256 proof with the shared
 `CHAT_ADMISSION_SECRET` and rejects invalid or older-than-60-second proofs
 before entering the prepare transaction. The secret exists only in the Next.js
 server and the target Convex deployment and must match in both environments.

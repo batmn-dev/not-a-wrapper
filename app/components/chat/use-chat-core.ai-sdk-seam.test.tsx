@@ -1200,10 +1200,12 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
           return createUIMessageStreamResponse({
             stream: toUIMessageStream({
               stream: result.stream,
-              messageMetadata: () =>
-                pausedEffort === undefined
-                  ? undefined
-                  : { reasoningEffort: pausedEffort },
+              messageMetadata: () => ({
+                generationBudget: 16_384,
+                ...(pausedEffort === undefined
+                  ? {}
+                  : { reasoningEffort: pausedEffort }),
+              }),
             }),
           })
         }
@@ -1274,6 +1276,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
         expect(JSON.parse(continuationInit.body).reasoningEffort).toBe(
           pausedEffort
         )
+        expect(JSON.parse(continuationInit.body).generationBudget).toBe(16_384)
 
         // One-shot: no further dispatches however long the clock runs.
         await advanceFake(500)

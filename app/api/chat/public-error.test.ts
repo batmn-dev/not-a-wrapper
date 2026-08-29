@@ -1,3 +1,4 @@
+import { OPENROUTER_AFFORDABILITY_MESSAGE } from "@/lib/chat-errors"
 import { describe, expect, it } from "vitest"
 import { normalizeChatError } from "./public-error"
 
@@ -59,6 +60,93 @@ describe("normalizeChatError", () => {
       message: expect.stringContaining("Your OpenRouter API account"),
       retryable: false,
       provider: "openrouter",
+    })
+  })
+
+  it("exposes a structured shorter-budget recovery for OpenRouter affordability", () => {
+    expect(
+      normalizeChatError(
+        {
+          responseBody: JSON.stringify({
+            error: {
+              message: "Request cannot be processed.",
+              metadata: { error_type: "token_limit_exceeded" },
+            },
+          }),
+        },
+        { provider: "openrouter", credentialSource: "byok" }
+      )
+    ).toEqual({
+      code: "PAYMENT_REQUIRED",
+      message: OPENROUTER_AFFORDABILITY_MESSAGE,
+      retryable: false,
+      provider: "openrouter",
+      credentialSource: "byok",
+      recovery: "retry_with_shorter_generation_budget",
+    })
+  })
+
+  it("recognizes the OpenRouter adapter's direct mid-stream error shape", () => {
+    expect(
+      normalizeChatError(
+        {
+          code: 402,
+          message: "Request cannot be processed.",
+          metadata: { error_type: "token_limit_exceeded" },
+        },
+        { provider: "openrouter", credentialSource: "byok" }
+      )
+    ).toEqual({
+      code: "PAYMENT_REQUIRED",
+      message: OPENROUTER_AFFORDABILITY_MESSAGE,
+      retryable: false,
+      provider: "openrouter",
+      credentialSource: "byok",
+      recovery: "retry_with_shorter_generation_budget",
+    })
+  })
+
+  it("recognizes the observed OpenRouter max-output affordability message", () => {
+    expect(
+      normalizeChatError(
+        {
+          responseBody: JSON.stringify({
+            error: {
+              code: 402,
+              message:
+                "This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford 28881.",
+            },
+          }),
+        },
+        { provider: "openrouter", credentialSource: "byok" }
+      )
+    ).toMatchObject({
+      code: "PAYMENT_REQUIRED",
+      message: OPENROUTER_AFFORDABILITY_MESSAGE,
+      recovery: "retry_with_shorter_generation_budget",
+    })
+  })
+
+  it("does not treat a generic OpenRouter payment error as an output-budget error", () => {
+    expect(
+      normalizeChatError(
+        {
+          responseBody: JSON.stringify({
+            error: {
+              message: "Request cannot be processed.",
+              metadata: { error_type: "payment_required" },
+            },
+          }),
+        },
+        { provider: "openrouter", credentialSource: "byok" }
+      )
+    ).toEqual({
+      code: "PAYMENT_REQUIRED",
+      message:
+        "Your OpenRouter API account has insufficient credits or requires payment. Check OpenRouter billing or update your API key in settings.",
+      retryable: false,
+      provider: "openrouter",
+      credentialSource: "byok",
     })
   })
 

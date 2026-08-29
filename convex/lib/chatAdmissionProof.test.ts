@@ -22,8 +22,7 @@ const payload: ChatAdmissionProofPayload = {
     routeReason: "priority_byok",
   },
   grantDigest: "a".repeat(64),
-  cancellationSettlementVersion:
-    CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
+  cancellationSettlementVersion: CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   issuedAt: NOW,
 }
 
@@ -89,6 +88,31 @@ describe("chat admission proof", () => {
         {
           ...withEffort,
           reasoningEffort: { requested: "high", applied: "low" },
+        },
+        proof,
+        { secret: SECRET, now: NOW }
+      )
+    ).toBe(false)
+  })
+
+  it("binds the generation budget into the admission proof", () => {
+    const withBudget: ChatAdmissionProofPayload = {
+      ...payload,
+      generationBudget: { requested: 16_384, applied: 16_384 },
+    }
+    const proof = signChatAdmissionProof(withBudget, SECRET)
+
+    expect(
+      verifyChatAdmissionProof(withBudget, proof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(true)
+    expect(
+      verifyChatAdmissionProof(
+        {
+          ...withBudget,
+          generationBudget: { requested: 16_384, applied: 8_192 },
         },
         proof,
         { secret: SECRET, now: NOW }

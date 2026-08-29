@@ -1193,6 +1193,37 @@ describe("chat turn controller", () => {
     expect(storeAdapters.writeMessages).not.toHaveBeenCalled()
   })
 
+  it("applies a shorter generation budget only to the requested retry", async () => {
+    const { adapters, controller, setMessagesState, setSnapshot } =
+      createHarness()
+    setSnapshot({ isAuthenticated: true })
+    const messages = [
+      userMessage("user-1", "prompt"),
+      assistantMessage(
+        "assistant-1",
+        "failed answer",
+        new Date("2026-01-02T00:00:00Z")
+      ),
+    ]
+    setMessagesState(messages)
+
+    await controller.runRegenerationTurn({
+      chatId: "chat-1",
+      messages,
+      targetAssistantMessageId: "assistant-1",
+      chatVersion: 2,
+      isSubmitting: false,
+      status: "ready",
+      generationBudget: 16_384,
+    })
+
+    expect(adapters.regenerate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ generationBudget: 16_384 }),
+      })
+    )
+  })
+
   it("stages durable regeneration without local cache mutation", async () => {
     const {
       adapters,

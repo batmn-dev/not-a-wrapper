@@ -22,6 +22,7 @@ import {
   type ChatTurnMessage,
   type EnsureChatForTurnArgs,
   type EnsuredTurnChat,
+  type RegenerationTurnOverrides,
   type StagedAttachmentReference,
 } from "@/lib/chat-turn/chat-turn-controller"
 import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
@@ -865,7 +866,7 @@ export function useChatCore({
 
   // Read live messages because memoized assistant rows retain this callback.
   const handleReload = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, overrides?: RegenerationTurnOverrides) => {
       const currentMessages = getMessages()
       await chatTurn.runRegenerationTurn({
         chatId,
@@ -874,6 +875,7 @@ export function useChatCore({
         chatVersion: currentMessages.length, // same count since we're regenerating, not adding
         isSubmitting: getIsSubmitting(),
         status: getStatus(),
+        ...overrides,
       })
     },
     [chatTurn, chatId, getMessages, getIsSubmitting, getStatus]

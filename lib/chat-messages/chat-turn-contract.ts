@@ -1,5 +1,6 @@
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import { isModelReasoningEffort } from "@/lib/models/types"
+import { isGenerationBudget } from "@/lib/openproviders/output-budget"
 import type { UIMessage } from "ai"
 
 // Chat turn wire contract (CONTEXT.md): the single statement of the
@@ -78,6 +79,10 @@ export type ChatTurnBodyFields = {
    * provider decides). Untrusted: the parser drops unknown values and the
    * Chat turn runtime clamps to the resolved route's supported levels. */
   reasoningEffort?: ModelReasoningEffort
+  /** Optional total generation allowance, including hidden reasoning tokens.
+   * Absent = Auto. Present invalid values fail closed because this controls
+   * provider spend. */
+  generationBudget?: number
   chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
@@ -93,7 +98,7 @@ export type ChatTurnWireRequest = ChatTurnBodyFields & {
 export type ChatTurnRequestRejection = {
   ok: false
   status: number
-  code: "INVALID_REQUEST" | "MISSING_GUEST_ID"
+  code: "INVALID_REQUEST" | "INVALID_GENERATION_BUDGET" | "MISSING_GUEST_ID"
   error: string
   details?: Record<string, string>
   /** True when the rejection represents a state our own client should never
@@ -103,8 +108,7 @@ export type ChatTurnRequestRejection = {
 }
 
 export type ChatTurnRequestParseResult =
-  | { ok: true; request: ChatTurnWireRequest }
-  | ChatTurnRequestRejection
+  { ok: true; request: ChatTurnWireRequest } | ChatTurnRequestRejection
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -127,7 +131,11 @@ export function parseChatTurnRequest(
   const record: Record<string, unknown> = isRecord(body) ? body : {}
   const { messages, chatId, model } = record
 
-  if (!Array.isArray(messages) || !isNonEmptyString(chatId) || !isNonEmptyString(model)) {
+  if (
+    !Array.isArray(messages) ||
+    !isNonEmptyString(chatId) ||
+    !isNonEmptyString(model)
+  ) {
     return {
       ok: false,
       status: 400,
@@ -169,6 +177,19 @@ export function parseChatTurnRequest(
     !isModelReasoningEffort(record.reasoningEffort)
   ) {
     delete record.reasoningEffort
+  }
+
+  if (
+    record.generationBudget !== undefined &&
+    !isGenerationBudget(record.generationBudget)
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      code: "INVALID_GENERATION_BUDGET",
+      error:
+        "Generation budget must be a positive whole number within the supported range",
+    }
   }
 
   return { ok: true, request: record as ChatTurnWireRequest }

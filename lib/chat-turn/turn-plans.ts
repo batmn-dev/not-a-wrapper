@@ -36,6 +36,7 @@ type BuildChatTurnRequestBodyArgs = {
   systemPrompt?: string
   enableSearch?: boolean
   reasoningEffort?: ModelReasoningEffort
+  generationBudget?: number
   chatVersion?: number
   selectedPathToken?: ChatTurnSelectedPathToken
   edit?: ChatTurnEditRequest
@@ -53,6 +54,7 @@ export function buildChatTurnRequestBody({
   systemPrompt,
   enableSearch,
   reasoningEffort,
+  generationBudget,
   chatVersion,
   selectedPathToken,
   edit,
@@ -65,6 +67,7 @@ export function buildChatTurnRequestBody({
     systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
     ...(enableSearch !== undefined ? { enableSearch } : {}),
     ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
+    ...(generationBudget !== undefined ? { generationBudget } : {}),
     ...(chatVersion !== undefined ? { chatVersion } : {}),
     ...(selectedPathToken
       ? {

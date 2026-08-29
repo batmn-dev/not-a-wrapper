@@ -662,6 +662,7 @@ describe("prepareGenerationForChat", () => {
         credentialSource: "byok" as const,
         routeReason: "priority_byok" as const,
       },
+      generationBudget: { requested: 16_384, applied: 16_384 },
       latestUserMessage: {
         id: "user-new",
         role: "user" as const,
@@ -694,6 +695,8 @@ describe("prepareGenerationForChat", () => {
       routeId: "openrouter:anthropic/claude-sonnet-5",
       credentialSource: "byok",
       routeReason: "priority_byok",
+      requestedGenerationBudget: 16_384,
+      appliedGenerationBudget: 16_384,
     })
     // The assistant placeholder keeps the logical model + resolved provider.
     const assistant = tables.messages.find(
@@ -2371,6 +2374,7 @@ describe("prepareGenerationForChat", () => {
       {
         messageId: fixture.messageId,
         error: "provider failed",
+        errorRecovery: "retry_with_shorter_generation_budget",
       }
     )
 
@@ -2380,7 +2384,11 @@ describe("prepareGenerationForChat", () => {
       content: "partial regenerated answer",
       status: "failed",
       error: "provider failed",
+      errorRecovery: "retry_with_shorter_generation_budget",
     })
+    expect(fixture.run.errorRecovery).toBe(
+      "retry_with_shorter_generation_budget"
+    )
   })
 
   it("falls back to a legacy snapshot row for reused regeneration output", async () => {
