@@ -31,9 +31,8 @@ export type ChatAdmissionProofPayload = {
   /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
    * makes a forged or swapped reservation attach unrepresentable. */
   reservationId?: string
-  /** Signed worker capability. Only runs created by a compatible worker may
-   * defer cancellation settlement during a rolling deployment. */
-  cancellationSettlementVersion?: CancellationSettlementProtocolVersion
+  /** Required worker capability for cancellation-aware settlement. */
+  cancellationSettlementVersion: CancellationSettlementProtocolVersion
   /** Canonical durable-input plan confirmed transactionally at prepare. */
   generationInputHash?: string
   issuedAt: number
@@ -70,18 +69,11 @@ function serializeAdmission(payload: ChatAdmissionProofPayload): string {
     payload.generationInputHash ?? null,
     payload.issuedAt,
   ] as const
-  // Preserve the deployed v2 bytes for older workers. New workers bind their
-  // deferred-settlement capability in v3, so Convex can activate per run
-  // instead of relying on unsafe whole-deployment timing.
-  return JSON.stringify(
-    payload.cancellationSettlementVersion === undefined
-      ? ["chat-admission-v2", ...base]
-      : [
-          "chat-admission-v3",
-          ...base,
-          payload.cancellationSettlementVersion,
-        ]
-  )
+  return JSON.stringify([
+    "chat-admission-v3",
+    ...base,
+    payload.cancellationSettlementVersion,
+  ])
 }
 
 export function signChatAdmissionProof(

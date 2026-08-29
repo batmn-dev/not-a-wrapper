@@ -148,7 +148,6 @@ export default MyIcon
 - `PerplexityIcon`
 - `XaiIcon`
 - `XIcon` (X/Twitter logo)
-- `ZolaIcon`
 
 ## Notes
 

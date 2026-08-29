@@ -56,8 +56,6 @@ vi.mock("@/lib/openproviders/request-shaping", () => ({
   resolveReasoningEffort: vi.fn(() => ({})),
 }))
 
-vi.mock("@/lib/openproviders/env", () => ({ env: {} }))
-
 vi.mock("@/lib/tools/runtime", () => ({
   prepareToolRuntime: vi.fn(),
 }))

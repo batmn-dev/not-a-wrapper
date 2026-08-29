@@ -268,8 +268,8 @@ export default defineSchema({
         })
       )
     ),
-    // Signed worker capability. Only versioned runs may use deferred
-    // cancellation settlement during rolling deploys.
+    // Protocol marker for cancellation-settlement audit and historical rows.
+    // Current workers always write v1.
     cancellationSettlementVersion: v.optional(v.literal(1)),
     // Durable title attempt/usage evidence, persisted before each call and
     // mirrored to the reservation so worker loss or deletion cannot erase it.
@@ -566,7 +566,8 @@ export default defineSchema({
      * when a title call may have run but its usage never arrived. */
     titleEstimatedCredits: v.optional(v.number()),
     /** Input-only title floor pinned at reservation time (ADR-0021
-     * cancellation amendment): what a started-but-unfinished title costs. */
+     * cancellation amendment): what a started-but-unfinished title costs.
+     * Optional only so historical reservation documents remain readable. */
     titleEstimatedInputTokens: v.optional(v.number()),
     /** How the settled title component was derived (actual / input_floor /
      * not_run), persisted separately from the primary basis. */
@@ -587,7 +588,7 @@ export default defineSchema({
     settlementGrantExpiresAt: v.optional(v.number()),
     /** Durable fallback discriminator copied from the run before cleanup. */
     providerMayHaveStarted: v.optional(v.boolean()),
-    /** Signed worker capability copied from the run at attach. */
+    /** Protocol marker copied from the run at attach. */
     cancellationSettlementVersion: v.optional(v.literal(1)),
     /** Per-step evidence mirrored from the run for missing-run recovery. */
     observedInputTokens: v.optional(v.number()),

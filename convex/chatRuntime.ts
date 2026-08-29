@@ -238,7 +238,7 @@ export const generationRunWriteArgs = {
     // Cancellation terminal-usage evidence (ADR-0021 cancellation
     // amendment): completed-step aggregates, partial-output estimate, and
     // title attempt facts, settled atomically when this worker still owns
-    // the run. Optional for active old workers during the deployment window.
+    // the run. Optional when the turn has no platform reservation evidence.
     terminalUsage: v.optional(vTerminalUsageEvidence),
   },
   // The lease heartbeat (gameplan §6) — no payload beyond the run identity
@@ -2012,11 +2012,9 @@ export async function prepareGenerationForChat(
           grantExpiresAt: now + EXECUTION_GRANT_TTL_MS,
         }
       : {}),
-    ...(args.cancellationSettlementVersion !== undefined
-      ? {
-          cancellationSettlementVersion: args.cancellationSettlementVersion,
-        }
-      : {}),
+    cancellationSettlementVersion:
+      args.cancellationSettlementVersion ??
+      CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   })
 
   // Attach the platform-usage reservation to its run transactionally
@@ -2029,7 +2027,9 @@ export async function prepareGenerationForChat(
       userId: owner.user._id,
       runId,
       now,
-      cancellationSettlementVersion: args.cancellationSettlementVersion,
+      cancellationSettlementVersion:
+        args.cancellationSettlementVersion ??
+        CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
     })
   }
 
@@ -2210,6 +2210,7 @@ export async function prepareGenerationForChat(
 }
 
 type VerifiedPrepareGenerationArgs = PrepareGenerationForChatArgs & {
+  cancellationSettlementVersion: CancellationSettlementProtocolVersion
   admissionIssuedAt: number
   admissionProof: string
 }
@@ -2279,8 +2280,8 @@ export const prepareGeneration = mutation({
     generationInputHash: v.optional(v.string()),
     grantDigest: v.optional(v.string()),
     reservationId: v.optional(v.id("usageReservations")),
-    cancellationSettlementVersion: v.optional(
-      v.literal(CANCELLATION_SETTLEMENT_PROTOCOL_VERSION)
+    cancellationSettlementVersion: v.literal(
+      CANCELLATION_SETTLEMENT_PROTOCOL_VERSION
     ),
     admissionIssuedAt: v.number(),
     admissionProof: v.string(),
@@ -2343,17 +2344,15 @@ export async function markGenerationWorkStartedForChat(
     workDurationMs: priorWorkDurationMs,
     updatedAt: now,
   })
-  if (run.cancellationSettlementVersion === 1) {
-    const reservation = await ctx.db
-      .query("usageReservations")
-      .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
-      .unique()
-    if (reservation?.status === "reserved") {
-      await ctx.db.patch(reservation._id, {
-        providerMayHaveStarted: true,
-        updatedAt: now,
-      })
-    }
+  const reservation = await ctx.db
+    .query("usageReservations")
+    .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
+    .unique()
+  if (reservation?.status === "reserved") {
+    await ctx.db.patch(reservation._id, {
+      providerMayHaveStarted: true,
+      updatedAt: now,
+    })
   }
 }
 
@@ -3353,14 +3352,12 @@ export async function recordToolInvocationsForChat(
       updatedAt: now,
       ...usagePatch,
     })
-    if (usagePatch && run.cancellationSettlementVersion === 1) {
-      if (reservation?.status === "reserved") {
-        await ctx.db.patch(reservation._id, {
-          observedInputTokens: usagePatch.inputTokens,
-          observedOutputTokens: usagePatch.outputTokens,
-          updatedAt: now,
-        })
-      }
+    if (usagePatch && reservation?.status === "reserved") {
+      await ctx.db.patch(reservation._id, {
+        observedInputTokens: usagePatch.inputTokens,
+        observedOutputTokens: usagePatch.outputTokens,
+        updatedAt: now,
+      })
     }
   }
 }

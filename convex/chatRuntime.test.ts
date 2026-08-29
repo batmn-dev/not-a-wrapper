@@ -30,7 +30,10 @@ import {
 } from "./domain/generation_run_liveness"
 import { getSelectedPathMessages } from "./domain/message_branches"
 import type { AuthenticatedRunOwner } from "./lib/auth"
-import { signChatAdmissionProof } from "./lib/chatAdmissionProof"
+import {
+  CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
+  signChatAdmissionProof,
+} from "./lib/chatAdmissionProof"
 import { selectBranchForChat } from "./messages"
 
 type TableDocuments = {
@@ -666,6 +669,8 @@ describe("prepareGenerationForChat", () => {
         parts: [{ type: "text", text: "hi" }],
       },
       grantDigest: "a".repeat(64),
+      cancellationSettlementVersion:
+        CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
       admissionIssuedAt: 1700000000000,
     }
     const secret = "test-chat-admission-secret-with-32-bytes"
@@ -755,6 +760,8 @@ describe("prepareGenerationForChat", () => {
         routeReason: "priority_byok" as const,
       },
       grantDigest: "a".repeat(64),
+      cancellationSettlementVersion:
+        CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
       issuedAt,
     }
 

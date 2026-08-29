@@ -88,6 +88,7 @@ const authorizedReserveArgs: ReservePlatformUsageArgs = {
   estimatedInputTokens: 10,
   estimatedOutputTokens: 20,
   titleEstimatedCredits: 5,
+  titleEstimatedInputTokens: 4,
   pricingSnapshot: {
     revision: "catalog-v1",
     currency: "USD",

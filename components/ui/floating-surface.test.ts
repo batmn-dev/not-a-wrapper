@@ -251,19 +251,16 @@ describe("floating surface contract", () => {
     expect(morphingPopover).not.toContain('aria-modal="true"')
   })
 
-  it("removes consumer-owned modal and morphing-popover edge recipes", () => {
+  it("removes consumer-owned modal edge recipes", () => {
     const authModal = read("app/auth/_components/auth-modal.tsx")
     const settingsModal = read(
       "app/components/layout/settings/settings-trigger.tsx"
     )
     const searchModal = read("app/components/history/desktop-search-modal.tsx")
-    const feedbackPopover = read("app/components/chat/feedback-widget.tsx")
 
     expect(authModal).toContain('surface="centered"')
     expect(authModal).not.toContain("shadow-[0_18px_60px")
     expect(settingsModal).not.toContain("rounded-2xl")
     expect(searchModal).not.toContain("shadow-border-xl")
-    expect(feedbackPopover).not.toContain("shadow-[")
-    expect(feedbackPopover).not.toContain("bg-popover")
   })
 })
