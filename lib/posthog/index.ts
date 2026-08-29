@@ -47,8 +47,7 @@ export function getPostHogClient(): PostHog | null {
  * Flush pending PostHog events without destroying the client.
  * Call this in `after()` callbacks for streaming responses.
  *
- * Unlike shutdown(), this allows the client to be reused in warm
- * serverless containers, avoiding the need to recreate the client.
+ * Flushing keeps the client reusable in warm serverless containers.
  */
 export async function flushPostHog(): Promise<void> {
   if (posthogClient) {
@@ -56,22 +55,6 @@ export async function flushPostHog(): Promise<void> {
       await posthogClient.flush()
     } catch (error) {
       console.error("[PostHog] Error during flush:", error)
-    }
-  }
-}
-
-/**
- * @deprecated Use flushPostHog() instead. shutdown() destroys the client,
- * which causes issues with warm serverless container reuse.
- */
-export async function shutdownPostHog(): Promise<void> {
-  if (posthogClient) {
-    try {
-      await posthogClient.shutdown()
-      // Reset the singleton so it can be recreated on next warm invocation
-      posthogClient = null
-    } catch (error) {
-      console.error("[PostHog] Error during shutdown:", error)
     }
   }
 }

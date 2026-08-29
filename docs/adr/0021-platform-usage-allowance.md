@@ -364,13 +364,11 @@ balance negative. Estimation is admission control, not the final charge.
 ## Existing counters
 
 `users.dailyMessageCount` (and the anonymous counter) remain **abuse rate
-limits** only. The pro-model counters (`dailyProMessageCount`,
-`dailyProReset`) are retired as economic controls: no longer enforced or
-incremented (fields stay optional for production compatibility; `checkUsage`
-/`incrementUsage` keep accepting `isProModel` for deploy compatibility but
-ignore it). The abuse increment still happens at admission — before the
-credential source is known — which is now correct because it is not an
-economic counter; the economic admission is the reservation itself.
+limits** only. The retired pro-model fields remain optional in the schema only
+until production preflight proves older user rows can be contracted safely.
+The abuse increment still happens at admission — before the credential source
+is known — which is now correct because it is not an economic counter; the
+economic admission is the reservation itself.
 
 ## Alternatives considered
 

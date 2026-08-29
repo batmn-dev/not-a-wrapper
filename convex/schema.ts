@@ -60,6 +60,7 @@ export default defineSchema({
     dailyMessageCount: v.optional(v.number()),
     dailyReset: v.optional(v.number()), // Unix timestamp
 
+    // Production compatibility only; contract after old rows are gone.
     dailyProMessageCount: v.optional(v.number()),
     dailyProReset: v.optional(v.number()), // Unix timestamp
 

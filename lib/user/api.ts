@@ -37,8 +37,6 @@ export function getUserProfileFromWorkosUser(
     message_count: null,
     daily_message_count: null,
     daily_reset: null,
-    daily_pro_message_count: null,
-    daily_pro_reset: null,
     last_active_at: null,
     created_at: null,
     favorite_models: null,

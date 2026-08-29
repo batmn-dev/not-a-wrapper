@@ -21,7 +21,6 @@ import {
   resolveToolCallDecision,
   stopGenerationRunForChat,
   updateAssistantSnapshotForChat,
-  vEditIntent,
 } from "./chatRuntime"
 import {
   APPROVAL_EXPIRY_MS,
@@ -625,17 +624,6 @@ function createApprovalContinuationFixture(
     responses,
   }
 }
-
-describe("edit intent wire validator", () => {
-  it("still accepts the legacy `title` field from pre-title-generation clients", () => {
-    // Convex object validators reject unknown fields, and the wire parser +
-    // durable runtime forward the client's edit object verbatim. Stale tabs
-    // built before generated titles send `title` on first-message edits;
-    // removing this compat field 400s those edits for the whole deploy window.
-    expect(vEditIntent.fields.title?.kind).toBe("string")
-    expect(vEditIntent.fields.title?.isOptional).toBe("optional")
-  })
-})
 
 describe("prepareGenerationForChat", () => {
   afterEach(() => {

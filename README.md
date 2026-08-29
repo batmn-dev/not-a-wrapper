@@ -119,8 +119,9 @@ bun run dev:clean    # Dev with fresh .next cache
 bun run env:check    # Validate local environment variables
 bun run lint         # ESLint
 bun run typecheck    # TypeScript checks
-bun run build        # Production build (deploys Convex)
 bun run test         # Vitest
+bun run build:next   # Local Next.js production build
+bun run build        # Deploy Convex production, then build Next.js
 ```
 
 ## Contributing

@@ -266,7 +266,7 @@ const vStoredMessage = v.object({
   parts: v.any(),
 })
 
-export const vEditIntent = v.object({
+const vEditIntent = v.object({
   editedMessageId: v.string(),
   editCutoffTimestamp: v.number(),
   expectedChatVersion: v.number(),
@@ -277,11 +277,6 @@ export const vEditIntent = v.object({
     parts: v.any(),
   }),
   regenerateTitle: v.optional(v.boolean()),
-  // Deploy-compat only: pre-title-generation clients send the edited text as
-  // `title`. Convex object validators reject unknown fields, so dropping this
-  // would 400 every first-message edit from a stale tab. Accepted and ignored;
-  // remove once no deployed client builds the legacy edit shape.
-  title: v.optional(v.string()),
 })
 
 const vRegenerationIntent = v.object({

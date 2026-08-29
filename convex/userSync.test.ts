@@ -15,7 +15,6 @@ type StoredUser = {
   premium?: boolean
   messageCount?: number
   dailyMessageCount?: number
-  dailyProMessageCount?: number
   lastActiveAt?: number
   lastSyncedFromWorkOSAt?: number
   workosUpdatedAt?: string
@@ -106,7 +105,6 @@ describe("softDeleteAppUserFromWorkOS", () => {
       premium: false,
       messageCount: 0,
       dailyMessageCount: 0,
-      dailyProMessageCount: 0,
       deletedAt: 1700000000000,
       disabledAt: 1700000000000,
       lastSyncedFromWorkOSAt: 1700000000000,

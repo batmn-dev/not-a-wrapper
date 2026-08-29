@@ -1,11 +1,11 @@
-# Convex Schema Contraction Manifests — DORMANT (pre-launch)
+# Convex schema contraction manifests
 
-This project has **no users and no production data**, so schema contractions
-need no manifests. Change `convex/schema.ts` directly and wipe dev data if it
-conflicts.
+The manifest workflow is dormant for ordinary pre-launch development. Change
+`convex/schema.ts` directly and wipe development data when needed.
 
-See **AGENTS.md → "Pre-Launch: The Database Is Disposable"**.
+Production may still contain smoke-test or manually created rows. Keep fields
+that reached production optional until the deploy preflight proves contraction
+is safe, or production is explicitly marked disposable. Existing manifests are
+historical records of those production-facing contractions.
 
-This directory and the manifest workflow are dormant until launch. When the app
-has real users, restore the expand/migrate/contract discipline (preserved in git
-history) and record contractions here again.
+See [the migration guide](../../docs/convex-migrations.md) and AGENTS.md.

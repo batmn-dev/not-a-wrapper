@@ -23,8 +23,6 @@ export type UserProfile = {
   message_count: number | null
   daily_message_count: number | null
   daily_reset: string | null
-  daily_pro_message_count: number | null
-  daily_pro_reset: string | null
 
   // Activity
   last_active_at: string | null

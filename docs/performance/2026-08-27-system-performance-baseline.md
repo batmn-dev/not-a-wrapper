@@ -1,8 +1,7 @@
 # System performance baseline — 2026-08-27
 
 Phase 4 deliverable of the performance benchmarking plan. Contract:
-[`metric-dictionary.md`](./metric-dictionary.md) · lifecycle inventory:
-[`current-measurement-map.md`](./current-measurement-map.md) · harness:
+[`metric-dictionary.md`](./metric-dictionary.md) · harness:
 `benchmarks/chat-performance/browser/` (results file
 `results/2026-08-27T20-55-52-standard.json`, local).
 

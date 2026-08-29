@@ -1,7 +1,6 @@
 # Metric dictionary — chat performance
 
-Date: 2026-08-27 · Companion to [`current-measurement-map.md`](./current-measurement-map.md).
-This is the naming and interpretation contract for every chat-performance metric —
+Date: 2026-08-27. This is the naming and interpretation contract for every chat-performance metric —
 existing, proxy, and proposed. Phase 3/4 report against these names; nothing may report
 under a name not defined here.
 

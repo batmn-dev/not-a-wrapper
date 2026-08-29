@@ -9,12 +9,8 @@ import { optionalAuthMutation, optionalAuthQuery } from "./lib/authedFunctions"
  * allowance reservation in convex/usageAllowance.ts, and BYOK messages bypass
  * allowance entirely while still counting here as ordinary requests.
  *
- * The former pro-model counters (users.dailyProMessageCount/dailyProReset)
- * are retired: they conflated "expensive model" with "platform-funded spend"
- * and charged BYOK messages against an economic limit. The schema fields stay
- * optional for production compatibility but are no longer read or written.
- * `isProModel` is still accepted (and ignored) for deploy compatibility with
- * in-flight clients.
+ * The retired pro-model fields stay optional in the schema only until
+ * production preflight proves older user rows can be contracted safely.
  */
 
 const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
@@ -38,8 +34,6 @@ function getStartOfDayMs(): number {
  */
 export const checkUsage = optionalAuthQuery({
   args: {
-    // Deploy-compat only: ignored. The pro-model economic tier is retired.
-    isProModel: v.optional(v.boolean()),
     anonymousId: v.optional(v.string()),
   },
   handler: async (ctx, { anonymousId }) => {
@@ -124,8 +118,6 @@ export const checkUsage = optionalAuthQuery({
  */
 export const incrementUsage = optionalAuthMutation({
   args: {
-    // Deploy-compat only: ignored. The pro-model economic tier is retired.
-    isProModel: v.optional(v.boolean()),
     anonymousId: v.optional(v.string()),
   },
   handler: async (ctx, { anonymousId }) => {
