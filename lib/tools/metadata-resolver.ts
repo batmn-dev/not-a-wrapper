@@ -1,5 +1,3 @@
-// lib/tools/metadata-resolver.ts
-
 import type { ServerInfo } from "@/lib/mcp/load-tools"
 import type { ToolMetadata, ToolSource } from "./types"
 import {

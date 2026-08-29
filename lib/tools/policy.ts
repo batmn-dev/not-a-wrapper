@@ -238,8 +238,8 @@ type ConvexToolLimitStoreOptions = {
 }
 
 /**
- * ACCEPTED TOKEN-LIFETIME COUPLING (durable-turn gameplan §0, decided
- * 2026-07-19): this store deliberately rides the captured user token, not the
+ * Accepted token-lifetime coupling: this store deliberately rides the
+ * captured user token, not the
  * execution-grant worker wire — budget accounting is an admission-control
  * concern, not durable run state. If the token expires in the tail of a long
  * run, `checkAndConsume` rejects and the runtime degrades into the tested

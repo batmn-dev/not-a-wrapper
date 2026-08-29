@@ -1,14 +1,11 @@
 /**
- * Chat-turn execution budget — the ONE derivation every generation deadline
- * comes from (durable-turn gameplan §0 addendum, 2026-07-19).
+ * Chat-turn execution budget — the one derivation every generation deadline
+ * comes from.
  *
  * A Chat turn's execution is request-scoped: the provider stream, tool calls,
  * and durable settlement all happen inside one `POST /api/chat` invocation
  * bounded by the route's `maxDuration`. Every other deadline in the system is
- * a slice of, or an envelope around, that one number. Before this module those
- * deadlines were scattered literals (`maxDuration = 60`, a 120 s client
- * watchdog that outlived the route itself, a 60 min grant TTL that outlived it
- * ~50×) whose orderings nobody enforced — the 2026-07-14 incident class.
+ * a slice of, or an envelope around, that one number.
  *
  * Enforced ordering (violations throw at module load and are pinned by test):
  *
@@ -32,8 +29,7 @@ export type ChatTurnExecutionBudget = {
   routeMaxMs: number
   /**
    * When provider/tool consumption must be cut so settlement still fits
-   * inside the route budget. (Enforcement wires into the runtime's abort
-   * composition with the lease work — PR 2; the value is authoritative now.)
+   * inside the route budget. The runtime's abort composition enforces it.
    */
   providerDeadlineMs: number
   /**
@@ -60,7 +56,7 @@ export type ChatTurnExecutionBudget = {
   grantTtlMs: number
   /**
    * Slack added to `startedAt + routeMaxMs` when stamping
-   * `chat.liveRunFreshUntil` (written once at prepare — gameplan §5).
+   * `chat.liveRunFreshUntil` (written once at prepare).
    */
   liveRunFreshSlackMs: number
   /**
@@ -127,8 +123,7 @@ function assertBudgetOrdering(budget: ChatTurnExecutionBudget): void {
  * The route's top-line duration in SECONDS. `app/api/chat/route.ts` must
  * export `maxDuration = 300` as a literal (Next.js statically analyzes segment
  * config, so it cannot import this value); route.test.ts pins the agreement.
- * 300 s is the Fluid Compute default, supported on Hobby and Pro; streaming
- * counts toward the limit (decided 2026-07-19, gameplan §0).
+ * Streaming time counts toward the limit.
  */
 export const CHAT_ROUTE_MAX_DURATION_SECONDS = 300
 

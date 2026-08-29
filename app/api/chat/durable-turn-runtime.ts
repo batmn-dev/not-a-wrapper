@@ -118,8 +118,8 @@ export type DurableWorkerWire = (call: DurableWorkerCall) => Promise<unknown>
 /**
  * A worker-wire HTTP rejection, carrying the endpoint's typed grant-rejection
  * code when there is one. `grant_unauthorized` after prepare means the run
- * already reached an absorbing outcome and revoked its grant (aborted/failed —
- * gameplan §0 amendment 2): the write is an idempotent no-op, not a failure.
+ * already reached an absorbing outcome and revoked its grant (aborted/failed):
+ * the write is an idempotent no-op, not a failure.
  * `grant_expired` is deterministic — retrying cannot succeed.
  */
 export class DurableWorkerWriteError extends Error {
@@ -195,7 +195,7 @@ export type DurableTurnDeps = {
   settleRetryDelaysMs?: number[]
   /** Server-only admission signer; tests inject a deterministic fake. */
   admissionProofSigner?: (payload: ChatAdmissionProofPayload) => string
-  /** Sampled chat-performance session (PR 0b) — checkpoint counters only. */
+  /** Sampled chat-performance session; checkpoint counters only. */
   perf?: ChatPerfServerSession
 }
 
@@ -390,8 +390,8 @@ export type DurableTurnRuntime = {
    * Aborts when this worker can no longer legitimately execute the run: the
    * heartbeat answered `lost` (Stop, supersession, reaping) or heartbeat
    * transport died past its retry budget. The Chat turn runtime composes it
-   * with the provider deadline so provider consumption stops promptly
-   * (gameplan §6/§12). Guest: never aborts.
+   * with the provider deadline so provider consumption stops promptly. Guest:
+   * never aborts.
    */
   readonly executionAbortSignal: AbortSignal
 
@@ -399,9 +399,8 @@ export type DurableTurnRuntime = {
    * The signals provider/tool consumption must respect, given the incoming
    * request's signal. Durable: the request signal is EXCLUDED — a client
    * disconnect (reload, tab close, navigation that drops the fetch) leaves
-   * the worker streaming to durable settlement (gameplan §12 scenario 9; §14
-   * "Reload mid-text → same run ID"); Stop, supersession, and reaping reach
-   * the worker through `executionAbortSignal` instead. Guest: the request
+   * the worker streaming to durable settlement; Stop, supersession, and reaping
+   * reach the worker through `executionAbortSignal` instead. Guest: the request
    * signal IS the lifecycle — nobody is left to receive or settle a
    * disconnected guest stream.
    */
@@ -1151,7 +1150,7 @@ export function createConvexDurableTurn(args: {
         }
         return "landed"
       } catch (error) {
-        // Absorbing outcomes revoke the grant (gameplan §0 amendment 2), so
+        // Absorbing outcomes revoke the grant, so
         // the benign double-terminal orders — the envelope's abort after the
         // stream's, or a spurious completion after a landed failure — now
         // reject at the grant gate instead of no-oping inside the handler.
@@ -1278,7 +1277,7 @@ export function createConvexDurableTurn(args: {
   // evidence instead of downgrading to started-without-usage.
   let lastTerminalFacts: TerminalUsageFacts | undefined
 
-  // Heartbeat loop (gameplan §6): recursive and non-overlapping — the next
+  // The heartbeat loop is recursive and non-overlapping: the next
   // beat is scheduled only after the previous one settles. Three-way branch:
   // renewed → continue; paused → stop the loop WITHOUT aborting (the approval
   // worker's envelope finalize is still legitimate); lost → abort provider
@@ -1463,7 +1462,7 @@ export function createConvexDurableTurn(args: {
     executionAbortSignal: executionAbortController.signal,
     providerAbortSignals() {
       // Deliberately excludes the request signal: the durable worker outlives
-      // its client (gameplan §12 scenario 9 — reload/disconnect leaves the
+      // its client, so reload/disconnect leaves the
       // stream settling server-side). Stop/supersession/reaping abort through
       // the execution signal via heartbeat `lost` or a grant rejection.
       return [executionAbortController.signal]
@@ -1530,7 +1529,7 @@ export function createConvexDurableTurn(args: {
         },
         { token: convexToken }
       ).catch((error: unknown) => {
-        // Approval-continuation idempotency, layer 2 of 3 (gameplan §10):
+        // Approval-continuation idempotency, layer 2 of 3:
         // the losing auto-send continuation gets a structured 409 the client
         // recognizes and swallows — never a failed repaint.
         const conflictCode = (
@@ -1603,7 +1602,7 @@ export function createConvexDurableTurn(args: {
       snapshotTracker = createDurableSnapshotTracker({
         throttleMs: snapshotThrottleMs(),
         persist: (snapshotArgs) => {
-          // Checkpoint counters (PR 0b step 5): attempts/accepted/lost/failed
+          // Checkpoint counters: attempts/accepted/lost/failed
           // plus cumulative payload bytes. Sizes and enums only — the
           // serialization happens only when this request is sampled.
           const perfSession = deps.perf
@@ -1657,9 +1656,8 @@ export function createConvexDurableTurn(args: {
         },
       })
 
-      // The lease was born inside prepareGeneration; the loop keeps it fresh
-      // for the stream's lifetime (gameplan §6 — starts immediately after a
-      // successful prepare, stops at settlement/pause/loss).
+      // The lease was born inside prepareGeneration; the loop starts after a
+      // successful prepare, keeps it fresh, and stops at settlement/pause/loss.
       startHeartbeat()
 
       console.log(
@@ -1892,9 +1890,8 @@ export function createConvexDurableTurn(args: {
             terminalFacts,
           }) {
             const settleStartedAtMs = Date.now()
-            // Heartbeat policy (gameplan §10 "Runtime terminal convergence"):
-            // stay alive through the bounded terminal retries — a mid-retry
-            // reaping would race the write — then stop on EVERY exit. A
+            // Keep the heartbeat alive through bounded terminal retries; a
+            // mid-retry reap would race the write. Then stop on every exit. A
             // degraded exit stops too: lease expiry is the honest convergence
             // path once retries are exhausted.
             try {

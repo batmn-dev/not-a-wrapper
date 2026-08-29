@@ -43,6 +43,7 @@ const payload: UsageReservationAuthorizationPayload = {
   estimatedInputTokens: 1_000,
   estimatedOutputTokens: 10_000,
   titleEstimatedCredits: 500,
+  titleEstimatedInputTokens: 250,
   pricingSnapshot,
   issuedAt: NOW,
 }
@@ -110,37 +111,34 @@ describe("usage reservation authorization", () => {
     ).toBe(false)
   })
 
-  it("covers the title input floor with a versioned proof expansion", () => {
-    // New payloads sign the widened v2 tuple; a payload WITHOUT the field
-    // keeps the exact v1 serialization (the rollout window's old-server
-    // proofs stay verifiable — pinned by the tests above, which omit it).
-    const widened = { ...payload, titleEstimatedInputTokens: 250 }
-    const proof = signUsageReservationAuthorization(widened, SECRET)
+  it("requires and binds the title input floor", () => {
+    const proof = signUsageReservationAuthorization(payload, SECRET)
     expect(
-      verifyUsageReservationAuthorization(widened, proof, {
+      verifyUsageReservationAuthorization(payload, proof, {
         secret: SECRET,
         now: NOW,
       })
     ).toBe(true)
-    // Tampering with, adding, or stripping the field breaks the proof.
-    for (const tampered of [
-      { ...widened, titleEstimatedInputTokens: 251 },
-      { ...widened, titleEstimatedInputTokens: undefined },
-    ]) {
-      expect(
-        verifyUsageReservationAuthorization(tampered, proof, {
-          secret: SECRET,
-          now: NOW,
-        })
-      ).toBe(false)
-    }
     expect(
       verifyUsageReservationAuthorization(
-        widened,
-        signUsageReservationAuthorization(payload, SECRET),
+        { ...payload, titleEstimatedInputTokens: 251 },
+        proof,
         { secret: SECRET, now: NOW }
       )
     ).toBe(false)
+    const retiredPayload = {
+      ...payload,
+      titleEstimatedInputTokens: undefined,
+    } as unknown as UsageReservationAuthorizationPayload
+    expect(
+      verifyUsageReservationAuthorization(retiredPayload, proof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(false)
+    expect(() =>
+      signUsageReservationAuthorization(retiredPayload, SECRET)
+    ).toThrow("Invalid usage reservation authorization payload")
   })
 
   it("rejects expired and materially future-dated authorizations", () => {

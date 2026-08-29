@@ -85,8 +85,8 @@ export function deriveChatRowStatus(
   now: number = Date.now()
 ): SidebarChatStatus {
   if (overrideStatus && overrideStatus !== "idle") return overrideStatus
-  // Freshness-bounded (durable-turn gameplan §11/§18 #4): the projection's
-  // live phase renders only inside the once-written deadline — prepare's
+  // The projection's live phase renders only inside the once-written
+  // deadline: prepare's
   // route-budget ceiling, or the approval's own expiry. An expired deadline
   // NEVER renders a spinner; the reaper settles the row durably. A missing
   // deadline (pre-freshness rows, live-override-only paths) stays live —

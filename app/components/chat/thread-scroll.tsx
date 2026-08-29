@@ -80,15 +80,6 @@ export function addScrollEndListener(
     if (timer !== null) window.clearTimeout(timer)
   }
 }
-// The reference's turn-virtualization experiment (Statsig 1841171328) was
-// removed 2026-08-28: its gate was a hardcoded compile-time `false` (no
-// Statsig namespace exists locally, and the treatment arm's reflow
-// correction cancels in-flight touch momentum — see the
-// turn-virtualization memory/audit), so the wrapper/placeholder/
-// render-intersection machinery was statically dead. The eager arm — plain
-// sections plus assistant content-visibility — is the only arm, exactly as
-// the reference ships it. Git history (pre-2026-08-28) holds the full port
-// if virtualization is ever revisited.
 export const TURN_CENTER_INTERSECTION_ROOT_MARGIN = "-49% 0px -49% 0px"
 export const TURN_CENTER_INTERSECTION_THRESHOLD = 0
 

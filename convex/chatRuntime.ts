@@ -238,10 +238,10 @@ export const generationRunWriteArgs = {
     // Cancellation terminal-usage evidence (ADR-0021 cancellation
     // amendment): completed-step aggregates, partial-output estimate, and
     // title attempt facts, settled atomically when this worker still owns
-    // the run. Optional for active old workers during the deployment window.
+    // the run. Optional when the turn has no platform reservation evidence.
     terminalUsage: v.optional(vTerminalUsageEvidence),
   },
-  // The lease heartbeat (gameplan §6) — no payload beyond the run identity
+  // The lease heartbeat carries no payload beyond the run identity
   // the wire adds; the server clock is authoritative.
   heartbeatGenerationRun: {},
   // Settlement-only terminal-usage receipt (ADR-0021 cancellation
@@ -316,8 +316,8 @@ type CanonicalApprovalDecision = {
 const ACTIVE_RUN_SCAN_LIMIT = 50
 
 /**
- * Execution-grant lifetime (ADR-0011), budget-derived (route max + settlement
- * reserve + slack — durable-turn gameplan §0). Must comfortably exceed the
+ * Execution-grant lifetime (ADR-0011), budget-derived from route max,
+ * settlement reserve, and slack. Must comfortably exceed the
  * longest legitimate turn plus settlement retries; it bounds how long a leaked
  * digest preimage could authorize idempotent worker writes. Expiry is the
  * backstop revocation; absorbing terminal transitions (aborted/failed) also
@@ -332,7 +332,7 @@ const terminalToolInvocationStatuses = new Set<
 /**
  * Absorbing terminal outcomes (`aborted`, `failed`) also revoke the execution
  * grant eagerly — nothing may overwrite them, so the grant authorizes nothing
- * but rejections from here on (gameplan §0 amendment 2). `completed` keeps its
+ * but rejections from here on. `completed` keeps its
  * grant while the deliberate fail-over-completed convergence exists: the
  * fire-and-forget failure write must still land after a spurious completion.
  * `awaiting_approval` is a pause, not a settlement — the pausing worker's
@@ -347,8 +347,8 @@ function grantRevocationForStatus(
 }
 
 /**
- * Lease fields clear at every terminal transition AND at the approval pause
- * (gameplan §6 step 6): a paused run is lease-free — its liveness is the
+ * Lease fields clear at every terminal transition and at the approval pause:
+ * a paused run is lease-free, so its liveness is the
  * pending unexpired approval, not a heartbeat.
  */
 const LEASE_CLEAR: Partial<Doc<"generationRuns">> = {
@@ -433,8 +433,7 @@ function findMessageIndexByUiId(
 
 /**
  * Selected-path derivation for runtime consumers: one context serves the
- * whole call (plan PR 1 step 4; made unconditional in the 2026-07-23 flag
- * collapse).
+ * whole call.
  */
 function getSelectedPath(messages: Doc<"messages">[]) {
   return getSelectedPathMessagesFromContext(createBranchContext(messages))
@@ -1477,8 +1476,8 @@ export async function applyApprovalResponses(
    * paused run — i.e. the pause was still live (`awaiting_approval`) when
    * this prepare began. False means the pause was already settled by an
    * earlier writer (a Stop that denied the approvals, a supersession, a
-   * reap): the continuation branch must CONFLICT rather than resurrect a
-   * settled run (gameplan §13 race #16).
+   * reap): the continuation branch must conflict rather than resurrect a
+   * settled run.
    */
   pausedRunWasLive: boolean
 } | null> {
@@ -2001,7 +2000,7 @@ export async function prepareGenerationForChat(
     status: "running",
     startedAt: now,
     updatedAt: now,
-    // The lease is born at prepare (gameplan §6): the worker's heartbeat loop
+    // The lease is born at prepare; the worker's heartbeat loop
     // renews it; the reaper fails runs whose deadline lapses.
     heartbeatAt: now,
     leaseExpiresAt: computeLeaseExpiresAt(now),
@@ -2012,11 +2011,9 @@ export async function prepareGenerationForChat(
           grantExpiresAt: now + EXECUTION_GRANT_TTL_MS,
         }
       : {}),
-    ...(args.cancellationSettlementVersion !== undefined
-      ? {
-          cancellationSettlementVersion: args.cancellationSettlementVersion,
-        }
-      : {}),
+    cancellationSettlementVersion:
+      args.cancellationSettlementVersion ??
+      CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   })
 
   // Attach the platform-usage reservation to its run transactionally
@@ -2029,7 +2026,9 @@ export async function prepareGenerationForChat(
       userId: owner.user._id,
       runId,
       now,
-      cancellationSettlementVersion: args.cancellationSettlementVersion,
+      cancellationSettlementVersion:
+        args.cancellationSettlementVersion ??
+        CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
     })
   }
 
@@ -2057,7 +2056,7 @@ export async function prepareGenerationForChat(
     assistantOrder = preparedRegeneration.assistantOrder
     preparedModelHistory = preparedRegeneration.messages
   } else if (continuationMessage) {
-    // Approval-continuation idempotency, layer 1 of 3 (gameplan §10, PR 8):
+    // Approval-continuation idempotency, layer 1 of 3:
     // the paused run records its continuation inside this transaction, so of
     // two racing auto-send continuations exactly ONE creates a run — the
     // second sees continuationRunId and gets a typed conflict the route maps
@@ -2082,9 +2081,9 @@ export async function prepareGenerationForChat(
             message: "Approval continuation already dispatched",
           })
         }
-        // A continuation is only legal against a pause that was still LIVE
-        // when this prepare began (gameplan §9/§13 race #16 — "no approval
-        // can resurrect a stopped run"). `pausedRunWasLive` is stamped by
+        // A continuation is legal only against a pause that was still live
+        // when this prepare began; no approval can resurrect a stopped run.
+        // `pausedRunWasLive` is stamped by
         // applyApprovalResponses above: its approvals-resolved close
         // transitioned the pause in THIS transaction. False means an earlier
         // writer (Stop denying the approvals, supersession, reap) already
@@ -2184,8 +2183,8 @@ export async function prepareGenerationForChat(
     {
       liveRunStatus: "streaming",
       statusRunId: runId,
-      // Written ONCE here (and overwritten only by an approval pause): the
-      // hard ceiling no legitimate run outlives (gameplan §18 #4).
+      // Written once here and overwritten only by an approval pause: the hard
+      // ceiling no legitimate run outlives.
       liveRunFreshUntil: computeLiveRunFreshUntil(now),
     },
     now
@@ -2210,6 +2209,7 @@ export async function prepareGenerationForChat(
 }
 
 type VerifiedPrepareGenerationArgs = PrepareGenerationForChatArgs & {
+  cancellationSettlementVersion: CancellationSettlementProtocolVersion
   admissionIssuedAt: number
   admissionProof: string
 }
@@ -2279,8 +2279,8 @@ export const prepareGeneration = mutation({
     generationInputHash: v.optional(v.string()),
     grantDigest: v.optional(v.string()),
     reservationId: v.optional(v.id("usageReservations")),
-    cancellationSettlementVersion: v.optional(
-      v.literal(CANCELLATION_SETTLEMENT_PROTOCOL_VERSION)
+    cancellationSettlementVersion: v.literal(
+      CANCELLATION_SETTLEMENT_PROTOCOL_VERSION
     ),
     admissionIssuedAt: v.number(),
     admissionProof: v.string(),
@@ -2343,17 +2343,15 @@ export async function markGenerationWorkStartedForChat(
     workDurationMs: priorWorkDurationMs,
     updatedAt: now,
   })
-  if (run.cancellationSettlementVersion === 1) {
-    const reservation = await ctx.db
-      .query("usageReservations")
-      .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
-      .unique()
-    if (reservation?.status === "reserved") {
-      await ctx.db.patch(reservation._id, {
-        providerMayHaveStarted: true,
-        updatedAt: now,
-      })
-    }
+  const reservation = await ctx.db
+    .query("usageReservations")
+    .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
+    .unique()
+  if (reservation?.status === "reserved") {
+    await ctx.db.patch(reservation._id, {
+      providerMayHaveStarted: true,
+      updatedAt: now,
+    })
   }
 }
 
@@ -2441,7 +2439,7 @@ export async function updateAssistantSnapshotForChat(
   const { run } = owner
   const message = await requireAssistantMessageForRun(ctx, run, args.messageId)
 
-  // Sampled outcome telemetry (measurement plan Phase 2 §2.3): the
+  // Sampled outcome telemetry: the
   // Convex-side mirror of the Next-side checkpoint counters, so
   // accepted-vs-rejected accounting closes end to end. Buckets/enums only.
   const perfSampled = shouldSampleChatPerfConvex()
@@ -2470,8 +2468,8 @@ export async function updateAssistantSnapshotForChat(
     return { kind: "lost" as const, reason: "terminal" as const }
   }
 
-  // Stale snapshots are rejected BEFORE persistence (gameplan §10 "Snapshot
-  // sequencing"): a late lower-or-equal sequence write inserts nothing — the
+  // Stale snapshots are rejected before persistence: a late lower-or-equal
+  // sequence write inserts nothing. The
   // old post-insert latest-snapshot check only prevented adoption, leaving a
   // dead row and a write conflict surface behind.
   const lastSequence = run.lastSnapshotSequence ?? 0
@@ -2512,7 +2510,7 @@ export async function updateAssistantSnapshotForChat(
 
   if (!isTerminalMessageStatus(message.status)) {
     // Status advances to "streaming" only while the worker still owns
-    // execution. An awaiting_approval pause is lease-free (gameplan §6) and
+    // execution. An awaiting_approval pause is lease-free, and
     // its liveness is the pending approval — the same worker's post-pause
     // final flush lands CONTENT here, but repainting the pause "streaming"
     // would strand the run outside both liveness regimes (no lease → the
@@ -2549,7 +2547,7 @@ export async function updateAssistantSnapshotForChat(
 }
 
 /**
- * The heartbeat's three-way discriminant (gameplan §6): the runtime MUST
+ * The heartbeat's three-way discriminant: the runtime must
  * branch on it — `renewed` continues the loop, `paused` stops the loop
  * WITHOUT aborting (the approval worker's envelope finalize is still
  * legitimate), `lost` aborts provider consumption and stops all writes.
@@ -2560,11 +2558,11 @@ export type GenerationRunHeartbeatResult =
   | { kind: "lost"; reason: "terminal" | "unlinked" | "not-owner" }
 
 /**
- * Renew the worker's lease (worker-wire only — heartbeats have no user-token
- * twin; gameplan §0 amendment 1). Guards per the §10 matrix: exact run (the
+ * Renew the worker's lease. Heartbeats are worker-wire only and have no
+ * user-token twin. Guards: exact run (the
  * grant), worker-executing status, run→message→chat linkage, and current
- * chat-slot ownership. Extends the run's lease fields only — never the chat
- * doc (§18 #4). Server clock, never a client timestamp.
+ * chat-slot ownership. Extends the run's lease fields only, never the chat
+ * doc. Server clock, never a client timestamp.
  */
 export async function heartbeatGenerationRunForChat(
   ctx: MutationCtx,
@@ -2851,7 +2849,7 @@ export async function createToolApprovalRequestForChat(
     status: verdict.run.status,
     updatedAt: now,
     lastProgressAt: now,
-    // The pause is lease-free (gameplan §6): liveness becomes the pending
+    // The pause is lease-free: liveness becomes the pending
     // unexpired approval; the same worker's final flush and completion
     // downgrade stay legal via the non-terminal content-write guard.
     ...LEASE_CLEAR,
@@ -2870,8 +2868,8 @@ export async function createToolApprovalRequestForChat(
   return approvalRequestId
 }
 
-// Durable Stop (gameplan §9, PR 6): authenticated, idempotent, explicitly
-// run-scoped — Stop targets `(chatId, runId)`, never "the active run".
+// Durable Stop is authenticated, idempotent, and explicitly run-scoped:
+// it targets `(chatId, runId)`, never "the active run".
 
 export type StopGenerationRunResult = {
   outcome: "stopped" | "already-terminal" | "not-current"
@@ -2900,8 +2898,8 @@ export async function stopGenerationRunForChat(
   }
 
   // A run that lost the chat's status slot is already terminal or is an
-  // awaiting_approval run the next prepare's deny-pending pass closes —
-  // never stop the newer owner (§9 step 5).
+  // awaiting_approval run the next prepare's deny-pending pass closes. Never
+  // stop the newer owner.
   if (owner.chat.statusRunId !== run._id) {
     return {
       outcome: "not-current",
@@ -2934,8 +2932,8 @@ export async function stopGenerationRunForChat(
     stopRequestedBy: owner.user._id,
   })
 
-  // Deny this run's pending approvals; settle its active tool records
-  // without erasing completed evidence (§9 steps 10–11).
+  // Deny this run's pending approvals and settle its active tool records
+  // without erasing completed evidence.
   const pendingApprovals = await ctx.db
     .query("toolApprovalRequests")
     .withIndex("by_run_status", (q) =>
@@ -2987,8 +2985,8 @@ export const stopGenerationRun = ownedGenerationRunMutation({
 })
 
 /**
- * Approval resolution transitions ONLY `pending → approved|denied` (gameplan
- * §10, PR 8): a conflicting second decision — the other tab already resolved
+ * Approval resolution transitions only `pending → approved|denied`. A
+ * conflicting second decision — the other tab already resolved
  * — returns the canonical existing resolution instead of overwriting it (the
  * old unconditional patch let a late deny repaint an earlier approve).
  */
@@ -3101,7 +3099,7 @@ export async function resolveToolCallDecision(
   // Expiry is checked TRANSACTIONALLY against the server clock, not left to
   // the cron: a decision racing in after `expiresAt` settles the row as
   // expired here — approving expired work must be impossible regardless of
-  // reaper cadence (gameplan §10).
+  // reaper cadence.
   if (approval.expiresAt !== undefined && now >= approval.expiresAt) {
     await expireToolApprovalForChat(ctx, approval, now, "decision")
     return { status: "expired", alreadyResolved: true, reason: approval.reason }
@@ -3159,8 +3157,8 @@ export async function recordToolInvocationsForChat(
   await requireAssistantMessageForRun(ctx, run, args.messageId)
 
   // A terminal run accepts no further tool-invocation writes — the same
-  // read-only rule the snapshot path enforces (gameplan §10 guard matrix; this
-  // was the one worker op that still accepted writes after settlement). The
+  // read-only rule the snapshot path enforces. This was the one worker op that
+  // still accepted writes after settlement. The
   // late writer here is a worker that lost the abort/supersede race flushing
   // its step records.
   if (isTerminalGenerationRunStatus(run.status)) return
@@ -3330,7 +3328,7 @@ export async function recordToolInvocationsForChat(
   }
 
   if (args.invocations.length > 0 || hasStepUsage) {
-    // Accepted tool activity is progress evidence (gameplan §5) — not
+    // Accepted tool activity is progress evidence, not
     // liveness; the heartbeat alone renews the lease.
     let reservation: Doc<"usageReservations"> | null = null
     if (usagePatch) {
@@ -3353,29 +3351,27 @@ export async function recordToolInvocationsForChat(
       updatedAt: now,
       ...usagePatch,
     })
-    if (usagePatch && run.cancellationSettlementVersion === 1) {
-      if (reservation?.status === "reserved") {
-        await ctx.db.patch(reservation._id, {
-          observedInputTokens: usagePatch.inputTokens,
-          observedOutputTokens: usagePatch.outputTokens,
-          updatedAt: now,
-        })
-      }
+    if (usagePatch && reservation?.status === "reserved") {
+      await ctx.db.patch(reservation._id, {
+        observedInputTokens: usagePatch.inputTokens,
+        observedOutputTokens: usagePatch.outputTokens,
+        updatedAt: now,
+      })
     }
   }
 }
 
-// Reconciliation reapers (durable-turn gameplan §6, PR 3). Internal MUTATIONS
+// Reconciliation reapers are internal mutations
 // (transactional, exactly-once per invocation — never actions), invoked by
 // convex/crons.ts. Bounded per status per tick (REAPER_BATCH_LIMIT); the
 // next tick finishes what this one left.
 //
-// Load-bearing range shape (§18 #6): Convex orders `undefined < null < all
+// Load-bearing range shape: Convex orders `undefined < null < all
 // other values`, and documents missing an indexed field sort as `undefined` —
 // so every expiry range MUST exclude `undefined` via `.gt(field, undefined)`
 // or pre-heartbeat rows (no lease fields) would be falsely reaped.
 //
-// Deploy-boundary drain rule (§6): enable these crons only after every
+// Deploy-boundary drain rule: enable these crons only after every
 // in-flight run started by a pre-heartbeat deploy has drained. With the
 // `undefined` exclusion this is belt-and-suspenders; pre-launch it is
 // trivially satisfied (dev data is disposable).
@@ -3563,8 +3559,8 @@ export const reapExpiredToolApprovals = internalMutation({
  *  - no `continuationRunId` (a stamped continuation means a prepare owns the
  *    close — unreachable while still paused, but never fight it);
  *  - every resolution carries a defined `resolvedAt`, and the NEWEST one is
- *    older than the grace window. An undated resolution is EXCLUDED, never
- *    treated as infinitely old — the §18 #6 `undefined` rule applied to this
+ *    older than the grace window. An undated resolution is excluded, never
+ *    treated as infinitely old — the same `undefined` rule applied to this
  *    pass's expiry comparison (`undefined` must not classify as "expired").
  *
  * The grace window (measured from the last `resolvedAt`) keeps the live

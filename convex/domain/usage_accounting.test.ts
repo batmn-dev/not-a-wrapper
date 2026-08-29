@@ -153,6 +153,7 @@ describe("reservation payload fingerprint", () => {
     estimatedInputTokens: 100,
     estimatedOutputTokens: 200,
     titleEstimatedCredits: 12,
+    titleEstimatedInputTokens: 250,
     pricingSnapshot: snapshot,
   }
 
@@ -189,18 +190,11 @@ describe("reservation payload fingerprint", () => {
     )
   })
 
-  it("expands to the v4 shape only when the title input floor is present", () => {
-    // Rollout safety: old-server payloads (no titleEstimatedInputTokens)
-    // keep the exact v3 serialization; new payloads version-bump and cover
-    // the field.
+  it("binds the required title input floor in the v4 shape", () => {
     expect(reservationPayloadFingerprint(base)).toContain(
-      "usage-reservation-fingerprint-v3"
-    )
-    const widened = { ...base, titleEstimatedInputTokens: 250 }
-    expect(reservationPayloadFingerprint(widened)).toContain(
       "usage-reservation-fingerprint-v4"
     )
-    expect(reservationPayloadFingerprint(widened)).not.toBe(
+    expect(reservationPayloadFingerprint(base)).not.toBe(
       reservationPayloadFingerprint({
         ...base,
         titleEstimatedInputTokens: 251,

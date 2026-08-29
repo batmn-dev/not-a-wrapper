@@ -160,8 +160,8 @@ function planSelectedPathNormalization(messages: ChatMessage[]) {
 }
 
 /**
- * Sibling patches are planned from ONE context of the entry array (plan PR 1
- * step 6): missing branch indexes for the whole group are assigned in a
+ * Sibling patches are planned from one context of the entry array: missing
+ * branch indexes for the whole group are assigned in a
  * single pass instead of rebuilding after each sibling patch. This matches
  * the previous sequential behavior exactly — each sequential call recomputed
  * the same group assignment and consumed the next free index in the same

@@ -301,5 +301,5 @@ same rules as defense in depth).
   second-tab projection, cross-tab durable Stop, and settlement convergence
   behave identically on the production build.
 - New invariants are enforced by CI: the equivalence corpus, the 2× p95
-  scaling gate, the long-task canary at every cadence candidate, and the
-  stable-block zero-rerender component tests.
+  scaling gate, and the stable-block zero-rerender component tests. The
+  browser performance workflow owns ongoing long-task measurement.

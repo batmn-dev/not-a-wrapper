@@ -242,7 +242,7 @@ export function MessageAssistant({
                     status === "streaming" && "streaming-animation"
                   )}
                   markdown={true}
-                  // Live render state for the Markdown block model (plan PR 3):
+                  // Live render state for the Markdown block model:
                   // only a live message's terminal block may render as a
                   // growing code block. Conversation already scopes live
                   // status to the last row, so no isLast gate is needed here.

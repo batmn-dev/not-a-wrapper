@@ -1,5 +1,5 @@
 /**
- * Growing-block tail helpers (streaming investigation 2026-07-28, fix 1).
+ * Growing-block tail helpers.
  *
  * Single-block content — a list without blank-line separators, an open code
  * fence — never presents a blank-line-preceded block start, so the block
@@ -368,8 +368,6 @@ export function isPrecededByBlankLine(source: string, offset: number): boolean {
   if (index < 0) return true
   return source[index] === "\n"
 }
-
-// --- Render-boundary tail mending (ADR-0016 amendment, 2026-08-11) ---------
 
 /**
  * A terminal growing block can expose raw delimiters (`**`, `](`, and `|`

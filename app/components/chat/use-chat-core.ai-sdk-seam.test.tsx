@@ -355,7 +355,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
     current: null,
   }
 
-  // Delivered-message-notification recorder (plan PR 2): one entry per render
+  // Delivered-message-notification recorder: one entry per render
   // in which React observed a NEW messages array identity — the exact seam the
   // frame subscription batches. `atMs` is the virtual clock at delivery.
   type MessagesFrame = { messages: UIMessage[]; status: string; atMs: number }

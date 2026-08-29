@@ -48,9 +48,8 @@ export type TitleDurationClusterProps = {
 /**
  * TitleDurationCluster — a plain `title · duration` text cluster. It reuses ONLY
  * `formatDuration` from reasoning.tsx; it deliberately does NOT render
- * `Reasoning`/`ReasoningLabel`, which own inline disclosure + React-19 auto-open
- * state the panel header must not inherit (plan §6, GA §B2). Both tiers collapse
- * onto `--muted-foreground` (GA §6.5).
+ * `Reasoning`/`ReasoningLabel`, which own inline disclosure and auto-open state
+ * the panel header must not inherit. Both tiers use `--muted-foreground`.
  */
 export function TitleDurationCluster({
   title,
@@ -96,9 +95,8 @@ export type PanelHeaderProps = {
  * close button, aligned to the app conversation header's height and sharp-edge
  * shadow treatment. Its bottom edge is always visible, and it carries the left
  * sharp-edge shadow too because its opaque background would otherwise cover the
- * shell seam. The close button is the shipped `Button(ghost, icon)` with a
- * Remix close glyph tinted by
- * `currentColor` — no new file, no sprite hash (GA §4 row 22).
+ * shell seam. The close button uses the shared ghost icon button and a Remix
+ * close glyph tinted by `currentColor`.
  */
 export function PanelHeader({
   title,

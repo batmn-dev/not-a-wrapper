@@ -186,7 +186,7 @@ export type ChatTurnInput = {
   /** Canonical durable input already used for route and allowance admission. */
   generationInput?: DurableGenerationInputPlan
   /**
-   * Sampled chat-performance session (PR 0b). Absent/no-op by default; when
+   * Sampled chat-performance session. Absent/no-op by default; when
    * sampled it wraps preparation stages in content-free spans and receives
    * checkpoint counters from the durable runtime.
    */
@@ -485,8 +485,8 @@ export function createChatTurnRuntime(args: {
 
   // Request-scoped resource teardown (MCP clients, analytics flushes) is
   // owned by SETTLEMENT, not by `after()`: `after()` can fire on
-  // response-stream cancellation while a durable worker is still executing
-  // (client reload — gameplan §12 scenario 9), and disposing MCP clients
+  // response-stream cancellation while a durable worker is still executing,
+  // and disposing MCP clients
   // mid-run would fail every later tool step. The `after()` registration
   // below stays only as the backstop for turns whose stream never started
   // (prepare failures) or already settled; the provider deadline bounds how
@@ -1183,10 +1183,10 @@ export function createChatTurnRuntime(args: {
     // Provider consumption stops on the FIRST of: the runtime's execution
     // scope ending (durable: worker lost run ownership via heartbeat `lost` /
     // grant rejection — the CLIENT signal is deliberately absent, a reload or
-    // disconnect leaves the worker streaming to durable settlement, gameplan
-    // §12 scenario 9; guest: the request signal itself), or the budget's
-    // provider deadline (the settlement reserve must fit inside the route
-    // budget — gameplan §0). Client-disconnect telemetry below stays keyed to
+    // disconnect leaves the worker streaming to durable settlement; guest:
+    // the request signal itself), or the provider deadline, which reserves
+    // enough route time for settlement.
+    // Client-disconnect telemetry below stays keyed to
     // the request signal alone and never stops the stream.
     // Remaining provider budget = deadline minus what prepare() already
     // consumed (anchored at construction — see turnStartedAtMs). The floor
@@ -1354,7 +1354,7 @@ export function createChatTurnRuntime(args: {
       clearStalledContinuationTimer()
     }
 
-    // Two abort observers with distinct meanings (gameplan §12 scenario 9):
+    // Two abort observers have distinct meanings:
     // the REQUEST signal is client-disconnect telemetry only — for durable
     // chats the stream keeps executing after it fires — while the EXECUTION
     // signal is the stream actually ending, which owns the abort cleanup

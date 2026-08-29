@@ -1,5 +1,3 @@
-// lib/tools/utils.ts
-
 import { MAX_TOOL_RESULT_SIZE, TOOL_EXECUTION_TIMEOUT_MS } from "@/lib/config"
 import type { ToolSet } from "ai"
 import {

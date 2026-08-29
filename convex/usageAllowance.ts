@@ -37,6 +37,7 @@ import {
   authenticatedMutation,
   authenticatedQuery,
 } from "./lib/authedFunctions"
+import { CANCELLATION_SETTLEMENT_PROTOCOL_VERSION } from "./lib/chatAdmissionProof"
 import {
   usageReservationAuthorizationAudience,
   verifyUsageReservationAuthorization,
@@ -356,9 +357,7 @@ export async function reserveUsageForUser(
       ...(args.titleEstimatedCredits !== undefined
         ? { titleEstimatedCredits: args.titleEstimatedCredits }
         : {}),
-      ...(args.titleEstimatedInputTokens !== undefined
-        ? { titleEstimatedInputTokens: args.titleEstimatedInputTokens }
-        : {}),
+      titleEstimatedInputTokens: args.titleEstimatedInputTokens,
       pricingSnapshot: args.pricingSnapshot,
       payloadFingerprint: fingerprint,
       reservedAt: now,
@@ -502,15 +501,13 @@ export async function attachReservationToRun(
   }
   await ctx.db.patch(args.reservationId, {
     generationRunId: args.runId,
-    ...(args.cancellationSettlementVersion !== undefined
-      ? {
-          cancellationSettlementVersion: args.cancellationSettlementVersion,
-          // The compatible worker has not yet crossed its awaited dispatch
-          // boundary. markGenerationWorkStarted flips this before any provider
-          // call, making missing-run recovery deterministic.
-          providerMayHaveStarted: false,
-        }
-      : {}),
+    cancellationSettlementVersion:
+      args.cancellationSettlementVersion ??
+      CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
+    // The worker has not yet crossed its awaited dispatch boundary.
+    // markGenerationWorkStarted flips this before any provider call, making
+    // missing-run recovery deterministic.
+    providerMayHaveStarted: false,
     attachedAt: args.now,
     updatedAt: args.now,
   })
@@ -816,12 +813,6 @@ export async function deferUsageSettlementForTerminalRun(
     return true
   }
 
-  // Per-run rollout activation: older workers do not implement the durable
-  // dispatch/title/receipt protocol. They settle immediately through the
-  // compatibility fallback instead of creating accounting state they cannot
-  // finalize themselves.
-  if (run.cancellationSettlementVersion !== 1) return false
-
   // The compatible worker awaits workStartedAt before calling the provider.
   // OCC orders this against Stop: if this transaction sees no marker, the
   // provider call cannot begin afterward because grant revocation wins.
@@ -1080,13 +1071,10 @@ function terminalSettlementFallbackEvidence(
       title,
     }
   }
-  // Protocol-v1 workers await this authorization before provider work. With
-  // no worker receipt, a committed marker conservatively means work may have
-  // started. Legacy rows lack even the marker guarantee.
+  // Workers await this authorization before provider work. With no worker
+  // receipt, a committed marker conservatively means work may have started.
   const mayHaveStarted =
-    reservation.providerMayHaveStarted ??
-    (run?.workStartedAt !== undefined ||
-      reservation.cancellationSettlementVersion !== 1)
+    reservation.providerMayHaveStarted ?? run?.workStartedAt !== undefined
   if (!mayHaveStarted) {
     return { primary: { kind: "not-started" }, title }
   }
@@ -1380,43 +1368,6 @@ export async function settleUsageForTerminalRun(
       ctx,
       reservation,
       decision,
-      auditReason,
-      now
-    )
-    return
-  }
-
-  // Rolling-deploy compatibility: a run from an older worker cannot create a
-  // pending settlement because it lacks the receipt/title protocol. Settle it
-  // immediately with the same bounded cancellation fallback. Its historical
-  // best-effort work marker is not proof of non-dispatch, so unknown work
-  // charges the input floor rather than the full output reservation or a
-  // possibly-wrong refund.
-  if (
-    (terminalReason === "user_stop" || terminalReason === "superseded") &&
-    run.cancellationSettlementVersion !== 1
-  ) {
-    const message = run.assistantMessageId
-      ? await ctx.db.get(run.assistantMessageId)
-      : null
-    const partialEstimate = message
-      ? continuationAdjustedPartialEstimate(run, message.parts)
-      : 0
-    const withFallback: Doc<"usageReservations"> = {
-      ...reservation,
-      providerMayHaveStarted: true,
-      terminalEstimatedOutputTokens:
-        reservation.estimatedOutputTokens !== undefined
-          ? Math.min(partialEstimate, reservation.estimatedOutputTokens)
-          : partialEstimate,
-    }
-    await applyTerminalSettlementDecision(
-      ctx,
-      reservation,
-      resolveTerminalUsageSettlement(
-        reservationTerminalFacts(reservation),
-        terminalSettlementFallbackEvidence(withFallback, run)
-      ),
       auditReason,
       now
     )

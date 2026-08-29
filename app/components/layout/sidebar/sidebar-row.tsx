@@ -71,7 +71,7 @@ export function SidebarRow({
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
-      // Chat-switch responsiveness anchor (PR 0b): the user's navigation
+      // Chat-switch responsiveness anchor: the user's navigation
       // intent, marked before Next.js routing commits. Content-free no-op
       // unless instrumentation is enabled.
       markChatPerf("chat_navigation_intent")

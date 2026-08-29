@@ -1,5 +1,5 @@
 /**
- * Chat-performance instrumentation core (chat-responsiveness plan, PR 0b).
+ * Chat-performance instrumentation core.
  *
  * Content-free by construction: every event passes a per-event field
  * allow-list before emission; string fields must match a declared enum or the
@@ -20,8 +20,8 @@
  * Correlation: the client generates a random UUID per sampled turn and sends
  * it as the `x-chat-perf-id` header; the route validates shape/length and
  * carries it through its spans. It is never persisted to chat/run/message
- * documents, never reused across turns, and is explicitly NOT a usage
- * admission idempotency key (plan PR 0 acceptance).
+ * documents, never reused across turns, and is not a usage-admission
+ * idempotency key.
  */
 import { containsSecret } from "./secret-patterns"
 
@@ -52,7 +52,7 @@ export function createChatPerfCorrelationId(): string {
 
 /**
  * Validates an incoming header value. Invalid, absent, or oversized values
- * are dropped silently (plan PR 0 acceptance) — never echoed into logs.
+ * are dropped silently and never echoed into logs.
  */
 export function parseChatPerfIdHeader(
   value: string | null | undefined
@@ -147,7 +147,7 @@ export const DURABLE_WORKER_WRITE_OPS = [
  * allow-listed enum or the correlation id cannot exist.
  */
 const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
-  // --- client turn marks (plan PR 0 step 3) ---
+  // Client turn marks
   chat_send_intent: { correlationId: CORRELATION },
   "composer.keystroke_to_next_paint": { durationMs: REQUIRED_NUMBER },
   "composer.keystroke_to_settled_paint": { durationMs: REQUIRED_NUMBER },
@@ -203,7 +203,7 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     ),
   },
   markdown_projection_settle_mismatch: {},
-  // --- client navigation marks (plan PR 0 step 3) ---
+  // Client navigation marks
   chat_navigation_intent: {},
   chat_route_state_committed: {},
   first_thread_content_painted: { messageCount: NUMBER },
@@ -220,7 +220,7 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     detachedCount: NUMBER,
     bindingClass: oneOf("durable", "guest", "unowned"),
   },
-  // --- server spans / counters (plan PR 0 steps 4–5) ---
+  // Server spans and counters
   server_span: {
     span: oneOf(...CHAT_PERF_SPAN_NAMES),
     durationMs: NUMBER,

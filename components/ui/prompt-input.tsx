@@ -1,34 +1,8 @@
 /**
- * @component PromptInput
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/prompt-input
- * @customized true
- * @customizations
- *   - `autoFocus` is enabled by default on PromptInputTextarea
- *   - Removes redundant `TooltipProvider` wrapper in `PromptInputAction`
- *   - Not A Wrapper uses app-level TooltipProvider for consistency and smaller bundle
- *   - The public PromptInputTextarea name now hosts one stable ProseMirror
- *     contenteditable plus a non-interactive textarea fallback
- *   - Editor layout: a grid/alignment wrapper contains a
- *     separate capped overflow scroller, while a hidden textarea preserves
- *     the bounded, plain-text expansion measurement contract
- *   - Layout-loop hardening in PromptInputTextarea: the expansion decision is
- *     a pure function of (value, derived compact width) — it must not read
- *     layout that `textareaExpanded` itself influences; clone measurement is
- *     capped to a bounded prefix of the value; a single callback-ref-owned
- *     ResizeObserver remeasures when the expansion-invariant surface or
- *     side-control inline sizes change
- *   - Source-parity multiline expand/collapse mode owns the scroll root through
- *     callback-ref-synchronized data attributes, with no effect or timeout
- *   - The stable editor callback ref owns content-free key-to-paint performance
- *     measurement while diagnostic instrumentation is enabled
- * @upgradeNotes
- *   - Preserve autoFocus default on PromptInputTextarea
- *   - Do NOT re-add TooltipProvider wrapper in PromptInputAction
- *   - Preserve the callback-ref-owned ProseMirror lifecycle and plain-string
- *     document boundary; do not remount the editor for controlled updates
- *   - Preserve the layout-loop hardening: no live-layout reads in the
- *     expansion decision and no effect-driven layout dispatch per keystroke
+ * Based on prompt-kit: https://prompt-kit.com/docs/prompt-input
+ * The stable ProseMirror editor is callback-ref owned and never remounts for
+ * controlled updates. Expansion derives from value and compact width without
+ * effect-driven layout dispatch. Actions use the app-level TooltipProvider.
  */
 "use client"
 

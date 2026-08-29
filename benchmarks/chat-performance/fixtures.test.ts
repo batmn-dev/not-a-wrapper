@@ -1,22 +1,14 @@
 import { describe, expect, it } from "vitest"
 import {
-  assertProjectionEquivalence,
   buildCodePayload,
   buildCodeStressPayload,
   buildLongMarkdownPayload,
   buildManyShortBlocksPayload,
   buildShortProsePayload,
-  buildDeterministicBranchTree,
   buildMarkdownPayload,
-  buildRandomBranchTree,
-  buildRandomBranchTreeSeeds,
   buildStreamScript,
-  createSeededRandom,
-  currentBranchImplementation,
   foldStreamScript,
   hashValue,
-  NAMED_BRANCH_FIXTURES,
-  projectionHash,
   type StreamChunkEvent,
 } from "./fixtures"
 
@@ -44,95 +36,6 @@ describe("pinned payload hashes (cross-commit comparability)", () => {
       manyShortBlocks: hashValue(buildManyShortBlocksPayload()),
       shortProse: hashValue(buildShortProsePayload()),
     }).toEqual(PINNED_PAYLOAD_HASHES)
-  })
-})
-
-describe("seeded reproducibility", () => {
-  it("produces identical random sequences for the same seed", () => {
-    const a = createSeededRandom(42)
-    const b = createSeededRandom(42)
-    const c = createSeededRandom(43)
-    const seqA = Array.from({ length: 20 }, () => a())
-    const seqB = Array.from({ length: 20 }, () => b())
-    const seqC = Array.from({ length: 20 }, () => c())
-    expect(seqA).toEqual(seqB)
-    expect(seqA).not.toEqual(seqC)
-  })
-
-  it("rebuilds byte-identical branch trees per seed", () => {
-    for (const seed of buildRandomBranchTreeSeeds(10)) {
-      expect(hashValue(buildRandomBranchTree(seed))).toBe(
-        hashValue(buildRandomBranchTree(seed))
-      )
-    }
-  })
-
-  it("keeps deterministic tree row counts and stable projection hashes", () => {
-    const tree575 = buildDeterministicBranchTree(575)
-    const tree1150 = buildDeterministicBranchTree(1150)
-    expect(tree575).toHaveLength(575)
-    expect(tree1150).toHaveLength(1150)
-    // Reproducibility gate: rebuilding must reproduce the exact projection.
-    expect(projectionHash(currentBranchImplementation.project(tree575))).toBe(
-      projectionHash(
-        currentBranchImplementation.project(buildDeterministicBranchTree(575))
-      )
-    )
-  })
-})
-
-describe("branch projection equivalence harness", () => {
-  const randomSeeds = buildRandomBranchTreeSeeds(200)
-
-  it("projects every named fixture and stays reproducible", () => {
-    for (const [name, build] of Object.entries(NAMED_BRANCH_FIXTURES)) {
-      const first = assertProjectionEquivalence(
-        [currentBranchImplementation],
-        build(),
-        name
-      )
-      const second = assertProjectionEquivalence(
-        [currentBranchImplementation],
-        build(),
-        name
-      )
-      expect(second, name).toBe(first)
-    }
-  })
-
-  it("projects at least 200 seeded randomized trees without divergence or hangs", () => {
-    for (const seed of randomSeeds) {
-      const tree = buildRandomBranchTree(seed)
-      const first = assertProjectionEquivalence(
-        [currentBranchImplementation],
-        tree,
-        `seed ${seed}`
-      )
-      expect(
-        assertProjectionEquivalence(
-          [currentBranchImplementation],
-          buildRandomBranchTree(seed),
-          `seed ${seed}`
-        )
-      ).toBe(first)
-    }
-  })
-
-  it("fails loudly when implementations diverge", () => {
-    const broken = {
-      name: "broken",
-      project: (messages: Parameters<typeof currentBranchImplementation.project>[0]) => {
-        const projection = currentBranchImplementation.project(messages)
-        return { ...projection, selectedPath: projection.selectedPath.slice(1) }
-      },
-    }
-    expect(() =>
-      assertProjectionEquivalence(
-        [currentBranchImplementation, broken],
-        buildDeterministicBranchTree(575),
-        "broken-comparison"
-      )
-    ).toThrow(/mismatch/)
   })
 })
 

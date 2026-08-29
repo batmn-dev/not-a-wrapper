@@ -2,12 +2,12 @@ import { LEASE_SKEW_GRACE_MS } from "@/convex/domain/generation_run_liveness"
 import type { SelectedRunProjection } from "@/convex/messages"
 
 /**
- * Run presentation — the ONE pure resolver of local/background/stale
- * generation state (durable-turn gameplan §8). Every surface (assistant row,
+ * Run presentation — the one pure resolver of local/background/stale
+ * generation state. Every surface (assistant row,
  * Activity panel, composer Stop, announcer, action suppression) presents this
  * value; none re-derives its own local/background/stale booleans.
  *
- * This is the ONLY place time-based classification may live (§18 #3): the
+ * This is the only place time-based classification may live: the
  * server stores `leaseExpiresAt` / approval `expiresAt`; this module compares
  * them to an injected clock with a skew grace. Convex queries cannot do this —
  * they re-execute on data changes, never on wall-clock time.
@@ -137,7 +137,7 @@ export function resolveGenerationPresentation(
     rawSelectedRun.assistantMessageId === localAssistantMessageId
 
   // A TERMINAL projection behind a NEW local dispatch is the PREVIOUS turn's
-  // run — presentation-irrelevant to the in-flight submission (gameplan §8:
+  // run — presentation-irrelevant to the in-flight submission:
   // local submission renders immediately, Stop included). Without masking it,
   // rule 1 below would win for the whole projection gap in any chat with
   // history: the composer would show the prior turn's settled state and offer

@@ -1,12 +1,6 @@
 /**
- * @component Source
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/source
- * @customized true
- * @customizations
- *   - Uses the shared Favicon module for retrieval and fallback consistency
- * @upgradeNotes
- *   - Preserve the shared Favicon module instead of adding direct images
+ * Based on prompt-kit: https://prompt-kit.com/docs/source
+ * Source icons use the shared Favicon retrieval and fallback path.
  */
 "use client"
 

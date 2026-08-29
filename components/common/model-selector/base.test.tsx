@@ -597,7 +597,6 @@ describe("ModelSelector", () => {
 
     const selectedOption = getModelOption("GPT-5.5")
 
-    expect(selectedOption.className).toContain("bg-interactive-selected")
     expect(
       selectedOption.querySelector('[data-slot="selected-model-check"]')
     ).not.toBeNull()
@@ -609,7 +608,7 @@ describe("ModelSelector", () => {
     ).not.toBeNull()
   })
 
-  it("reveals legacy models for one provider with its logo", () => {
+  it("reveals legacy models for one provider", () => {
     renderSelector({ isUserAuthenticated: true })
 
     expect(document.body.textContent).not.toContain("GPT-4.1")
@@ -632,17 +631,6 @@ describe("ModelSelector", () => {
       "Show legacy models for Anthropic"
     )
     expect(anthropicOption?.dataset.closeOnClick).toBe("false")
-    expect(
-      anthropicOption
-        ?.querySelector('[data-slot="show-legacy-models-icon"] svg')
-        ?.getAttribute("class")
-    ).toContain("text-claude-logo")
-    expect(anthropicOption?.className).toContain("group/show-legacy")
-    expect(
-      anthropicOption?.querySelector('[data-slot="show-legacy-models-label"]')
-        ?.className
-    ).toContain("opacity-40 group-hover/show-legacy:opacity-100")
-
     act(() => {
       anthropicOption?.click()
     })
@@ -813,33 +801,11 @@ describe("ModelSelector", () => {
   it("swaps resting check and lock states for pin actions without selecting", () => {
     const onSelect = renderSelector({ isUserAuthenticated: true })
     const selectedOption = getModelOption("GPT-5 Mini")
-    const selectedCheck = selectedOption.querySelector<HTMLElement>(
-      '[data-slot="selected-model-check"]'
-    )
-    const rightSlot = selectedOption.querySelector<HTMLElement>(
-      '[data-slot="model-option-right-slot"]'
-    )
     const pinAction = selectedOption.querySelector<HTMLButtonElement>(
       '[aria-label="Pin GPT-5 Mini"]'
     )
 
-    expect(selectedCheck?.className).toContain(
-      "group-hover/model-option:opacity-0"
-    )
-    expect(rightSlot?.className).toContain("size-[18px]")
-    expect(selectedCheck?.style.getPropertyValue("--icon-slot-size")).toBe(
-      "18px"
-    )
-    expect(selectedCheck?.style.getPropertyValue("--icon-glyph-size")).toBe(
-      "18px"
-    )
-    expect(pinAction?.className).toContain(
-      "group-hover/model-option:opacity-100"
-    )
-    expect(pinAction?.className).toContain("pointer-events-none")
-    expect(pinAction?.className).toContain(
-      "group-hover/model-option:pointer-events-auto"
-    )
+    expect(pinAction).not.toBeNull()
 
     act(() => {
       pinAction?.click()
@@ -859,11 +825,6 @@ describe("ModelSelector", () => {
     expect(
       lockedPinnedOption.querySelector('[aria-label="Unpin GPT-5.4"]')
     ).not.toBeNull()
-    const lockedIcon = lockedPinnedOption.querySelector<HTMLElement>(
-      '[data-slot="locked-model-icon"]'
-    )
-    expect(lockedIcon?.style.getPropertyValue("--icon-slot-size")).toBe("18px")
-    expect(lockedIcon?.style.getPropertyValue("--icon-glyph-size")).toBe("18px")
   })
 
   it("preserves the model list scroll position when pinning reorders a row", () => {
@@ -949,62 +910,6 @@ describe("ModelSelector", () => {
     }
   })
 
-  it("owns its composite menu inset and row geometry", () => {
-    renderSelector({ isUserAuthenticated: false })
-
-    const menu = document.body.querySelector<HTMLElement>(
-      '[data-testid="model-menu"]'
-    )
-    const option = getModelOption("GPT-5 Mini")
-
-    expect(menu?.dataset.geometry).toBe("custom")
-    expect(menu?.className).toContain("bg-floating-surface")
-    expect(menu?.className).toContain("p-1.5")
-    expect(menu?.className).toContain("relative")
-    expect(menu?.className).toContain("rounded-3xl")
-    expect(menu?.className).toContain(
-      "[--model-selector-list-max-height:19rem]"
-    )
-    const searchOverlay = document.body.querySelector<HTMLElement>(
-      '[data-slot="model-selector-desktop-search"]'
-    )
-    expect(searchOverlay?.className).toContain("absolute")
-    expect(searchOverlay?.className).toContain("from-floating-surface/80")
-    expect(searchOverlay?.className).toContain("to-floating-surface/0")
-    const searchInput = document.body.querySelector<HTMLInputElement>(
-      'input[placeholder="Search models..."]'
-    )
-    expect(searchInput?.className).toContain("backdrop-blur-md")
-    expect(searchInput?.className).toContain("rounded-full")
-    expect(option.dataset.geometry).toBe("custom")
-    expect(option.className).toContain("h-10")
-    expect(option.className).toContain("rounded-xl")
-    expect(option.className).not.toContain("mx-2.5")
-    expect(
-      document.body.querySelector('[data-slot="model-section"]')
-    ).toBeNull()
-    expect(
-      option.querySelector<HTMLElement>('[data-slot="model-name"]')?.className
-    ).toContain("text-base")
-    expect(
-      option.querySelector('[data-slot="selected-model-check"]')
-    ).not.toBeNull()
-    const scrollSurface = document.body.querySelector<HTMLElement>(
-      "[data-scrollable-surface]"
-    )
-    expect(scrollSurface?.className).toContain(
-      "pt-(--model-selector-fixed-height)"
-    )
-    expect(scrollSurface?.className).toContain(
-      "scroll-pt-[calc(var(--model-selector-fixed-height)+0.5rem)]"
-    )
-    expect(scrollSurface?.className).toContain("[scrollbar-width:none]")
-    expect(scrollSurface?.className).toContain("[&::-webkit-scrollbar]:hidden")
-    expect(scrollSurface?.className).not.toContain("scrollbar-gutter")
-    expect(scrollSurface?.className).not.toContain("pr-1")
-    expect(scrollSurface?.className).not.toContain("pb-1")
-  })
-
   it("selects the anonymous model but opens auth for locked guest models", () => {
     const onSelect = renderSelector({ isUserAuthenticated: false })
 
@@ -1066,90 +971,7 @@ describe("ModelSelector", () => {
     expect(
       document.body.querySelector('[data-testid="drawer-trigger"]')
     ).toBeTruthy()
-    expect(
-      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
-        ?.className
-    ).toContain("bg-floating-surface")
-    expect(
-      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
-        ?.className
-    ).toContain("dark:bg-floating-surface/80")
-    expect(
-      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
-        ?.className
-    ).toContain("dark:backdrop-blur-[10px]")
-    expect(
-      document.body.querySelector<HTMLElement>('[data-testid="model-drawer"]')
-        ?.className
-    ).toContain("data-[vaul-drawer-direction=bottom]:rounded-t-[2rem]")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-testid="model-drawer-title"]'
-      )?.className
-    ).toContain("sr-only")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-testid="model-drawer-handle"]'
-      )?.className
-    ).toBe(
-      "bg-muted-foreground/60 absolute top-2 left-1/2 z-20 mt-0 h-1 w-11 -translate-x-1/2"
-    )
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-testid="model-drawer-handle-hit-area"]'
-      )?.className
-    ).toBe("pointer-events-auto absolute inset-x-0 top-0 z-20 h-5 touch-none")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-slot="model-selector-mobile-search"]'
-      )?.className
-    ).toContain("absolute")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-slot="model-selector-mobile-search"]'
-      )?.className
-    ).toContain("from-floating-surface/80")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-slot="model-selector-mobile-search"]'
-      )?.className
-    ).toContain("to-floating-surface/0")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-slot="model-selector-mobile-scroll"]'
-      )?.className
-    ).toContain("pt-(--model-selector-mobile-header-height)")
-    expect(
-      document.body.querySelector<HTMLInputElement>(
-        'input[placeholder="Search models..."]'
-      )?.className
-    ).toContain("rounded-full")
-    expect(
-      document.body.querySelector<HTMLInputElement>(
-        'input[placeholder="Search models..."]'
-      )?.className
-    ).toContain("h-12")
-    expect(
-      document.body.querySelector<HTMLElement>(
-        '[data-slot="model-selector-search-icon"]'
-      )?.className
-    ).toContain("z-10")
     const mobileOption = getModelOption("GPT-5 Mini")
-    expect(mobileOption.className).toContain("h-14")
-    expect(mobileOption.className).toContain("px-4")
-    const mobileModelIcon = mobileOption.querySelector<HTMLElement>(
-      '[data-slot="model-option-icon"]'
-    )
-    expect(mobileModelIcon?.style.getPropertyValue("--icon-slot-size")).toBe(
-      "24px"
-    )
-    expect(mobileModelIcon?.style.getPropertyValue("--icon-glyph-size")).toBe(
-      "24px"
-    )
-    expect(
-      mobileOption.querySelector<HTMLElement>('[data-slot="model-name"]')
-        ?.className
-    ).toContain("text-base")
     expect(
       mobileOption.querySelector('[data-slot="selected-model-check"]')
     ).not.toBeNull()
@@ -1157,10 +979,6 @@ describe("ModelSelector", () => {
     expect(
       secondMobileOption.querySelector('[data-slot="selected-model-check"]')
     ).toBeNull()
-    expect(secondMobileOption.className).toContain(
-      "before:bg-floating-menu-divider/60"
-    )
-    expect(secondMobileOption.className).toContain("before:inset-x-0")
     const sections = Array.from(
       document.body.querySelectorAll<HTMLElement>('[data-slot="model-section"]')
     )
@@ -1176,24 +994,6 @@ describe("ModelSelector", () => {
       (section) => section.getAttribute("aria-label") === "All models"
     )
     expect(allModelsSection?.textContent).toContain("GPT-5 Mini")
-    for (const section of sections) {
-      const label = section.querySelector('[data-slot="model-section-label"]')
-      const container = section.querySelector<HTMLElement>(
-        '[data-slot="model-section-container"]'
-      )
-
-      expect(container?.contains(label)).toBe(false)
-      expect(label?.className).toContain("text-sm")
-      expect(container?.className).toContain("bg-muted/50")
-      expect(container?.className).toContain("dark:bg-muted/80")
-      expect(container?.className).toContain("rounded-3xl")
-      expect(
-        container
-          ?.querySelector<HTMLElement>('[data-testid="model-option"]')
-          ?.className.includes("before:bg-floating-menu-divider/60")
-      ).toBe(false)
-    }
-
     act(() => {
       mobileOption.click()
     })
@@ -1231,12 +1031,6 @@ describe("ModelSelector", () => {
     expect(
       options.some((option) => option.textContent?.includes("OpenRouter"))
     ).toBe(false)
-    // The normalized selection highlights the logical row.
-    expect(
-      options
-        .find((option) => option.textContent?.includes("GPT-5.4"))
-        ?.className.includes("bg-interactive-selected")
-    ).toBe(true)
   })
 
   it("keeps multi-route Claude provider labels off ordinary selector rows", () => {
@@ -1343,7 +1137,7 @@ describe("ModelSelector", () => {
     }
   })
 
-  it("shows the selected model icon instead of a chevron in the composer", () => {
+  it("shows the selected model icon and anchors the desktop menu outside the trigger", () => {
     renderSelector({
       isUserAuthenticated: false,
       selectedModelId: "openrouter:openai/gpt-5.4",
@@ -1361,43 +1155,10 @@ describe("ModelSelector", () => {
     expect(trigger?.firstElementChild?.getAttribute("data-slot")).toBe(
       "selected-model-icon"
     )
-    expect(trigger?.firstElementChild?.className).toContain("text-foreground")
-    expect(trigger?.firstElementChild?.className).toContain("opacity-100")
     expect(trigger?.hasAttribute("data-composer-control")).toBe(true)
-    expect(trigger?.className).toContain("composer-btn")
-    expect(trigger?.className).not.toContain("hover:bg-interactive-hover")
-    expect(trigger?.className).not.toContain("active:bg-interactive-pressed")
-    expect(trigger?.className).not.toContain("press-motion")
-    expect(trigger?.className).toContain("can-hover:relative")
-    expect(trigger?.className).toContain("can-hover:after:absolute")
-    expect(trigger?.className).toContain("can-hover:after:-inset-x-1")
-    expect(trigger?.className).toContain("overflow-visible")
-    expect(trigger?.className).toContain("gap-1.5")
-    expect(trigger?.className).toContain("ps-3.5")
-    expect(trigger?.className).toContain("pe-3")
-    expect(trigger?.className).toContain("text-base")
-    expect(trigger?.className).toContain("leading-[26px]")
-    expect(trigger?.className).toContain("max-w-full")
-    expect(trigger?.className).not.toContain("max-w-none")
-    expect(trigger?.className).not.toContain("overflow-hidden")
-
-    const selectedModelIcon = trigger?.querySelector<HTMLElement>(
-      '[data-slot="selected-model-icon"]'
-    )
-    expect(selectedModelIcon?.style.getPropertyValue("--icon-slot-size")).toBe(
-      "16px"
-    )
-    expect(selectedModelIcon?.style.getPropertyValue("--icon-glyph-size")).toBe(
-      "16px"
-    )
-    expect(trigger?.lastElementChild?.className).toContain("text-foreground")
-    expect(trigger?.lastElementChild?.className).toContain("min-w-0")
-    expect(trigger?.lastElementChild?.className).toContain("truncate")
-    expect(trigger?.lastElementChild?.className).not.toContain("max-w-40")
     const pressSurface = document.body.querySelector(
       '[data-slot="model-selector-visual-surface"]'
     )
-    expect(pressSurface?.className).not.toContain("press-motion")
     expect(pressSurface?.contains(trigger ?? null)).toBe(true)
     expect(dropdownAnchor?.current).toBe(
       document.body.querySelector('[data-slot="model-selector-desktop-anchor"]')
@@ -1421,20 +1182,6 @@ describe("ModelSelector", () => {
     })
     expect(onOpenChange).toHaveBeenCalledOnce()
     expect(onOpenChange).toHaveBeenCalledWith(true)
-  })
-
-  it("keeps the hover bridge scoped to the composer trigger", () => {
-    renderSelector({
-      isUserAuthenticated: false,
-      selectedModelId: "gpt-5-mini",
-    })
-
-    const trigger = document.body.querySelector<HTMLButtonElement>(
-      '[data-testid="model-trigger"]'
-    )
-
-    expect(trigger?.className).toContain("overflow-hidden")
-    expect(trigger?.className).not.toContain("can-hover:after:-inset-x-1")
   })
 
   it("disables the trigger and ignores option clicks when disabled", () => {

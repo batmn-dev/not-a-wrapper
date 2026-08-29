@@ -1,22 +1,9 @@
 "use client"
 
 /**
- * @component Markdown
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/markdown
- * @customized true
- * @customizations
- *   - Uses `LinkMarkdown` component for custom link handling with previews
- *   - Integrates `ButtonCopy` for one-click code copying in code blocks
- *   - Adds `CodeBlockGroup` header with language label display
- *   - Uses remark parser for block-level splitting (same parser as renderer)
- *   - Per-block memoization via `MemoizedMarkdownBlock` for better performance
- *   - Upstream has basic code/link handling; Not A Wrapper has enhanced UX features
- * @upgradeNotes
- *   - Preserve LinkMarkdown, ButtonCopy, and CodeBlockGroup integrations
- *   - Maintain per-block memoization pattern for performance
- *   - Keep parsing and rendering on the same remark-based pipeline
- *   - Verify INITIAL_COMPONENTS customizations are not overwritten
+ * Based on prompt-kit: https://prompt-kit.com/docs/markdown
+ * Local contracts: one remark pipeline for projection and rendering, stable
+ * per-block memoization, safe link previews, and app-owned code controls.
  */
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import {
@@ -72,9 +59,8 @@ export type MarkdownProps = {
   className?: string
   components?: Partial<Components>
   /**
-   * True while the message that owns this Markdown is still live
-   * (submitted/streaming). Only then can the TERMINAL parsed block be
-   * `growing` (plan PR 3 stability rule); settled/aborted/failed messages and
+   * True while the message that owns this Markdown is still live. Only then
+   * can the terminal parsed block be `growing`; settled messages and
    * every non-terminal block are always `stable`. Threaded from the message
    * row without changing how status is derived.
    */
@@ -82,7 +68,7 @@ export type MarkdownProps = {
 }
 
 /**
- * Block stability (plan PR 3): `growing` iff the block is the terminal parsed
+ * Block stability: `growing` iff the block is the terminal parsed
  * Markdown block AND the owning message's render state is live. There is
  * deliberately NO fence parsing — every non-terminal block is definitionally
  * complete, and a terminal block settles when the message does or when a

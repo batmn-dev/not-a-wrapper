@@ -233,8 +233,8 @@ export function selectActivityPanelTarget({
 }
 
 /**
- * useActivityPanel — the single, chat-owned selector for the Activity panel
- * (plan §4, GA §6.7). Called ONCE by `Chat` after `useChatCore` returns the
+ * useActivityPanel — the single, chat-owned selector for the Activity panel.
+ * Called once by `Chat` after `useChatCore` returns the
  * already-projected selected path; it does NOT recompute `projectSelectedPath`.
  *
  * The default target follows the latest generation/pending assistant. An

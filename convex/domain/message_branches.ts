@@ -19,7 +19,7 @@ export type MessageBranchInfo = {
 /**
  * The canonical branch context: one immutable snapshot of sorting, legacy
  * effective parents, child grouping, and lookup maps per message-array
- * version (chat-responsiveness plan, PR 1). All branch semantics live in
+ * version. All branch semantics live in
  * `createBranchContext` and the `*FromContext` primitives; the array-based
  * exports below are one-line adapters kept as migration aids — they are NOT
  * an alternate implementation.
@@ -229,7 +229,7 @@ export type MessageBranchPatch = {
 
 /**
  * Missing-branch-index assignments for one sibling group, computed in a
- * single pass over the group in message-sort order (plan PR 1 step 6). The
+ * single pass over the group in message-sort order. The
  * assignment matches the pre-context sequential behavior exactly: every call
  * for the same group walked the same order and produced the same indexes, so
  * one pass per group is a pure de-duplication. Memoized per context — a new

@@ -514,15 +514,11 @@ export function reservationPayloadFingerprint(
     titleEstimatedCredits ?? null,
     pricingSnapshotFingerprintValue(pricingSnapshot),
   ] as const
-  // Versioned expansion (rollout safety): a payload WITHOUT the title input
-  // floor serializes byte-identically to the historical v3 shape, so
-  // reservations created by the previous server build replay cleanly across
-  // the deploy; payloads carrying it get the widened v4 shape.
-  return JSON.stringify(
-    titleEstimatedInputTokens === undefined
-      ? ["usage-reservation-fingerprint-v3", ...base]
-      : ["usage-reservation-fingerprint-v4", ...base, titleEstimatedInputTokens]
-  )
+  return JSON.stringify([
+    "usage-reservation-fingerprint-v4",
+    ...base,
+    titleEstimatedInputTokens,
+  ])
 }
 
 /** Validate an integer credit amount crossing a trust boundary. */
@@ -567,6 +563,7 @@ export function isValidUsageReservationArgs(
     isValidTokenEstimate(args.estimatedOutputTokens) &&
     (args.titleEstimatedCredits === undefined ||
       isValidCreditAmount(args.titleEstimatedCredits)) &&
+    typeof args.titleEstimatedInputTokens === "number" &&
     isValidTokenEstimate(args.titleEstimatedInputTokens) &&
     isValidPricingSnapshot(args.pricingSnapshot)
   )

@@ -70,8 +70,7 @@ function withBranchMetadata(
 
 /**
  * Selected visible path plus branch descriptors. The whole projection shares
- * ONE branch context (plan PR 1 step 3; made unconditional in the 2026-07-23
- * flag collapse after hash-identical equivalence held across every fixture).
+ * one branch context.
  */
 function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
   const context = createBranchContext(messages)
@@ -82,8 +81,8 @@ function getVisibleSelectedMessages(messages: Doc<"messages">[]) {
 }
 
 /**
- * Run/worker correlation ids are owner-internal plumbing (durable-turn
- * gameplan §7): a public or non-owner viewer gets the conversation, never the
+ * Run/worker correlation ids are owner-internal plumbing: a public or
+ * non-owner viewer gets the conversation, never the
  * generation-run linkage that keys durable control state. Both fields are
  * optional on the doc, so omitting them preserves the handler return type.
  */
@@ -155,7 +154,7 @@ export async function getLastMessagesHandler(
   return stripRunLinkageForViewer(tail)
 }
 
-// Atomic selected-conversation projection (durable-turn gameplan §7, PR 4).
+// Atomic selected-conversation projection.
 
 // (ACTIVE_TOOL_INVOCATION_STATUSES removed with `activeToolNames` —
 // Experiment 2 §6.1.)

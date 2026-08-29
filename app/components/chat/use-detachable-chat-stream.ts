@@ -167,7 +167,7 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
     // ChatTurnBodyFields is what keeps a new wire field a contract change.
     private readonly getFallbackTurnBody: () => ChatTurnBodyFields | null
   ) {
-    // One-shot chat-perf correlation header (PR 0b): resolves to an empty
+    // One-shot chat-perf correlation header: resolves to an empty
     // object unless instrumentation is enabled AND a turn armed an id — so a
     // continuation request never reuses a prior turn's correlation id.
     super({ api, headers: () => takeChatPerfHeader() })
@@ -235,7 +235,7 @@ type DetachableChatStreamOwner = {
 }
 
 /**
- * Detached-binding gauges (PR 0b step 7): enumerable counts beside the
+ * Detached-binding gauges: enumerable counts beside the
  * WeakMap lifecycle (which is deliberately non-enumerable). Counts and class
  * enums only — no chat ids or content ever leave through these marks, and
  * emission is a no-op unless client instrumentation is enabled.
@@ -362,8 +362,8 @@ function createDetachableChatStreamOwner(
           if (!lastAssistantMessageIsCompleteWithApprovalResponses(args)) {
             return false
           }
-          // Only the tab that LOCALLY resolved the approval may auto-send the
-          // continuation (gameplan §10 layer 3), and the resolution arms
+          // Only the tab that locally resolved the approval may auto-send the
+          // continuation, and the resolution arms
           // exactly ONE dispatch — consuming here closes the gate for any
           // later remount that rehydrates the same approval-responded parts.
           const lastMessage = args.messages[args.messages.length - 1]

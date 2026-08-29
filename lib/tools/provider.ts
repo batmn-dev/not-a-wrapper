@@ -1,5 +1,3 @@
-// lib/tools/provider.ts
-
 import { getProviderStrategy } from "@/lib/openproviders/provider-strategy"
 import type { Provider } from "@/lib/openproviders/types"
 import type { ToolSet } from "ai"

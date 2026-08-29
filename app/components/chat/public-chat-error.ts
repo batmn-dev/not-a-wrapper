@@ -34,8 +34,8 @@ export function presentChatStreamError(
 ): ChatStreamErrorPresentation {
   const body = parsePublicBody(error.message)
 
-  // A losing approval-continuation POST (another tab's auto-send won —
-  // structured 409, gameplan §10) repaints through the winner's projection,
+  // A losing approval-continuation POST (another tab's auto-send won) repaints
+  // through the winner's projection,
   // so surfacing it would be a false failure. APPROVAL_UNRESOLVED is
   // deliberately NOT in this set: no winning decision exists to observe, so
   // it falls through to the toast path with its actionable server message.

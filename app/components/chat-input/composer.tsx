@@ -98,8 +98,8 @@ type ComposerProps = {
   isSubmitting?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
   stop?: () => void
-  /** Resolver-driven Stop affordance beyond the local transport (gameplan
-   * §8/§11): a stoppable background, awaiting-approval, or possibly-stale run
+  /** Resolver-driven Stop affordance beyond the local transport: a stoppable
+   * background, awaiting-approval, or possibly-stale run
    * presents Stop even while the local status reads ready. */
   stoppable?: boolean
   onLockedGuestModelSelect?: (modelId: string) => void

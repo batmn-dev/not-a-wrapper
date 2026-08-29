@@ -58,10 +58,8 @@ const composerPlusTooltip = (
   </TooltipShortcut>
 )
 
-/* ChatGPT's touch-optimized + menu treatment (decompiled from their
- * production bundles + root CSS 2026-08-24; see reference-ui/ChatGPT/
- * components/chat-composer/chatgpt-plus-menu-touch-optimized-2026-08-24.md):
- * mobile-OS user agents get large icon-chip rows in a content-sized,
+/* ChatGPT's touch-optimized + menu treatment: mobile-OS user agents get large
+ * icon-chip rows in a content-sized,
  * rounded-28 superellipse popover — 6px row inline margin/padding, 12px gap,
  * 36px full-round chips on the tertiary surface with 20px glyphs, row
  * highlight on the same tertiary token, and no group separators. */

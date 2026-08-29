@@ -22,6 +22,8 @@ const payload: ChatAdmissionProofPayload = {
     routeReason: "priority_byok",
   },
   grantDigest: "a".repeat(64),
+  cancellationSettlementVersion:
+    CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   issuedAt: NOW,
 }
 
@@ -72,7 +74,7 @@ describe("chat admission proof", () => {
     ).toBe(false)
   })
 
-  it("binds reasoning effort into the v2 proof", () => {
+  it("binds reasoning effort into the admission proof", () => {
     const withEffort: ChatAdmissionProofPayload = {
       ...payload,
       reasoningEffort: { requested: "high", applied: "medium" },
@@ -167,35 +169,29 @@ describe("chat admission proof", () => {
     ).toBe(false)
   })
 
-  it("binds deferred-settlement capability without breaking legacy v2 proofs", () => {
-    const legacyProof = signChatAdmissionProof(payload, SECRET)
+  it("rejects the retired v2 format", () => {
+    const v2Proof = hmacSha256Hex(
+      SECRET,
+      JSON.stringify([
+        "chat-admission-v2",
+        payload.chatId,
+        payload.requestId,
+        payload.model,
+        payload.provider,
+        [
+          payload.route!.routeId,
+          payload.route!.credentialSource,
+          payload.route!.routeReason,
+        ],
+        null,
+        payload.grantDigest,
+        null,
+        null,
+        payload.issuedAt,
+      ])
+    )
     expect(
-      verifyChatAdmissionProof(payload, legacyProof, {
-        secret: SECRET,
-        now: NOW,
-      })
-    ).toBe(true)
-
-    const capable = {
-      ...payload,
-      cancellationSettlementVersion:
-        CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
-    }
-    const capableProof = signChatAdmissionProof(capable, SECRET)
-    expect(
-      verifyChatAdmissionProof(capable, capableProof, {
-        secret: SECRET,
-        now: NOW,
-      })
-    ).toBe(true)
-    expect(
-      verifyChatAdmissionProof(payload, capableProof, {
-        secret: SECRET,
-        now: NOW,
-      })
-    ).toBe(false)
-    expect(
-      verifyChatAdmissionProof(capable, legacyProof, {
+      verifyChatAdmissionProof(payload, v2Proof, {
         secret: SECRET,
         now: NOW,
       })

@@ -37,10 +37,9 @@ export const usageReservationArgValidators = {
   estimatedInputTokens: v.optional(v.number()),
   estimatedOutputTokens: v.optional(v.number()),
   titleEstimatedCredits: v.optional(v.number()),
-  // Input-only title floor (cancellation settlement). Optional for the
-  // Convex-first deployment window: fingerprint and authorization serialize
-  // it only when present, so old-server payloads keep verifying.
-  titleEstimatedInputTokens: v.optional(v.number()),
+  // Input-only title floor required by the current cancellation-settlement
+  // protocol. Stored reservation rows keep the field optional for history.
+  titleEstimatedInputTokens: v.number(),
   pricingSnapshot: vPricingSnapshot,
 }
 

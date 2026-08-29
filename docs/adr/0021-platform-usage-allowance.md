@@ -144,27 +144,25 @@ race-free without SQL unique constraints.
 
 ## Durable lifecycle accounting (the provider boundary rule)
 
-**Evidence beats the boundary marker.** For cancellation-settlement protocol
-v1 runs, `run.workStartedAt` is committed before provider dispatch and the
-worker awaits its acknowledgement. A lost acknowledgement can leave the marker
-committed even though the worker correctly refuses dispatch, so trusted worker
-`not-started` evidence releases when no durable usage exists. Without worker
-evidence, the marker remains the conservative fallback. Legacy runs lack this
-guarantee and retain a conservative compatibility fallback. The settlement
-decision, in order:
+**Evidence beats the boundary marker.** The current worker commits
+`run.workStartedAt` before provider dispatch and awaits its acknowledgement. A
+lost acknowledgement can leave the marker committed even though the worker
+correctly refuses dispatch, so trusted worker `not-started` evidence releases
+when no durable usage exists. Without worker evidence, the marker remains the
+conservative fallback. The settlement decision, in order:
 
-| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived, carried no token counts, or named a route absent from the pinned snapshot) |
-| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                     |
-| Trusted protocol-v1 worker reports `not-started`, with no durable usage                                      | release even if the authorization marker committed — its acknowledgement may have been lost, and the worker did not dispatch                                                       |
-| Protocol-v1, no evidence, `workStartedAt` never written                                                     | release (provider consumption never began)                                                                                                                                          |
-| No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing   |
-| `user_stop` / `superseded` (cancellation)                                                                   | protocol-v1 after dispatch **defers** (amendment below); pre-dispatch releases and legacy runs settle immediately through the bounded compatibility fallback — never `estimated_after_unknown_usage` |
-| `lease_expired` (no live worker to acknowledge)                                                             | settle immediately from durable facts via the same cancellation fallback: completed-step usage when accumulated, else release for a protocol-v1 run with no dispatch marker, otherwise estimated input plus a bounded persisted-partial-output estimate |
-| No evidence otherwise (legacy rows, evidence-free `request_aborted`, approval/continuation strands)        | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — legacy conservative behavior, retained only where no cancellation evidence channel exists                    |
-| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                             |
-| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                           |
+| Evidence at terminal                                                                                        | Accounting                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived, carried no token counts, or named a route absent from the pinned snapshot)                                               |
+| Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                                                                   |
+| Trusted worker reports `not-started`, with no durable usage                                                 | release even if the authorization marker committed — its acknowledgement may have been lost, and the worker did not dispatch                                                                                                      |
+| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                                                                        |
+| No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing                                                 |
+| `user_stop` / `superseded` (cancellation)                                                                   | after dispatch **defers** (amendment below); pre-dispatch releases — never `estimated_after_unknown_usage`                                                                                                                        |
+| `lease_expired` (no live worker to acknowledge)                                                             | settle immediately from durable facts via the same cancellation fallback: completed-step usage when accumulated, else release with no dispatch marker, otherwise estimated input plus a bounded persisted-partial-output estimate |
+| No evidence otherwise (legacy rows, evidence-free `request_aborted`, approval/continuation strands)         | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — legacy conservative behavior, retained only where no cancellation evidence channel exists                                                                 |
+| Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                                                                           |
+| Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                                                                         |
 
 Approval-expired / continuation-lost apply the same table through the shared
 lifecycle-verdict path.
@@ -188,9 +186,7 @@ dispatch-authorization marker, completed-step tokens, and title evidence. A
 Stop that wins before the marker releases immediately; a Stop after the
 marker defers. Trusted worker `not-started` evidence still releases, while a
 missing worker receipt lets the deadline fallback charge from the strongest
-mirrored evidence. Legacy callers do not opt into deferred settlement and use the
-immediate bounded compatibility fallback. Approval continuations additionally
-freeze
+mirrored evidence. Approval continuations additionally freeze
 `generationRuns.resumedOutputTokensBaseline` at prepare (the partial-output
 estimate over the reused message's parts, already billed to the paused run's
 settled reservation); every partial-output estimate for the continuation —
@@ -211,6 +207,13 @@ pair — and nothing else: no snapshots, tools, approvals, heartbeats, or
 lifecycle writes. Wrong-run, wrong-digest, expired, malformed, and replayed
 receipts are rejected without balance changes; a receipt against an
 already-finalized reservation is acknowledged as a benign no-op.
+
+**Protocol contract.** New reservation authorizations require the pinned title
+input floor, and new chat admission proofs always bind cancellation-settlement
+protocol v1. The retired proof formats are rejected. Optional protocol fields,
+legacy settlement literals, and conservative stale-row reconciliation remain
+so historical production documents stay readable without keeping an old
+worker request path alive.
 
 **Evidence order (deterministic, shared by receipt and reaper —
 `resolveTerminalUsageSettlement`):**

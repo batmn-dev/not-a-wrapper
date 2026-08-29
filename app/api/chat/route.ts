@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   // `response_stream_closed`). Distinct from the runtime's turn clock, which
   // deliberately starts at construction (see chat-turn-runtime.ts).
   const requestReceivedAtMs = Date.now()
-  // Sampled chat-performance session (PR 0b): off unless CHAT_PERF_SAMPLE_RATE
+  // Sampled chat-performance session: off unless CHAT_PERF_SAMPLE_RATE
   // is set. The client's x-chat-perf-id is validated here and carried only
   // through perf spans — never persisted to chat/run/message docs and never
   // used as an admission idempotency key. (`requestId` above is generated
@@ -194,10 +194,8 @@ export async function POST(req: Request) {
       )
     }
 
-    // Use authenticated userId, or client-provided ID for anonymous users
-    // (the wire contract guarantees a guest ID is present when unauthenticated).
+    // The wire contract guarantees a guest id when unauthenticated.
     const userId = authUserId ?? clientUserId!
-    // For anonymous users, use clientUserId for rate limiting.
     const anonymousId = !isAuthenticated ? clientUserId! : undefined
 
     // Server-side usage admission — enforces rate limits before a turn runs.

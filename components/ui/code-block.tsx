@@ -1,17 +1,7 @@
 /**
- * @component CodeBlock
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/code-block
- * @customized true
- * @customizations
- *   - Uses `useTheme()` hook for automatic dark/light mode switching
- *   - Upstream requires manual `theme` prop; Not A Wrapper auto-detects from app theme
- *   - Adds `[&>pre]:!bg-background` for consistent backgrounds across themes
- *   - SSR fallback renders plain code block before hydration
- * @upgradeNotes
- *   - Check if upstream still uses static theme prop vs auto-detection
- *   - Preserve useTheme() integration and SSR fallback pattern
- *   - Verify background styling classes are maintained
+ * Based on prompt-kit: https://prompt-kit.com/docs/code-block
+ * Local contracts: theme-driven highlighting, app-surface backgrounds, and a
+ * plain SSR fallback before the highlighter is ready.
  */
 "use client"
 
@@ -56,9 +46,8 @@ export type CodeBlockCodeProps = {
   language?: string
   className?: string
   /**
-   * True only for the terminal code block of a live (submitted/streaming)
-   * message (plan PR 3 stability rule, classified in
-   * `components/ui/markdown.tsx`). Growing blocks render changed code as
+   * True only for the terminal code block of a live message, as classified in
+   * `components/ui/markdown.tsx`. Growing blocks render changed code as
    * escaped plain text immediately and highlight after
    * `GROWING_HIGHLIGHT_IDLE_MS` without another tuple change; everything else
    * highlights immediately.

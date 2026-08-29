@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Client-side chat-performance marks (PR 0b): turn marks, navigation marks,
+ * Client-side chat-performance marks: turn marks, navigation marks,
  * and the per-turn correlation id. Everything is a no-op unless
  * `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"` (build-time flag).
  *
@@ -282,7 +282,7 @@ type NavigationPerfInput = {
 const TERMINAL_RUN_STATUSES = new Set(["completed", "failed", "aborted"])
 
 /**
- * Chat-switch responsiveness marks (plan PR 0 step 3): route commit,
+ * Chat-switch responsiveness marks: route commit,
  * cache hit/miss at commit, first thread content, authoritative content
  * arrival, and the durable settlement receipt (selected-run terminal
  * transition). All keyed per chat id.

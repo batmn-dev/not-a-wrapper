@@ -501,7 +501,6 @@ describe("durable turn runtime — settlement ordering", () => {
       "stream aborted",
       "ui message stream aborted",
     ])
-    // The abort path never completes the run.
     expect(wireCalls(wire, "markGenerationRunCompleted")).toHaveLength(0)
 
     // The final full-parts snapshot is unconditional (ADR-0011) — abort

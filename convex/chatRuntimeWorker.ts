@@ -199,7 +199,7 @@ export const markGenerationRunAborted = internalMutation({
 })
 
 // Heartbeats are worker-wire only — there is deliberately no user-token twin
-// (gameplan §0 amendment 1): the lease belongs to the executing worker, and
+// The lease belongs to the executing worker, and
 // the worker's only credential is the execution grant.
 export const heartbeatGenerationRun = internalMutation({
   args: { ...grantArgs, ...generationRunWriteArgs.heartbeatGenerationRun },

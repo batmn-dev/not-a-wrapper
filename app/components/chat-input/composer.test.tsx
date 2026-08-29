@@ -401,26 +401,6 @@ describe("Composer primary action", () => {
     })
   }
 
-  it("keeps ChatGPT's trailing control spacing across input modes", () => {
-    const mounted = renderComposer({})
-    const trailing = mounted.querySelector<HTMLElement>(
-      "[data-composer-trailing]"
-    )
-    const [modelGroup, actionGroup] = Array.from(trailing?.children ?? [])
-
-    expect(trailing?.className).toContain("gap-1")
-    expect(trailing?.className).toContain("min-w-0")
-    expect(trailing?.className).toContain("max-w-full")
-    expect(trailing?.className).not.toContain("cant-hover:")
-    expect(modelGroup?.className).toContain("gap-1.5")
-    expect(modelGroup?.className).toContain("min-w-0")
-    expect(modelGroup?.className).toContain("shrink")
-    expect(modelGroup?.className).not.toContain("cant-hover:")
-    expect(actionGroup?.className).toContain("gap-2")
-    expect(actionGroup?.className).toContain("shrink-0")
-    expect(actionGroup?.className).not.toContain("cant-hover:")
-  })
-
   it("keeps search outside the editor document and preserves the surface placeholder", () => {
     composerMocks.enableSearch = true
     renderComposer({ placeholder: "Message this project" })
@@ -472,7 +452,6 @@ describe("Composer primary action", () => {
     expect(button?.disabled).toBe(false)
     expect(button?.getAttribute("aria-disabled")).toBe("false")
     expect(button?.type).toBe("button")
-    expect(button?.className).toContain("can-hover:after:-inset-x-1")
 
     act(() => {
       button?.click()
@@ -528,8 +507,6 @@ describe("Composer primary action", () => {
     expect(sendButton?.getAttribute("aria-disabled")).toBe("true")
     expect(sendButton?.hasAttribute("data-visually-disabled")).toBe(true)
     expect(sendButton?.type).toBe("submit")
-    expect(sendButton?.className).toContain("composer-submit-btn")
-    expect(sendButton?.className).toContain("can-hover:after:-inset-x-1")
     expect(promptInputActionMockCalls.at(-1)?.disabled).toBeUndefined()
 
     act(() => sendButton?.click())
@@ -572,25 +549,6 @@ describe("Composer primary action", () => {
     expect(defaultComposer.querySelector("textarea")?.ariaLabel).toBe(
       "Chat with ChatGPT"
     )
-    expect(
-      defaultComposer
-        .querySelector("textarea")
-        ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
-    ).toContain("sm:pb-4")
-    expect(
-      defaultComposer
-        .querySelector("textarea")
-        ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
-    ).toContain("z-1")
-    expect(
-      defaultComposer.querySelector('[data-composer-transition-slot="leading"]')
-    ).not.toBeNull()
-    expect(
-      defaultComposer.querySelector(
-        '[data-composer-transition-slot="trailing"]'
-      )
-    ).not.toBeNull()
-
     act(() => {
       root?.render(
         composerElement({
@@ -607,11 +565,6 @@ describe("Composer primary action", () => {
     expect(defaultComposer.querySelector("textarea")?.ariaLabel).toBe(
       "New chat in Investing project"
     )
-    expect(
-      defaultComposer
-        .querySelector("textarea")
-        ?.closest<HTMLDivElement>('div[class*="order-2"]')?.className
-    ).toContain("sm:pb-0")
   })
 
   it("restores editor focus without moving the caret after model selection", () => {

@@ -8,8 +8,8 @@ const geminiModels: ModelConfig[] = [
     provider: "Google",
     providerId: "google",
     catalogStatus: "visible",
-    // Preview id: when Google ships a stable `gemini-3.1-pro`, retire this
-    // with a succession entry in model-id-migration.ts (plan §2D warning).
+    // When Google ships a stable `gemini-3.1-pro`, retire this preview with a
+    // succession entry in model-id-migration.ts.
     idKind: "stable",
     verifiedAgainst: "gemini-3.1-pro-preview",
     lastVerifiedAt: "2026-07-05",

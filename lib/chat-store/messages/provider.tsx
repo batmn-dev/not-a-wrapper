@@ -49,7 +49,7 @@ type MessagesContextType = {
   messages: ExtendedUIMessage[]
   /**
    * Raw durable facts about the chat's current run, atomically consistent
-   * with `messages` (one Convex query — gameplan §7). Null for guests,
+   * with `messages` in one Convex query. Null for guests,
    * public/non-owner viewers, and chats with no current run. Carries NO
    * time-derived fields; the pure presentation resolver owns clock
    * classification.
@@ -156,7 +156,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     ) as ExtendedUIMessage[]
   }, [canSubscribeToMessages, convexMessages])
 
-  // Selected-conversation client counters (PR 0b step 6): selected count and
+  // Selected-conversation client counters: selected count and
   // mapping duration, counts only — no content, no ids. Render must stay
   // pure, so the duration is measured post-commit by timing one additional
   // mapping pass of the same update; instrumentation is off by default and
@@ -236,7 +236,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     chatId,
   ])
 
-  // Navigation/chat-switch marks + durable settlement receipt (PR 0b step 3).
+  // Navigation/chat-switch marks + durable settlement receipt.
   // No-op unless the build-time instrumentation flag is on.
   useChatNavigationPerfMarks({
     chatId,

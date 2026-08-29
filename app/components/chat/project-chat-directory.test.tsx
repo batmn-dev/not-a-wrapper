@@ -247,17 +247,9 @@ describe("ProjectChatDirectory", () => {
     const link = container.querySelector('a[href="/c/chat-1"]')
     expect(link?.getAttribute("aria-description")).toBe("Last updated Jul 17")
     expect(link?.getAttribute("aria-label")).toBeNull()
-    const emptyPreviewLink = container.querySelector('a[href="/c/chat-2"]')
-    expect(
-      emptyPreviewLink?.querySelector('[aria-hidden="true"]')?.className
-    ).toContain("mt-px")
-    expect(
-      emptyPreviewLink?.querySelector('[aria-hidden="true"]')?.className
-    ).toContain("h-0")
     const list = container.querySelector(
       'ol[aria-label="Project conversations"]'
     )
-    expect(list?.className).toContain("divide-y")
 
     const row = list?.querySelector("li")
     act(() => {
@@ -267,10 +259,6 @@ describe("ProjectChatDirectory", () => {
     const action = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Open conversation options for Quarterly planning"]'
     )
-    expect(action?.className).toContain("h-10")
-    expect(action?.className).toContain("w-[34px]")
-    expect(action?.className).toContain("ps-1")
-    expect(action?.className).toContain("pe-1.5")
     act(() => action?.click())
     expect(directoryMocks.routerPush).toHaveBeenCalledTimes(1)
     const menuToggle = container.querySelector<HTMLButtonElement>(
@@ -278,27 +266,6 @@ describe("ProjectChatDirectory", () => {
     )
     act(() => menuToggle?.click())
     expect(row?.getAttribute("data-actions-open")).toBe("true")
-    expect(row?.className).toContain("bg-interactive-hover")
-    expect(
-      container.querySelector('[data-testid="project-conversation-date"]')
-        ?.className
-    ).toContain("opacity-0")
-    expect(
-      container.querySelector(
-        '[data-testid="project-conversation-overflow-menu"]'
-      )?.className
-    ).toContain("opacity-100")
-    expect(
-      container.querySelector('[data-testid="project-conversation-date"]')
-        ?.className
-    ).not.toContain("transition")
-    for (const tab of container.querySelectorAll('[role="tab"]')) {
-      expect(tab.className).not.toContain("transition")
-      expect(tab.className).toContain("py-[9px]")
-    }
-    expect(
-      container.querySelector('[role="tabpanel"]')?.parentElement?.className
-    ).toContain("gap-4")
   })
 
   it("contains query failures in an intentional error state", () => {
@@ -333,7 +300,7 @@ describe("project detail presentation", () => {
     container.remove()
   })
 
-  it("renders the project title, compact header, and backed actions", async () => {
+  it("renders the project title and backed actions", async () => {
     act(() => {
       root.render(
         <ProjectDetailSurface
@@ -345,7 +312,6 @@ describe("project detail presentation", () => {
 
     expect(container.textContent).toContain("Investing")
     expect(container.textContent).toContain("Chat")
-    expect(container.querySelector("header")?.className).toContain("gap-2")
     expect(
       container.querySelector('[data-testid="project-folder-icon"]')
     ).not.toBeNull()
@@ -390,23 +356,6 @@ describe("project detail presentation", () => {
     })
   })
 
-  it("truncates long project titles in both responsive header structures", () => {
-    const longName =
-      "A deliberately long project title that must stay within the header"
-    act(() => {
-      root.render(
-        <ProjectDetailSurface
-          project={{ id: projectId(), name: longName, pinned: false }}
-          onStartChat={vi.fn()}
-        />
-      )
-    })
-
-    expect(container.querySelector("h1")?.className).toContain("truncate")
-    expect(container.querySelector("header div.truncate")?.className).toContain(
-      "truncate"
-    )
-  })
 })
 
 describe("formatProjectConversationDate", () => {

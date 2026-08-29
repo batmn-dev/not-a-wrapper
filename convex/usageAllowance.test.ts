@@ -190,6 +190,7 @@ function reserveArgs(
     providerId: "openai",
     estimatedCredits: 100_000,
     titleEstimatedCredits: 1_000,
+    titleEstimatedInputTokens: 400,
     pricingSnapshot: snapshot,
     ...overrides,
   }
@@ -755,18 +756,6 @@ describe("provider rejection before any output", () => {
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
       settlementBasis: "estimated_after_unknown_usage",
-    })
-  })
-
-  it("bounds a legacy worker Stop at the input fallback", async () => {
-    // Old workers cannot create receipt-pending state. Their cancellation is
-    // still bounded at input plus partial output, never the full reservation.
-    const { ctx, tables } = createCtx({ users: [user] })
-    const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
-    await settleUsageForTerminalRun(ctx, run, {}, "user_stop", "user_stop")
-    expect(tables.usageReservations[0]).toMatchObject({
-      status: "settled",
-      settlementBasis: "estimated_input_floor",
     })
   })
 })

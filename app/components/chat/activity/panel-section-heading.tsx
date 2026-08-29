@@ -12,7 +12,7 @@ export type PanelSectionHeadingProps = {
  * PanelSectionHeading — a muted section label for the Activity panel body
  * (e.g. "Sources · 12"). A plain `div`, NOT a heading element: the panel's
  * accessible name lives on the dialog/landmark header, so a second heading
- * here would pollute the a11y tree (GA §D1, plan §B). Uses the activity panel's
+ * here would pollute the accessibility tree. Uses the activity panel's
  * reference section scale: 1.05rem / 1.5, medium.
  */
 export function PanelSectionHeading({
