@@ -3,15 +3,16 @@
 > **Status:** Implemented 2026-08-28 (Phases 1–6; ADR-0021 amended). The
 > rollout "Contract" step (removing legacy proof acceptance) remains
 > deliberately open until rollback no longer needs it.
-> Post-review hardening 2026-08-28: dispatched runs always stamp
-> `providerMayHaveStarted: true` (§15 — marker absence is not proof; only the
-> worker's not-started receipt releases); deadline/lease fallbacks settle the
-> title at zero absent start evidence (§7.7); per-step usage accumulation is
-> idempotent via a step high-water mark; approval continuations freeze a
+> Final-review remediation 2026-08-28: protocol-v1 workers await a durable
+> dispatch marker before provider work and reservations mirror that marker,
+> completed-step usage, and title evidence; deadline/lease fallbacks use those
+> facts even after run deletion; per-step usage is an order-independent keyed
+> set; approval continuations freeze a
 > partial-output baseline so a stopped continuation never rebills the paused
-> run's parts; chat deletion closes live runs (terminalize + defer) before
-> tombstoning; the reservation cap excludes a provider-reported actual title
-> component.
+> run's parts; direct and project chat deletion close live runs before
+> tombstoning; checked integer arithmetic rejects unrepresentable evidence;
+> full deadline batches self-drain. A signed protocol version keeps legacy
+> workers on immediate compatibility settlement during rolling deployment.
 > **Date:** 2026-08-28
 > **Scope:** Platform-funded durable chat turns only
 > **Required architecture update:** Amend
@@ -283,6 +284,9 @@ Additional rules:
   window unless another actor already terminalized the run.
 - `user_stop` and `superseded` use the pending-evidence window when the provider
   may have started.
+- Protocol-v1 provider work cannot begin until Convex has acknowledged the
+  durable dispatch marker. If Stop wins first, the reservation releases and
+  the worker is denied dispatch. Legacy workers do not defer settlement.
 - `lease_expired` has no live worker to acknowledge it. Settle immediately from
   durable completed-step and partial-output facts using the same fallback
   policy.
@@ -329,7 +333,15 @@ Add:
 | `settlementGrantDigest?: string`         | Digest of the existing worker secret, valid only for terminal usage submission |
 | `settlementGrantExpiresAt?: number`      | Hard authorization deadline equal to the evidence deadline                     |
 | `providerMayHaveStarted?: boolean`       | Durable fallback discriminator copied before run cleanup                       |
+| `cancellationSettlementVersion?: 1`      | Signed per-run activation gate for rolling deployment                          |
+| `observedInputTokens?: number`           | Monotonic completed-step input mirror that survives run deletion               |
+| `observedOutputTokens?: number`          | Monotonic completed-step output mirror that survives run deletion              |
+| `titleUsageEvidence?: object`            | Durable title start or actual evidence that survives run deletion              |
 | `titleSettlementBasis?: string`          | Auditable `actual`, `input_floor`, or `not_run` title basis                    |
+
+`generationRuns` stores the same protocol version and title evidence plus an
+optional `usageSteps` set keyed by step number. Totals are derived from the set,
+so out-of-order delivery is accepted and duplicate delivery cannot double-add.
 
 Keep reservation `status: "reserved"` while evidence is pending. This accurately
 keeps the amount in `bucket.reservedCredits` and avoids adding a fourth balance
@@ -537,8 +549,8 @@ transitions.
 - If the reservation was already settled, such as an approval pause, do
   nothing.
 - The same transaction that marks the run terminal must seed the reservation's
-  pending timestamp, deadline, settlement digest, `providerMayHaveStarted`, and
-  stored partial-output fallback.
+  pending timestamp, deadline, settlement digest, mirrored dispatch/usage/title
+  facts, and stored partial-output fallback.
 - The transaction must continue denying approvals and terminalizing active tool
   invocations exactly as today.
 
@@ -567,9 +579,10 @@ Add a bounded pass over due pending reservations.
 6. Emit one structured timeout event.
 
 Run it on a second-level cadence compatible with the existing durable-run
-reaper. A due reservation must converge within at most two cron intervals under
-normal operation. Keep the existing 30-minute stale-reservation reconciler as
-the final deployment/crash net for unattached and legacy rows.
+reaper. When a pass consumes its full bounded batch, schedule another pass
+immediately so bursts do not require one cron interval per batch. Keep the
+existing 30-minute stale-reservation reconciler as the final deployment/crash
+net for unattached and legacy rows.
 
 ## 16. Ordered implementation phases
 
@@ -745,24 +758,26 @@ Operational checks after deployment:
 
 ### Expand
 
-1. Deploy optional schema fields, new validators, dual proof acceptance, dormant
-   settlement operation, and deadline reconciler.
-2. Confirm old callers still reserve and settle normally.
-3. Deploy the Next worker that sends the new proof field and terminal evidence.
-4. Confirm receipt observability before enabling deferred Stop settlement.
+1. Deploy optional schema fields, validators that accept the optional signed
+   protocol version, settlement operation, and deadline reconciler.
+2. Confirm old callers, whose proofs omit the version, still reserve and settle
+   immediately through the bounded compatibility path.
+3. Deploy the Next worker that signs protocol v1 and persists dispatch, step,
+   and title evidence.
+4. Confirm only versioned runs enter deferred Stop settlement.
 
-Ordering is Convex-first and MANDATORY, not merely polite: a new Next build
-always sends `titleEstimatedInputTokens`, which a pre-amendment Convex
-validator rejects. This repository's deploy pipeline (`convex deploy` runs
-before the Next build in the same command) enforces the forward direction
-structurally; rollback must follow the staged procedure below rather than
-redeploying an old commit directly.
+Ordering is Convex-first and MANDATORY: a new Next build sends the versioned
+proof field, which a pre-amendment Convex validator rejects. This repository's
+deploy pipeline (`convex deploy` runs before the Next build in the same command)
+enforces the forward direction structurally.
 
 ### Activate
 
-Switch Stop/supersession to pending settlement only after both the settlement
-operation and deadline reaper are live. Never deploy a state that can create
-pending reservations without a compatible finalizer.
+Activation is per run, not a manual deployment flag. Convex copies the signed
+protocol version onto the run and reservation; only those rows may defer.
+Unversioned old-worker rows remain on immediate compatibility settlement, so a
+rolling deployment cannot create pending reservations before its finalizer is
+available.
 
 ### Contract
 
@@ -772,14 +787,10 @@ and settlement literals readable.
 
 ### Rollback
 
-Rollback in reverse behavior order:
-
-1. Stop creating new pending settlements while leaving the receipt endpoint and
-   deadline reconciler active.
-2. Wait for or explicitly reconcile existing pending rows.
-3. Roll back runtime evidence plumbing if necessary.
-4. Do not remove schema fields, the receipt handler, or deadline reconciliation
-   while pending rows exist.
+Roll back Next first. The old Next build omits the protocol version and new
+cancellations settle immediately, while the expanded Convex deployment keeps
+draining existing versioned pending rows. Do not roll Convex back or remove the
+receipt handler, fields, or deadline reconciliation while pending rows exist.
 
 Rolling directly back to code that knows only the 30-minute full-estimate stale
 fallback would overcharge pending cancellations and is not an acceptable

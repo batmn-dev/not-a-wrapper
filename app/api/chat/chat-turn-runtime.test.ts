@@ -1122,7 +1122,7 @@ describe("createChatTurnRuntime — evidence-gated word chunking", () => {
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
-  it("does not delay response construction on the best-effort work-start write", async () => {
+  it("does not dispatch until the durable work-start boundary commits", async () => {
     const harness = makeStreamHarness()
     let releaseWorkStart: (() => void) | undefined
     const workStartPending = new Promise<void>((resolve) => {
@@ -1152,13 +1152,40 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
         expect(wireCall(wire, "markGenerationWorkStarted")).toBeDefined()
       })
       await vi.waitFor(() => {
-        expect(responseReturned).toBe(true)
+        expect(responseReturned).toBe(false)
       })
     } finally {
       releaseWorkStart?.()
     }
 
     await expect(responsePending).resolves.toBeInstanceOf(Response)
+  })
+
+  it("never calls the provider when the durable dispatch boundary fails", async () => {
+    const harness = makeStreamHarness()
+    const wire = makeWorkerWire({
+      markGenerationWorkStarted: () => {
+        throw new Error("boundary unavailable")
+      },
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        durableWorkerWire: wire,
+      }),
+    })
+
+    await runtime.prepare()
+    await expect(runtime.toResponse(notAbortedSignal())).rejects.toThrow(
+      "Provider dispatch no longer authorized"
+    )
+    expect(harness.streamText).not.toHaveBeenCalled()
+    expect(wireCall(wire, "markGenerationRunAborted")?.args).toMatchObject({
+      terminalUsage: {
+        primary: { kind: "not-started" },
+        title: { kind: "not-run" },
+      },
+    })
   })
 
   it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {

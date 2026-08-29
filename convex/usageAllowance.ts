@@ -1,6 +1,7 @@
 import { v } from "convex/values"
 import { CHAT_TURN_EXECUTION_BUDGET } from "../lib/chat-turn/execution-budget"
 import { estimatePartialOutputTokens } from "../lib/usage/terminal-usage-estimate"
+import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
@@ -486,6 +487,7 @@ export async function attachReservationToRun(
     userId: Id<"users">
     runId: Id<"generationRuns">
     now: number
+    cancellationSettlementVersion?: 1
   }
 ): Promise<void> {
   const reservation = await ctx.db.get(args.reservationId)
@@ -500,6 +502,15 @@ export async function attachReservationToRun(
   }
   await ctx.db.patch(args.reservationId, {
     generationRunId: args.runId,
+    ...(args.cancellationSettlementVersion !== undefined
+      ? {
+          cancellationSettlementVersion: args.cancellationSettlementVersion,
+          // The compatible worker has not yet crossed its awaited dispatch
+          // boundary. markGenerationWorkStarted flips this before any provider
+          // call, making missing-run recovery deterministic.
+          providerMayHaveStarted: false,
+        }
+      : {}),
     attachedAt: args.now,
     updatedAt: args.now,
   })
@@ -799,10 +810,22 @@ export async function deferUsageSettlementForTerminalRun(
   if (!reservation || reservation.status !== "reserved") return true
   if (reservation.settlementDeadlineAt !== undefined) return true
 
-  // Structural release: a run that never crossed the execution boundary
-  // cannot have dispatched provider work. (Committed runs are "streaming"+
-  // in practice, so cancellation almost always defers.)
+  // Queued is structurally pre-provider for every worker generation.
   if (run.status === "queued") {
+    await releaseReservation(ctx, reservation, terminalReason, now)
+    return true
+  }
+
+  // Per-run rollout activation: older workers do not implement the durable
+  // dispatch/title/receipt protocol. They settle immediately through the
+  // compatibility fallback instead of creating accounting state they cannot
+  // finalize themselves.
+  if (run.cancellationSettlementVersion !== 1) return false
+
+  // The compatible worker awaits workStartedAt before calling the provider.
+  // OCC orders this against Stop: if this transaction sees no marker, the
+  // provider call cannot begin afterward because grant revocation wins.
+  if (run.workStartedAt === undefined) {
     await releaseReservation(ctx, reservation, terminalReason, now)
     return true
   }
@@ -835,12 +858,11 @@ export async function deferUsageSettlementForTerminalRun(
           settlementGrantExpiresAt: settlementDeadlineAt,
         }
       : {}),
-    // A dispatched (non-queued) run MAY have reached the provider regardless
-    // of missing markers — `workStartedAt` is fire-and-forget and its absence
-    // is not proof (gameplan §15). Only the worker's explicit not-started
-    // receipt can prove otherwise and release; the deadline fallback must
-    // charge the conservative floor, never refund possibly-real work.
+    // The awaited dispatch boundary proves provider work may have started.
     providerMayHaveStarted: true,
+    observedInputTokens: run.inputTokens,
+    observedOutputTokens: run.outputTokens,
+    titleUsageEvidence: run.titleUsageEvidence,
     terminalEstimatedOutputTokens,
     updatedAt: now,
   })
@@ -862,31 +884,78 @@ export async function deferUsageSettlementForTerminalRun(
  * run that provably accumulated tokens — must not downgrade the charge to
  * the input floor.
  */
-function upgradeEvidenceWithRunUsage(
+function upgradeEvidenceWithDurableUsage(
   evidence: TerminalUsageEvidencePayload,
-  run: Doc<"generationRuns"> | null
+  run: Doc<"generationRuns"> | null,
+  reservation?: Doc<"usageReservations">
 ): TerminalUsageEvidencePayload {
-  if (
-    evidence.primary.kind !== "started-without-usage" &&
-    evidence.primary.kind !== "not-started"
+  const observedInput = Math.max(
+    run?.inputTokens ?? 0,
+    reservation?.observedInputTokens ?? 0
+  )
+  const observedOutput = Math.max(
+    run?.outputTokens ?? 0,
+    reservation?.observedOutputTokens ?? 0
+  )
+  let primary = evidence.primary
+  if (primary.kind === "actual") {
+    const inputTokens = Math.max(primary.inputTokens ?? 0, observedInput)
+    const outputTokens = Math.max(primary.outputTokens ?? 0, observedOutput)
+    if (
+      inputTokens !== (primary.inputTokens ?? 0) ||
+      outputTokens !== (primary.outputTokens ?? 0)
+    ) {
+      primary = { ...primary, inputTokens, outputTokens }
+    }
+  } else if (primary.kind === "completed-steps") {
+    const inputTokens = Math.max(primary.inputTokens ?? 0, observedInput)
+    const outputTokens = Math.max(primary.outputTokens ?? 0, observedOutput)
+    if (
+      inputTokens !== (primary.inputTokens ?? 0) ||
+      outputTokens !== (primary.outputTokens ?? 0)
+    ) {
+      primary = { ...primary, inputTokens, outputTokens }
+    }
+  } else if (
+    primary.kind === "started-without-usage" ||
+    primary.kind === "not-started"
   ) {
+    if ((observedInput ?? 0) > 0 || (observedOutput ?? 0) > 0) {
+      primary = {
+        kind: "completed-steps",
+        inputTokens: observedInput,
+        outputTokens: observedOutput,
+        ...(evidence.primary.kind === "started-without-usage" &&
+        evidence.primary.partialOutputTokens !== undefined
+          ? { partialOutputTokens: evidence.primary.partialOutputTokens }
+          : {}),
+      }
+    } else if (
+      primary.kind === "not-started" &&
+      (run?.workStartedAt !== undefined ||
+        reservation?.providerMayHaveStarted === true)
+    ) {
+      primary = { kind: "started-without-usage" }
+    }
+  }
+
+  const titleRank = (title: TerminalUsageEvidencePayload["title"]): number =>
+    title.kind === "actual" ? 2 : title.kind === "started-without-usage" ? 1 : 0
+  const title = [run?.titleUsageEvidence, reservation?.titleUsageEvidence]
+    .filter(
+      (candidate): candidate is TerminalUsageEvidencePayload["title"] =>
+        candidate !== undefined
+    )
+    .reduce(
+      (strongest, candidate) =>
+        titleRank(candidate) >= titleRank(strongest) ? candidate : strongest,
+      evidence.title
+    )
+
+  if (primary === evidence.primary && title === evidence.title) {
     return evidence
   }
-  if (!run || ((run.inputTokens ?? 0) === 0 && (run.outputTokens ?? 0) === 0)) {
-    return evidence
-  }
-  return {
-    primary: {
-      kind: "completed-steps",
-      inputTokens: run.inputTokens,
-      outputTokens: run.outputTokens,
-      ...(evidence.primary.kind === "started-without-usage" &&
-      evidence.primary.partialOutputTokens !== undefined
-        ? { partialOutputTokens: evidence.primary.partialOutputTokens }
-        : {}),
-    },
-    title: evidence.title,
-  }
+  return { primary, title }
 }
 
 export type FinalizeTerminalUsageOutcome =
@@ -917,9 +986,10 @@ export async function finalizePendingTerminalUsage(
   if (run && reservation.generationRunId !== run._id) {
     throw new Error("Terminal usage run does not match reservation")
   }
-  const evidence = upgradeEvidenceWithRunUsage(
+  const evidence = upgradeEvidenceWithDurableUsage(
     adjustEvidenceForContinuationBaseline(args.evidence, run),
-    run
+    run,
+    reservation
   )
   if (reservation.status !== "reserved") {
     warnUsage("usage_terminal_late_evidence_ignored", {
@@ -961,51 +1031,70 @@ export async function finalizePendingTerminalUsage(
 
 /**
  * Evidence for a pending reservation whose worker never reported: durable
- * run facts when the run survives, the facts copied onto the reservation at
- * Stop time when it did not. Convex holds NO evidence that a title attempt
- * ever started — only the worker's receipt carries that — so per invariant 7
- * (a title is charged only from actual usage or explicit start evidence) the
- * fallback always settles the title at zero.
+ * run facts when the run survives, and monotonic facts mirrored onto the
+ * reservation before cleanup when it does not.
  */
 function terminalSettlementFallbackEvidence(
   reservation: Doc<"usageReservations">,
   run: Doc<"generationRuns"> | null
 ): TerminalUsageEvidencePayload {
-  const observedInput = run?.inputTokens ?? 0
-  const observedOutput = run?.outputTokens ?? 0
+  const observedInput = Math.max(
+    run?.inputTokens ?? 0,
+    reservation.observedInputTokens ?? 0
+  )
+  const observedOutput = Math.max(
+    run?.outputTokens ?? 0,
+    reservation.observedOutputTokens ?? 0
+  )
+  const titleRank = (candidate: TerminalUsageEvidencePayload["title"]): number =>
+    candidate.kind === "actual"
+      ? 2
+      : candidate.kind === "started-without-usage"
+        ? 1
+        : 0
+  const title = [run?.titleUsageEvidence, reservation.titleUsageEvidence]
+    .filter(
+      (candidate): candidate is TerminalUsageEvidencePayload["title"] =>
+        candidate !== undefined
+    )
+    .reduce(
+      (strongest, candidate) =>
+        titleRank(candidate) > titleRank(strongest) ? candidate : strongest,
+      { kind: "not-run" } as const
+    )
   if (observedInput > 0 || observedOutput > 0) {
     return {
       primary: {
         kind: "completed-steps",
-        inputTokens: run?.inputTokens,
-        outputTokens: run?.outputTokens,
+        inputTokens: observedInput,
+        outputTokens: observedOutput,
         partialOutputTokens: reservation.terminalEstimatedOutputTokens,
       },
-      title: { kind: "not-run" },
+      title,
     }
   }
-  // Rows deferred by current code always carry the stamp (true — a dispatched
-  // run may have started regardless of markers, gameplan §15). An unstamped
-  // pending row (deploy-overlap legacy) gets the same conservative answer:
-  // never refund possibly-real work on marker absence alone.
-  const mayHaveStarted = reservation.providerMayHaveStarted ?? true
+  // Protocol-v1 dispatch is acknowledged before provider work. Legacy rows
+  // lack that guarantee, so marker absence remains conservative for them.
+  const mayHaveStarted =
+    reservation.providerMayHaveStarted ??
+    (run?.workStartedAt !== undefined ||
+      reservation.cancellationSettlementVersion !== 1)
   if (!mayHaveStarted) {
-    return { primary: { kind: "not-started" }, title: { kind: "not-run" } }
+    return { primary: { kind: "not-started" }, title }
   }
   return {
     primary: {
       kind: "started-without-usage",
       partialOutputTokens: reservation.terminalEstimatedOutputTokens,
     },
-    title: { kind: "not-run" },
+    title,
   }
 }
 
-// Sized for the documented two-interval convergence promise: each
-// finalization is a handful of small writes (bucket, reservation, one ledger
-// row), so 100 per 15 s tick stays far inside Convex mutation limits while
-// absorbing cancellation bursts the stale reconciler's 25 could not.
-const TERMINAL_SETTLEMENT_BATCH_LIMIT = 100
+// Each finalization is a handful of small writes (bucket, reservation, one
+// ledger row). A full batch schedules the next bounded pass immediately so a
+// burst cannot wait for one fixed cron interval per 100 rows.
+export const TERMINAL_SETTLEMENT_BATCH_LIMIT = 100
 
 /**
  * Deadline reconciliation for pending cancellation settlements: bounded,
@@ -1046,6 +1135,16 @@ export async function reconcileDueTerminalSettlementsPass(
       now,
     })
     if (outcome !== "already-finalized") finalized++
+  }
+  if (due.length === TERMINAL_SETTLEMENT_BATCH_LIMIT) {
+    // A full page proves more due work may exist. Continue immediately instead
+    // of waiting for another cron tick, so burst size cannot violate bounded
+    // convergence or create a sustained backlog.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.usageAllowance.reconcileDueTerminalSettlements,
+      {}
+    )
   }
   return { finalized }
 }
@@ -1164,11 +1263,9 @@ export async function settleUsageForTerminalRun(
   const snapshot = reservation.pricingSnapshot
   const titleEstimate = reservation.titleEstimatedCredits ?? 0
 
-  // Evidence beats the boundary marker: `workStartedAt` is written by a
-  // best-effort fire-and-forget write, so its ABSENCE must never refund a run
-  // that provably consumed usage (aggregate present, or per-step
-  // accumulation) — release is decided only after both evidence channels
-  // come up empty.
+  // Evidence always beats the boundary marker. Protocol-v1 markers are
+  // acknowledged before dispatch; legacy markers were best-effort. Either
+  // way, aggregate or completed-step usage must never be downgraded.
   if (evidence.usage !== undefined) {
     // Completion path: authoritative all-steps aggregate. A title evidence
     // object without a single numeric field is NOT observed usage — the
@@ -1232,9 +1329,10 @@ export async function settleUsageForTerminalRun(
   if (evidence.terminal !== undefined) {
     const decision = resolveTerminalUsageSettlement(
       reservationTerminalFacts(reservation),
-      upgradeEvidenceWithRunUsage(
+      upgradeEvidenceWithDurableUsage(
         adjustEvidenceForContinuationBaseline(evidence.terminal, run),
-        run
+        run,
+        reservation
       )
     )
     await applyTerminalSettlementDecision(
@@ -1273,6 +1371,43 @@ export async function settleUsageForTerminalRun(
       ctx,
       reservation,
       decision,
+      auditReason,
+      now
+    )
+    return
+  }
+
+  // Rolling-deploy compatibility: a run from an older worker cannot create a
+  // pending settlement because it lacks the receipt/title protocol. Settle it
+  // immediately with the same bounded cancellation fallback. Its historical
+  // best-effort work marker is not proof of non-dispatch, so unknown work
+  // charges the input floor rather than the full output reservation or a
+  // possibly-wrong refund.
+  if (
+    (terminalReason === "user_stop" || terminalReason === "superseded") &&
+    run.cancellationSettlementVersion !== 1
+  ) {
+    const message = run.assistantMessageId
+      ? await ctx.db.get(run.assistantMessageId)
+      : null
+    const partialEstimate = message
+      ? continuationAdjustedPartialEstimate(run, message.parts)
+      : 0
+    const withFallback: Doc<"usageReservations"> = {
+      ...reservation,
+      providerMayHaveStarted: true,
+      terminalEstimatedOutputTokens:
+        reservation.estimatedOutputTokens !== undefined
+          ? Math.min(partialEstimate, reservation.estimatedOutputTokens)
+          : partialEstimate,
+    }
+    await applyTerminalSettlementDecision(
+      ctx,
+      reservation,
+      resolveTerminalUsageSettlement(
+        reservationTerminalFacts(reservation),
+        terminalSettlementFallbackEvidence(withFallback, run)
+      ),
       auditReason,
       now
     )
@@ -1437,19 +1572,35 @@ export async function reconcileStaleUsageReservationsPass(
     }
     const run = await ctx.db.get(reservation.generationRunId)
     if (!run) {
-      // The run row is gone (chat deletion raced settlement). Provider work
-      // may have begun — settle the estimate rather than blindly refund.
-      await settleReservation(
-        ctx,
-        reservation,
-        {
-          actualCredits: reservation.reservedCredits,
-          basis: "estimated_after_unknown_usage",
-          titleCredits: reservation.titleEstimatedCredits ?? 0,
-          reason: "reconciled_run_missing",
-        },
-        now
-      )
+      if (reservation.cancellationSettlementVersion === 1) {
+        // Current workers mirror dispatch, step, and title evidence onto the
+        // reservation. Run deletion therefore uses the normal bounded policy,
+        // never the legacy full-output estimate.
+        await applyTerminalSettlementDecision(
+          ctx,
+          reservation,
+          resolveTerminalUsageSettlement(
+            reservationTerminalFacts(reservation),
+            terminalSettlementFallbackEvidence(reservation, null)
+          ),
+          "reconciled_run_missing",
+          now
+        )
+      } else {
+        // Historical rows predate durable evidence mirroring. Preserve their
+        // conservative behavior; changing them would invent evidence.
+        await settleReservation(
+          ctx,
+          reservation,
+          {
+            actualCredits: reservation.reservedCredits,
+            basis: "estimated_after_unknown_usage",
+            titleCredits: reservation.titleEstimatedCredits ?? 0,
+            reason: "reconciled_run_missing",
+          },
+          now
+        )
+      }
       reconciled++
       continue
     }

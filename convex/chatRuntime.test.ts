@@ -16,6 +16,7 @@ import {
   reapExpiredGenerationRunsPass,
   reapExpiredToolApprovalsPass,
   reapResolvedApprovalPausesPass,
+  recordTitleUsageEvidenceForChat,
   recordToolInvocationsForChat,
   resolveToolCallDecision,
   stopGenerationRunForChat,
@@ -4337,6 +4338,7 @@ describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
 
 describe("assistant work-duration lifecycle", () => {
   it("records the provider boundary once and carries approval-pause work", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(20_000)
     const fixture = createGenerationRunLinkageFixture()
     fixture.message.metadata = {
       reasoningDurationMs: 436,
@@ -4347,7 +4349,7 @@ describe("assistant work-duration lifecycle", () => {
 
     await markGenerationWorkStartedForChat(ctx, owner, {
       messageId: fixture.messageId,
-      startedAt: 20_000,
+      startedAt: 999_000,
     })
     await markGenerationWorkStartedForChat(ctx, owner, {
       messageId: fixture.messageId,
@@ -5430,6 +5432,7 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
         userId,
         assistantMessageId: messageId,
       }),
+      cancellationSettlementVersion: 1 as const,
       ...(options.workStartedAt !== undefined
         ? { workStartedAt: options.workStartedAt }
         : {}),
@@ -5469,6 +5472,8 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
       routeId: "gpt-5",
       providerId: "openai",
       status: "reserved" as const,
+      cancellationSettlementVersion: 1 as const,
+      providerMayHaveStarted: options.workStartedAt !== undefined,
       estimatedCredits: 100_000,
       reservedCredits: 100_000,
       titleEstimatedCredits: 500,
@@ -5794,26 +5799,150 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
     })
   })
 
-  it("a redelivered step's usage is not double-counted", async () => {
-    // Money-bearing accumulation must be idempotent: a worker retry after a
-    // lost response redelivers the same step number, and the high-water mark
-    // rejects the duplicate add.
+  it("mirrors durable title start and actual usage onto the reservation", async () => {
     const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
     const { ctx, tables } = createMutationCtx(fixture.tables)
 
-    const step = {
+    await recordTitleUsageEvidenceForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        evidence: {
+          kind: "started-without-usage",
+          routeId: "gpt-5",
+          pricingRole: "primary",
+        },
+      }
+    )
+    await recordTitleUsageEvidenceForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        evidence: {
+          kind: "actual",
+          routeId: "gpt-5",
+          pricingRole: "primary",
+          inputTokens: 100,
+          outputTokens: 5,
+        },
+      }
+    )
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    await recordTitleUsageEvidenceForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        evidence: {
+          kind: "actual",
+          routeId: "gpt-5",
+          pricingRole: "primary",
+          inputTokens: 1,
+          outputTokens: 0,
+        },
+      }
+    )
+
+    const expected = {
+      kind: "actual",
+      routeId: "gpt-5",
+      pricingRole: "primary",
+      inputTokens: 100,
+      outputTokens: 5,
+    }
+    expect(tables.generationRuns[0]?.titleUsageEvidence).toEqual(expected)
+    expect(tables.usageReservations[0]?.titleUsageEvidence).toEqual(expected)
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it("per-step usage is order-independent and retry-idempotent", async () => {
+    // Step 2 can commit before step 1 because writes do not backpressure the
+    // SDK. Both must count exactly once, including a later retry of step 2.
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    const stepTwo = {
       messageId: fixture.messageId,
-      stepNumber: 1,
+      stepNumber: 2,
       usage: { inputTokens: 600, outputTokens: 40 },
       invocations: [],
     }
-    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), step)
-    await recordToolInvocationsForChat(ctx, await runOwner(ctx, fixture.runId), step)
+    const stepOne = {
+      messageId: fixture.messageId,
+      stepNumber: 1,
+      usage: { inputTokens: 400, outputTokens: 60 },
+      invocations: [],
+    }
+    await recordToolInvocationsForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      stepTwo
+    )
+    await recordToolInvocationsForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      stepOne
+    )
+    await recordToolInvocationsForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      stepTwo
+    )
     expect(tables.generationRuns[0]).toMatchObject({
-      inputTokens: 600,
-      outputTokens: 40,
-      lastUsageStepNumber: 1,
+      inputTokens: 1_000,
+      outputTokens: 100,
+      lastUsageStepNumber: 2,
+      usageSteps: [
+        { stepNumber: 1, inputTokens: 400, outputTokens: 60 },
+        { stepNumber: 2, inputTokens: 600, outputTokens: 40 },
+      ],
     })
+    expect(tables.usageReservations[0]).toMatchObject({
+      observedInputTokens: 1_000,
+      observedOutputTokens: 100,
+    })
+  })
+
+  it("rejects unpriceable step evidence before it becomes durable", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await expect(
+      recordToolInvocationsForChat(
+        ctx,
+        await runOwner(ctx, fixture.runId),
+        {
+          messageId: fixture.messageId,
+          stepNumber: 1,
+          usage: { outputTokens: Number.MAX_SAFE_INTEGER },
+          invocations: [],
+        }
+      )
+    ).rejects.toThrow("exceeds safe integer accounting range")
+    expect(tables.generationRuns[0]?.usageSteps).toBeUndefined()
+    expect(tables.usageReservations[0]?.observedOutputTokens).toBeUndefined()
+  })
+
+  it("bounds adversarial durable step growth", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await expect(
+      recordToolInvocationsForChat(
+        ctx,
+        await runOwner(ctx, fixture.runId),
+        {
+          messageId: fixture.messageId,
+          stepNumber: 65,
+          usage: { inputTokens: 1 },
+          invocations: [],
+        }
+      )
+    ).rejects.toThrow("Invalid per-step usage evidence")
+    expect(tables.generationRuns[0]?.usageSteps).toBeUndefined()
   })
 })
 

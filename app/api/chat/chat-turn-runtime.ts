@@ -1406,15 +1406,33 @@ export function createChatTurnRuntime(args: {
         : wordChunkingTransform
       : lifecycleTransform
 
+    // Commit the provider-consumption boundary BEFORE dispatch. This awaited
+    // write is load-bearing billing state: if Stop/revocation wins, the worker
+    // reports not-started and never calls the provider.
+    const dispatchBoundaryAt = Date.now()
+    const dispatchAuthorized = await lifecycle.stream.startWork(dispatchBoundaryAt)
+    if (!dispatchAuthorized) {
+      await lifecycle.stream.onAbort(
+        "provider dispatch not authorized",
+        initialWorkDurationMs,
+        {
+          primary: { kind: "not-started" },
+          title: { kind: "not-run" },
+        }
+      )
+      throw new Error("Provider dispatch no longer authorized")
+    }
+
+    // Exact assistant-work start: durable authorization is committed and the
+    // next operation begins provider consumption.
+    streamStartMs = Date.now()
+    lastProgressAtMs = streamStartMs
+    workDuration = createWorkDurationTracker({
+      initialDurationMs: initialWorkDurationMs,
+    })
+    providerStreamStarted = true
+
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) => {
-      // Exact assistant-work start: every preparatory step above is complete,
-      // and the next operation begins provider consumption.
-      streamStartMs = Date.now()
-      lastProgressAtMs = streamStartMs
-      workDuration = createWorkDurationTracker({
-        initialDurationMs: initialWorkDurationMs,
-      })
-      providerStreamStarted = true
       // Two anchors, deliberately both emitted (no-ops unless sampled):
       // `stream_start` keeps its historical clock — runtime construction →
       // streamText (turnStartedAtMs is set AFTER auth/parse/admission);
@@ -1883,11 +1901,6 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
-    // Begin persisting the exact start before exposing Stop to the client.
-    // Failure and latency are observational: the durable adapter logs either,
-    // and this best-effort write must not delay a healthy provider stream.
-    void lifecycle.stream.startWork(streamStartMs)
-
     // Title generation is independent of answer generation: it starts once
     // durable prepare has accepted the first turn (or first-message edit), but
     // failure is absorbed so naming can never fail the conversation. Durable
@@ -1911,12 +1924,28 @@ export function createChatTurnRuntime(args: {
           // Cancellation evidence (ADR-0021): pin each concrete attempt so a
           // stopped title call settles at its input floor for the exact
           // attempted route, and a never-started one settles to zero.
-          onAttemptStart: ({ routeId, pricingRole }) => {
+          onAttemptStart: async ({ routeId, pricingRole }) => {
             titleAttempt.current = {
               kind: "started-without-usage",
               routeId,
               pricingRole,
             }
+            const persisted = await lifecycle.stream.recordTitleUsageEvidence(
+              titleAttempt.current
+            )
+            if (!persisted) {
+              throw new Error("Title dispatch no longer authorized")
+            }
+          },
+          onAttemptComplete: async (generated) => {
+            titleAttempt.current = {
+              kind: "actual",
+              routeId: generated.routeId,
+              pricingRole: generated.pricingRole,
+              inputTokens: generated.usage.inputTokens,
+              outputTokens: generated.usage.outputTokens,
+            }
+            await lifecycle.stream.recordTitleUsageEvidence(titleAttempt.current)
           },
         })
           .then((generated) => {

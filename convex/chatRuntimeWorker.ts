@@ -6,6 +6,7 @@ import {
   generationRunWriteArgs,
   heartbeatGenerationRunForChat,
   markGenerationWorkStartedForChat,
+  recordTitleUsageEvidenceForChat,
   markGenerationRunAbortedForChat,
   markGenerationRunCompletedForChat,
   markGenerationRunFailedForChat,
@@ -146,6 +147,14 @@ export const markGenerationWorkStarted = internalMutation({
   handler: async (ctx, { runId, grantDigest, ...args }) => {
     const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
     return markGenerationWorkStartedForChat(ctx, owner, args)
+  },
+})
+
+export const recordTitleUsageEvidence = internalMutation({
+  args: { ...grantArgs, ...generationRunWriteArgs.recordTitleUsageEvidence },
+  handler: async (ctx, { runId, grantDigest, ...args }) => {
+    const owner = await requireGrantAuthorizedRun(ctx, { runId, grantDigest })
+    return recordTitleUsageEvidenceForChat(ctx, owner, args)
   },
 })
 

@@ -4,6 +4,10 @@ import { hmacSha256Hex, timingSafeEqualHex } from "./sha256"
 export const CHAT_ADMISSION_PROOF_MAX_AGE_MS = 60_000
 const CHAT_ADMISSION_PROOF_MAX_FUTURE_SKEW_MS = 10_000
 
+export const CANCELLATION_SETTLEMENT_PROTOCOL_VERSION = 1 as const
+export type CancellationSettlementProtocolVersion =
+  typeof CANCELLATION_SETTLEMENT_PROTOCOL_VERSION
+
 export type ChatAdmissionRouteReceipt = {
   routeId: string
   credentialSource: "platform" | "byok"
@@ -27,6 +31,9 @@ export type ChatAdmissionProofPayload = {
   /** Platform-usage reservation attached at prepare (ADR-0021). Signing it
    * makes a forged or swapped reservation attach unrepresentable. */
   reservationId?: string
+  /** Signed worker capability. Only runs created by a compatible worker may
+   * defer cancellation settlement during a rolling deployment. */
+  cancellationSettlementVersion?: CancellationSettlementProtocolVersion
   /** Canonical durable-input plan confirmed transactionally at prepare. */
   generationInputHash?: string
   issuedAt: number
@@ -40,8 +47,7 @@ function requireAdmissionSecret(secret: string | undefined): string {
 }
 
 function serializeAdmission(payload: ChatAdmissionProofPayload): string {
-  return JSON.stringify([
-    "chat-admission-v2",
+  const base = [
     payload.chatId,
     payload.requestId,
     payload.model,
@@ -63,7 +69,19 @@ function serializeAdmission(payload: ChatAdmissionProofPayload): string {
     payload.reservationId ?? null,
     payload.generationInputHash ?? null,
     payload.issuedAt,
-  ])
+  ] as const
+  // Preserve the deployed v2 bytes for older workers. New workers bind their
+  // deferred-settlement capability in v3, so Convex can activate per run
+  // instead of relying on unsafe whole-deployment timing.
+  return JSON.stringify(
+    payload.cancellationSettlementVersion === undefined
+      ? ["chat-admission-v2", ...base]
+      : [
+          "chat-admission-v3",
+          ...base,
+          payload.cancellationSettlementVersion,
+        ]
+  )
 }
 
 export function signChatAdmissionProof(

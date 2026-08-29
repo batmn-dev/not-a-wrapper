@@ -45,6 +45,11 @@ const WORKER_OPS: {
       internal.chatRuntimeWorker.markGenerationWorkStarted,
       args
     ),
+  recordTitleUsageEvidence: (ctx, args) =>
+    ctx.runMutation(
+      internal.chatRuntimeWorker.recordTitleUsageEvidence,
+      args
+    ),
   updateAssistantSnapshot: (ctx, args) =>
     ctx.runMutation(internal.chatRuntimeWorker.updateAssistantSnapshot, args),
   recordToolInvocations: (ctx, args) =>

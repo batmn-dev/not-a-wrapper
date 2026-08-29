@@ -19,6 +19,7 @@ type TableName =
   | "toolApprovalRequests"
   | "toolCallLog"
   | "chatAttachments"
+  | "usageReservations"
   | "deletionJobs"
 
 type TestDocument = {
@@ -46,6 +47,7 @@ const tableNames: TableName[] = [
   "toolApprovalRequests",
   "toolCallLog",
   "chatAttachments",
+  "usageReservations",
   "deletionJobs",
 ]
 
@@ -186,6 +188,7 @@ function createHarness(
           buildQuery(query)
 
           const resultApi = {
+            order: () => resultApi,
             filter: (
               buildFilter: (query: {
                 field: (fieldName: string) => string
@@ -213,6 +216,17 @@ function createHarness(
               tables[tableName].find((document) =>
                 matches(document, filters)
               ) ?? null,
+            unique: async () => {
+              const matching = tables[tableName].filter((document) =>
+                matches(document, filters)
+              )
+              expect(matching.length).toBeLessThanOrEqual(1)
+              return matching[0] ?? null
+            },
+            collect: async () =>
+              tables[tableName].filter((document) =>
+                matches(document, filters)
+              ),
             paginate: async ({
               cursor,
               numItems,
@@ -266,10 +280,7 @@ function createHarness(
       },
     },
     meta: {},
-  } as unknown as Pick<
-    MutationCtx,
-    "db" | "meta" | "storage" | "scheduler"
-  >
+  } as unknown as MutationCtx
 
   const runStep = async (jobId: Id<"deletionJobs">) => {
     paginateCalls = 0
@@ -528,6 +539,95 @@ describe("asynchronous Chat deletion", () => {
     }
     expect(harness.operations.at(-2)).toBe(`delete:${projectDoc._id}`)
     expect(harness.paginateCallsByStep.every((count) => count <= 1)).toBe(true)
+  })
+
+  it("defers a live child run before Project deletion removes it", async () => {
+    const owner = user()
+    const projectDoc = project("project-1")
+    const chatDoc = chat("chat-1", projectDoc._id)
+    delete chatDoc.deletingAt
+    const runId = asId<"generationRuns">("run-1")
+    const messageId = asId<"messages">("message-1")
+    const harness = createHarness({
+      users: [owner as unknown as TestDocument],
+      projects: [projectDoc as unknown as TestDocument],
+      chats: [chatDoc as unknown as TestDocument],
+      generationRuns: [
+        row(runId, {
+          chatId: chatDoc._id,
+          userId: owner._id,
+          requestId: "request-1",
+          model: "gpt-5-mini",
+          provider: "openai",
+          status: "streaming",
+          assistantMessageId: messageId,
+          workStartedAt: 10,
+          grantDigest: "digest-1",
+          cancellationSettlementVersion: 1,
+          updatedAt: 10,
+        }),
+      ],
+      messages: [
+        row(messageId, {
+          chatId: chatDoc._id,
+          role: "assistant",
+          status: "streaming",
+          content: "partial",
+          parts: [{ type: "text", text: "partial" }],
+          orderId: 1,
+          createdAt: 10,
+          updatedAt: 10,
+          generationRunId: runId,
+        }),
+      ],
+      usageReservations: [
+        row("reservation-1", {
+          userId: owner._id,
+          requestId: "request-1",
+          bucketId: "bucket-1",
+          generationRunId: runId,
+          chatId: chatDoc._id,
+          modelId: "gpt-5-mini",
+          routeId: "gpt-5-mini",
+          providerId: "openai",
+          status: "reserved",
+          estimatedCredits: 100_000,
+          estimatedInputTokens: 1_000,
+          estimatedOutputTokens: 8_192,
+          reservedCredits: 100_000,
+          cancellationSettlementVersion: 1,
+          providerMayHaveStarted: true,
+          pricingSnapshot: {
+            revision: "rev-1",
+            currency: "USD",
+            primary: {
+              modelId: "gpt-5-mini",
+              routeId: "gpt-5-mini",
+              providerId: "openai",
+              upstreamModelId: "gpt-5-mini",
+              inputCreditsPerMTok: 750_000,
+              outputCreditsPerMTok: 4_500_000,
+            },
+          },
+          payloadFingerprint: "fp",
+          reservedAt: 1,
+          updatedAt: 1,
+        }),
+      ],
+    })
+    const job = await ensureProjectDeletionJob(harness.ctx, projectDoc, owner)
+    harness.schedule(job._id)
+
+    await harness.pump()
+
+    expect(harness.tables.generationRuns).toEqual([])
+    expect(harness.tables.usageReservations[0]).toMatchObject({
+      status: "reserved",
+      terminalPendingAt: expect.any(Number),
+      settlementDeadlineAt: expect.any(Number),
+      settlementGrantDigest: "digest-1",
+      providerMayHaveStarted: true,
+    })
   })
 
   it("returns the existing active job for a second delete request", async () => {

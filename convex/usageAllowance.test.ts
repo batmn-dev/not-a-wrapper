@@ -15,6 +15,7 @@ import {
   reserveUsageForUser,
   settleUsageForTerminalRun,
   STALE_RESERVATION_MS,
+  TERMINAL_SETTLEMENT_BATCH_LIMIT,
   TERMINAL_EVIDENCE_WINDOW_MS,
   type AuthorizedReserveUsageArgs,
   type ReserveUsageArgs,
@@ -46,6 +47,7 @@ function createCtx(input: Partial<Tables> = {}) {
   }
   const all = () => Object.values(tables).flat() as Array<{ _id: string }>
   let counter = 0
+  const scheduled: Array<{ delayMs: number; args: unknown }> = []
 
   const ctx = {
     db: {
@@ -130,9 +132,15 @@ function createCtx(input: Partial<Tables> = {}) {
         },
       }),
     },
+    scheduler: {
+      runAfter: async (delayMs: number, _fn: unknown, args: unknown) => {
+        scheduled.push({ delayMs, args })
+        return `scheduled_${scheduled.length}`
+      },
+    },
   } as unknown as MutationCtx
 
-  return { ctx, tables }
+  return { ctx, tables, scheduled }
 }
 
 const user = {
@@ -750,16 +758,15 @@ describe("provider rejection before any output", () => {
     })
   })
 
-  it("never applies the rejection release to a user Stop (legacy rows)", async () => {
-    // Direct settle with a user_stop reason only happens for LEGACY rows
-    // (pre-amendment strands the stale reconciler finds without pending
-    // fields). New Stops defer instead — see the cancellation describe.
+  it("bounds a legacy worker Stop at the input fallback", async () => {
+    // Old workers cannot create receipt-pending state. Their cancellation is
+    // still bounded at input plus partial output, never the full reservation.
     const { ctx, tables } = createCtx({ users: [user] })
     const run = await reservedRunFixture(ctx, { workStartedAt: 1 })
     await settleUsageForTerminalRun(ctx, run, {}, "user_stop", "user_stop")
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
-      settlementBasis: "estimated_after_unknown_usage",
+      settlementBasis: "estimated_input_floor",
     })
   })
 })
@@ -813,6 +820,7 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
       status: "streaming",
       workStartedAt: 1,
       grantDigest: "digest-1",
+      cancellationSettlementVersion: 1,
       updatedAt: Date.now(),
       ...options.runFields,
     }
@@ -826,6 +834,7 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
       userId: user._id,
       runId,
       now: Date.now(),
+      cancellationSettlementVersion: 1,
     })
     const run = (await ctx.db.get(runId))!
     if (!options.skipDefer) {
@@ -964,6 +973,47 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     })
   })
 
+  it("cannot downgrade mirrored usage with a smaller terminal receipt", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables, {
+      runFields: {
+        inputTokens: 1_000,
+        outputTokens: 100,
+        titleUsageEvidence: {
+          kind: "actual",
+          routeId: "gpt-5-nano",
+          pricingRole: "title",
+          inputTokens: 100,
+          outputTokens: 5,
+        },
+      },
+    })
+    await finalizePendingTerminalUsage(ctx, {
+      reservation: reservation as Doc<"usageReservations">,
+      run,
+      evidence: {
+        primary: { kind: "actual", inputTokens: 1, outputTokens: 0 },
+        title: {
+          kind: "actual",
+          routeId: "gpt-5-nano",
+          pricingRole: "title",
+          inputTokens: 1,
+          outputTokens: 0,
+        },
+      },
+      source: "worker_receipt",
+      now: Date.now(),
+    })
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "actual",
+      inputTokens: 1_000,
+      outputTokens: 100,
+      titleCredits: 13,
+      actualCredits: 1_213,
+    })
+  })
+
   it("duplicate receipts and receipt/reaper races produce exactly one ledger entry", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const { ctx, tables } = createCtx({ users: [user] })
@@ -1025,31 +1075,45 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     })
   })
 
-  it("marker absence is not proof: a marker-less Stop still charges the floor at deadline", async () => {
-    // Gameplan §15: `workStartedAt` is fire-and-forget, so its absence on a
-    // dispatched run must never refund possibly-real provider work. Only the
-    // worker's explicit not-started receipt (next test) can release.
+  it("the deadline reaper charges a durably started title at its input floor", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     const { reservation } = await pendingStopFixture(ctx, tables, {
-      runFields: { workStartedAt: undefined },
+      runFields: {
+        titleUsageEvidence: {
+          kind: "started-without-usage",
+          routeId: "gpt-5-nano",
+          pricingRole: "title",
+        },
+      },
     })
-    expect(reservation.providerMayHaveStarted).toBe(true)
     await ctx.db.patch(reservation._id, {
       settlementDeadlineAt: Date.now() - 1,
     })
     await reconcileDueTerminalSettlementsPass(ctx)
     expect(tables.usageReservations[0]).toMatchObject({
       status: "settled",
-      settlementBasis: "estimated_input_floor",
-      actualCredits: 750,
+      titleSettlementBasis: "input_floor",
+      titleCredits: 40,
+      actualCredits: 790,
     })
   })
 
-  it("a worker's not-started receipt releases the reservation in full", async () => {
+  it("releases immediately when the awaited dispatch boundary is absent", async () => {
+    // New workers await this write before provider dispatch. OCC orders Stop
+    // against it, so absence is structural proof that no call can begin.
     const { ctx, tables } = createCtx({ users: [user] })
-    const { reservation, run } = await pendingStopFixture(ctx, tables, {
+    const { reservation } = await pendingStopFixture(ctx, tables, {
       runFields: { workStartedAt: undefined },
     })
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "released",
+      providerMayHaveStarted: false,
+    })
+  })
+
+  it("cannot downgrade an already-dispatched run with not-started evidence", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables)
     const outcome = await finalizePendingTerminalUsage(ctx, {
       reservation: reservation as Doc<"usageReservations">,
       run,
@@ -1060,9 +1124,13 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
       source: "worker_receipt",
       now: Date.now(),
     })
-    expect(outcome).toBe("released")
-    expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
-    expect(bucketOf(tables).spentCredits).toBe(0)
+    expect(outcome).toBe("settled")
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "estimated_input_floor",
+      actualCredits: 750,
+    })
+    expect(bucketOf(tables).spentCredits).toBe(750)
     expect(bucketOf(tables).reservedCredits).toBe(0)
   })
 
@@ -1123,6 +1191,30 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     })
   })
 
+  it("a missing current-protocol run settles from mirrored evidence", async () => {
+    const { ctx, tables } = createCtx({ users: [user] })
+    const { reservation, run } = await pendingStopFixture(ctx, tables, {
+      skipDefer: true,
+    })
+    await ctx.db.patch(reservation._id, {
+      providerMayHaveStarted: true,
+      observedInputTokens: 1_000,
+      observedOutputTokens: 100,
+      reservedAt: Date.now() - STALE_RESERVATION_MS - 1,
+    })
+    tables.generationRuns.splice(
+      tables.generationRuns.findIndex((doc) => doc._id === run._id),
+      1
+    )
+
+    await reconcileStaleUsageReservationsPass(ctx)
+    expect(tables.usageReservations[0]).toMatchObject({
+      status: "settled",
+      settlementBasis: "observed_partial",
+      actualCredits: 1_200,
+    })
+  })
+
   it("a pending reservation rejects an idempotent-replay re-admission", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const { ctx, tables } = createCtx({ users: [user] })
@@ -1173,6 +1265,66 @@ describe("reserve hardening", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe("due settlement convergence", () => {
+  it("self-schedules another pass when a full due batch is consumed", async () => {
+    const now = Date.now()
+    const usageBuckets = Array.from(
+      { length: TERMINAL_SETTLEMENT_BATCH_LIMIT },
+      (_, index) =>
+        ({
+          _id: `bucket_${index}` as Id<"usageBuckets">,
+          _creationTime: 1,
+          userId: user._id,
+          bucketKind: "included",
+          periodKey: "2026-08",
+          periodStart: 0,
+          periodEnd: now + 1,
+          planId: "free-v1",
+          grantedCredits: 1_000,
+          availableCredits: 900,
+          reservedCredits: 100,
+          spentCredits: 0,
+          status: "active",
+          createdAt: 1,
+          updatedAt: 1,
+        }) satisfies Doc<"usageBuckets">
+    )
+    const usageReservations = usageBuckets.map(
+      (bucket, index) =>
+        ({
+          _id: `reservation_${index}` as Id<"usageReservations">,
+          _creationTime: 1,
+          userId: user._id,
+          requestId: `request_${index}`,
+          bucketId: bucket._id,
+          chatId: `chat_${index}`,
+          modelId: "gpt-5-mini",
+          routeId: "gpt-5-mini",
+          providerId: "openai",
+          status: "reserved",
+          estimatedCredits: 100,
+          reservedCredits: 100,
+          cancellationSettlementVersion: 1,
+          providerMayHaveStarted: false,
+          terminalPendingAt: now - 2,
+          settlementDeadlineAt: now - 1,
+          pricingSnapshot: snapshot,
+          payloadFingerprint: `fp_${index}`,
+          reservedAt: 1,
+          updatedAt: 1,
+        }) satisfies Doc<"usageReservations">
+    )
+    const { ctx, scheduled } = createCtx({ usageBuckets, usageReservations })
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+
+    const result = await reconcileDueTerminalSettlementsPass(ctx)
+
+    expect(result.finalized).toBe(TERMINAL_SETTLEMENT_BATCH_LIMIT)
+    expect(scheduled).toEqual([{ delayMs: 0, args: {} }])
+    log.mockRestore()
   })
 })
 

@@ -153,7 +153,9 @@ export async function generateChatTitle(args: {
   onAttemptStart?: (attempt: {
     routeId: string
     pricingRole: "title" | "primary"
-  }) => void
+  }) => void | Promise<void>
+  /** Fired after provider usage is known, before the result is returned. */
+  onAttemptComplete?: (result: GeneratedChatTitle) => void | Promise<void>
 }): Promise<GeneratedChatTitle> {
   const userText = clipChatTitleInput(args.userText)
   if (!userText) {
@@ -169,7 +171,7 @@ export async function generateChatTitle(args: {
     route: ChatTitleModelRoute,
     pricingRole: GeneratedChatTitle["pricingRole"]
   ) => {
-    args.onAttemptStart?.({ routeId: route.routeId, pricingRole })
+    await args.onAttemptStart?.({ routeId: route.routeId, pricingRole })
     const result = await args.generateText({
       model: route.model,
       instructions: CHAT_TITLE_INSTRUCTIONS,
@@ -179,7 +181,7 @@ export async function generateChatTitle(args: {
       timeout: CHAT_TITLE_TIMEOUT_MS,
       abortSignal: args.abortSignal,
     })
-    return {
+    const generated = {
       title: sanitizeGeneratedChatTitle(result.text, userText),
       routeId: route.routeId,
       pricingRole,
@@ -188,6 +190,8 @@ export async function generateChatTitle(args: {
         outputTokens: result.usage?.outputTokens,
       },
     }
+    await args.onAttemptComplete?.(generated)
+    return generated
   }
 
   try {

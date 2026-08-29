@@ -51,6 +51,12 @@ describe("credit math (ADR-0021)", () => {
     expect(creditsForTokens(-5, 1_000_000)).toBe(0)
     expect(creditsForTokens(Number.NaN, 1_000_000)).toBe(0)
   })
+
+  it("rejects priced values outside the safe integer accounting range", () => {
+    expect(() =>
+      creditsForTokens(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
+    ).toThrow("exceeds safe integer accounting range")
+  })
 })
 
 describe("bucket balance transitions", () => {
@@ -106,6 +112,21 @@ describe("bucket balance transitions", () => {
       spentCredits: 200,
     })
     expect(bucketInvariantHolds(released)).toBe(true)
+  })
+
+  it("rejects a balance transition that would lose integer precision", () => {
+    expect(() =>
+      applySettle(
+        {
+          grantedCredits: Number.MAX_SAFE_INTEGER,
+          availableCredits: 0,
+          reservedCredits: 1,
+          spentCredits: Number.MAX_SAFE_INTEGER - 1,
+        },
+        1,
+        2
+      )
+    ).toThrow("exceeds safe integer accounting range")
   })
 })
 

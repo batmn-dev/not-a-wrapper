@@ -10,6 +10,7 @@ import {
 } from "@/convex/domain/generation_run_liveness"
 import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
 import {
+  CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   signChatAdmissionProof,
   type ChatAdmissionProofPayload,
 } from "@/convex/lib/chatAdmissionProof"
@@ -310,7 +311,14 @@ export type DurableStreamBinding = {
    */
   stream: {
     /** Begin persisting the provider-consumption boundary before response exposure. */
-    startWork(startedAt: number): Promise<void>
+    /** Returns false when the durable boundary could not commit. The caller
+     * must not dispatch the provider in that case. */
+    startWork(startedAt: number): Promise<boolean>
+    /** Persist title start/actual evidence. Start callers must not dispatch
+     * when this returns false. */
+    recordTitleUsageEvidence(
+      evidence: TitleTerminalUsageEvidence
+    ): Promise<boolean>
     onChunk(chunk: TextStreamPart<ToolSet>): void
     recordStep(step: DurableStepRecord): void
     noteStreamError(errorMessage: string, workDurationMs: number): void
@@ -953,7 +961,12 @@ export function createGuestDurableTurn(
       return {
         streamTextExtras: {},
         stream: {
-          async startWork() {},
+          async startWork() {
+            return true
+          },
+          async recordTitleUsageEvidence() {
+            return true
+          },
           onChunk() {},
           recordStep() {},
           noteStreamError() {},
@@ -1477,6 +1490,8 @@ export function createConvexDurableTurn(args: {
         reasoningEffort,
         grantDigest,
         reservationId,
+        cancellationSettlementVersion:
+          CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
         generationInputHash,
         issuedAt: admissionIssuedAt,
       })
@@ -1509,6 +1524,8 @@ export function createConvexDurableTurn(args: {
           generationInputHash,
           grantDigest,
           reservationId,
+          cancellationSettlementVersion:
+            CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
           admissionIssuedAt,
           admissionProof,
         },
@@ -1713,21 +1730,47 @@ export function createConvexDurableTurn(args: {
 
         stream: {
           async startWork(startedAt) {
-            await withWorkerWriteTimeout(
-              workerWrite("markGenerationWorkStarted", {
-                messageId: currentMessageId,
-                startedAt,
-              }),
-              "writing provider work start"
-            ).catch((error: unknown) => {
-              if (noteIfGrantRejection(error, "work-start")) return
+            try {
+              await withWorkerWriteTimeout(
+                workerWrite("markGenerationWorkStarted", {
+                  messageId: currentMessageId,
+                  startedAt,
+                }),
+                "writing provider work start"
+              )
+              return true
+            } catch (error: unknown) {
+              if (noteIfGrantRejection(error, "work-start")) return false
               warnDurable("durable_work_start_write_failed", {
                 requestId,
                 chatId,
                 runId: currentRunId,
                 error: describeError(error),
               })
-            })
+              return false
+            }
+          },
+
+          async recordTitleUsageEvidence(evidence) {
+            try {
+              await withWorkerWriteTimeout(
+                workerWrite("recordTitleUsageEvidence", {
+                  messageId: currentMessageId,
+                  evidence,
+                }),
+                "writing title usage evidence"
+              )
+              return true
+            } catch (error: unknown) {
+              if (noteIfGrantRejection(error, "title-usage")) return false
+              warnDurable("durable_title_usage_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
+              return false
+            }
           },
 
           onChunk(chunk) {

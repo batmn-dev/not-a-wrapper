@@ -66,7 +66,9 @@ import {
   ownedGenerationRunMutation,
 } from "./lib/authedFunctions"
 import {
+  CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   verifyChatAdmissionProof,
+  type CancellationSettlementProtocolVersion,
   type ChatAdmissionRouteReceipt,
 } from "./lib/chatAdmissionProof"
 import {
@@ -78,10 +80,15 @@ import {
   type PersistedReasoningEffort,
 } from "./lib/reasoningEffort"
 import { sha256Hex, timingSafeEqualHex } from "./lib/sha256"
-import { vTerminalUsageEvidence } from "./lib/usageValidators"
 import {
+  vTerminalUsageEvidence,
+  vTitleTerminalUsageEvidence,
+} from "./lib/usageValidators"
+import {
+  computeUsageCredits,
   isValidTerminalUsageEvidence,
   type TerminalUsageEvidencePayload,
+  type TitleTerminalUsageEvidence,
 } from "./domain/usage_accounting"
 import {
   attachReservationToRun,
@@ -91,6 +98,10 @@ import {
 } from "./usageAllowance"
 
 const MAX_PREVIEW_LENGTH = 500
+// Defense-in-depth ceiling above the product's current 20-step maximum. The
+// worker grant is narrow, but it must not be able to grow a run document
+// without bound by inventing step numbers.
+const MAX_DURABLE_USAGE_STEPS = 64
 
 const vMessageRole = v.union(
   v.literal("user"),
@@ -147,6 +158,10 @@ export const generationRunWriteArgs = {
   markGenerationWorkStarted: {
     messageId: v.id("messages"),
     startedAt: v.number(),
+  },
+  recordTitleUsageEvidence: {
+    messageId: v.id("messages"),
+    evidence: vTitleTerminalUsageEvidence,
   },
   updateAssistantSnapshot: {
     messageId: v.id("messages"),
@@ -1880,6 +1895,7 @@ type PrepareGenerationForChatArgs = {
    * transaction, so a platform-funded run can never exist unaccounted.
    */
   reservationId?: Id<"usageReservations">
+  cancellationSettlementVersion?: CancellationSettlementProtocolVersion
 }
 
 export async function prepareGenerationForChat(
@@ -1996,6 +2012,11 @@ export async function prepareGenerationForChat(
           grantExpiresAt: now + EXECUTION_GRANT_TTL_MS,
         }
       : {}),
+    ...(args.cancellationSettlementVersion !== undefined
+      ? {
+          cancellationSettlementVersion: args.cancellationSettlementVersion,
+        }
+      : {}),
   })
 
   // Attach the platform-usage reservation to its run transactionally
@@ -2008,6 +2029,7 @@ export async function prepareGenerationForChat(
       userId: owner.user._id,
       runId,
       now,
+      cancellationSettlementVersion: args.cancellationSettlementVersion,
     })
   }
 
@@ -2208,6 +2230,7 @@ export async function prepareGenerationWithVerifiedAdmission(
       reasoningEffort: args.reasoningEffort,
       grantDigest: args.grantDigest,
       reservationId: args.reservationId,
+      cancellationSettlementVersion: args.cancellationSettlementVersion,
       generationInputHash: args.generationInputHash,
       issuedAt: admissionIssuedAt,
     },
@@ -2256,6 +2279,9 @@ export const prepareGeneration = mutation({
     generationInputHash: v.optional(v.string()),
     grantDigest: v.optional(v.string()),
     reservationId: v.optional(v.id("usageReservations")),
+    cancellationSettlementVersion: v.optional(
+      v.literal(CANCELLATION_SETTLEMENT_PROTOCOL_VERSION)
+    ),
     admissionIssuedAt: v.number(),
     admissionProof: v.string(),
   },
@@ -2309,11 +2335,93 @@ export async function markGenerationWorkStartedForChat(
     0,
     message?.metadata?.workDurationMs ?? 0
   )
+  const now = nowMs()
   await ctx.db.patch(run._id, {
-    workStartedAt: args.startedAt,
+    // This mutation is the authority boundary. Do not let a worker-supplied
+    // clock move durable billing evidence into the past or future.
+    workStartedAt: now,
     workDurationMs: priorWorkDurationMs,
-    updatedAt: nowMs(),
+    updatedAt: now,
   })
+  if (run.cancellationSettlementVersion === 1) {
+    const reservation = await ctx.db
+      .query("usageReservations")
+      .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
+      .unique()
+    if (reservation?.status === "reserved") {
+      await ctx.db.patch(reservation._id, {
+        providerMayHaveStarted: true,
+        updatedAt: now,
+      })
+    }
+  }
+}
+
+/** Persist title evidence before dispatch and after provider completion. */
+export async function recordTitleUsageEvidenceForChat(
+  ctx: MutationCtx,
+  owner: AuthenticatedRunOwner,
+  args: {
+    messageId: Id<"messages">
+    evidence: TitleTerminalUsageEvidence
+  }
+) {
+  const { run } = owner
+  await requireAssistantMessageForRun(ctx, run, args.messageId)
+  if (
+    !isValidTerminalUsageEvidence({
+      primary: { kind: "not-started" },
+      title: args.evidence,
+    })
+  ) {
+    throw new Error("Invalid title usage evidence")
+  }
+
+  // The first actual receipt is absorbing. A retry or compromised worker must
+  // never replace completed evidence with a smaller charge.
+  if (run.titleUsageEvidence?.kind === "actual") {
+    if (
+      args.evidence.kind === "actual" &&
+      (args.evidence.routeId !== run.titleUsageEvidence.routeId ||
+        args.evidence.inputTokens !== run.titleUsageEvidence.inputTokens ||
+        args.evidence.outputTokens !== run.titleUsageEvidence.outputTokens ||
+        args.evidence.pricingRole !== run.titleUsageEvidence.pricingRole)
+    ) {
+      console.warn("Conflicting title usage receipt ignored", {
+        runId: run._id,
+      })
+    }
+    return
+  }
+
+  const reservation = await ctx.db
+    .query("usageReservations")
+    .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
+    .unique()
+  if (args.evidence.kind === "actual" && reservation) {
+    const rate =
+      args.evidence.pricingRole === "primary"
+        ? reservation.pricingSnapshot.primary
+        : (reservation.pricingSnapshot.title ??
+          reservation.pricingSnapshot.primary)
+    if (rate.routeId === args.evidence.routeId) {
+      // Reject evidence that cannot be represented in integer accounting
+      // before it can poison the durable fallback path.
+      computeUsageCredits(rate, args.evidence)
+    }
+  }
+
+  const now = nowMs()
+  await ctx.db.patch(run._id, {
+    titleUsageEvidence: args.evidence,
+    updatedAt: now,
+  })
+  if (reservation?.status === "reserved") {
+    await ctx.db.patch(reservation._id, {
+      titleUsageEvidence: args.evidence,
+      updatedAt: now,
+    })
+  }
 }
 
 export async function updateAssistantSnapshotForChat(
@@ -3129,34 +3237,131 @@ export async function recordToolInvocationsForChat(
   // otherwise it preserves the accumulated value.
   const stepInputTokens = args.usage?.inputTokens ?? 0
   const stepOutputTokens = args.usage?.outputTokens ?? 0
+  if (
+    !Number.isSafeInteger(stepInputTokens) ||
+    stepInputTokens < 0 ||
+    !Number.isSafeInteger(stepOutputTokens) ||
+    stepOutputTokens < 0 ||
+    (args.stepNumber !== undefined &&
+      (!Number.isSafeInteger(args.stepNumber) ||
+        args.stepNumber <= 0 ||
+        args.stepNumber > MAX_DURABLE_USAGE_STEPS))
+  ) {
+    throw new Error("Invalid per-step usage evidence")
+  }
   const hasStepUsage = stepInputTokens > 0 || stepOutputTokens > 0
-  // Idempotency for money-bearing accumulation: steps are numbered
-  // monotonically within a run, so a redelivered step (retry after a lost
-  // response) at or below the high-water mark must not double-add its tokens.
-  // A usage payload without a step number (legacy worker) keeps the old
-  // accumulate-always behavior.
-  const stepAlreadyAccumulated =
-    args.stepNumber !== undefined &&
-    run.lastUsageStepNumber !== undefined &&
-    args.stepNumber <= run.lastUsageStepNumber
-  const accumulateStepUsage = hasStepUsage && !stepAlreadyAccumulated
+  let usagePatch:
+    | Pick<
+        Doc<"generationRuns">,
+        "inputTokens" | "outputTokens" | "usageSteps" | "lastUsageStepNumber"
+      >
+    | undefined
+
+  if (hasStepUsage && args.stepNumber !== undefined) {
+    const existingSteps = run.usageSteps ?? []
+    const existingStep = existingSteps.find(
+      (step) => step.stepNumber === args.stepNumber
+    )
+    if (
+      existingStep &&
+      ((existingStep.inputTokens ?? 0) !== stepInputTokens ||
+        (existingStep.outputTokens ?? 0) !== stepOutputTokens)
+    ) {
+      console.warn(
+        JSON.stringify({
+          _tag: "generation_step_usage_conflict",
+          runId: run._id,
+          stepNumber: args.stepNumber,
+        })
+      )
+    } else if (!existingStep) {
+      if (existingSteps.length >= MAX_DURABLE_USAGE_STEPS) {
+        throw new Error("Per-step usage evidence exceeds the durable step limit")
+      }
+      const usageSteps = [
+        ...existingSteps,
+        {
+          stepNumber: args.stepNumber,
+          ...(args.usage?.inputTokens !== undefined
+            ? { inputTokens: args.usage.inputTokens }
+            : {}),
+          ...(args.usage?.outputTokens !== undefined
+            ? { outputTokens: args.usage.outputTokens }
+            : {}),
+        },
+      ].sort((left, right) => left.stepNumber - right.stepNumber)
+      const sum = (field: "inputTokens" | "outputTokens") => {
+        const total = usageSteps.reduce(
+          (current, step) => current + BigInt(step[field] ?? 0),
+          BigInt(0)
+        )
+        if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new RangeError("Per-step usage total exceeds safe integer range")
+        }
+        return Number(total)
+      }
+      usagePatch = {
+        usageSteps,
+        inputTokens: sum("inputTokens"),
+        outputTokens: sum("outputTokens"),
+        lastUsageStepNumber: Math.max(
+          run.lastUsageStepNumber ?? 0,
+          args.stepNumber
+        ),
+      }
+    }
+  } else if (hasStepUsage) {
+    // Deployment compatibility for the pre-step-number worker contract.
+    const inputTokens = BigInt(run.inputTokens ?? 0) + BigInt(stepInputTokens)
+    const outputTokens =
+      BigInt(run.outputTokens ?? 0) + BigInt(stepOutputTokens)
+    if (
+      inputTokens > BigInt(Number.MAX_SAFE_INTEGER) ||
+      outputTokens > BigInt(Number.MAX_SAFE_INTEGER)
+    ) {
+      throw new RangeError("Per-step usage total exceeds safe integer range")
+    }
+    usagePatch = {
+      inputTokens: Number(inputTokens),
+      outputTokens: Number(outputTokens),
+      usageSteps: run.usageSteps,
+      lastUsageStepNumber: run.lastUsageStepNumber,
+    }
+  }
 
   if (args.invocations.length > 0 || hasStepUsage) {
     // Accepted tool activity is progress evidence (gameplan §5) — not
     // liveness; the heartbeat alone renews the lease.
+    let reservation: Doc<"usageReservations"> | null = null
+    if (usagePatch) {
+      reservation = await ctx.db
+        .query("usageReservations")
+        .withIndex("by_run", (q) => q.eq("generationRunId", run._id))
+        .unique()
+      if (reservation) {
+        // Validate the priced total, not just each token field. A max-safe
+        // token count can still overflow credits and must never become durable
+        // evidence that every reconciler retry will reject forever.
+        computeUsageCredits(reservation.pricingSnapshot.primary, {
+          inputTokens: usagePatch.inputTokens,
+          outputTokens: usagePatch.outputTokens,
+        })
+      }
+    }
     await ctx.db.patch(run._id, {
       lastProgressAt: now,
       updatedAt: now,
-      ...(accumulateStepUsage
-        ? {
-            inputTokens: (run.inputTokens ?? 0) + stepInputTokens,
-            outputTokens: (run.outputTokens ?? 0) + stepOutputTokens,
-            ...(args.stepNumber !== undefined
-              ? { lastUsageStepNumber: args.stepNumber }
-              : {}),
-          }
-        : {}),
+      ...usagePatch,
     })
+    if (usagePatch && run.cancellationSettlementVersion === 1) {
+      if (reservation?.status === "reserved") {
+        await ctx.db.patch(reservation._id, {
+          observedInputTokens: usagePatch.inputTokens,
+          observedOutputTokens: usagePatch.outputTokens,
+          updatedAt: now,
+        })
+      }
+    }
   }
 }
 

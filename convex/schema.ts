@@ -7,6 +7,7 @@ import {
   vPricingSnapshot,
   vSettlementBasis,
   vTitleSettlementBasis,
+  vTitleTerminalUsageEvidence,
   vUsageReservationStatus,
 } from "./lib/usageValidators"
 
@@ -251,10 +252,28 @@ export default defineSchema({
     finishReason: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
-    // High-water mark for per-step usage accumulation: a redelivered step
-    // (worker retry after a lost response) must not double-add its tokens
-    // into the settlement-evidence totals above (ADR-0021).
+    // Compatibility field written by the first cancellation-settlement
+    // implementation. Current workers use usageSteps below because a scalar
+    // high-water mark loses valid out-of-order writes.
     lastUsageStepNumber: v.optional(v.number()),
+    // Order-independent, idempotent per-step usage evidence. Step count is
+    // bounded by the runtime's maxSteps; duplicate step numbers are absorbed
+    // and totals above are recomputed from this set.
+    usageSteps: v.optional(
+      v.array(
+        v.object({
+          stepNumber: v.number(),
+          inputTokens: v.optional(v.number()),
+          outputTokens: v.optional(v.number()),
+        })
+      )
+    ),
+    // Signed worker capability. Only versioned runs may use deferred
+    // cancellation settlement during rolling deploys.
+    cancellationSettlementVersion: v.optional(v.literal(1)),
+    // Durable title attempt/usage evidence, persisted before each call and
+    // mirrored to the reservation so worker loss or deletion cannot erase it.
+    titleUsageEvidence: v.optional(vTitleTerminalUsageEvidence),
     // Approval continuations reuse the paused assistant message, whose parts
     // were already billed to the PREVIOUS run's settled reservation. This
     // baseline (the partial-output estimate over the reused parts at prepare)
@@ -568,6 +587,13 @@ export default defineSchema({
     settlementGrantExpiresAt: v.optional(v.number()),
     /** Durable fallback discriminator copied from the run before cleanup. */
     providerMayHaveStarted: v.optional(v.boolean()),
+    /** Signed worker capability copied from the run at attach. */
+    cancellationSettlementVersion: v.optional(v.literal(1)),
+    /** Per-step evidence mirrored from the run for missing-run recovery. */
+    observedInputTokens: v.optional(v.number()),
+    observedOutputTokens: v.optional(v.number()),
+    /** Durable title evidence for deadline/deletion recovery. */
+    titleUsageEvidence: v.optional(vTitleTerminalUsageEvidence),
     pricingSnapshot: vPricingSnapshot,
     payloadFingerprint: v.string(),
     reservedAt: v.number(),

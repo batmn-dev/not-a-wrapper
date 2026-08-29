@@ -41,7 +41,15 @@ export function creditsForTokens(
 ): number {
   const count = normalizeTokenCount(tokens)
   if (count === 0 || creditsPerMTok === 0) return 0
-  return Math.ceil((count * creditsPerMTok) / TOKENS_PER_RATE_UNIT)
+  if (!Number.isSafeInteger(creditsPerMTok) || creditsPerMTok < 0) {
+    throw new RangeError("Token rate must be a non-negative safe integer")
+  }
+  const numerator = BigInt(count) * BigInt(creditsPerMTok)
+  const divisor = BigInt(TOKENS_PER_RATE_UNIT)
+  return safeNumberFromBigInt(
+    (numerator + divisor - BigInt(1)) / divisor,
+    "Token credit result"
+  )
 }
 
 function normalizeTokenCount(tokens: number | undefined): number {
@@ -56,10 +64,26 @@ export function computeUsageCredits(
   rate: Pick<RoutePricingRate, "inputCreditsPerMTok" | "outputCreditsPerMTok">,
   usage: UsageTokens
 ): number {
-  return (
-    creditsForTokens(usage.inputTokens, rate.inputCreditsPerMTok) +
-    creditsForTokens(usage.outputTokens, rate.outputCreditsPerMTok)
+  return safeNumberFromBigInt(
+    BigInt(creditsForTokens(usage.inputTokens, rate.inputCreditsPerMTok)) +
+      BigInt(creditsForTokens(usage.outputTokens, rate.outputCreditsPerMTok)),
+    "Usage credit result"
   )
+}
+
+function safeNumberFromBigInt(value: bigint, label: string): number {
+  const maximum = BigInt(Number.MAX_SAFE_INTEGER)
+  if (value > maximum || value < -maximum) {
+    throw new RangeError(`${label} exceeds safe integer accounting range`)
+  }
+  return Number(value)
+}
+
+function safeInteger(value: number, label: string): bigint {
+  if (!Number.isSafeInteger(value)) {
+    throw new RangeError(`${label} must be a safe integer`)
+  }
+  return BigInt(value)
 }
 
 /**
@@ -270,14 +294,25 @@ export function resolveTerminalUsageSettlement(
   // actual usage — a title attempt's included — may honestly exceed it, so an
   // actual title component rides on top of the capped estimate instead of
   // being swallowed by it.
-  let actualCredits = primaryCredits + titleCredits
+  let actualCredits = safeNumberFromBigInt(
+    BigInt(primaryCredits) + BigInt(titleCredits),
+    "Terminal settlement credit result"
+  )
   let uncappedCredits: number | undefined
   if (estimateBased) {
     const actualTitleCredits = titleBasis === "actual" ? titleCredits : 0
-    const estimatedCredits = actualCredits - actualTitleCredits
-    if (estimatedCredits > reservation.reservedCredits) {
+    const estimatedCredits = safeInteger(actualCredits, "actualCredits") -
+      safeInteger(actualTitleCredits, "actualTitleCredits")
+    const reservedCredits = safeInteger(
+      reservation.reservedCredits,
+      "reservedCredits"
+    )
+    if (estimatedCredits > reservedCredits) {
       uncappedCredits = actualCredits
-      actualCredits = reservation.reservedCredits + actualTitleCredits
+      actualCredits = safeNumberFromBigInt(
+        reservedCredits + safeInteger(actualTitleCredits, "actualTitleCredits"),
+        "Capped terminal settlement credit result"
+      )
     }
   }
   return {
@@ -302,9 +337,19 @@ export type BucketBalances = {
 
 /** The materialized-balance invariant every mutation must preserve. */
 export function bucketInvariantHolds(bucket: BucketBalances): boolean {
+  if (
+    !Number.isSafeInteger(bucket.grantedCredits) ||
+    !Number.isSafeInteger(bucket.availableCredits) ||
+    !Number.isSafeInteger(bucket.reservedCredits) ||
+    !Number.isSafeInteger(bucket.spentCredits)
+  ) {
+    return false
+  }
   return (
-    bucket.availableCredits ===
-    bucket.grantedCredits - bucket.spentCredits - bucket.reservedCredits
+    safeInteger(bucket.availableCredits, "availableCredits") ===
+    safeInteger(bucket.grantedCredits, "grantedCredits") -
+      safeInteger(bucket.spentCredits, "spentCredits") -
+      safeInteger(bucket.reservedCredits, "reservedCredits")
   )
 }
 
@@ -312,10 +357,17 @@ export function applyReserve(
   bucket: BucketBalances,
   estimatedCredits: number
 ): BucketBalances {
+  const estimated = safeInteger(estimatedCredits, "estimatedCredits")
   return {
     ...bucket,
-    availableCredits: bucket.availableCredits - estimatedCredits,
-    reservedCredits: bucket.reservedCredits + estimatedCredits,
+    availableCredits: safeNumberFromBigInt(
+      safeInteger(bucket.availableCredits, "availableCredits") - estimated,
+      "availableCredits"
+    ),
+    reservedCredits: safeNumberFromBigInt(
+      safeInteger(bucket.reservedCredits, "reservedCredits") + estimated,
+      "reservedCredits"
+    ),
   }
 }
 
@@ -330,11 +382,24 @@ export function applySettle(
   reservedCredits: number,
   actualCredits: number
 ): BucketBalances {
+  const reserved = safeInteger(reservedCredits, "reservedCredits")
+  const actual = safeInteger(actualCredits, "actualCredits")
   return {
     ...bucket,
-    availableCredits: bucket.availableCredits + reservedCredits - actualCredits,
-    reservedCredits: bucket.reservedCredits - reservedCredits,
-    spentCredits: bucket.spentCredits + actualCredits,
+    availableCredits: safeNumberFromBigInt(
+      safeInteger(bucket.availableCredits, "availableCredits") +
+        reserved -
+        actual,
+      "availableCredits"
+    ),
+    reservedCredits: safeNumberFromBigInt(
+      safeInteger(bucket.reservedCredits, "bucket reservedCredits") - reserved,
+      "reservedCredits"
+    ),
+    spentCredits: safeNumberFromBigInt(
+      safeInteger(bucket.spentCredits, "spentCredits") + actual,
+      "spentCredits"
+    ),
   }
 }
 
@@ -343,10 +408,17 @@ export function applyRelease(
   bucket: BucketBalances,
   reservedCredits: number
 ): BucketBalances {
+  const reserved = safeInteger(reservedCredits, "reservedCredits")
   return {
     ...bucket,
-    availableCredits: bucket.availableCredits + reservedCredits,
-    reservedCredits: bucket.reservedCredits - reservedCredits,
+    availableCredits: safeNumberFromBigInt(
+      safeInteger(bucket.availableCredits, "availableCredits") + reserved,
+      "availableCredits"
+    ),
+    reservedCredits: safeNumberFromBigInt(
+      safeInteger(bucket.reservedCredits, "bucket reservedCredits") - reserved,
+      "reservedCredits"
+    ),
   }
 }
 
