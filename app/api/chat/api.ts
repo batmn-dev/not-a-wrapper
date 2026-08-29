@@ -213,6 +213,13 @@ async function getPinnedContinuationProvider(
 function toAdmissionError(
   failure: RouteResolutionFailure
 ): PublicChatHttpError {
+  if (failure.reason === "invalid_generation_budget") {
+    return new PublicChatHttpError({
+      message: `This model needs a generation budget of at least ${failure.minimumGenerationBudget.toLocaleString()} tokens when fixed reasoning is enabled.`,
+      statusCode: 400,
+      code: "INVALID_GENERATION_BUDGET",
+    })
+  }
   if (failure.reason === "insufficient_allowance") {
     // Reached only when no usable fallback BYOK route existed — allowance
     // exhaustion WITH a valid fallback key transparently chose BYOK instead.
