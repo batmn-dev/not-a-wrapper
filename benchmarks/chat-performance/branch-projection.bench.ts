@@ -1,11 +1,7 @@
 /**
- * Branch-projection benchmark (plan PR 0a, step 2).
+ * Branch-projection benchmark.
  *
- * Reproduces the supplied branch finding in a repository-owned harness:
- * the per-call adapter pattern rebuilds its context per helper call, so full
- * projection cost grows superlinearly with row count. The PR 1 single-pass
- * candidate (one shared context per array version) runs in the same process
- * for a direct comparison; equivalence is asserted before timing.
+ * Compares the per-call adapters with the production single-context path.
  *
  * Run with: bun run bench:chat
  * Record results per docs/measurements/2026-07-22-chat-performance-baseline.md.
@@ -16,7 +12,7 @@ import {
   buildDeterministicBranchTree,
   buildRandomBranchTree,
   buildRandomBranchTreeSeeds,
-  currentBranchImplementation,
+  arrayAdapterBranchImplementation,
   describeBenchEnvironment,
   NAMED_BRANCH_FIXTURES,
   singlePassBranchImplementation,
@@ -24,7 +20,7 @@ import {
 } from "./fixtures"
 
 const IMPLEMENTATIONS: BranchProjectionImplementation[] = [
-  currentBranchImplementation,
+  arrayAdapterBranchImplementation,
   singlePassBranchImplementation,
 ]
 
@@ -37,9 +33,7 @@ const randomTrees = buildRandomBranchTreeSeeds(200).map((seed) =>
   buildRandomBranchTree(seed)
 )
 
-// Environment + equivalence recorded once per run: every registered
-// implementation must produce identical output hashes before timing means
-// anything.
+// Every implementation must produce identical output before timing matters.
 console.log(
   "[chat-performance] environment:",
   JSON.stringify(await describeBenchEnvironment())
@@ -55,8 +49,7 @@ console.log(
 
 for (const implementation of IMPLEMENTATIONS) {
   describe(`branch projection — ${implementation.name}`, () => {
-    // The large trees are slow on the current implementation (~hundreds of
-    // ms/op); fixed low iteration counts keep one bench run bounded.
+    // The adapter baseline is slow on large trees, so keep runs bounded.
     bench(
       "575-row branched tree",
       () => {

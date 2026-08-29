@@ -143,7 +143,7 @@ status/error publications are exempt (they bypass the coalescer by design).
 
 | Metric | Source | Gate? | Status |
 |---|---|---|---|
-| `branch_projection_ms` (575/1,150-row + named + seeded fixtures) | `branch-projection.bench.ts` | yes — 5 ms p95 gate, env-gated `CHAT_PERF_GATES=true`; wired blocking in `.github/workflows/perf-benchmark.yml` (Phase 6, 2026-08-28) | existing |
+| `branch_projection_ms` (575/1,150-row + named + seeded fixtures) | `branch-projection.bench.ts` | yes — 5 ms p95 for the production path in the controlled weekly benchmark lane | existing |
 | `markdown_projection_replay_ms` (7 payload shapes × 40 updates) | `markdown-projection.bench.ts` | yes (scaling gates exist) | existing |
 | `shiki_full_block_ms` / `shiki_init_ms` | `render-stream.bench.tsx` | yes | existing |
 | `projection_hash` / `correctness_hash` | FNV-1a over outputs (`fixtures.ts:54`) | **blocking** — a hash mismatch invalidates the run's perf numbers | existing (payload hashes pinned in `fixtures.test.ts`, Phase 6, 2026-08-28) |

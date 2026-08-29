@@ -3,8 +3,8 @@
 # Separate from ci-cd.yml on purpose: this needs a real Convex deployment and
 # a server env (secret PERF_ENV_FILE), takes minutes of browser time, and its
 # numbers are runner-class-relative — none of which belongs in the per-PR
-# gate. Per-PR protection stays in ci-cd.yml's `bun run test`, which already
-# runs the projection correctness gates and the pinned fixture hashes.
+# gate. Per-PR protection stays in ci-cd.yml's `bun run test`, which covers
+# branch semantics, Markdown projection correctness, and pinned fixture hashes.
 #
 # Setup (one-time):
 #   1. Secret PERF_ENV_FILE — the contents of a .env.local for the perf
@@ -60,10 +60,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The gate file's timing half runs only here (CHAT_PERF_GATES), per its
-      # own contract: blocking in the benchmark environment, never in the
-      # per-PR lane. Local p95 is ~0.5 ms against the 5 ms budget, so a
-      # shared runner's 3-4x slowdown still leaves wide margin.
+      # Branch timing runs only in this controlled lane, never ordinary CI.
       - name: Micro-benchmark timing gates
         run: CHAT_PERF_GATES=true bunx vitest run benchmarks/chat-performance/branch-projection-gate.test.ts benchmarks/chat-performance/markdown-projection-gate.test.ts
 

@@ -49,14 +49,14 @@ failure exits non-zero and the timings must be discarded.
 
 `.github/workflows/perf-benchmark.yml` runs weekly and on demand
 (`workflow_dispatch`, suite choice): micro-benchmark timing gates
-(`CHAT_PERF_GATES=true`), the browser suite (correctness-blocking via this
-harness's exit code), and `compare-results.ts` against the checked-in
+for branch and Markdown projection, the browser suite (correctness-blocking
+via this harness's exit code), and `compare-results.ts` against the checked-in
 runner-class baseline in `baselines/` (report-only until a baseline is
 committed; see `baselines/README.md`). One-time setup: the `PERF_ENV_FILE`
 secret with the perf server's `.env.local` contents, plus a dedicated
 `PERF_AUTH_PASSWORD` secret for durable runs. Per-PR CI is untouched —
-`bun run test` already carries the projection correctness gates and the pinned
-fixture payload hashes.
+`bun run test` already covers branch semantics, Markdown projection
+correctness, and pinned fixture payload hashes.
 
 ## Scope and known limitations
 

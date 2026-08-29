@@ -4,7 +4,7 @@
  *
  * Everything here is seeded and pure: the same seed always produces the same
  * branch trees, payloads, and stream scripts, so benchmark output hashes are
- * committable and legacy/candidate implementations can be compared exactly.
+ * committable and implementations can be compared exactly.
  * No wall-clock time is read anywhere — stream cadence is virtual (`atMs`).
  */
 import type { Doc, Id } from "../../convex/_generated/dataModel"
@@ -308,8 +308,7 @@ export type RandomBranchTreeOptions = {
 /**
  * Seeded randomized tree generator. Injects, per seed: legacy rows (missing
  * branch fields), duplicate/missing selected flags, tied order values, orphan
- * parent pointers, explicit root siblings, and occasional parent cycles —
- * the anomaly matrix PR 1's equivalence gate requires.
+ * parent pointers, explicit root siblings, and occasional parent cycles.
  */
 export function buildRandomBranchTree(
   seed: number,
@@ -376,7 +375,7 @@ export function buildRandomBranchTreeSeeds(
   return Array.from({ length: count }, (_, i) => baseSeed + i * 7919)
 }
 
-// Branch projection harness (legacy/candidate equivalence)
+// Branch projection harness
 
 /**
  * The canonical serializable projection compared between implementations:
@@ -402,7 +401,7 @@ export type BranchProjectionImplementation = {
   project: (messages: BenchMessage[]) => BranchProjection
 }
 
-export type BranchProjectionOps = {
+type BranchProjectionOps = {
   getSelectedPathMessages: (messages: BenchMessage[]) => BenchMessage[]
   getBranchInfoForMessage: (
     messages: BenchMessage[],
@@ -414,11 +413,9 @@ export type BranchProjectionOps = {
 }
 
 /**
- * Builds a projection through array-based ops — the exact call pattern
- * `convex/messages.ts:withBranchMetadata` uses today (one selected-path
- * derivation plus one per-message descriptor lookup over the full array).
+ * Builds a projection through array-based ops for comparison benchmarks.
  */
-export function createArrayOpsImplementation(
+function createArrayOpsImplementation(
   name: string,
   ops: BranchProjectionOps
 ): BranchProjectionImplementation {
@@ -448,12 +445,9 @@ export function createArrayOpsImplementation(
 }
 
 /**
- * The per-call adapter pattern — the pre-PR-1 production call shape (each
- * helper call builds its own context). Benchmark-comparison baseline only:
- * production has used the shared single-pass context unconditionally since
- * the 2026-07-23 flag collapse.
+ * The per-call adapter pattern. Benchmark-only: production shares one context.
  */
-export const currentBranchImplementation = createArrayOpsImplementation(
+export const arrayAdapterBranchImplementation = createArrayOpsImplementation(
   "per-call-adapters",
   {
     getSelectedPathMessages,
@@ -463,8 +457,7 @@ export const currentBranchImplementation = createArrayOpsImplementation(
 )
 
 /**
- * One shared `BranchContext` per array version — the production shape
- * (unconditional since the 2026-07-23 flag collapse).
+ * One shared `BranchContext` per array version — the production shape.
  */
 export const singlePassBranchImplementation: BranchProjectionImplementation = {
   name: "single-pass-context",
@@ -481,14 +474,13 @@ export const singlePassBranchImplementation: BranchProjectionImplementation = {
   },
 }
 
-export function projectionHash(projection: BranchProjection): string {
+function projectionHash(projection: BranchProjection): string {
   return hashValue(projection)
 }
 
 /**
  * Asserts every implementation produces byte-identical projections for the
- * given tree. Returns the shared hash. Throws with the differing
- * implementation names on mismatch — the PR 1 equivalence gate.
+ * given tree. Returns the shared hash and names mismatches.
  */
 export function assertProjectionEquivalence(
   implementations: BranchProjectionImplementation[],
