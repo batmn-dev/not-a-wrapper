@@ -122,8 +122,6 @@ export function UserProvider({
         message_count: prevUser?.message_count ?? null,
         daily_message_count: prevUser?.daily_message_count ?? null,
         daily_reset: prevUser?.daily_reset ?? null,
-        daily_pro_message_count: prevUser?.daily_pro_message_count ?? null,
-        daily_pro_reset: prevUser?.daily_pro_reset ?? null,
         last_active_at: prevUser?.last_active_at ?? null,
         created_at: prevUser?.created_at ?? null,
         favorite_models: prevUser?.favorite_models ?? null,

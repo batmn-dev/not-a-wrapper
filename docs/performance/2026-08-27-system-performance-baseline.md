@@ -1,8 +1,7 @@
 # System performance baseline — 2026-08-27
 
 Phase 4 deliverable of the performance benchmarking plan. Contract:
-[`metric-dictionary.md`](./metric-dictionary.md) · lifecycle inventory:
-[`current-measurement-map.md`](./current-measurement-map.md) · harness:
+[`metric-dictionary.md`](./metric-dictionary.md) · harness:
 `benchmarks/chat-performance/browser/` (results file
 `results/2026-08-27T20-55-52-standard.json`, local).
 
@@ -96,9 +95,9 @@ unmeasured, not fast.
 
 - **Branch projection (single-pass context, production implementation):**
   1,150-row tree mean 0.43 ms (max 0.47 ms); 575-row 0.23 ms; 200-tree seeded
-  sweep 3.9 ms total. The env-gated 5 ms p95 gate (`CHAT_PERF_GATES=true`)
-  passes. The retired per-call-adapters implementation measures 86 ms on the
-  1,150-row tree — the gate protects a ~200× regression margin.
+  sweep 3.9 ms total. The controlled benchmark lane keeps a 5 ms p95 gate on
+  the production path. The per-call adapter baseline measured 86 ms on the
+  1,150-row tree, about 200× slower.
 - **Markdown incremental projection (×40 tail-growth replay):** ~12 KB mixed
   16.2 ms vs legacy 341 ms; ~100 KB 14.6 ms vs 3,381 ms (the incremental
   projection is size-invariant on append); 400 short blocks 7.8 ms; growing

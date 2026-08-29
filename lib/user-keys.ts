@@ -107,31 +107,6 @@ export async function getEffectiveProviderApiKey(
     : { provider, apiKey: undefined, source: undefined }
 }
 
-/**
- * Backwards-compatible key-only accessor. New provider runtimes should prefer
- * `getEffectiveProviderApiKey` so they do not reconstruct credential provenance
- * from whether a key string happens to exist.
- */
-export async function getEffectiveApiKey(
-  provider: Provider,
-  token?: string
-): Promise<string | null> {
-  return (await getEffectiveProviderApiKey(provider, token)).apiKey ?? null
-}
-
-/**
- * @deprecated Use getUserKeyFromConvex instead
- */
-export async function getUserKey(
-  _userId: string,
-  _provider: Provider
-): Promise<string | null> {
-  console.warn(
-    "getUserKey is deprecated, use getUserKeyFromConvex instead"
-  )
-  return null
-}
-
 // Tool Provider Key Management
 //
 // Tool providers (Exa, Firecrawl) use the same encrypted key storage as

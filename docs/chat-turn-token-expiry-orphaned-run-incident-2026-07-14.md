@@ -11,7 +11,7 @@
 
 ## Post-remediation reconciliation (2026-07-19)
 
-This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14; code references in the historical sections describe the 2026-07-14 tree and may no longer match current `HEAD`. The recommendation, outcome table, and phase labels below are frozen checkpoints from 2026-07-19: they may call work “remaining” that later landed through PRs 0–8 of the [durable-turn gameplan](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md). The optional PR 9 browser harness remained out of scope. Current implementation guidance lives in [ADR-0009](./adr/0009-durable-turn-runtime.md), [ADR-0011](./adr/0011-durable-turn-settlement.md), `CONTEXT.md`, and current source—not in this report or the historical gameplan.
+This document is a historical incident record. The diagnosis, evidence, and timeline sections remain accurate as written on 2026-07-14; code references in the historical sections describe the 2026-07-14 tree and may no longer match current `HEAD`. The recommendation, outcome table, and phase labels below are frozen checkpoints from 2026-07-19 and may call work “remaining” that later landed. Current implementation guidance lives in [ADR-0009](./adr/0009-durable-turn-runtime.md), [ADR-0011](./adr/0011-durable-turn-settlement.md), `CONTEXT.md`, and current source.
 
 ### Outcome of each recommendation
 
@@ -213,7 +213,7 @@ The current implementation discards both when the second outcome fails.
 
 No independent liveness authority expired the orphaned run. The terminal mutation failed, and there is no heartbeat lease plus server-side reaper currently guaranteed to convert an abandoned active run to a terminal failure.
 
-The accepted durable-turn architecture already identifies this need. [`docs/gameplans/extend-the-existing-convex-native-durable-turn-architecture.md`](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) proposes generation-run leases, heartbeats, first-terminal-wins transitions, and a Convex cron reaper. This incident is direct evidence that those controls are correctness requirements, not optional resilience polish.
+The durable-turn architecture now uses generation-run leases, heartbeats, first-terminal-wins transitions, and a Convex cron reaper. This incident is direct evidence that those controls are correctness requirements, not optional resilience polish. See [ADR-0009](./adr/0009-durable-turn-runtime.md) and [ADR-0011](./adr/0011-durable-turn-settlement.md).
 
 ### Why the Activity panel claimed success
 
@@ -703,7 +703,7 @@ A longer route limit may reduce platform kills, but it also permits more tools, 
 - [`lib/chat-messages/assistant-activity.ts`](../lib/chat-messages/assistant-activity.ts), lines 292–328 — defaults to `Finished / Done` in the absence of explicit failure evidence.
 - [`docs/adr/0006-chat-turn-runtime.md`](./adr/0006-chat-turn-runtime.md) — current stream/persistence runtime contract.
 - [`docs/adr/0009-durable-turn-runtime.md`](./adr/0009-durable-turn-runtime.md) — current durable runtime boundary and rejecting finalizer semantics.
-- [`docs/gameplans/extend-the-existing-convex-native-durable-turn-architecture.md`](./gameplans/extend-the-existing-convex-native-durable-turn-architecture.md) — proposed leases, heartbeats, reaper, status guards, and partial-content preservation.
+- [`docs/adr/0011-durable-turn-settlement.md`](./adr/0011-durable-turn-settlement.md) — current settlement and durable-write guarantees.
 - `.next/dev/logs/next-development.log` — transient local evidence for the model finish, tool-budget degradation, token-expiry failures, and failed response pipe.
 
 ### Official references

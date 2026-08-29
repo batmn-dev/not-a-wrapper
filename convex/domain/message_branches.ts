@@ -20,9 +20,8 @@ export type MessageBranchInfo = {
  * The canonical branch context: one immutable snapshot of sorting, legacy
  * effective parents, child grouping, and lookup maps per message-array
  * version. All branch semantics live in
- * `createBranchContext` and the `*FromContext` primitives; the array-based
- * exports below are one-line adapters kept as migration aids — they are NOT
- * an alternate implementation.
+ * `createBranchContext` and the `*FromContext` primitives. The array-based
+ * exports below are convenience adapters, not an alternate implementation.
  *
  * A context is valid only for the exact array it was built from. Never reuse
  * one after any message's branch field (parentMessageId / branchIndex /
@@ -71,10 +70,6 @@ function hasExplicitBranchState(message: ChatMessage) {
   )
 }
 
-export function hasBranchState(messages: ChatMessage[]) {
-  return messages.some(hasExplicitBranchState)
-}
-
 function branchSort(messages: ChatMessage[]) {
   return [...messages].sort((a, b) => {
     const branchIndexA = a.branchIndex ?? Number.MAX_SAFE_INTEGER
@@ -100,8 +95,8 @@ function hasRootSiblingWithRole(
  * groups and orders children, and builds lookup maps. Effective-parent
  * inference is deliberately order-dependent (a row without explicit branch
  * state chains to the previous row in sort order unless it is an explicit
- * root sibling seen after another root row of its role) — preserved exactly
- * from the pre-context implementation.
+ * root sibling seen after another root row of its role), which keeps mixed
+ * legacy and branched histories connected.
  */
 export function createBranchContext(
   messages: readonly ChatMessage[]
@@ -229,11 +224,9 @@ export type MessageBranchPatch = {
 
 /**
  * Missing-branch-index assignments for one sibling group, computed in a
- * single pass over the group in message-sort order. The
- * assignment matches the pre-context sequential behavior exactly: every call
- * for the same group walked the same order and produced the same indexes, so
- * one pass per group is a pure de-duplication. Memoized per context — a new
- * array version gets a new context and fresh assignments.
+ * single pass over the group in message-sort order. Existing indexes stay
+ * reserved and missing indexes fill the first available positions. Memoized
+ * per context; a new array version gets fresh assignments.
  */
 type MissingIndexAssignment = {
   assignments: Map<Id<"messages">, number>
@@ -259,9 +252,7 @@ function getMissingIndexAssignment(
   const cached = byGroup.get(groupKey)
   if (cached) return cached
 
-  // Assignment walks the group in message-sort order (NOT branch order) —
-  // the pre-context implementation re-sorted siblings with `sortMessages`
-  // before assigning, and that order is load-bearing for exact equivalence.
+  // Assign in message order, not branch order, so missing indexes are stable.
   const siblings = sortMessages(
     getSiblingMessagesFromContext(context, parentId, role)
   )
@@ -299,10 +290,7 @@ export function getNextMissingBranchIndexFromContext(
 }
 
 export function getSelectedPathBranchNormalizationPatchesFromContext(
-  context: BranchContext,
-  options: {
-    skipSelectedMessageIds?: Set<Id<"messages">>
-  } = {}
+  context: BranchContext
 ): MessageBranchPatch[] {
   const selectedPath = getSelectedPathMessagesFromContext(context)
   const patches: MessageBranchPatch[] = []
@@ -326,10 +314,7 @@ export function getSelectedPathBranchNormalizationPatchesFromContext(
       hasPatch = true
     }
 
-    if (
-      message.selected === undefined &&
-      !options.skipSelectedMessageIds?.has(message._id)
-    ) {
+    if (message.selected === undefined) {
       patch.selected = true
       hasPatch = true
     }
@@ -364,63 +349,17 @@ export function getBranchInfoForMessageFromContext(
   }
 }
 
-// Test/benchmark-only array adapters — one-line delegations to the context
-// primitives above. Each builds a throwaway context; production hot paths use
-// the shared `*FromContext` primitives instead.
-export function getEffectiveParentId(
-  messages: ChatMessage[],
-  message: ChatMessage
-) {
-  return getEffectiveParentIdFromContext(createBranchContext(messages), message)
-}
-
-export function getSiblingMessages(
-  messages: ChatMessage[],
-  parentId: Id<"messages"> | undefined,
-  role: ChatMessage["role"]
-) {
-  return getSiblingMessagesFromContext(
-    createBranchContext(messages),
-    parentId,
-    role
-  )
-}
-
-export function getNextBranchIndex(
-  messages: ChatMessage[],
-  parentId: Id<"messages"> | undefined,
-  role: ChatMessage["role"]
-) {
-  return getNextBranchIndexFromContext(
-    createBranchContext(messages),
-    parentId,
-    role
-  )
-}
-
+// Array adapters for simple callers and benchmarks. Each builds a throwaway
+// context; production hot paths share the `*FromContext` primitives instead.
 export function getSelectedPathMessages(messages: ChatMessage[]) {
   return getSelectedPathMessagesFromContext(createBranchContext(messages))
 }
 
-export function getNextMissingBranchIndex(
-  messages: ChatMessage[],
-  target: ChatMessage
-) {
-  return getNextMissingBranchIndexFromContext(
-    createBranchContext(messages),
-    target
-  )
-}
-
 export function getSelectedPathBranchNormalizationPatches(
-  messages: ChatMessage[],
-  options: {
-    skipSelectedMessageIds?: Set<Id<"messages">>
-  } = {}
+  messages: ChatMessage[]
 ): MessageBranchPatch[] {
   return getSelectedPathBranchNormalizationPatchesFromContext(
-    createBranchContext(messages),
-    options
+    createBranchContext(messages)
   )
 }
 

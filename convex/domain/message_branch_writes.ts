@@ -98,9 +98,7 @@ function asSimulatedDoc(
  * that changes a branch field produces a NEW array (`applyPatchToMessages`
  * maps to a fresh array), so keying the cache by array reference is exactly
  * the plan's lifecycle rule: a context is never reused after any branch field
- * in its source array changes, and each logical array version is built at
- * most once. (Unconditional since the 2026-07-23 flag collapse; the writer
- * equivalence property tests pin exact parity with the pre-PR-1 writer.)
+ * in its source array changes, and each logical array version is built once.
  */
 const contextByArrayVersion = new WeakMap<
   readonly ChatMessage[],
@@ -161,11 +159,8 @@ function planSelectedPathNormalization(messages: ChatMessage[]) {
 
 /**
  * Sibling patches are planned from one context of the entry array: missing
- * branch indexes for the whole group are assigned in a
- * single pass instead of rebuilding after each sibling patch. This matches
- * the previous sequential behavior exactly — each sequential call recomputed
- * the same group assignment and consumed the next free index in the same
- * message-sort order — which the writer equivalence tests pin down.
+ * branch indexes for the whole group are assigned in one pass, in stable
+ * message order, without rebuilding after each sibling patch.
  */
 function planSiblingSelection(
   messages: ChatMessage[],

@@ -9,8 +9,6 @@ type ConvexUserProfileFields = Pick<
   | "messageCount"
   | "dailyMessageCount"
   | "dailyReset"
-  | "dailyProMessageCount"
-  | "dailyProReset"
   | "lastActiveAt"
   | "favoriteModels"
   | "systemPrompt"
@@ -50,12 +48,6 @@ export function mergeUserProfileWithConvexFields(
     daily_reset: timestampToUserProfileString(
       convexUser.dailyReset,
       user.daily_reset
-    ),
-    daily_pro_message_count:
-      convexUser.dailyProMessageCount ?? user.daily_pro_message_count,
-    daily_pro_reset: timestampToUserProfileString(
-      convexUser.dailyProReset,
-      user.daily_pro_reset
     ),
     last_active_at: timestampToUserProfileString(
       convexUser.lastActiveAt,

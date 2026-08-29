@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { decryptSecret } from "./encryption"
 import { getProviderStrategy } from "./openproviders/provider-strategy"
 import {
-  getEffectiveApiKey,
   getEffectiveProviderApiKey,
   getUserKeyFromConvex,
 } from "./user-keys"
@@ -170,11 +169,5 @@ describe("provider API key resolution", () => {
 
     expect(decryptSecret).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it("keeps the legacy key-only accessor compatible", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "platform-key")
-
-    await expect(getEffectiveApiKey("openai")).resolves.toBe("platform-key")
   })
 })

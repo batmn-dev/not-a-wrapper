@@ -153,11 +153,8 @@ upgrade (PR #97). Read the body's names through this mapping:
   standalone `toUIMessageStream({ stream: result.stream, ... })` converter —
   the UI-message semantics, carrying the response-level `onEnd` — plus
   `createUIMessageStreamResponse` — SSE encoding, the `Response`, and
-  `consumeSseStream`. The runtime currently uses the also-deprecated instance
-  `result.toUIMessageStream(...)` equivalent; new work should use the
-  standalone converter because the instance helper is scheduled for removal in
-  the next major. Both
-  halves remain inside
+  `consumeSseStream`. The runtime uses the standalone converter. Both halves
+  remain inside
   `toResponse(signal)`'s single closure, so the "both finish layers share one
   closure" invariant is untouched.
 - Approval gating is no longer applied by wrapping tools (the

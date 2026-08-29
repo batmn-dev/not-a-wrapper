@@ -94,8 +94,8 @@ _Avoid_: branch-write helpers (the shallow primitives it replaces), generic inse
 _Status_: implemented 2026-07-11 (branch `darknight/janus-cosmetics`).
 
 **Branch context**:
-The canonical immutable snapshot (`createBranchContext` + `*FromContext` primitives in `convex/domain/message_branches.ts`) of one message-array version's branch facts — sorting, legacy effective parents, sibling grouping/order, lookup maps. All branch semantics live in the factory and primitives; production consumers unconditionally share one context per query/plan or planned array version. A context is valid only for the exact array it was built from and is never reused after a branch field changes. The array-based helper exports remain only as test/benchmark compatibility adapters, not a second algorithm; equivalence against the pre-change fixture is pinned by property tests over 200+ seeded trees and by the writer op-log equivalence suite.
-_Avoid_: branch cache (it is rebuilt per version, never invalidated in place), second branch implementation (the adapters delegate; the legacy copy is a test-only fixture)
+The canonical immutable snapshot (`createBranchContext` + `*FromContext` primitives in `convex/domain/message_branches.ts`) of one message-array version's branch facts — sorting, legacy effective parents, sibling grouping/order, lookup maps. All branch semantics live in the factory and primitives; production consumers unconditionally share one context per query/plan or planned array version. A context is valid only for the exact array it was built from and is never reused after a branch field changes. The array-based helper exports are convenience adapters, not a second algorithm. Semantic tests cover legacy linear chats, selected paths, sibling metadata, normalization, malformed trees, and branch writes directly.
+_Avoid_: branch cache (it is rebuilt per version, never invalidated in place), second branch implementation (the adapters delegate and tests assert semantics directly)
 _Status_: implemented 2026-07-22 (chat-responsiveness plan PR 1); rollout lever and redundant shadow query removed after soak on 2026-07-23.
 
 **Chat-owned deletion**:

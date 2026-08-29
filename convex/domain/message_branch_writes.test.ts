@@ -220,6 +220,12 @@ describe("Message branch writer", () => {
     expect(getSelectedPathMessages(messages).map((item) => item._id)).toEqual([
       result._id,
     ])
+
+    await writer(ctx).select(original._id)
+    expect(getSelectedPathMessages(messages).map((item) => item._id)).toEqual([
+      original._id,
+      descendant._id,
+    ])
   })
 
   it("writes a regeneration sibling with structural provenance", async () => {
@@ -268,8 +274,10 @@ describe("Message branch writer", () => {
 
     await writer(ctx).select(missingTwo._id)
 
+    expect(messages.find((item) => item._id === indexed._id)?.branchIndex).toBe(2)
+    expect(messages.find((item) => item._id === missingOne._id)?.branchIndex).toBe(0)
+    expect(messages.find((item) => item._id === missingTwo._id)?.branchIndex).toBe(1)
     const siblings = messages.filter((item) => item.role === "assistant")
-    expect(siblings.map((item) => item.branchIndex).sort()).toEqual([0, 1, 2])
     expect(siblings.filter((item) => item.selected)).toHaveLength(1)
     expect(messages.find((item) => item._id === user._id)).toMatchObject({
       branchIndex: 0,
@@ -303,6 +311,13 @@ describe("Message branch writer", () => {
     ])
     expect(selectedPath.at(-1)?.selected).toBe(true)
     expect(result._id).toBe(oldAnswer._id)
+    expect(messages.find((item) => item._id === user._id)?.updatedAt).toBe(0)
+    expect(messages.find((item) => item._id === oldAnswer._id)?.updatedAt).toBe(
+      100
+    )
+    expect(messages.find((item) => item._id === newAnswer._id)?.updatedAt).toBe(
+      100
+    )
   })
 
   it("rejects missing, cross-chat, and role-mismatched targets without writes", async () => {

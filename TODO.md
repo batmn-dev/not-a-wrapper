@@ -99,12 +99,6 @@ floor or time/output-proportional estimate rather than the full reservation),
 and implement it within ADR-0011's settle-never-rejects and ADR-0021's
 reserve-then-settle contracts. Add a regression test that a first-beat Stop
 settles for far less than the full estimate.
-- ~~**Intermittent live-stream adoption loss after the first durable send's
-hard navigation**~~ — RESOLVED 2026-08-28 (home + project variants); the
-harness fails any scenario with `liveStreamNotAdoptedRuns > 0` as the
-regression gate. Full forensics and both fixes:
-`docs/performance/2026-08-28-adoption-loss-root-cause.md`.
-
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting
 animations from narrowly approved, behavior-critical exceptions. Require a
@@ -112,13 +106,6 @@ bounded live-state lifecycle, reduced-motion fallback, and measured profiling
 before assigning severity or changing established behavior; prefer a
 compositor-friendly equivalent when it preserves the same interaction and
 visual result.
-- **Retired Google title model:** `selectChatTitleModelConfig` picks the cheapest
-visible same-provider model, which for Google is `gemini-2.5-flash-lite`; Google
-now returns 404 "no longer available to new users" for it, so every new Gemini
-chat stays titled "New chat" (`chat_title_generation_failed`, AI_APICallError).
-Mark the retired 2.5 Flash models non-visible in the Google catalog (Google
-points at `gemini-3.5-flash-lite`) and make title selection skip models the
-provider has retired.
 - **Routine compatible dependency refresh:** update the remaining compatible
 patch and minor releases, including React, Sentry, Braintrust, PostHog,
 WorkOS, TanStack Query, Shiki, Base UI, React Hook Form, Tailwind, Vitest, and
@@ -135,8 +122,5 @@ text-streaming feel end to end. Known suspects are catalogued in
 `docs/streaming-regression-suspects-2026-08-20.md`: the platform generation
 budget (OpenAI/Google reasoning shares the 8,192-token allowance), route
 flapping incl. first-turn local chat ids skipping the platform tier,
-sequential Convex roundtrips on the admission critical path
-(reserve/getKeySettings/getUserKey), and settle waiting on title usage.
-Beyond fixing those, look for anything else that makes responses feel fast:
-parallelize admission reads, measure TTFT via the chat-perf spans, and
+and settle waiting on title usage. Measure TTFT via the chat-perf spans and
 re-verify perceived streaming smoothness in the browser.

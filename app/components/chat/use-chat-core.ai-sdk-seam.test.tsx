@@ -150,8 +150,6 @@ const authenticatedUser = {
   message_count: 0,
   daily_message_count: 0,
   daily_reset: null,
-  daily_pro_message_count: 0,
-  daily_pro_reset: null,
   last_active_at: null,
   created_at: null,
   favorite_models: null,
