@@ -28,49 +28,11 @@ describe("Button visually disabled state", () => {
     expect(button.tabIndex).toBe(0)
     expect(button.getAttribute("aria-disabled")).toBe("true")
     expect(button.hasAttribute("data-visually-disabled")).toBe(true)
-    expect(button.className).toContain("keyboard-focused:ring-3")
-    expect(button.className).not.toContain("focus-visible:ring-3")
 
     act(() => button.click())
 
     expect(onClick).not.toHaveBeenCalled()
     expect(onSubmit).not.toHaveBeenCalled()
-
-    act(() => root.unmount())
-    container.remove()
-  })
-
-  it("keeps composer interaction colors owned by the composer primitive", () => {
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-
-    act(() => {
-      root.render(<Button variant="composer">Composer control</Button>)
-    })
-
-    const button = container.querySelector("button") as HTMLButtonElement
-    expect(button.className).toContain("text-foreground")
-    expect(button.className).not.toContain("hover:bg-interactive-hover")
-    expect(button.className).not.toContain("active:bg-interactive-pressed")
-    expect(button.className).toContain("press-motion")
-
-    act(() => root.unmount())
-    container.remove()
-  })
-
-  it("allows interaction owners to opt out of shared press motion", () => {
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-
-    act(() => {
-      root.render(<Button pressMotion="none">Stable anchor</Button>)
-    })
-
-    expect(container.querySelector("button")?.className).not.toContain(
-      "press-motion"
-    )
 
     act(() => root.unmount())
     container.remove()

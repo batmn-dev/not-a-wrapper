@@ -120,7 +120,7 @@ export default defineSchema({
     // Freshness ceiling for the live projection, written ONCE (at prepare:
     // startedAt + route budget + slack; at approval pause: the approval's
     // expiresAt) and cleared at terminal transitions — never per heartbeat
-    // (gameplan §5/§18 #4). An expired deadline must never render a spinner.
+    // An expired deadline must never render a spinner.
     liveRunFreshUntil: v.optional(v.number()),
     // Deletion tombstone (logical deletion is immediate; physical cleanup is a
     // scheduled drain — see deletionJobs). A set value makes the chat invisible
@@ -293,7 +293,7 @@ export default defineSchema({
     // terminal outcomes (aborted/failed) clear both fields (revocation).
     grantDigest: v.optional(v.string()),
     grantExpiresAt: v.optional(v.number()),
-    // --- Durable liveness (durable-turn gameplan §5). Lease fields are
+    // Durable liveness. Lease fields are
     // written by the worker heartbeat; a document missing them sorts as
     // `undefined` in by_status_lease_expires, so every reaper range MUST
     // exclude undefined (`.gt("leaseExpiresAt", undefined)`) or lease-less
@@ -317,7 +317,7 @@ export default defineSchema({
     stopRequestedAt: v.optional(v.number()),
     stopRequestedBy: v.optional(v.id("users")),
     supersededByRunId: v.optional(v.id("generationRuns")),
-    // Approval continuation idempotency (gameplan §10): the first continuation
+    // Approval continuation idempotency: the first continuation
     // records both relation fields; a second attempt sees continuationRunId
     // and returns a typed conflict.
     continuationRunId: v.optional(v.id("generationRuns")),
@@ -404,7 +404,7 @@ export default defineSchema({
     createdAt: v.number(),
     resolvedAt: v.optional(v.number()),
     resolvedByUserId: v.optional(v.id("users")),
-    // Approval pauses are lease-free with their own expiry (gameplan §6).
+    // Approval pauses are lease-free with their own expiry.
     // Backfill pending rows before enabling the approval reaper — the
     // undefined-first index ordering would otherwise expire them instantly;
     // the reaper range excludes undefined regardless.

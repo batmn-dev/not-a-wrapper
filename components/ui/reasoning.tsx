@@ -1,25 +1,7 @@
 /**
- * @component Reasoning
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/reasoning
- * @customized true
- * @customizations
- *   - Uses React 19 render-sync pattern instead of useEffect for streaming state
- *   - Upstream: `useEffect(() => { if (isStreaming...) }, [isStreaming])`
- *   - This project: Syncs state during render to avoid extra render cycle
- *   - This follows React 19 best practices for derived state patterns
- *   - Added phase-aware ReasoningLabel with shimmer, duration, and chevron
- *   - Extended context with phase and durationSeconds for unified thinking UX
- *   - The simpler version at `app/components/chat/reasoning.tsx` has been removed;
- *     this is now the single reasoning component used throughout the app
- *   - ReasoningContent uses CSS grid 0fr/1fr animation instead of JS scrollHeight measurement
- *     (fixes content cutoff bug caused by stale max-height values during streaming)
- * @upgradeNotes
- *   - Do NOT revert to useEffect pattern for isStreaming state sync
- *   - Preserve the `if (isStreaming !== prevIsStreaming)` render-sync block
- *   - This pattern reduces render cycles and effect cleanup overhead
- *   - Do NOT revert ReasoningContent to scrollHeight/max-height pattern — the CSS grid
- *     approach is inherently correct and avoids measurement race conditions
+ * Based on prompt-kit: https://prompt-kit.com/docs/reasoning
+ * Local contracts: phase-aware presentation, render-synced streaming state,
+ * and CSS-grid disclosure without effect or scroll-height measurement.
  */
 "use client"
 

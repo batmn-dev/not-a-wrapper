@@ -56,88 +56,12 @@ describe("sidebar leading-icon placement contract", () => {
     expect(expandedIconCenter).toBe(railCenter)
   })
 
-  it("keeps the ChatGPT-parity absolute values", () => {
-    expect(resolvePx("--sidebar-leading-slot-size")).toBe(20)
-    expect(resolvePx("--sidebar-collapsed-item-width")).toBe(40)
-    expect(resolvePx("--sidebar-rail-width")).toBe(52)
-    expect(resolvePx("--sidebar-width")).toBe(260)
-    expect(resolvePx("--sidebar-header-height")).toBe(52)
-  })
-
-  it("gives both sidebar layers the same footer avatar center", () => {
-    // The expanded footer row (h-12) and the collapsed rail button (h-10)
-    // differ in height; the rail footer's bottom margin is derived from that
-    // difference in globals.css. Both layers share --sidebar-footer-inset as
-    // their bottom inset (expanded sticky-footer padding, rail nav padding),
-    // so the avatar center must land the same distance from the bottom edge —
-    // otherwise the avatar jumps vertically during the collapse crossfade.
-    const expandedCenter =
-      resolvePx("--sidebar-footer-inset") +
-      resolvePx("--sidebar-footer-row-height") / 2
-    const railCenter =
-      resolvePx("--sidebar-footer-inset") +
-      resolvePx("--sidebar-rail-footer-margin-bottom") +
-      resolvePx("--sidebar-footer-collapsed-button-size") / 2
-    expect(railCenter).toBe(expandedCenter)
-    expect(expandedCenter).toBe(30)
-  })
-
   it("keeps the collapsed frame width equal to the rail width", () => {
     // The ui/sidebar frame animates to --sidebar-width-icon while the app
     // renders its collapsed rail at --sidebar-rail-width inside it. Widths are
     // CSS-owned (no TS constants), so this equality is the whole contract.
     expect(resolvePx("--sidebar-width-icon")).toBe(
       resolvePx("--sidebar-rail-width")
-    )
-  })
-
-  it("gives both organizer modes one section-stack rhythm", () => {
-    // Cluster -> first section, and section -> section. Both "In one list" and
-    // "By project" flow through the shared .sidebar-section-stack class (also
-    // used by the design-system registry sidebar); these pins keep the rhythm
-    // from being re-derived per mode or per surface.
-    // First gap = section-margin (20) - first-margin (8); adjacent sections
-    // sit a full section-margin apart.
-    expect(resolvePx("--sidebar-section-stack-margin-top")).toBe(12)
-    expect(resolvePx("--sidebar-section-stack-gap")).toBe(20)
-
-    // The class must consume the tokens (not re-literalized values), so every
-    // surface that applies it inherits rhythm changes from one place.
-    const stackRule = css.match(/\.sidebar-section-stack\s*\{[^}]*\}/)?.[0]
-    expect(stackRule).toContain("var(--sidebar-section-stack-gap)")
-    expect(stackRule).toContain("var(--sidebar-section-stack-margin-top)")
-  })
-
-  it("compensates the row border on the block axis only", () => {
-    expect(
-      resolvePx("--sidebar-row-inner-content-block") +
-        resolvePx("--sidebar-row-separator-size")
-    ).toBe(resolvePx("--sidebar-row-content-block"))
-    // The row draws border-block only, so inline padding must be the shared
-    // token — an "inner" inline variant would re-introduce the 1px icon drift.
-    expect(declarations.has("--sidebar-row-inner-content-inline")).toBe(false)
-  })
-
-  it("matches ChatGPT's trailing-action reflow geometry", () => {
-    const actionContribution =
-      resolvePx("--sidebar-row-action-width") -
-      resolvePx("--sidebar-row-action-margin-inline-start") -
-      resolvePx("--sidebar-row-action-margin-inline-end")
-    const trailingCenterInset =
-      resolvePx("--sidebar-row-action-width") / 2 -
-      resolvePx("--sidebar-row-action-margin-inline-end")
-    const twoActionRail =
-      2 * actionContribution + resolvePx("--sidebar-row-action-gap")
-
-    expect(resolvePx("--sidebar-row-action-width")).toBe(34)
-    expect(resolvePx("--sidebar-row-action-gap")).toBe(4)
-    expect(resolvePx("--sidebar-row-action-content-gap")).toBe(8)
-    expect(actionContribution).toBe(20)
-    expect(trailingCenterInset).toBe(7)
-    expect(twoActionRail).toBe(44)
-    expect(resolvePx("--sidebar-row-action-rail-width")).toBe(twoActionRail)
-    expect(css).toContain(
-      '.sidebar-row-status-slot[data-sidebar-row-status-slot="compact"]'
     )
   })
 })

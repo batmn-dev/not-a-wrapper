@@ -1,18 +1,6 @@
 /**
- * @component TextShimmer
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/text-shimmer
- * @customized true
- * @customizations
- *   - Adds configurable `duration` prop (default: 4 seconds)
- *   - Adds configurable `spread` prop (default: 20, range: 5-45)
- *   - Adds the captured tertiary status variant used by bare assistant work
- *   - Upstream has fixed animation timing; this project allows customization
- *   - Enables fine-tuning of shimmer effect speed and gradient width
- * @upgradeNotes
- *   - Preserve duration and spread props with their default values
- *   - Maintain dynamicSpread clamping logic (min: 5, max: 45)
- *   - Verify animationDuration inline style is preserved
+ * Based on prompt-kit: https://prompt-kit.com/docs/text-shimmer
+ * Adds bounded spread, configurable duration, and the tertiary status variant.
  */
 "use client"
 

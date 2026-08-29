@@ -64,7 +64,7 @@ describe("secret value detection", () => {
   })
 })
 
-describe("chat-performance scrub corpus (plan PR 0b step 8)", () => {
+describe("chat-performance scrub corpus", () => {
   it("catches WorkOS-style session/access tokens behind Bearer schemes", () => {
     for (const leak of [
       "Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6InNzb19vaWRjX2tleV9wYWlyIn0.payload.sig",

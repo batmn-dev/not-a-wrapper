@@ -1,18 +1,6 @@
 /**
- * @component Image
- * @source prompt-kit
- * @upstream https://prompt-kit.com/docs/image
- * @customized true
- * @customizations
- *   - ESLint disable for `@next/next/no-img-element` is intentional
- *   - Renders dynamic base64/blob URLs that next/image doesn't support
- *   - ESLint disable for `react-hooks/set-state-in-effect` is required
- *   - useState in useEffect needed for URL.revokeObjectURL cleanup pattern
- *   - Each ESLint disable has inline comment explaining the reason
- * @upgradeNotes
- *   - Preserve ESLint disable comments with explanations
- *   - Do NOT convert img tag to next/image (base64/blob URLs not supported)
- *   - Maintain useEffect cleanup pattern for URL.revokeObjectURL
+ * Based on prompt-kit: https://prompt-kit.com/docs/image
+ * Dynamic base64/blob sources require a native img and an object-URL cleanup.
  */
 "use client"
 

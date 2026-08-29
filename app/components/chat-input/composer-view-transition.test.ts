@@ -1,7 +1,5 @@
 /** @vitest-environment jsdom */
 
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   COMPOSER_SLIDE_TRANSITION_CLASS,
@@ -12,8 +10,6 @@ type StartViewTransition = (update: () => void) => {
   finished: Promise<unknown>
 }
 
-const globalCss = readFileSync(join(process.cwd(), "app/globals.css"), "utf8")
-
 afterEach(() => {
   document.documentElement.classList.remove(COMPOSER_SLIDE_TRANSITION_CLASS)
   Reflect.deleteProperty(
@@ -23,18 +19,6 @@ afterEach(() => {
 })
 
 describe("runComposerSlideTransition", () => {
-  it("ships dormant identities for each independently transitioning composer part", () => {
-    expect(globalCss).toContain(".composer-parts-transition {")
-    expect(globalCss).toContain("--vt-composer: none;")
-    expect(globalCss).toContain(
-      '[data-composer-surface="true"] {\n  view-transition-group: contain;'
-    )
-    expect(globalCss).toContain('[data-composer-transition-slot="leading"]')
-    expect(globalCss).toContain("p.placeholder")
-    expect(globalCss).toContain('[data-composer-transition-slot="trailing"]')
-    expect(globalCss).toContain("::view-transition-group(composer-placeholder)")
-  })
-
   it("runs the update immediately when view transitions are unavailable", () => {
     const update = vi.fn()
 

@@ -31,7 +31,7 @@ export type LifecycleSignal =
   | { kind: "supersede"; reason: string }
   | { kind: "approval-requested" }
   | { kind: "approvals-resolved"; anyDenied: boolean }
-  // Durable-turn control signals (gameplan §10): an authenticated user Stop,
+  // Durable-turn control signals: an authenticated user Stop,
   // the lease reaper failing a dead worker's run, and the approval reaper
   // expiring an unattended pause.
   | { kind: "stop"; reason?: string }
@@ -46,7 +46,7 @@ export type LifecycleSignal =
 
 /**
  * Why a run reached its terminal status — durable audit vocabulary carried on
- * the run doc and the selected-conversation projection (gameplan §5). Stamped
+ * the run doc and the selected-conversation projection. Stamped
  * by every settling transition below; the approvals-resolved close leaves it
  * unset for the denied case (no member of this union describes it, and
  * inventing one is worse than an optional).
@@ -277,7 +277,7 @@ export function resolveGenerationRunTransition(
       }
     }
     case "stop": {
-      // The authenticated durable Stop (gameplan §9): same reach as abort —
+      // The authenticated durable Stop has the same reach as abort:
       // active statuses INCLUDING awaiting_approval (a Stop may close a
       // paused run; the handler denies its pending approvals in the same
       // transaction). First terminal wins; a settled run returns its
@@ -301,7 +301,7 @@ export function resolveGenerationRunTransition(
       }
     }
     case "lease-expired": {
-      // The lease reaper fails a run whose worker died (gameplan §6). Only
+      // The lease reaper fails a run whose worker died. Only
       // worker-executing statuses hold a lease: an awaiting_approval pause is
       // lease-free (the approval reaper owns its expiry), and a terminal run
       // is settled. Partial content is preserved by the terminal message
@@ -328,7 +328,7 @@ export function resolveGenerationRunTransition(
       }
     }
     case "approval-expired": {
-      // The approval reaper settles a pause nobody resolved (gameplan §6).
+      // The approval reaper settles a pause nobody resolved.
       // Only awaiting_approval holds an approval expiry; anything else is
       // either settled or a misrouted signal.
       if (runStatus !== "awaiting_approval") {

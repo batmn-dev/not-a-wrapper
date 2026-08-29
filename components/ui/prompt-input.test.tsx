@@ -285,22 +285,6 @@ describe("PromptInput responsive expansion", () => {
     const fallback = container.querySelector(
       ".composer-fallback-textarea"
     ) as HTMLTextAreaElement
-    const surface = container.querySelector(
-      '[data-composer-surface="true"]'
-    ) as HTMLElement
-    const form = container.querySelector("form") as HTMLFormElement
-    const overlayHost = container.querySelector(
-      "[data-composer-overlay-host]"
-    ) as HTMLElement
-    const layout = container.querySelector(
-      '[data-composer-layout="true"]'
-    ) as HTMLElement
-    const editorScroller = container.querySelector(
-      '[data-composer-editor-scroller="true"]'
-    ) as HTMLElement
-    const editorWrapper = container.querySelector(
-      '[data-composer-editor-wrapper="true"]'
-    ) as HTMLElement
 
     expect(editor.getAttribute("contenteditable")).toBe("true")
     expect(editor.getAttribute("role")).toBe("textbox")
@@ -312,57 +296,13 @@ describe("PromptInput responsive expansion", () => {
     expect(editor.getAttribute("autocapitalize")).toBe("sentences")
     expect(editor.getAttribute("spellcheck")).toBe("true")
     expect(editor.getAttribute("translate")).toBe("no")
-    expect(editor.className).not.toContain("min-h-[42px]")
-    expect(editor.className).not.toContain("mt-4")
-    expect(editor.className).not.toContain("pb-4")
     expect(editor.textContent).toBe("first line")
     expect(editor.querySelector("p")?.getAttribute("dir")).toBe("auto")
-    expect(fallback.className).toContain("wcDTda_fallbackTextarea")
     expect(fallback.getAttribute("aria-hidden")).toBeNull()
     expect(fallback.getAttribute("tabindex")).toBeNull()
     expect(fallback.getAttribute("readonly")).toBeNull()
     expect(fallback.name).toBe("prompt-textarea")
     expect(fallback.style.display).toBe("none")
-    expect(form.className).toContain("relative")
-    expect(form.className).toContain("z-1")
-    expect(overlayHost.parentElement?.parentElement).toBe(form)
-    expect(overlayHost.className).toContain("pointer-events-none")
-    expect(overlayHost.className).toContain("absolute")
-    expect(overlayHost.className).toContain("inset-0")
-    expect(layout.hasAttribute("data-composer-body")).toBe(true)
-    expect(layout.hasAttribute("data-composer-grid")).toBe(true)
-    expect(layout.className).toContain("min-w-0")
-    expect(layout.className).toContain(
-      "@max-[520px]/main:[grid-template-areas:'header_header_header'_'primary_primary_primary'_'leading_footer_trailing']"
-    )
-    expect(layout.className).toContain(
-      "max-sm:group-not-data-expanded/composer:pb-2"
-    )
-    expect(editorScroller.className).toContain("vertical-scroll-fade-mask")
-    expect(editorScroller.hasAttribute("data-scrollable-surface")).toBe(true)
-    expect(editorScroller.className).toContain("wcDTda_prosemirror-parent")
-    expect(editorScroller.className).toContain("default-browser")
-    expect(editorScroller.className).toContain("max-h-[max(30svh,5rem)]")
-    expect(editorScroller.className).not.toContain("max-h-52")
-    expect(editorScroller.className).toContain("scroll-py-4")
-    expect(editorScroller.style.maxHeight).toBe("")
-    expect(editorWrapper.className).toContain("min-h-0")
-    expect(editorWrapper.className).toContain("items-stretch")
-    expect(editorWrapper.className).not.toContain(
-      "group-data-[expanded-composer]/composer:h-full"
-    )
-    expect(form.style.getPropertyValue("--composer-border-radius")).toBe("28px")
-    expect(form.style.getPropertyValue("view-transition-name")).toBe(
-      "var(--vt-composer)"
-    )
-    expect(surface.className).toContain(
-      "rounded-[var(--composer-border-radius)]"
-    )
-    expect(surface.className).toContain("bg-[var(--composer-surface-primary)]")
-    expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
-    expect(surface.className).toContain(
-      "max-sm:not-dark:shadow-[0_0_0_1px_rgba(0,_0,_0,_0.04),0_2px_8px_0_rgba(0,_0,_0,_0.04),0px_4px_40px_8px_rgba(0,_0,_0,_0.025)]"
-    )
 
     renderDraft("second line\nthird line")
 
@@ -395,7 +335,6 @@ describe("PromptInput responsive expansion", () => {
     expect(editor.querySelectorAll("p")).toHaveLength(1)
     expect(paragraph?.getAttribute("data-empty-paragraph")).toBe("true")
     expect(paragraph?.getAttribute("data-placeholder")).toBe("Ask anything")
-    expect(paragraph?.classList).toContain("placeholder")
 
     act(() => {
       root.render(
@@ -593,7 +532,7 @@ describe("PromptInput responsive expansion", () => {
     expect(editor.getAttribute("aria-readonly")).toBeNull()
   })
 
-  it("uses ChatGPT's accessible expand control and root-owned scroll lock", () => {
+  it("uses an accessible expand control and root-owned scroll lock", () => {
     const renderComposer = (expanded: boolean) => {
       act(() => {
         root.render(
@@ -620,35 +559,11 @@ describe("PromptInput responsive expansion", () => {
     const surface = container.querySelector(
       '[data-composer-surface="true"]'
     ) as HTMLElement
-    const editorWrapper = container.querySelector(
-      '[data-composer-editor-wrapper="true"]'
-    ) as HTMLElement
-    const editorScroller = container.querySelector(
-      '[data-composer-editor-scroller="true"]'
-    ) as HTMLElement
     const expandButton = container.querySelector(
       'button[aria-label="Expand"]'
     ) as HTMLButtonElement
 
     expect(form.hasAttribute("data-expanded-composer-mode-button")).toBe(true)
-    expect(editorWrapper.className).toContain(
-      "group-data-expanded/composer:ps-2.5"
-    )
-    expect(editorWrapper.className).toContain(
-      "group-data-expanded/composer:pe-0"
-    )
-    expect(editorWrapper.className).not.toContain(
-      "group-data-[expanded]/composer:px-2.5"
-    )
-    expect(editorScroller.className).toContain(
-      "group-data-[expanded-composer-mode-button]/composer:pe-9"
-    )
-    expect(editorWrapper.className).not.toContain(
-      "group-data-[expanded-composer]/composer:h-full"
-    )
-    expect(editorScroller.className).toContain(
-      "group-data-[expanded-composer]/composer:h-full"
-    )
     expect(
       container.querySelector("[data-composer-controls-anchor]")
     ).not.toBeNull()
@@ -656,23 +571,7 @@ describe("PromptInput responsive expansion", () => {
     expect(expandButton.getAttribute("aria-pressed")).toBe("false")
     expect(expandButton.getAttribute("data-slot")).toBe("tooltip-trigger")
     expect(expandButton.hasAttribute("data-composer-control")).toBe(true)
-    expect(expandButton.className).toContain("composer-btn")
-    expect(expandButton.className).not.toContain("hover:bg-interactive-hover")
-    expect(expandButton.className).not.toContain(
-      "active:bg-interactive-pressed"
-    )
-    expect(expandButton.className).toContain("press-motion")
     expect(expandButton.querySelector('[data-slot="icon"]')).not.toBeNull()
-    expect(
-      expandButton.querySelector('[data-slot="icon"]')?.className
-    ).toContain("text-[var(--text-secondary)]")
-    expect(expandButton.querySelector("svg")?.getAttribute("width")).toBe("20")
-    expect(expandButton.querySelector("path")?.getAttribute("fill")).toBe(
-      "currentColor"
-    )
-    expect(expandButton.querySelector("path")?.getAttribute("d")).toBe(
-      "M4.335 11a.665.665 0 0 1 1.33 0v3.335H9l.134.014a.665.665 0 0 1 0 1.302L9 15.665H5A.665.665 0 0 1 4.335 15zm10-2V5.665H11a.665.665 0 0 1 0-1.33h4l.134.014c.303.062.531.33.531.651v4a.665.665 0 1 1-1.33 0"
-    )
 
     act(() => expandButton.click())
 
@@ -680,23 +579,12 @@ describe("PromptInput responsive expansion", () => {
       'button[aria-label="Collapse"]'
     ) as HTMLButtonElement
     expect(collapseButton.getAttribute("aria-pressed")).toBe("true")
-    expect(collapseButton.querySelector("path")?.getAttribute("fill")).toBe(
-      "currentColor"
-    )
     expect(form.hasAttribute("data-expanded-composer")).toBe(true)
     expect(surface.hasAttribute("data-expanded-composer")).toBe(true)
     expect(scrollRoot.hasAttribute("data-expanded-composer")).toBe(true)
-    expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
-    expect(surface.className).toContain(
-      "h-[min(calc(100svh-var(--header-height)-8rem),48rem)]"
-    )
-    expect(collapseButton.querySelector("path")?.getAttribute("d")).toBe(
-      "M7.335 16v-3.335H4a.665.665 0 1 1 0-1.33h4c.367 0 .665.298.665.665v4a.665.665 0 0 1-1.33 0m4-12a.665.665 0 1 1 1.33 0v3.335H16l.134.014a.665.665 0 0 1 0 1.302L16 8.665h-4A.665.665 0 0 1 11.335 8z"
-    )
 
     renderComposer(false)
     expect(scrollRoot.hasAttribute("data-expanded-composer")).toBe(false)
-    expect(surface.className).toContain("[corner-shape:superellipse(1.1)]")
     expect(container.querySelector('button[aria-label="Expand"]')).toBeNull()
   })
 

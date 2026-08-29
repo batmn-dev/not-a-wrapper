@@ -1,6 +1,6 @@
 /**
- * Approval-continuation idempotency, layer 3 of 3 (durable-turn gameplan §10,
- * PR 8): only the tab that LOCALLY resolved an approval may arm the AI SDK's
+ * Approval-continuation idempotency, layer 3 of 3: only the tab that locally
+ * resolved an approval may arm the AI SDK's
  * `sendAutomaticallyWhen` continuation. Approval-responded parts adopted from
  * the server (another tab resolved, or hydration re-installed a resolved
  * history) never auto-send — regardless of whether the SDK evaluates its
@@ -51,7 +51,7 @@ export function messageHasLocallyResolvedApproval(message: {
  * are CONSUMED — the resolution authorizes exactly one continuation dispatch.
  * A later remount that rehydrates the same approval-responded parts (still
  * present until the continuation lands) finds the gate closed, so reopening
- * or reloading never submits another model request (gameplan §19 checklist).
+ * or reloading never submits another model request.
  * Returns the consumed ids (empty = gate closed, auto-send must not arm).
  *
  * The caller MUST pair this with `restoreLocallyResolvedApprovals` when the

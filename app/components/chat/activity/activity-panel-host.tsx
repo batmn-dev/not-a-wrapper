@@ -11,8 +11,8 @@ import {
 } from "react"
 
 /**
- * Bridges the Chat-owned `ActivityPanel` to a slot rendered by `LayoutApp`,
- * without moving the scroll column (plan §5 commit 4, GA §7 R4/R6).
+ * Bridges the Chat-owned `ActivityPanel` to a slot rendered by `LayoutApp`
+ * without moving the scroll column.
  *
  * The bridge shares the slot's DOM element rather than a React node: `Chat`
  * portals the docked shell into that element, so the docked subtree stays in

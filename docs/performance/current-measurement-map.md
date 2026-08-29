@@ -211,7 +211,8 @@ Everything lives in `benchmarks/chat-performance/` and runs via
   `render-stream.bench.tsx` (pre-ADR-0016 baseline + Shiki). Gate tests (run in normal
   `bun run test`): fixture reproducibility, hash equivalence, the 5 ms p95 branch gate
   (env-gated behind `CHAT_PERF_GATES=true` — **nothing sets it anywhere**), markdown
-  scaling gates, jsdom cadence-selection test.
+  scaling gates. The one-off jsdom cadence-selection measurement was removed after the
+  production cadence decision; the browser performance workflow owns ongoing evidence.
 - **Output is `console.log` only.** No JSON serialization, no vitest reporter/outputFile,
   no CI execution of `bench:chat`, no artifact retention, no baseline comparison.
   Recorded baseline hashes (`4a062f446ff7b783` / `28eda0330f8c4e4e`) live in prose in

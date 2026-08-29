@@ -1,9 +1,7 @@
 /**
- * TEST-ONLY LEGACY FIXTURE — verbatim copy of `message_branch_writes.ts` as it existed before
- * PR 1 (single-pass branch context; chat-responsiveness plan). It is the
- * accepted-behavior baseline for the property/equivalence tests and is never
- * imported by production code. Remove after the PR 1 soak once the permanent
- * fixtures fully encode its behavior (plan PR 1 step 9).
+ * Test-only legacy fixture: the accepted-behavior baseline for branch-writer
+ * property and equivalence tests. Never imported by production code. Remove
+ * once permanent fixtures fully encode its behavior.
  */
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"

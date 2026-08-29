@@ -17,7 +17,7 @@ const grokModels: ModelConfig[] = [
       "xAI's recommended reasoning flagship with a 1M-token context.",
     tags: ["flagship", "reasoning", "advanced"],
     contextWindow: 1000000,
-    // xAI's docs don't state a max output — leave unset (plan §2D).
+    // xAI's docs do not state a max output, so leave it unset.
     inputCost: 1.25,
     outputCost: 2.5,
     priceUnit: "per 1M tokens",

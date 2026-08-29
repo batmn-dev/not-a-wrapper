@@ -500,7 +500,6 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     await runtime.prepare()
     const response = await runtime.toResponse(new AbortController().signal)
 
-    // The HTTP envelope streams to completion with a finish state.
     expect(response.status).toBe(200)
     const sse = await response.text()
     expect(sse).toContain('"messageId":"msg1"') // durable assistant id
@@ -520,7 +519,6 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     ])
     expect(toolNames(model.doStreamCalls[TOOL_STEPS])).toEqual(["get_weather"])
 
-    // The SDK executed the tool locally once per step.
     expect(weatherExecute).toHaveBeenCalledTimes(TOOL_STEPS)
     expect(weatherExecute.mock.calls[0][0]).toEqual({ city: "City 1" })
 

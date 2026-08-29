@@ -1,5 +1,3 @@
-// lib/tools/runtime.ts
-
 import { MCP_CONNECTION_TIMEOUT_MS, PREPARE_STEP_THRESHOLD } from "@/lib/config"
 import {
   loadUserMcpTools,
@@ -344,9 +342,7 @@ async function buildToolRuntime(
   }
 
   // Exa API key resolution (shared by Layer 2 capabilities)
-  //
-  // Conditional resolution (plan PR 7b; unconditional since the 2026-07-23
-  // flag collapse): every Exa-backed tool enters through exactly two doors —
+  // Every Exa-backed tool enters through exactly two doors:
   // the Layer 2 search fallback (search injected AND Layer 1 yielded no
   // provider-native search tools) and Layer 2 content extraction (the
   // model's `extract` capability). Both facts are known before any secret

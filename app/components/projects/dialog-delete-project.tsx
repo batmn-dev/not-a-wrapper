@@ -43,7 +43,6 @@ export function DialogDeleteProject({
       await deleteProject({ projectId: project._id })
       setIsOpen(false)
 
-      // If we're currently viewing this project, redirect to home
       if (pathname.startsWith(`/p/${project._id}`)) {
         router.push("/")
       }

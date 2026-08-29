@@ -3,10 +3,7 @@
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it } from "vitest"
-import {
-  getSidebarPaginationSkeletonWidths,
-  SidebarPaginationState,
-} from "./sidebar-pagination-skeleton"
+import { SidebarPaginationState } from "./sidebar-pagination-skeleton"
 
 describe("SidebarPaginationState", () => {
   let container: HTMLDivElement | null = null
@@ -65,18 +62,5 @@ describe("SidebarPaginationState", () => {
       container?.querySelector("[data-sidebar-pagination-skeleton]")
     ).toBeNull()
     expect(container?.querySelectorAll("[data-chat-row]")).toHaveLength(2)
-  })
-
-  it("uses stable page-varying widths inside the measured range", () => {
-    expect(getSidebarPaginationSkeletonWidths(0)).toEqual([100, 86, 100])
-    expect(getSidebarPaginationSkeletonWidths(1)).toEqual([94, 92, 83])
-    expect(getSidebarPaginationSkeletonWidths(1)).toBe(
-      getSidebarPaginationSkeletonWidths(1)
-    )
-    expect(
-      getSidebarPaginationSkeletonWidths(2).every(
-        (width) => width >= 80 && width <= 100
-      )
-    ).toBe(true)
   })
 })

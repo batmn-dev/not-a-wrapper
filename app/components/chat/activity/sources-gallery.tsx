@@ -21,7 +21,7 @@ export type SourcesGalleryProps = {
  * SourcesGallery — the app-level "Sources · N" gallery for the Activity panel.
  * Lives app-side (not in `components/ui`) because it depends on the app-level
  * `PanelSectionHeading`, preserving the `components/ui` → app dependency
- * boundary (plan §5 commit 1, GA §6.1). Renders ONE `ul` of full-bleed
+ * boundary. Renders one `ul` of full-bleed
  * `SourcesGalleryItem` anchors. No `groups` until real grouped source data
  * exists; rows are NOT routed through the `Source` HoverCard trio.
  */

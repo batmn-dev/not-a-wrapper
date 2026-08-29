@@ -20,7 +20,7 @@ export type Chat = {
   updated_at: string | null
   // Absent on optimistic/local chats, which derive an idle sidebar status.
   live_run_status?: "streaming" | "awaiting" | null
-  // Once-written freshness ceiling for the live projection (gameplan §5):
+  // Once-written freshness ceiling for the live projection:
   // prepare stamps startedAt + route budget + slack; an approval pause stamps
   // the approval's own expiry. An expired ceiling must never render a spinner.
   live_run_fresh_until?: number | null

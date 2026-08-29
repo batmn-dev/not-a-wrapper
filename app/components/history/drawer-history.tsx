@@ -321,7 +321,6 @@ export function DrawerHistory({
                       No chat history found.
                     </div>
                   ) : view.isSearching ? (
-                    // When searching, display a flat list without grouping
                     <div className="space-y-2">
                       {view.results.map((chat) => renderChatItem(chat))}
                     </div>

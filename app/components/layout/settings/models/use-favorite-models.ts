@@ -73,7 +73,6 @@ export function useFavoriteModels() {
       return result
     },
     onMutate: async (newFavoriteModels: string[]) => {
-      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["favorite-models"] })
 
       const previousFavoriteModels = queryClient.getQueryData<string[]>([
@@ -89,7 +88,6 @@ export function useFavoriteModels() {
       _newFavoriteModels: string[],
       context: { previousFavoriteModels?: string[] } | undefined
     ) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
       if (
         context &&
         "previousFavoriteModels" in context &&

@@ -4,7 +4,7 @@ import { isTerminalGenerationRunStatus } from "./message_contract"
 /**
  * Generation run liveness — pure worker-writability, lease math, and ownership
  * predicates shared by prepare, heartbeat, snapshots, tools, approvals, Stop,
- * terminal writes, queries, and reaping (durable-turn gameplan §6/§12).
+ * terminal writes, queries, and reaping.
  *
  * Two deliberately DIFFERENT predicates guard worker writes:
  *
@@ -16,11 +16,11 @@ import { isTerminalGenerationRunStatus } from "./message_contract"
  *  - content-writable (`!isTerminalGenerationRunStatus`) — snapshots, tool
  *    invocations, approval creation. It INCLUDES `awaiting_approval`: the
  *    pausing worker's era ends at its envelope finalize, so its final flush
- *    and completion downgrade must still land (gameplan §18 #5).
+ *    and completion downgrade must still land.
  *
  * No MutationCtx, no db access, no Date.now(): time crosses as an argument.
  * Server code stores deadlines; ONLY the client resolver classifies them
- * against a clock (gameplan §18 #3) — the helpers here that take `now` exist
+ * against a clock. The helpers here that take `now` exist
  * for the reaper's transactional re-validation, which runs on server time
  * inside a mutation, not for query-side classification.
  */
@@ -34,7 +34,7 @@ export const LEASE_DURATION_MS = 45_000
 /** Reaper cadence — bounds the zombie window to lease + one tick. */
 export const REAPER_INTERVAL_MS = 15_000
 
-/** Approval pause lifetime (gameplan §5 — operationally configurable). */
+/** Operationally configurable approval pause lifetime. */
 export const APPROVAL_EXPIRY_MS = 24 * 60 * 60 * 1000
 
 /**
@@ -49,8 +49,8 @@ export const APPROVAL_EXPIRY_MS = 24 * 60 * 60 * 1000
 export const RESOLVED_APPROVAL_CONTINUATION_GRACE_MS = 5 * 60 * 1000
 
 /**
- * Client-side clock-skew grace for lease/approval classification (resolver
- * input, gameplan §8). Lives here so the one number is shared with tests.
+ * Client-side clock-skew grace for lease/approval classification. Lives here
+ * so the resolver and tests share one value.
  */
 export const LEASE_SKEW_GRACE_MS = 5_000
 
@@ -78,8 +78,8 @@ export function computeLeaseExpiresAt(now: number): number {
 
 /**
  * Has a stored lease expired? A run with NO lease fields is never expired —
- * the same `undefined` exclusion the reaper's index range must apply
- * (gameplan §18 #6): a lease-less row predates the heartbeat deploy and must
+ * the same `undefined` exclusion the reaper's index range must apply: a
+ * lease-less row predates the heartbeat deploy and must
  * not be reaped by lease logic.
  */
 export function isLeaseExpired(
@@ -101,8 +101,7 @@ export function runOwnsChatStatusSlot(
  * The once-written sidebar freshness ceiling stamped at prepare
  * (`chat.liveRunFreshUntil`): no legitimate run outlives its route budget
  * plus slack. The approval pause overwrites it with the approval's own
- * expiry; terminal transitions clear it. Never rewritten per heartbeat
- * (gameplan §18 #4).
+ * expiry; terminal transitions clear it. Never rewritten per heartbeat.
  */
 export function computeLiveRunFreshUntil(startedAt: number): number {
   return (

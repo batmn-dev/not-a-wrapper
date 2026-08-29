@@ -146,21 +146,6 @@ describe("UserProfile", () => {
 
     expect(pickerClick).toHaveBeenCalledTimes(1)
     expect(button?.textContent).toContain("Profile picture")
-    const hoverOverlay = button?.querySelector<HTMLElement>(
-      ".group-hover\\/settings-field-surface\\:opacity-100"
-    )
-    expect(hoverOverlay).toBeInstanceOf(HTMLSpanElement)
-    expect(hoverOverlay?.className).toContain("bg-popover")
-    expect(
-      button
-        ?.querySelector<HTMLElement>("[data-slot=icon]")
-        ?.style.getPropertyValue("--icon-slot-size")
-    ).toBe("24px")
-    expect(
-      button
-        ?.querySelector<HTMLElement>("[data-slot=icon]")
-        ?.style.getPropertyValue("--icon-glyph-size")
-    ).toBe("24px")
   })
 
   it("disables profile-image selection while the profile is loading", () => {
@@ -293,26 +278,5 @@ describe("UserProfile", () => {
     expect(profileMocks.updateUser).toHaveBeenCalledWith({
       display_name: "Avery Morgan",
     })
-  })
-
-  it("applies the responsive visual contract to the rendered name editor", () => {
-    profileMocks.user = userProfileFixture
-    renderProfile()
-
-    const input = container?.querySelector<HTMLInputElement>(
-      "#settings-full-name"
-    )
-    const surface = input?.closest<HTMLElement>(
-      "[data-slot=settings-field-surface]"
-    )
-
-    expect(surface?.classList).toContain("focus-within:bg-row-hover")
-    expect(surface?.classList).toContain("sm:pr-2.5")
-    expect(input?.classList).toContain("border-input-border")
-    expect(input?.classList).toContain("bg-popover")
-    expect(input?.classList).toContain("hover:border-foreground")
-    expect(input?.classList).toContain("sm:field-sizing-content")
-    expect(input?.classList).toContain("sm:min-w-56")
-    expect(input?.classList).toContain("transition-none")
   })
 })

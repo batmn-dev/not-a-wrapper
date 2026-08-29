@@ -241,8 +241,8 @@ export function useChatCore({
   const handleError = useCallback((error: Error) => {
     const presentation = presentChatStreamError(error)
     if (presentation.kind === "swallow") {
-      // A losing approval-continuation POST (another tab's auto-send won —
-      // structured 409, gameplan §10) is swallowed without a failed repaint;
+      // A losing approval-continuation POST (another tab's auto-send won) is
+      // swallowed without a failed repaint;
       // this tab simply observes the winner's run through the projection.
       console.warn("Approval continuation conflict (another tab won):", error)
       return
@@ -342,7 +342,7 @@ export function useChatCore({
     return null
   }, [messages, status])
 
-  // Turn marks (PR 0b) — every input below is derived only when the
+  // Turn marks: every input below is derived only when the
   // build-time instrumentation flag is on; the hook is a no-op otherwise.
   const chatPerfTurnFacts = useMemo(() => {
     if (!isChatPerfClientEnabled()) {
@@ -639,8 +639,8 @@ export function useChatCore({
   const handleToolApproval = useCallback(
     async (approvalId: string, approved: boolean, reason?: string) => {
       try {
-        // Pending-only resolution (gameplan §10, PR 8): the mutation returns
-        // the CANONICAL decision — a conflicting second click adopts the
+        // Pending-only resolution: the mutation returns the canonical decision,
+        // so a conflicting second click adopts the
         // winner instead of overwriting it.
         const decision = approved
           ? await approveToolCall({ approvalId, reason })

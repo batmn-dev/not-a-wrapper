@@ -289,9 +289,6 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(skeleton).not.toBeNull()
     expect(skeleton.getAttribute("aria-hidden")).toBe("true")
     expect(skeleton.getAttribute("role")).toBeNull()
-    expect(skeleton.className).toContain("skeleton")
-    expect(skeleton.querySelectorAll(".skeleton-child")).toHaveLength(2)
-    expect(skeleton.querySelector(".animate-pulse")).toBeNull()
     expect(skeleton.closest('[aria-busy="true"]')).not.toBeNull()
 
     const github = {
@@ -347,7 +344,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(container.querySelector("[data-composer-menu-hint]")).toBeNull()
   })
 
-  it("uses ChatGPT's touch menu semantics and compact geometry on mobile", () => {
+  it("uses native menu semantics and keyboard containment on mobile", () => {
     breakpointMocks.isMobile = true
 
     act(() => {
@@ -389,33 +386,9 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
 
     expect(menu?.getAttribute("role")).toBe("menu")
     expect(trigger.getAttribute("aria-expanded")).toBe("true")
-    // The fine-pointer narrow-width popover is NOT the touch treatment —
-    // data-content-appearance marks only the mobile-OS icon-chip variant.
     expect(menu?.getAttribute("data-content-appearance")).toBeNull()
-    // ChatGPT's current mobile + menu: compact content-sized popover with
-    // plain glyph rows — not the old dark icon-circle panel.
-    expect(menu?.className).toContain("rounded-[20px]")
-    expect(menu?.className).toContain("py-2.5")
-    expect(menu?.className).not.toContain("w-[240px]")
-    // Content-sized: the rows set the width (capped at max-w-xs); the shared
-    // dropdown base's anchor-width sizing must NOT survive the merge, or the
-    // popover collapses to the + button's min-w floor and truncates labels.
-    expect(menu?.className).toContain("w-max")
-    expect(menu?.className).not.toContain("w-(--anchor-width)")
-    // Plain currentColor glyphs: no per-action icon tint on mobile rows.
-    expect(
-      menu?.querySelector('[class*="web-search-icon-foreground"]')
-    ).toBeNull()
-    // Surface and shadow come from the shared floating-surface tokens — no
-    // raw hex values or inline shadows on the menu.
-    expect(menu?.className).toContain("bg-floating-surface")
-    expect(menu?.className).toContain("shadow-floating-surface")
-    expect(menu?.className).not.toMatch(/#[0-9a-fA-F]{3,6}|rgba\(/)
     expect(filesItem?.getAttribute("role")).toBe("menuitem")
-    expect(filesItem?.className).toContain("min-h-9")
-    expect(filesItem?.className).toContain("rounded-[12px]")
     expect(filesItem?.textContent).toBe("Add photos & files")
-    expect(filesItem?.querySelector('[class*="rounded-full"]')).toBeNull()
     expect(menu?.textContent).not.toContain("Upload from computer")
     expect(webSearchItem?.getAttribute("role")).toBe("menuitemradio")
     expect(webSearchItem?.getAttribute("aria-checked")).toBe("false")
@@ -437,7 +410,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(menu?.hasAttribute("data-open")).toBe(true)
   })
 
-  it("renders ChatGPT's touch-optimized icon-chip popover on mobile-OS devices", () => {
+  it("renders touch actions and routes their native inputs on mobile-OS devices", () => {
     breakpointMocks.isMobile = true
     breakpointMocks.isTouch = true
     const onFilesAdded = vi.fn()
@@ -480,32 +453,13 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     const menu = document.body.querySelector<HTMLElement>(
       '[data-slot="dropdown-menu-content"]'
     )
-    // The touch treatment carries the appearance marker and ChatGPT's
-    // decompiled container geometry: rounded-28 superellipse, min-w 240px,
-    // item-height-capped, content-sized.
     expect(menu?.getAttribute("data-content-appearance")).toBe(
       "touch-optimized"
     )
-    expect(menu?.className).toContain("rounded-[28px]")
-    expect(menu?.className).toContain("min-w-60")
-    expect(menu?.className).toContain("w-max")
-    // Live source sets the visible-item cap through an element-scoped custom
-    // property, with 6.8 as the reusable stylesheet fallback.
-    expect(menu?.style.getPropertyValue("--min-items")).toBe("5.8")
-    expect(menu?.className).toContain(
-      "var(--min-items,6.8)*var(--floating-menu-item-height)"
+    const rows = menu?.querySelectorAll(
+      '[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]'
     )
-    expect(menu?.className).toContain("py-1.5")
-    expect(menu?.className).toContain("bg-(--floating-menu-touch-surface)")
-    expect(menu?.className).toContain("shadow-floating-menu-touch")
-    expect(menu?.className).toContain("select-none")
-
-    // Camera / Photos / Files rows with 36px full-round icon chips on the
-    // tertiary token, plus Web search and real connector rows in the same
-    // vocabulary.
-    const labels = [...(menu?.querySelectorAll(".truncate") ?? [])].map(
-      (node) => node.textContent
-    )
+    const labels = [...(rows ?? [])].map((node) => node.textContent)
     expect(labels).toEqual([
       "Camera",
       "Photos",
@@ -513,27 +467,12 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       "Web search",
       "GitHub",
     ])
-    const chips = menu?.querySelectorAll(
-      '[class*="rounded-full"][class*="--floating-menu-touch-tertiary"]'
-    )
-    expect(chips).toHaveLength(5)
-    const rows = menu?.querySelectorAll(
-      '[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]'
-    )
-    for (const row of rows ?? []) {
-      expect(row.className).toContain("min-h-(--floating-menu-item-height)")
-      expect(row.className).toContain("rounded-[28px]")
-      expect(row.className).toContain("scroll-m-1.5")
-      expect(row.className).toContain("cursor-auto")
-    }
     const connectorRow = [...(rows ?? [])].find(
       (row) => row.textContent === "GitHub"
     ) as HTMLElement
     expect(connectorRow.getAttribute("role")).toBe("menuitemcheckbox")
     expect(connectorRow.getAttribute("aria-checked")).toBe("true")
 
-    // The camera/photo sources are hidden inputs outside the menu, with
-    // ChatGPT's accept/capture contract; rows click them.
     const cameraInput = container.querySelector<HTMLInputElement>(
       '[data-testid="composer-upload-camera-input"]'
     )

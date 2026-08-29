@@ -45,7 +45,6 @@ describe("activity panel store — explicit-vs-default classification", () => {
     })
 
     openTurn("a1")
-    // The click on a non-default turn is an explicit selection.
     expect(store.getState().selectedTurnId).toBe("a1")
     expect(store.getState().panelTurnId).toBe("a1")
   })
@@ -66,20 +65,16 @@ describe("activity panel store — explicit-vs-default classification", () => {
     const store = createActivityPanelStore()
     store.setDerivedActivity({ panelTurnId: "a1", defaultTurnId: "a1" })
 
-    // The sources badge opens with a section target.
     store.openTurn("a1", { section: "sources" })
     expect(store.getState().openSection).toBe("sources")
 
-    // The panel consumes it after scrolling.
     store.clearOpenSection()
     expect(store.getState().openSection).toBeUndefined()
 
-    // A section-less open (the activity trigger) clears a stale target.
     store.openTurn("a1", { section: "sources" })
     store.openTurn("a2")
     expect(store.getState().openSection).toBeUndefined()
 
-    // Closing clears an unconsumed target.
     store.openTurn("a2", { section: "sources" })
     store.setOpen(false)
     expect(store.getState().openSection).toBeUndefined()
