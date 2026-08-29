@@ -5621,6 +5621,31 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
     })
   })
 
+  it("releases when the worker proves provider dispatch never happened", async () => {
+    const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
+    const { ctx, tables } = createMutationCtx(fixture.tables)
+
+    await markGenerationRunAbortedForChat(
+      ctx,
+      await runOwner(ctx, fixture.runId),
+      {
+        messageId: fixture.messageId,
+        reason: "provider dispatch not authorized",
+        terminalUsage: {
+          primary: { kind: "not-started" },
+          title: { kind: "not-run" },
+        },
+      }
+    )
+
+    expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
+    expect(tables.usageBuckets[0]).toMatchObject({
+      availableCredits: 1_000_000,
+      reservedCredits: 0,
+      spentCredits: 0,
+    })
+  })
+
   it("rejects malformed terminal evidence before any state change", async () => {
     const fixture = createAllowanceFixture({ workStartedAt: 1_000 })
     const { ctx, tables } = createMutationCtx(fixture.tables)

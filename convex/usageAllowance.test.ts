@@ -1111,7 +1111,7 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
     })
   })
 
-  it("cannot downgrade an already-dispatched run with not-started evidence", async () => {
+  it("preserves trusted no-dispatch evidence after the start marker commits", async () => {
     const { ctx, tables } = createCtx({ users: [user] })
     const { reservation, run } = await pendingStopFixture(ctx, tables)
     const outcome = await finalizePendingTerminalUsage(ctx, {
@@ -1124,13 +1124,9 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
       source: "worker_receipt",
       now: Date.now(),
     })
-    expect(outcome).toBe("settled")
-    expect(tables.usageReservations[0]).toMatchObject({
-      status: "settled",
-      settlementBasis: "estimated_input_floor",
-      actualCredits: 750,
-    })
-    expect(bucketOf(tables).spentCredits).toBe(750)
+    expect(outcome).toBe("released")
+    expect(tables.usageReservations[0]).toMatchObject({ status: "released" })
+    expect(bucketOf(tables).spentCredits).toBe(0)
     expect(bucketOf(tables).reservedCredits).toBe(0)
   })
 
@@ -1158,6 +1154,35 @@ describe("cancellation deferral and receipts (ADR-0021 amendment)", () => {
       actualCredits: 750 + 2_250,
     })
   })
+
+  it.each(["deadline", "stale"] as const)(
+    "the %s reconciler preserves an already-normalized continuation partial",
+    async (reconciler) => {
+      const { ctx, tables } = createCtx({ users: [user] })
+      const { reservation } = await pendingStopFixture(ctx, tables, {
+        runFields: { resumedOutputTokensBaseline: 1_500 },
+      })
+      await ctx.db.patch(reservation._id, {
+        terminalEstimatedOutputTokens: 500,
+        ...(reconciler === "deadline"
+          ? { settlementDeadlineAt: Date.now() - 1 }
+          : { reservedAt: Date.now() - STALE_RESERVATION_MS - 1 }),
+      })
+
+      if (reconciler === "deadline") {
+        await reconcileDueTerminalSettlementsPass(ctx)
+      } else {
+        await reconcileStaleUsageReservationsPass(ctx)
+      }
+
+      // The stored 500-token partial already excludes the 1,500-token
+      // continuation baseline, so deadline evidence must not subtract again.
+      expect(tables.usageReservations[0]).toMatchObject({
+        settlementBasis: "estimated_input_with_partial_output",
+        actualCredits: 750 + 2_250,
+      })
+    }
+  )
 
   it("the deadline reaper settles from copied facts when the run vanished", async () => {
     const { ctx, tables } = createCtx({ users: [user] })

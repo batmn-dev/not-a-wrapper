@@ -1188,6 +1188,43 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     })
   })
 
+  it("never calls the provider when the start write commits but its acknowledgement is lost", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const harness = makeStreamHarness()
+      const wire = makeWorkerWire({
+        // The request reached Convex, but the transport never delivered its
+        // response. The worker must time out without dispatching the provider.
+        markGenerationWorkStarted: () => new Promise<never>(() => {}),
+      })
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, makeFetchMutation(), {
+          durableWorkerWire: wire,
+        }),
+      })
+
+      await runtime.prepare()
+      const response = expect(
+        runtime.toResponse(notAbortedSignal())
+      ).rejects.toThrow("Provider dispatch no longer authorized")
+      await vi.advanceTimersByTimeAsync(10_000)
+      await response
+
+      expect(harness.streamText).not.toHaveBeenCalled()
+      expect(wireCall(wire, "markGenerationRunAborted")?.args).toMatchObject({
+        terminalUsage: {
+          primary: { kind: "not-started" },
+          title: { kind: "not-run" },
+        },
+      })
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = makeFetchMutation()

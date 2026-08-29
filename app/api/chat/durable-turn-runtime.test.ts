@@ -935,6 +935,44 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
     }
   })
 
+  it("reports grant-gated boundary writes as uncommitted", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new DurableWorkerWriteError({
+              op: "updateAssistantSnapshot",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      binding.stream.onChunk({ type: "text-delta", text: "partial" } as never)
+      await vi.waitFor(() => {
+        expect(turn.executionAbortSignal.aborted).toBe(true)
+      })
+
+      await expect(binding.stream.startWork(123)).resolves.toBe(false)
+      await expect(
+        binding.stream.recordTitleUsageEvidence({
+          kind: "started-without-usage",
+          routeId: "title-route",
+          pricingRole: "title",
+        })
+      ).resolves.toBe(false)
+      expect(wireCalls(wire, "markGenerationWorkStarted")).toHaveLength(0)
+      expect(wireCalls(wire, "recordTitleUsageEvidence")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it("degrades — never claims settlement — when grant EXPIRY is discovered mid-settlement", async () => {
     // Expiry means the TTL lapsed with NO known terminal anywhere. The final
     // snapshot discovers it; the completion write must then degrade instead
@@ -1727,7 +1765,7 @@ describe("durable turn runtime — cancellation terminal-usage evidence (ADR-002
     expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
   })
 
-  it("submits the settlement-only receipt exactly once when Stop settled first", async () => {
+  it("defers the Stop settlement receipt until the envelope has final evidence", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     try {
       const wire = makeRecordingWire({
@@ -1756,12 +1794,22 @@ describe("durable turn runtime — cancellation terminal-usage evidence (ADR-002
         primary: { kind: "started-without-usage" },
         title: { kind: "not-run" },
       })
-      // The envelope's second abort resolves settled-elsewhere via the local
-      // gate — it must NOT submit a second receipt.
+      expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
+
+      // The envelope's final parts and fresher title state must win over the
+      // earlier onAbort evidence.
       await binding.envelope.settle({
         responseMessage: RESPONSE_MESSAGE,
         isAborted: true,
-        terminalFacts: { title: { kind: "not-run" } },
+        terminalFacts: {
+          title: {
+            kind: "actual",
+            routeId: "title-route",
+            pricingRole: "title",
+            inputTokens: 10,
+            outputTokens: 2,
+          },
+        },
       })
 
       const receipts = wireCalls(wire, "finalizeTerminalUsage")
@@ -1770,8 +1818,19 @@ describe("durable turn runtime — cancellation terminal-usage evidence (ADR-002
         runId: "run1",
         reservationId: RESERVATION_ID,
       })
-      expect(receipts[0]!.args.terminalUsage.primary).toMatchObject({
-        kind: "started-without-usage",
+      expect(receipts[0]!.args.terminalUsage).toEqual({
+        primary: {
+          kind: "started-without-usage",
+          // The final response contains "done" → one estimated token.
+          partialOutputTokens: 1,
+        },
+        title: {
+          kind: "actual",
+          routeId: "title-route",
+          pricingRole: "title",
+          inputTokens: 10,
+          outputTokens: 2,
+        },
       })
     } finally {
       warn.mockRestore()

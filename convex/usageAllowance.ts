@@ -879,15 +879,16 @@ export async function deferUsageSettlementForTerminalRun(
 
 /**
  * Observed per-step usage on the run row outranks a no-usage claim
- * (invariant: authoritative usage always beats estimates). A worker whose
- * abort raced its own step accounting — or claimed "not started" against a
- * run that provably accumulated tokens — must not downgrade the charge to
- * the input floor.
+ * (invariant: authoritative usage always beats estimates). A trusted worker's
+ * `not-started` receipt then proves it never dispatched, even when the
+ * authorization write committed but its acknowledgement was lost. Without a
+ * worker receipt, the durable marker remains the conservative fallback.
  */
 function upgradeEvidenceWithDurableUsage(
   evidence: TerminalUsageEvidencePayload,
   run: Doc<"generationRuns"> | null,
-  reservation?: Doc<"usageReservations">
+  reservation: Doc<"usageReservations"> | undefined,
+  source: "trusted-worker" | "fallback"
 ): TerminalUsageEvidencePayload {
   const observedInput = Math.max(
     run?.inputTokens ?? 0,
@@ -931,6 +932,7 @@ function upgradeEvidenceWithDurableUsage(
           : {}),
       }
     } else if (
+      source === "fallback" &&
       primary.kind === "not-started" &&
       (run?.workStartedAt !== undefined ||
         reservation?.providerMayHaveStarted === true)
@@ -986,10 +988,15 @@ export async function finalizePendingTerminalUsage(
   if (run && reservation.generationRunId !== run._id) {
     throw new Error("Terminal usage run does not match reservation")
   }
+  const sourceEvidence =
+    source === "worker_receipt"
+      ? adjustEvidenceForContinuationBaseline(args.evidence, run)
+      : args.evidence
   const evidence = upgradeEvidenceWithDurableUsage(
-    adjustEvidenceForContinuationBaseline(args.evidence, run),
+    sourceEvidence,
     run,
-    reservation
+    reservation,
+    source === "worker_receipt" ? "trusted-worker" : "fallback"
   )
   if (reservation.status !== "reserved") {
     warnUsage("usage_terminal_late_evidence_ignored", {
@@ -1073,8 +1080,9 @@ function terminalSettlementFallbackEvidence(
       title,
     }
   }
-  // Protocol-v1 dispatch is acknowledged before provider work. Legacy rows
-  // lack that guarantee, so marker absence remains conservative for them.
+  // Protocol-v1 workers await this authorization before provider work. With
+  // no worker receipt, a committed marker conservatively means work may have
+  // started. Legacy rows lack even the marker guarantee.
   const mayHaveStarted =
     reservation.providerMayHaveStarted ??
     (run?.workStartedAt !== undefined ||
@@ -1263,9 +1271,9 @@ export async function settleUsageForTerminalRun(
   const snapshot = reservation.pricingSnapshot
   const titleEstimate = reservation.titleEstimatedCredits ?? 0
 
-  // Evidence always beats the boundary marker. Protocol-v1 markers are
-  // acknowledged before dispatch; legacy markers were best-effort. Either
-  // way, aggregate or completed-step usage must never be downgraded.
+  // Evidence always beats the boundary marker. Protocol-v1 workers await the
+  // marker acknowledgement before dispatch; legacy markers were best-effort.
+  // Either way, aggregate or completed-step usage must never be downgraded.
   if (evidence.usage !== undefined) {
     // Completion path: authoritative all-steps aggregate. A title evidence
     // object without a single numeric field is NOT observed usage — the
@@ -1332,7 +1340,8 @@ export async function settleUsageForTerminalRun(
       upgradeEvidenceWithDurableUsage(
         adjustEvidenceForContinuationBaseline(evidence.terminal, run),
         run,
-        reservation
+        reservation,
+        "trusted-worker"
       )
     )
     await applyTerminalSettlementDecision(

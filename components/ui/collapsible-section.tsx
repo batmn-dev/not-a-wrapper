@@ -94,9 +94,9 @@ export function CollapsibleSection({
     >
       {icon && <span className="shrink-0">{icon}</span>}
       {isSidebarVariant ? (
-        <h2 className="__menu-label truncate text-sm leading-5 font-medium">
+        <span className="__menu-label truncate text-sm leading-5 font-medium">
           {title}
-        </h2>
+        </span>
       ) : (
         <span className="truncate">{title}</span>
       )}
@@ -115,6 +115,11 @@ export function CollapsibleSection({
       />
     </CollapsibleTrigger>
   )
+  const sectionTrigger = isSidebarVariant ? (
+    <h2 className="min-w-0 flex-1">{trigger}</h2>
+  ) : (
+    trigger
+  )
 
   return (
     <Collapsible
@@ -128,11 +133,11 @@ export function CollapsibleSection({
     >
       {hasSidebarHeaderActions ? (
         <div className="sidebar-group-header group/sidebar-expando-section-header flex min-w-0 items-center justify-between pe-1.5">
-          {trigger}
+          {sectionTrigger}
           {headerActions}
         </div>
       ) : (
-        trigger
+        sectionTrigger
       )}
 
       <CollapsibleContent

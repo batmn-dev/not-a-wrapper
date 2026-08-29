@@ -145,16 +145,19 @@ race-free without SQL unique constraints.
 ## Durable lifecycle accounting (the provider boundary rule)
 
 **Evidence beats the boundary marker.** For cancellation-settlement protocol
-v1 runs, `run.workStartedAt` is committed and acknowledged before provider
-dispatch. The provider call is not authorized when that write fails. Convex
-can therefore distinguish a new run that never dispatched from one that may
-have consumed usage. Legacy runs lack this guarantee and retain a conservative
-compatibility fallback. The settlement decision, in order:
+v1 runs, `run.workStartedAt` is committed before provider dispatch and the
+worker awaits its acknowledgement. A lost acknowledgement can leave the marker
+committed even though the worker correctly refuses dispatch, so trusted worker
+`not-started` evidence releases when no durable usage exists. Without worker
+evidence, the marker remains the conservative fallback. Legacy runs lack this
+guarantee and retain a conservative compatibility fallback. The settlement
+decision, in order:
 
 | Evidence at terminal                                                                                        | Accounting                                                                                                                                                                          |
 | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived, carried no token counts, or named a route absent from the pinned snapshot) |
 | Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                     |
+| Trusted protocol-v1 worker reports `not-started`, with no durable usage                                      | release even if the authorization marker committed — its acknowledgement may have been lost, and the worker did not dispatch                                                       |
 | Protocol-v1, no evidence, `workStartedAt` never written                                                     | release (provider consumption never began)                                                                                                                                          |
 | No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing   |
 | `user_stop` / `superseded` (cancellation)                                                                   | protocol-v1 after dispatch **defers** (amendment below); pre-dispatch releases and legacy runs settle immediately through the bounded compatibility fallback — never `estimated_after_unknown_usage` |
@@ -180,11 +183,12 @@ pending is represented only on the reservation, which keeps
 fail-closed for concurrent admission) plus `terminalPendingAt`,
 `settlementDeadlineAt`, `providerMayHaveStarted`, and durable
 `terminalEstimatedOutputTokens` partial-output fallback captured before
-run/message cleanup can erase it. Protocol-v1 reservations mirror the
-acknowledged dispatch marker, completed-step tokens, and title evidence. A
+run/message cleanup can erase it. Protocol-v1 reservations mirror the durable
+dispatch-authorization marker, completed-step tokens, and title evidence. A
 Stop that wins before the marker releases immediately; a Stop after the
-marker defers and its deadline fallback charges only the strongest mirrored
-evidence. Legacy callers do not opt into deferred settlement and use the
+marker defers. Trusted worker `not-started` evidence still releases, while a
+missing worker receipt lets the deadline fallback charge from the strongest
+mirrored evidence. Legacy callers do not opt into deferred settlement and use the
 immediate bounded compatibility fallback. Approval continuations additionally
 freeze
 `generationRuns.resumedOutputTokensBaseline` at prepare (the partial-output

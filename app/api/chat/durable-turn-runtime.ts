@@ -1047,10 +1047,9 @@ export function createConvexDurableTurn(args: {
   let grantAuthorityLost = false
   let grantExpired = false
 
-  // Identity-checkable skip sentinel: a gated write resolves to THIS object,
-  // and any caller that must distinguish "landed" from "locally skipped"
-  // (writeTerminal) checks for it — a resolved skip must never read as a
-  // landed write.
+  // Identity-checkable skip sentinel: a gated write resolves to THIS object.
+  // Boolean boundary handlers and writeTerminal check it so a resolved skip
+  // never reads as a landed write.
   const GRANT_GATED_SKIP = {
     ok: false as const,
     skipped: "grant_authority_lost" as const,
@@ -1731,14 +1730,14 @@ export function createConvexDurableTurn(args: {
         stream: {
           async startWork(startedAt) {
             try {
-              await withWorkerWriteTimeout(
+              const written = await withWorkerWriteTimeout(
                 workerWrite("markGenerationWorkStarted", {
                   messageId: currentMessageId,
                   startedAt,
                 }),
                 "writing provider work start"
               )
-              return true
+              return !isGrantGatedSkip(written)
             } catch (error: unknown) {
               if (noteIfGrantRejection(error, "work-start")) return false
               warnDurable("durable_work_start_write_failed", {
@@ -1753,14 +1752,14 @@ export function createConvexDurableTurn(args: {
 
           async recordTitleUsageEvidence(evidence) {
             try {
-              await withWorkerWriteTimeout(
+              const written = await withWorkerWriteTimeout(
                 workerWrite("recordTitleUsageEvidence", {
                   messageId: currentMessageId,
                   evidence,
                 }),
                 "writing title usage evidence"
               )
-              return true
+              return !isGrantGatedSkip(written)
             } catch (error: unknown) {
               if (noteIfGrantRejection(error, "title-usage")) return false
               warnDurable("durable_title_usage_write_failed", {
@@ -1858,18 +1857,15 @@ export function createConvexDurableTurn(args: {
             const terminalUsage = facts
               ? toTerminalUsagePayload(facts, tracker.partsSnapshot)
               : undefined
-            const aborted = await markRunAborted(
+            await markRunAborted(
               reason,
               workDurationMs,
               terminalUsage
             )
-            // Stop/supersession won first: the run is settled but its
-            // reservation awaits evidence — submit the settlement-only
-            // receipt so the user is charged from real usage, not the
-            // deadline fallback.
-            if (aborted === "settled-elsewhere") {
-              await submitSettlementReceipt(terminalUsage)
-            }
+            // Do not finalize a Stop/supersession receipt here: the title and
+            // final response snapshot may still gain evidence before the
+            // envelope settles. The envelope submits once with those fresher
+            // facts; the deadline reconciler covers a missing envelope.
             // The run is settled (or unreachable); the envelope settle that
             // follows re-stops idempotently.
             stopHeartbeat()

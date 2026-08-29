@@ -4,7 +4,8 @@
 > rollout "Contract" step (removing legacy proof acceptance) remains
 > deliberately open until rollback no longer needs it.
 > Final-review remediation 2026-08-28: protocol-v1 workers await a durable
-> dispatch marker before provider work and reservations mirror that marker,
+> dispatch-authorization marker before provider work and reservations mirror
+> that marker,
 > completed-step usage, and title evidence; deadline/lease fallbacks use those
 > facts even after run deletion; per-step usage is an order-independent keyed
 > set; approval continuations freeze a
@@ -284,9 +285,11 @@ Additional rules:
   window unless another actor already terminalized the run.
 - `user_stop` and `superseded` use the pending-evidence window when the provider
   may have started.
-- Protocol-v1 provider work cannot begin until Convex has acknowledged the
-  durable dispatch marker. If Stop wins first, the reservation releases and
-  the worker is denied dispatch. Legacy workers do not defer settlement.
+- Protocol-v1 provider work cannot begin until the worker receives Convex's
+  acknowledgement of the durable dispatch marker. If that acknowledgement is
+  lost after commit, trusted worker `not-started` evidence releases because no
+  provider call occurred. If Stop wins first, the reservation releases and the
+  worker is denied dispatch. Legacy workers do not defer settlement.
 - `lease_expired` has no live worker to acknowledge it. Settle immediately from
   durable completed-step and partial-output facts using the same fallback
   policy.
@@ -492,9 +495,11 @@ Update AI SDK `onAbort` to consume its `{ steps }` argument.
 4. Classify a zero-step abort as `started-without-usage`, unless the runtime can
    prove the provider call never started.
 5. Submit terminal evidence with the normal aborted terminal write.
-6. If that write reports `settled-elsewhere`, attempt the settlement-only
-   terminal usage operation. That operation safely no-ops unless a matching
-   Stop/supersession left accounting pending.
+6. If Stop/supersession won first, wait for envelope settlement to combine the
+   final response snapshot with the freshest title evidence, then attempt the
+   settlement-only terminal usage operation. Never submit it directly from
+   stream `onAbort`; the deadline reconciler covers a missing envelope. The
+   operation safely no-ops unless matching accounting remains pending.
 
 Do not infer zero usage from an empty `steps` array.
 
