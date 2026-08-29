@@ -437,6 +437,7 @@ async function resolveModelRouteOnce(
         estimatedInputTokens: estimate.estimatedInputTokens,
         estimatedOutputTokens: estimate.estimatedOutputTokens,
         titleEstimatedCredits: estimate.titleEstimatedCredits,
+        titleEstimatedInputTokens: estimate.titleEstimatedInputTokens,
         pricingSnapshot,
       })
       if (reserved.kind === "insufficient_allowance") {

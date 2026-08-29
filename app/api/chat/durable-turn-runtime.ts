@@ -10,10 +10,16 @@ import {
 } from "@/convex/domain/generation_run_liveness"
 import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
 import {
+  CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   signChatAdmissionProof,
   type ChatAdmissionProofPayload,
 } from "@/convex/lib/chatAdmissionProof"
+import type {
+  TerminalUsageEvidencePayload,
+  TitleTerminalUsageEvidence,
+} from "@/convex/domain/usage_accounting"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import { estimatePartialOutputTokens } from "@/lib/usage/terminal-usage-estimate"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import type {
   ChatTurnEditRequest,
@@ -229,6 +235,24 @@ export type StreamFinishFacts = {
   toolCounts: { totalToolCalls: number; failedToolCalls: number }
 }
 
+/**
+ * Cancellation-evidence facts the parent runtime hands the binding (ADR-0021
+ * cancellation amendment). The parent supplies what only IT can observe —
+ * finished-step aggregates from `onAbort.steps` and the title attempt
+ * tracker's state; the binding adds the partial-output estimate from the
+ * parts it holds and ships the normalized payload with the aborted terminal
+ * write (or the settlement-only receipt when Stop already won).
+ */
+export type TerminalUsageFacts = {
+  /**
+   * The canonical evidence union (one contract, no drift). The parent never
+   * sets `partialOutputTokens` — the binding owns that estimate and stamps it
+   * in `toTerminalUsagePayload` from the parts it holds.
+   */
+  primary: TerminalUsageEvidencePayload["primary"]
+  title: TitleTerminalUsageEvidence
+}
+
 /** One recorded step's tool activity — the durable-persistence view of it. */
 export type DurableStepRecord = {
   stepNumber: number
@@ -287,12 +311,28 @@ export type DurableStreamBinding = {
    */
   stream: {
     /** Begin persisting the provider-consumption boundary before response exposure. */
-    startWork(startedAt: number): Promise<void>
+    /** Returns false when the durable boundary could not commit. The caller
+     * must not dispatch the provider in that case. */
+    startWork(startedAt: number): Promise<boolean>
+    /** Persist title start/actual evidence. Start callers must not dispatch
+     * when this returns false. */
+    recordTitleUsageEvidence(
+      evidence: TitleTerminalUsageEvidence
+    ): Promise<boolean>
     onChunk(chunk: TextStreamPart<ToolSet>): void
     recordStep(step: DurableStepRecord): void
     noteStreamError(errorMessage: string, workDurationMs: number): void
-    /** Flush the snapshot, then mark the run aborted. */
-    onAbort(reason: string, workDurationMs: number): Promise<void>
+    /**
+     * Flush the snapshot, then mark the run aborted — carrying terminal
+     * usage evidence when the parent observed any. If a Stop/supersession
+     * already settled the run elsewhere, the binding follows with the
+     * settlement-only terminal-usage receipt.
+     */
+    onAbort(
+      reason: string,
+      workDurationMs: number,
+      facts?: TerminalUsageFacts
+    ): Promise<void>
     /** Stream-onEnd half of the finish handoff (sync capture). */
     captureFinish(facts: StreamFinishFacts): void
   }
@@ -327,6 +367,12 @@ export type DurableStreamBinding = {
        * platform-funded runs; ignored elsewhere.
        */
       titleUsage?: TitleUsageForSettlement
+      /**
+       * The title attempt tracker's state at settle time. Primary facts come
+       * from the stream onAbort (aborts) or the captured finish (completed
+       * settled-elsewhere) — the envelope only ever contributes title state.
+       */
+      terminalFacts?: Pick<TerminalUsageFacts, "title">
     }): Promise<DurableSettlementReceipt>
   }
 }
@@ -915,7 +961,12 @@ export function createGuestDurableTurn(
       return {
         streamTextExtras: {},
         stream: {
-          async startWork() {},
+          async startWork() {
+            return true
+          },
+          async recordTitleUsageEvidence() {
+            return true
+          },
           onChunk() {},
           recordStep() {},
           noteStreamError() {},
@@ -996,10 +1047,9 @@ export function createConvexDurableTurn(args: {
   let grantAuthorityLost = false
   let grantExpired = false
 
-  // Identity-checkable skip sentinel: a gated write resolves to THIS object,
-  // and any caller that must distinguish "landed" from "locally skipped"
-  // (writeTerminal) checks for it — a resolved skip must never read as a
-  // landed write.
+  // Identity-checkable skip sentinel: a gated write resolves to THIS object.
+  // Boolean boundary handlers and writeTerminal check it so a resolved skip
+  // never reads as a landed write.
   const GRANT_GATED_SKIP = {
     ok: false as const,
     skipped: "grant_authority_lost" as const,
@@ -1139,7 +1189,8 @@ export function createConvexDurableTurn(args: {
 
   const markRunAborted = async (
     reason: string,
-    workDurationMs?: number
+    workDurationMs?: number,
+    terminalUsage?: TerminalUsageEvidencePayload
   ): Promise<TerminalWriteResult> => {
     const currentMessageId = assistantMessageId
     if (!runId || !currentMessageId) return "landed"
@@ -1147,8 +1198,85 @@ export function createConvexDurableTurn(args: {
       messageId: currentMessageId,
       reason,
       workDurationMs,
+      ...(terminalUsage ? { terminalUsage } : {}),
     })
   }
+
+  /**
+   * Normalize parent-observed facts into the wire evidence payload: the
+   * binding owns the partial-output estimate because it holds the parts (the
+   * tracker's snapshot mid-stream, the response message's at settle).
+   */
+  const toTerminalUsagePayload = (
+    facts: TerminalUsageFacts,
+    parts: unknown
+  ): TerminalUsageEvidencePayload => {
+    const primary = facts.primary
+    if (
+      primary.kind === "completed-steps" ||
+      primary.kind === "started-without-usage"
+    ) {
+      const partialOutputTokens = estimatePartialOutputTokens(parts)
+      return {
+        primary: {
+          ...primary,
+          ...(partialOutputTokens > 0 ? { partialOutputTokens } : {}),
+        },
+        title: facts.title,
+      }
+    }
+    return { primary, title: facts.title }
+  }
+
+  // Settlement-only terminal-usage receipt (ADR-0021 cancellation
+  // amendment): when a Stop/supersession settled the run elsewhere, the SAME
+  // worker secret authorizes exactly one allowance finalization against the
+  // reservation's settlement digest. One attempt, deliberately outside the
+  // grant-gated workerWrite (authority loss is the very state this serves);
+  // the deadline reconciler is the retry/failure backstop.
+  let settlementReceiptAttempted = false
+  const submitSettlementReceipt = async (
+    terminalUsage: TerminalUsageEvidencePayload | undefined
+  ): Promise<void> => {
+    if (!runId || !reservationId || !terminalUsage) return
+    if (settlementReceiptAttempted) return
+    settlementReceiptAttempted = true
+    try {
+      const response = await withWorkerWriteTimeout(
+        wire({
+          op: "finalizeTerminalUsage",
+          args: { runId, reservationId, terminalUsage },
+        }),
+        "writing terminal usage receipt"
+      )
+      const outcome = (
+        response as { result?: { outcome?: string } } | undefined
+      )?.result?.outcome
+      console.log(
+        JSON.stringify({
+          _tag: "durable_terminal_usage_receipt",
+          requestId,
+          chatId,
+          runId,
+          reservationId,
+          outcome: outcome ?? "unknown",
+        })
+      )
+    } catch (error) {
+      warnDurable("durable_terminal_usage_receipt_failed", {
+        requestId,
+        chatId,
+        runId,
+        reservationId,
+        error: describeError(error),
+      })
+    }
+  }
+
+  // The most recent abort facts, kept so the envelope settle (which fires
+  // after the stream onAbort on a Stop) reuses the richer step-aggregate
+  // evidence instead of downgrading to started-without-usage.
+  let lastTerminalFacts: TerminalUsageFacts | undefined
 
   // Heartbeat loop (gameplan §6): recursive and non-overlapping — the next
   // beat is scheduled only after the previous one settles. Three-way branch:
@@ -1361,6 +1489,8 @@ export function createConvexDurableTurn(args: {
         reasoningEffort,
         grantDigest,
         reservationId,
+        cancellationSettlementVersion:
+          CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
         generationInputHash,
         issuedAt: admissionIssuedAt,
       })
@@ -1393,6 +1523,8 @@ export function createConvexDurableTurn(args: {
           generationInputHash,
           grantDigest,
           reservationId,
+          cancellationSettlementVersion:
+            CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
           admissionIssuedAt,
           admissionProof,
         },
@@ -1597,21 +1729,47 @@ export function createConvexDurableTurn(args: {
 
         stream: {
           async startWork(startedAt) {
-            await withWorkerWriteTimeout(
-              workerWrite("markGenerationWorkStarted", {
-                messageId: currentMessageId,
-                startedAt,
-              }),
-              "writing provider work start"
-            ).catch((error: unknown) => {
-              if (noteIfGrantRejection(error, "work-start")) return
+            try {
+              const written = await withWorkerWriteTimeout(
+                workerWrite("markGenerationWorkStarted", {
+                  messageId: currentMessageId,
+                  startedAt,
+                }),
+                "writing provider work start"
+              )
+              return !isGrantGatedSkip(written)
+            } catch (error: unknown) {
+              if (noteIfGrantRejection(error, "work-start")) return false
               warnDurable("durable_work_start_write_failed", {
                 requestId,
                 chatId,
                 runId: currentRunId,
                 error: describeError(error),
               })
-            })
+              return false
+            }
+          },
+
+          async recordTitleUsageEvidence(evidence) {
+            try {
+              const written = await withWorkerWriteTimeout(
+                workerWrite("recordTitleUsageEvidence", {
+                  messageId: currentMessageId,
+                  evidence,
+                }),
+                "writing title usage evidence"
+              )
+              return !isGrantGatedSkip(written)
+            } catch (error: unknown) {
+              if (noteIfGrantRejection(error, "title-usage")) return false
+              warnDurable("durable_title_usage_write_failed", {
+                requestId,
+                chatId,
+                runId: currentRunId,
+                error: describeError(error),
+              })
+              return false
+            }
           },
 
           onChunk(chunk) {
@@ -1692,10 +1850,22 @@ export function createConvexDurableTurn(args: {
             })
           },
 
-          async onAbort(reason, workDurationMs) {
+          async onAbort(reason, workDurationMs, facts) {
             await drainPendingWrites(stepWritePromises)
             await tracker.flush().catch(() => {})
-            await markRunAborted(reason, workDurationMs)
+            if (facts) lastTerminalFacts = facts
+            const terminalUsage = facts
+              ? toTerminalUsagePayload(facts, tracker.partsSnapshot)
+              : undefined
+            await markRunAborted(
+              reason,
+              workDurationMs,
+              terminalUsage
+            )
+            // Do not finalize a Stop/supersession receipt here: the title and
+            // final response snapshot may still gain evidence before the
+            // envelope settles. The envelope submits once with those fresher
+            // facts; the deadline reconciler covers a missing envelope.
             // The run is settled (or unreachable); the envelope settle that
             // follows re-stops idempotently.
             stopHeartbeat()
@@ -1719,6 +1889,7 @@ export function createConvexDurableTurn(args: {
             isAborted,
             finishReason,
             titleUsage,
+            terminalFacts,
           }) {
             const settleStartedAtMs = Date.now()
             // Heartbeat policy (gameplan §10 "Runtime terminal convergence"):
@@ -1788,11 +1959,33 @@ export function createConvexDurableTurn(args: {
                 const terminalMetadata = projectPersistedMessageMetadata(
                   responseMessage.metadata
                 )
+                // Prefer the stream onAbort's step-aggregate primary facts
+                // (richer) with the envelope's title state (fresher — the
+                // title call may have finished in between); the response
+                // message's parts give the final partial-output estimate.
+                const abortFacts: TerminalUsageFacts | undefined =
+                  lastTerminalFacts || terminalFacts
+                    ? {
+                        primary: lastTerminalFacts?.primary ?? {
+                          kind: "started-without-usage" as const,
+                        },
+                        title:
+                          terminalFacts?.title ??
+                          lastTerminalFacts?.title ?? { kind: "not-run" },
+                      }
+                    : undefined
+                const terminalUsage = abortFacts
+                  ? toTerminalUsagePayload(abortFacts, responseMessage.parts)
+                  : undefined
                 const aborted = await markRunAborted(
                   "ui message stream aborted",
-                  terminalMetadata?.workDurationMs
+                  terminalMetadata?.workDurationMs,
+                  terminalUsage
                 )
                 if (aborted === "failed") return degrade("abort write failed")
+                if (aborted === "settled-elsewhere") {
+                  await submitSettlementReceipt(terminalUsage)
+                }
                 deps.perf?.counter("settlement_receipt_confirmed")
                 return {
                   status: "confirmed" as const,
@@ -1837,6 +2030,35 @@ export function createConvexDurableTurn(args: {
 
               if (landed === "failed") {
                 return degrade("completion write failed after retries")
+              }
+
+              if (landed === "settled-elsewhere") {
+                // A Stop won while the completion write was in flight. If its
+                // reservation is accounting-pending, hand it the best possible
+                // evidence — the authoritative all-steps aggregate.
+                const usage = capturedFinish?.usage
+                const actualEvidence: TerminalUsageEvidencePayload | undefined =
+                  usage &&
+                  (typeof usage.inputTokens === "number" ||
+                    typeof usage.outputTokens === "number")
+                    ? {
+                        primary: {
+                          kind: "actual",
+                          inputTokens: usage.inputTokens,
+                          outputTokens: usage.outputTokens,
+                        },
+                        title: terminalFacts?.title ?? { kind: "not-run" },
+                      }
+                    : terminalFacts
+                      ? toTerminalUsagePayload(
+                          {
+                            primary: { kind: "started-without-usage" },
+                            title: terminalFacts.title,
+                          },
+                          responseMessage.parts
+                        )
+                      : undefined
+                await submitSettlementReceipt(actualEvidence)
               }
 
               deps.perf?.counter("settlement_receipt_confirmed")

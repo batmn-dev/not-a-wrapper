@@ -1003,6 +1003,7 @@ describe("removeChatForOwner", () => {
     const jobs: Array<Record<string, unknown>> = []
     const scheduled: Array<{ delay: number; args: unknown }> = []
     const deleted: string[] = []
+    const queriedTables: string[] = []
     const ctx = {
       chat,
       user: owner,
@@ -1030,6 +1031,19 @@ describe("removeChatForOwner", () => {
         },
         delete: async (id: string) => deleted.push(id),
         query: (tableName: string) => {
+          queriedTables.push(tableName)
+          // The pre-tombstone supersede sweep (ADR-0021 cancellation
+          // amendment) scans runs and assistant messages; this chat has none.
+          if (tableName === "generationRuns" || tableName === "messages") {
+            const emptyApi = {
+              withIndex: () => emptyApi,
+              order: () => emptyApi,
+              take: async () => [],
+              collect: async () => [],
+              first: async () => null,
+            }
+            return emptyApi
+          }
           expect(tableName).toBe("deletionJobs")
           const resultApi = {
             withIndex: (
@@ -1089,5 +1103,9 @@ describe("removeChatForOwner", () => {
     ])
     expect(messages).toEqual([{ _id: "message-1", chatId: chat._id }])
     expect(deleted).toEqual([])
+    // Live runs must be closed (and their reservations deferred) BEFORE the
+    // tombstone, or the deletion batch would purge the run and strand a
+    // still-reserved reservation for the legacy full-estimate charge.
+    expect(queriedTables).toContain("generationRuns")
   })
 })

@@ -6,6 +6,8 @@ import {
   vLedgerEntryType,
   vPricingSnapshot,
   vSettlementBasis,
+  vTitleSettlementBasis,
+  vTitleTerminalUsageEvidence,
   vUsageReservationStatus,
 } from "./lib/usageValidators"
 
@@ -250,6 +252,35 @@ export default defineSchema({
     finishReason: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
+    // Compatibility field written by the first cancellation-settlement
+    // implementation. Current workers use usageSteps below because a scalar
+    // high-water mark loses valid out-of-order writes.
+    lastUsageStepNumber: v.optional(v.number()),
+    // Order-independent, idempotent per-step usage evidence. Step count is
+    // bounded by the runtime's maxSteps; duplicate step numbers are absorbed
+    // and totals above are recomputed from this set.
+    usageSteps: v.optional(
+      v.array(
+        v.object({
+          stepNumber: v.number(),
+          inputTokens: v.optional(v.number()),
+          outputTokens: v.optional(v.number()),
+        })
+      )
+    ),
+    // Signed worker capability. Only versioned runs may use deferred
+    // cancellation settlement during rolling deploys.
+    cancellationSettlementVersion: v.optional(v.literal(1)),
+    // Durable title attempt/usage evidence, persisted before each call and
+    // mirrored to the reservation so worker loss or deletion cannot erase it.
+    titleUsageEvidence: v.optional(vTitleTerminalUsageEvidence),
+    // Approval continuations reuse the paused assistant message, whose parts
+    // were already billed to the PREVIOUS run's settled reservation. This
+    // baseline (the partial-output estimate over the reused parts at prepare)
+    // is subtracted from every partial-output estimate for THIS run so a
+    // stopped continuation never rebills the prior run's output (ADR-0021
+    // cancellation amendment).
+    resumedOutputTokensBaseline: v.optional(v.number()),
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
     activeStreamId: v.optional(v.string()),
@@ -534,6 +565,35 @@ export default defineSchema({
     /** Title component of the estimate — the conservative fallback charge
      * when a title call may have run but its usage never arrived. */
     titleEstimatedCredits: v.optional(v.number()),
+    /** Input-only title floor pinned at reservation time (ADR-0021
+     * cancellation amendment): what a started-but-unfinished title costs. */
+    titleEstimatedInputTokens: v.optional(v.number()),
+    /** How the settled title component was derived (actual / input_floor /
+     * not_run), persisted separately from the primary basis. */
+    titleSettlementBasis: v.optional(vTitleSettlementBasis),
+    // --- Deferred cancellation settlement (ADR-0021 cancellation amendment).
+    // A user Stop / supersession keeps status "reserved" (the amount stays in
+    // bucket.reservedCredits) and stamps these fields; a worker terminal-usage
+    // receipt or the deadline reconciler finalizes. Pending/deadline
+    // timestamps are retained after finalization as audit facts; the
+    // settlement-grant fields are cleared.
+    terminalPendingAt: v.optional(v.number()),
+    settlementDeadlineAt: v.optional(v.number()),
+    /** Durable partial-output fallback captured when terminality won. */
+    terminalEstimatedOutputTokens: v.optional(v.number()),
+    /** Digest of the stopped worker's secret, valid ONLY for the
+     * settlement-only terminal usage receipt — never for run writes. */
+    settlementGrantDigest: v.optional(v.string()),
+    settlementGrantExpiresAt: v.optional(v.number()),
+    /** Durable fallback discriminator copied from the run before cleanup. */
+    providerMayHaveStarted: v.optional(v.boolean()),
+    /** Signed worker capability copied from the run at attach. */
+    cancellationSettlementVersion: v.optional(v.literal(1)),
+    /** Per-step evidence mirrored from the run for missing-run recovery. */
+    observedInputTokens: v.optional(v.number()),
+    observedOutputTokens: v.optional(v.number()),
+    /** Durable title evidence for deadline/deletion recovery. */
+    titleUsageEvidence: v.optional(vTitleTerminalUsageEvidence),
     pricingSnapshot: vPricingSnapshot,
     payloadFingerprint: v.string(),
     reservedAt: v.number(),
@@ -546,7 +606,11 @@ export default defineSchema({
     .index("by_user_request", ["userId", "requestId"])
     .index("by_run", ["generationRunId"])
     .index("by_status_reserved_at", ["status", "reservedAt"])
-    .index("by_user_reserved_at", ["userId", "reservedAt"]),
+    .index("by_user_reserved_at", ["userId", "reservedAt"])
+    // Bounded deadline reconciliation. Missing optional fields index as
+    // `undefined`, so scans must exclude them via
+    // `.gt("settlementDeadlineAt", undefined)` before the upper bound.
+    .index("by_status_settlement_deadline", ["status", "settlementDeadlineAt"]),
 
   // Append-only accounting evidence. Rows are NEVER updated or deleted in
   // normal operation; corrections are compensating "adjustment" entries.

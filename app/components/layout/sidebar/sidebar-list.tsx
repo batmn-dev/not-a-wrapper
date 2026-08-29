@@ -137,7 +137,7 @@ export function SidebarChatGroupActions({
   const [isOrganizerOpen, setIsOrganizerOpen] = useState(false)
 
   return (
-    <div className="flex shrink-0 items-center gap-1 pe-2.5 text-[var(--text-tertiary)]">
+    <div className="flex w-[58px] shrink-0 items-center gap-2 pe-2.5 text-[var(--text-tertiary)]">
       <DropdownMenu open={isOrganizerOpen} onOpenChange={setIsOrganizerOpen}>
         <DropdownMenuTrigger
           render={

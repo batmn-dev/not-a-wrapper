@@ -935,6 +935,44 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
     }
   })
 
+  it("reports grant-gated boundary writes as uncommitted", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          updateAssistantSnapshot: () => {
+            throw new DurableWorkerWriteError({
+              op: "updateAssistantSnapshot",
+              status: 401,
+              detail: '{"ok":false,"code":"grant_unauthorized"}',
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+
+      binding.stream.onChunk({ type: "text-delta", text: "partial" } as never)
+      await vi.waitFor(() => {
+        expect(turn.executionAbortSignal.aborted).toBe(true)
+      })
+
+      await expect(binding.stream.startWork(123)).resolves.toBe(false)
+      await expect(
+        binding.stream.recordTitleUsageEvidence({
+          kind: "started-without-usage",
+          routeId: "title-route",
+          pricingRole: "title",
+        })
+      ).resolves.toBe(false)
+      expect(wireCalls(wire, "markGenerationWorkStarted")).toHaveLength(0)
+      expect(wireCalls(wire, "recordTitleUsageEvidence")).toHaveLength(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it("degrades — never claims settlement — when grant EXPIRY is discovered mid-settlement", async () => {
     // Expiry means the TTL lapsed with NO known terminal anywhere. The final
     // snapshot discovers it; the completion write must then degrade instead
@@ -1679,6 +1717,148 @@ describe("durable turn runtime — fail() at each phase", () => {
         .map(([message]) => String(message))
         .find((message) => message.includes("durable_run_failed_write_failed"))
       expect(warnLine).toBeDefined()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe("durable turn runtime — cancellation terminal-usage evidence (ADR-0021 amendment)", () => {
+  const RESERVATION_ID = "res1" as Id<"usageReservations">
+
+  it("ships abort evidence with the terminal write, adding the partial estimate", async () => {
+    const { turn, wire } = await makePreparedTurn({
+      input: { reservationId: RESERVATION_ID },
+    })
+    const binding = turn.bind(makeToolFacts())
+    binding.stream.onChunk({
+      type: "text-delta",
+      text: "partial answer!!",
+    } as TextStreamPart<ToolSet>)
+
+    await binding.stream.onAbort("stream aborted", 1_000, {
+      primary: { kind: "completed-steps", inputTokens: 500, outputTokens: 20 },
+      title: {
+        kind: "started-without-usage",
+        routeId: "title-route",
+        pricingRole: "title",
+      },
+    })
+
+    const aborts = wireCalls(wire, "markGenerationRunAborted")
+    expect(aborts).toHaveLength(1)
+    // 16 persisted characters → 4 estimated partial-output tokens.
+    expect(aborts[0]!.args.terminalUsage).toEqual({
+      primary: {
+        kind: "completed-steps",
+        inputTokens: 500,
+        outputTokens: 20,
+        partialOutputTokens: 4,
+      },
+      title: {
+        kind: "started-without-usage",
+        routeId: "title-route",
+        pricingRole: "title",
+      },
+    })
+    // The terminal write landed the evidence — no settlement-only receipt.
+    expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
+  })
+
+  it("defers the Stop settlement receipt until the envelope has final evidence", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new DurableWorkerWriteError({
+              op: "markGenerationRunAborted",
+              status: 401,
+              detail: "",
+              grantRejection: "grant_unauthorized",
+            })
+          },
+          finalizeTerminalUsage: () => ({
+            ok: true,
+            result: { outcome: "settled" },
+          }),
+        },
+      })
+      const { turn } = await makePreparedTurn({
+        wire,
+        input: { reservationId: RESERVATION_ID },
+      })
+      const binding = turn.bind(makeToolFacts())
+
+      await binding.stream.onAbort("stream aborted", 1_000, {
+        primary: { kind: "started-without-usage" },
+        title: { kind: "not-run" },
+      })
+      expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
+
+      // The envelope's final parts and fresher title state must win over the
+      // earlier onAbort evidence.
+      await binding.envelope.settle({
+        responseMessage: RESPONSE_MESSAGE,
+        isAborted: true,
+        terminalFacts: {
+          title: {
+            kind: "actual",
+            routeId: "title-route",
+            pricingRole: "title",
+            inputTokens: 10,
+            outputTokens: 2,
+          },
+        },
+      })
+
+      const receipts = wireCalls(wire, "finalizeTerminalUsage")
+      expect(receipts).toHaveLength(1)
+      expect(receipts[0]!.args).toMatchObject({
+        runId: "run1",
+        reservationId: RESERVATION_ID,
+      })
+      expect(receipts[0]!.args.terminalUsage).toEqual({
+        primary: {
+          kind: "started-without-usage",
+          // The final response contains "done" → one estimated token.
+          partialOutputTokens: 1,
+        },
+        title: {
+          kind: "actual",
+          routeId: "title-route",
+          pricingRole: "title",
+          inputTokens: 10,
+          outputTokens: 2,
+        },
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("skips the receipt entirely for turns without a reservation", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const wire = makeRecordingWire({
+        responders: {
+          markGenerationRunAborted: () => {
+            throw new DurableWorkerWriteError({
+              op: "markGenerationRunAborted",
+              status: 401,
+              detail: "",
+              grantRejection: "grant_unauthorized",
+            })
+          },
+        },
+      })
+      const { turn } = await makePreparedTurn({ wire })
+      const binding = turn.bind(makeToolFacts())
+      await binding.stream.onAbort("stream aborted", 1_000, {
+        primary: { kind: "started-without-usage" },
+        title: { kind: "not-run" },
+      })
+      expect(wireCalls(wire, "finalizeTerminalUsage")).toHaveLength(0)
     } finally {
       warn.mockRestore()
     }

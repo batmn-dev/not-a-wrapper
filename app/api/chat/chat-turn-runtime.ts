@@ -104,12 +104,14 @@ import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import { splitAndValidateApprovalContinuation } from "./approval-continuation"
 import type { DurableGenerationInputPlan } from "./durable-generation-input"
+import type { TitleTerminalUsageEvidence } from "@/convex/domain/usage_accounting"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
   type DurableStreamBinding,
   type DurableTurnRuntime,
   type DurableWorkerWire,
+  type TerminalUsageFacts,
   type TitleUsageForSettlement,
 } from "./durable-turn-runtime"
 import { lowerForeignHostedToolParts } from "./hosted-tool-lowering"
@@ -1228,6 +1230,43 @@ export function createChatTurnRuntime(args: {
     let abortCaptured = false
     let streamCompleted = false
 
+    // Title attempt tracker (ADR-0021 cancellation amendment): request-local
+    // evidence of whether/where a title call started, created BEFORE the
+    // stream so the onAbort closure never has a temporal-dead-zone dependency
+    // on the later-created titleTask. "not-run" until an attempt dispatches;
+    // route-pinned "started-without-usage" per attempt; route-aware actual
+    // usage once the call finishes.
+    const titleAttempt: { current: TitleTerminalUsageEvidence } = {
+      current: { kind: "not-run" },
+    }
+
+    // The finished-step usage aggregate an abort exposes (AI SDK 7:
+    // `onAbort.steps` is previously finished steps ONLY). Zero finished steps
+    // is NOT proof of zero usage — the classification below then reports
+    // started-without-usage, never a zero-usage "actual".
+    const aggregateAbortStepUsage = (
+      steps: ReadonlyArray<{
+        usage?: { inputTokens?: number; outputTokens?: number }
+      }>
+    ): TerminalUsageFacts["primary"] | null => {
+      let inputTokens = 0
+      let outputTokens = 0
+      let observed = false
+      for (const step of steps) {
+        if (typeof step.usage?.inputTokens === "number") {
+          inputTokens += step.usage.inputTokens
+          observed = true
+        }
+        if (typeof step.usage?.outputTokens === "number") {
+          outputTokens += step.usage.outputTokens
+          observed = true
+        }
+      }
+      return observed
+        ? { kind: "completed-steps", inputTokens, outputTokens }
+        : null
+    }
+
     const clearStalledContinuationTimer = () => {
       if (stalledContinuationTimer !== null) {
         clearTimeout(stalledContinuationTimer)
@@ -1367,15 +1406,33 @@ export function createChatTurnRuntime(args: {
         : wordChunkingTransform
       : lifecycleTransform
 
+    // Commit the provider-consumption boundary BEFORE dispatch. This awaited
+    // write is load-bearing billing state: if Stop/revocation wins, the worker
+    // reports not-started and never calls the provider.
+    const dispatchBoundaryAt = Date.now()
+    const dispatchAuthorized = await lifecycle.stream.startWork(dispatchBoundaryAt)
+    if (!dispatchAuthorized) {
+      await lifecycle.stream.onAbort(
+        "provider dispatch not authorized",
+        initialWorkDurationMs,
+        {
+          primary: { kind: "not-started" },
+          title: { kind: "not-run" },
+        }
+      )
+      throw new Error("Provider dispatch no longer authorized")
+    }
+
+    // Exact assistant-work start: durable authorization is committed and the
+    // next operation begins provider consumption.
+    streamStartMs = Date.now()
+    lastProgressAtMs = streamStartMs
+    workDuration = createWorkDurationTracker({
+      initialDurationMs: initialWorkDurationMs,
+    })
+    providerStreamStarted = true
+
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) => {
-      // Exact assistant-work start: every preparatory step above is complete,
-      // and the next operation begins provider consumption.
-      streamStartMs = Date.now()
-      lastProgressAtMs = streamStartMs
-      workDuration = createWorkDurationTracker({
-        initialDurationMs: initialWorkDurationMs,
-      })
-      providerStreamStarted = true
       // Two anchors, deliberately both emitted (no-ops unless sampled):
       // `stream_start` keeps its historical clock — runtime construction →
       // streamText (turnStartedAtMs is set AFTER auth/parse/admission);
@@ -1570,15 +1627,25 @@ export function createChatTurnRuntime(args: {
           }
         },
 
-        onAbort: async () => {
+        onAbort: async (event) => {
           streamCompleted = true
           reasoningActivity.close()
           closeWorkDuration()
           resolvePostToolContinuation()
-          // Flush the latest snapshot, then mark the run aborted (guest: inert).
+          // Flush the latest snapshot, then mark the run aborted (guest:
+          // inert) — carrying cancellation evidence: the finished-step usage
+          // aggregate when any step completed, otherwise
+          // started-without-usage, plus the title attempt tracker's state.
           await lifecycle.stream.onAbort(
             "stream aborted",
-            currentWorkDurationMs()
+            currentWorkDurationMs(),
+            {
+              primary:
+                aggregateAbortStepUsage(event?.steps ?? []) ?? {
+                  kind: "started-without-usage",
+                },
+              title: titleAttempt.current,
+            }
           )
         },
 
@@ -1834,11 +1901,6 @@ export function createChatTurnRuntime(args: {
       runGeneration
     )
 
-    // Begin persisting the exact start before exposing Stop to the client.
-    // Failure and latency are observational: the durable adapter logs either,
-    // and this best-effort write must not delay a healthy provider stream.
-    void lifecycle.stream.startWork(streamStartMs)
-
     // Title generation is independent of answer generation: it starts once
     // durable prepare has accepted the first turn (or first-message edit), but
     // failure is absorbed so naming can never fail the conversation. Durable
@@ -1859,7 +1921,44 @@ export function createChatTurnRuntime(args: {
           fallback: { model: aiModel, routeId: route.routeId },
           userText: titleRequest.userText,
           abortSignal: titleSignal,
-        }).catch((error: unknown) => {
+          // Cancellation evidence (ADR-0021): pin each concrete attempt so a
+          // stopped title call settles at its input floor for the exact
+          // attempted route, and a never-started one settles to zero.
+          onAttemptStart: async ({ routeId, pricingRole }) => {
+            titleAttempt.current = {
+              kind: "started-without-usage",
+              routeId,
+              pricingRole,
+            }
+            const persisted = await lifecycle.stream.recordTitleUsageEvidence(
+              titleAttempt.current
+            )
+            if (!persisted) {
+              throw new Error("Title dispatch no longer authorized")
+            }
+          },
+          onAttemptComplete: async (generated) => {
+            titleAttempt.current = {
+              kind: "actual",
+              routeId: generated.routeId,
+              pricingRole: generated.pricingRole,
+              inputTokens: generated.usage.inputTokens,
+              outputTokens: generated.usage.outputTokens,
+            }
+            await lifecycle.stream.recordTitleUsageEvidence(titleAttempt.current)
+          },
+        })
+          .then((generated) => {
+            titleAttempt.current = {
+              kind: "actual",
+              routeId: generated.routeId,
+              pricingRole: generated.pricingRole,
+              inputTokens: generated.usage.inputTokens,
+              outputTokens: generated.usage.outputTokens,
+            }
+            return generated
+          })
+          .catch((error: unknown) => {
           // Stop, grant loss, and the provider deadline cancel the title
           // alongside the answer — a normal shutdown, not a title failure.
           // (A still-provisional chat re-requests a title on its next turn.)
@@ -1967,8 +2066,10 @@ export function createChatTurnRuntime(args: {
           // Platform-funded completions wait for the (bounded, ≤8s) title
           // call's usage so the settlement charges the title at its actual
           // cost; BYOK/guest settles immediately — allowance is untouched.
+          // Aborted turns do NOT wait: the title tracker's synchronous state
+          // rides `terminalFacts` instead.
           const titleUsage =
-            credential.source === "platform"
+            credential.source === "platform" && !isAborted
               ? await titleUsageForSettlement
               : undefined
           await lifecycle.envelope.settle({
@@ -1976,6 +2077,7 @@ export function createChatTurnRuntime(args: {
             isAborted,
             finishReason,
             titleUsage,
+            terminalFacts: { title: titleAttempt.current },
           })
         } finally {
           // Settlement owns request-scoped teardown (see the factory-level

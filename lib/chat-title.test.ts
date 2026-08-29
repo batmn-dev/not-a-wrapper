@@ -74,6 +74,48 @@ describe("chat title generation", () => {
     )
   })
 
+  it("persists start before dispatch and completion before returning", async () => {
+    const events: string[] = []
+    let releaseStart: (() => void) | undefined
+    const startPersisted = new Promise<void>((resolve) => {
+      releaseStart = resolve
+    })
+    const generateText = vi.fn(async () => {
+      events.push("provider")
+      return {
+        text: "Durable Title Evidence",
+        usage: { inputTokens: 80, outputTokens: 3 },
+      }
+    })
+    const pending = generateChatTitle({
+      generateText: generateText as unknown as Parameters<
+        typeof generateChatTitle
+      >[0]["generateText"],
+      model: {} as Parameters<typeof generateChatTitle>[0]["model"],
+      routeId: "gpt-5.4-mini",
+      userText: "How should title usage survive a crash?",
+      onAttemptStart: async () => {
+        events.push("start-persisting")
+        await startPersisted
+        events.push("start-persisted")
+      },
+      onAttemptComplete: async () => {
+        events.push("actual-persisted")
+      },
+    })
+
+    await vi.waitFor(() => expect(events).toEqual(["start-persisting"]))
+    expect(generateText).not.toHaveBeenCalled()
+    releaseStart?.()
+    await pending
+    expect(events).toEqual([
+      "start-persisting",
+      "start-persisted",
+      "provider",
+      "actual-persisted",
+    ])
+  })
+
   it("names the chat with the fallback route when the title route is retired upstream", async () => {
     const titleModel = { id: "retired" } as unknown as Parameters<
       typeof generateChatTitle

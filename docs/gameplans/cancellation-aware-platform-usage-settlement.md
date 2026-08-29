@@ -1,6 +1,19 @@
 # Cancellation-aware platform usage settlement
 
-> **Status:** Approved implementation plan
+> **Status:** Implemented 2026-08-28 (Phases 1–6; ADR-0021 amended). The
+> rollout "Contract" step (removing legacy proof acceptance) remains
+> deliberately open until rollback no longer needs it.
+> Final-review remediation 2026-08-28: protocol-v1 workers await a durable
+> dispatch-authorization marker before provider work and reservations mirror
+> that marker,
+> completed-step usage, and title evidence; deadline/lease fallbacks use those
+> facts even after run deletion; per-step usage is an order-independent keyed
+> set; approval continuations freeze a
+> partial-output baseline so a stopped continuation never rebills the paused
+> run's parts; direct and project chat deletion close live runs before
+> tombstoning; checked integer arithmetic rejects unrepresentable evidence;
+> full deadline batches self-drain. A signed protocol version keeps legacy
+> workers on immediate compatibility settlement during rolling deployment.
 > **Date:** 2026-08-28
 > **Scope:** Platform-funded durable chat turns only
 > **Required architecture update:** Amend
@@ -272,6 +285,11 @@ Additional rules:
   window unless another actor already terminalized the run.
 - `user_stop` and `superseded` use the pending-evidence window when the provider
   may have started.
+- Protocol-v1 provider work cannot begin until the worker receives Convex's
+  acknowledgement of the durable dispatch marker. If that acknowledgement is
+  lost after commit, trusted worker `not-started` evidence releases because no
+  provider call occurred. If Stop wins first, the reservation releases and the
+  worker is denied dispatch. Legacy workers do not defer settlement.
 - `lease_expired` has no live worker to acknowledge it. Settle immediately from
   durable completed-step and partial-output facts using the same fallback
   policy.
@@ -318,7 +336,15 @@ Add:
 | `settlementGrantDigest?: string`         | Digest of the existing worker secret, valid only for terminal usage submission |
 | `settlementGrantExpiresAt?: number`      | Hard authorization deadline equal to the evidence deadline                     |
 | `providerMayHaveStarted?: boolean`       | Durable fallback discriminator copied before run cleanup                       |
+| `cancellationSettlementVersion?: 1`      | Signed per-run activation gate for rolling deployment                          |
+| `observedInputTokens?: number`           | Monotonic completed-step input mirror that survives run deletion               |
+| `observedOutputTokens?: number`          | Monotonic completed-step output mirror that survives run deletion              |
+| `titleUsageEvidence?: object`            | Durable title start or actual evidence that survives run deletion              |
 | `titleSettlementBasis?: string`          | Auditable `actual`, `input_floor`, or `not_run` title basis                    |
+
+`generationRuns` stores the same protocol version and title evidence plus an
+optional `usageSteps` set keyed by step number. Totals are derived from the set,
+so out-of-order delivery is accepted and duplicate delivery cannot double-add.
 
 Keep reservation `status: "reserved"` while evidence is pending. This accurately
 keeps the amount in `bucket.reservedCredits` and avoids adding a fourth balance
@@ -469,9 +495,11 @@ Update AI SDK `onAbort` to consume its `{ steps }` argument.
 4. Classify a zero-step abort as `started-without-usage`, unless the runtime can
    prove the provider call never started.
 5. Submit terminal evidence with the normal aborted terminal write.
-6. If that write reports `settled-elsewhere`, attempt the settlement-only
-   terminal usage operation. That operation safely no-ops unless a matching
-   Stop/supersession left accounting pending.
+6. If Stop/supersession won first, wait for envelope settlement to combine the
+   final response snapshot with the freshest title evidence, then attempt the
+   settlement-only terminal usage operation. Never submit it directly from
+   stream `onAbort`; the deadline reconciler covers a missing envelope. The
+   operation safely no-ops unless matching accounting remains pending.
 
 Do not infer zero usage from an empty `steps` array.
 
@@ -526,8 +554,8 @@ transitions.
 - If the reservation was already settled, such as an approval pause, do
   nothing.
 - The same transaction that marks the run terminal must seed the reservation's
-  pending timestamp, deadline, settlement digest, `providerMayHaveStarted`, and
-  stored partial-output fallback.
+  pending timestamp, deadline, settlement digest, mirrored dispatch/usage/title
+  facts, and stored partial-output fallback.
 - The transaction must continue denying approvals and terminalizing active tool
   invocations exactly as today.
 
@@ -556,9 +584,10 @@ Add a bounded pass over due pending reservations.
 6. Emit one structured timeout event.
 
 Run it on a second-level cadence compatible with the existing durable-run
-reaper. A due reservation must converge within at most two cron intervals under
-normal operation. Keep the existing 30-minute stale-reservation reconciler as
-the final deployment/crash net for unattached and legacy rows.
+reaper. When a pass consumes its full bounded batch, schedule another pass
+immediately so bursts do not require one cron interval per batch. Keep the
+existing 30-minute stale-reservation reconciler as the final deployment/crash
+net for unattached and legacy rows.
 
 ## 16. Ordered implementation phases
 
@@ -734,17 +763,26 @@ Operational checks after deployment:
 
 ### Expand
 
-1. Deploy optional schema fields, new validators, dual proof acceptance, dormant
-   settlement operation, and deadline reconciler.
-2. Confirm old callers still reserve and settle normally.
-3. Deploy the Next worker that sends the new proof field and terminal evidence.
-4. Confirm receipt observability before enabling deferred Stop settlement.
+1. Deploy optional schema fields, validators that accept the optional signed
+   protocol version, settlement operation, and deadline reconciler.
+2. Confirm old callers, whose proofs omit the version, still reserve and settle
+   immediately through the bounded compatibility path.
+3. Deploy the Next worker that signs protocol v1 and persists dispatch, step,
+   and title evidence.
+4. Confirm only versioned runs enter deferred Stop settlement.
+
+Ordering is Convex-first and MANDATORY: a new Next build sends the versioned
+proof field, which a pre-amendment Convex validator rejects. This repository's
+deploy pipeline (`convex deploy` runs before the Next build in the same command)
+enforces the forward direction structurally.
 
 ### Activate
 
-Switch Stop/supersession to pending settlement only after both the settlement
-operation and deadline reaper are live. Never deploy a state that can create
-pending reservations without a compatible finalizer.
+Activation is per run, not a manual deployment flag. Convex copies the signed
+protocol version onto the run and reservation; only those rows may defer.
+Unversioned old-worker rows remain on immediate compatibility settlement, so a
+rolling deployment cannot create pending reservations before its finalizer is
+available.
 
 ### Contract
 
@@ -754,14 +792,10 @@ and settlement literals readable.
 
 ### Rollback
 
-Rollback in reverse behavior order:
-
-1. Stop creating new pending settlements while leaving the receipt endpoint and
-   deadline reconciler active.
-2. Wait for or explicitly reconcile existing pending rows.
-3. Roll back runtime evidence plumbing if necessary.
-4. Do not remove schema fields, the receipt handler, or deadline reconciliation
-   while pending rows exist.
+Roll back Next first. The old Next build omits the protocol version and new
+cancellations settle immediately, while the expanded Convex deployment keeps
+draining existing versioned pending rows. Do not roll Convex back or remove the
+receipt handler, fields, or deadline reconciliation while pending rows exist.
 
 Rolling directly back to code that knows only the 30-minute full-estimate stale
 fallback would overcharge pending cancellations and is not an acceptable

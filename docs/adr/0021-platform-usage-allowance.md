@@ -5,6 +5,9 @@
 candidacy now requires an atomic reservation, not just list membership) and
 ADR-0011 (durable settlement gains an accounting half: every terminal
 transition also settles or releases the run's usage reservation).
+**Amended:** 2026-08-28 — cancellation-aware settlement (see
+"Cancellation-aware settlement" below): a user Stop or supersession no longer
+converts the worst-case admission reservation into final spend.
 
 **Context.** ADR-0020 made Priority/Fallback API-key preferences real routing
 tiers, but the platform tier admits by list membership (`FREE_MODELS_IDS`)
@@ -141,28 +144,128 @@ race-free without SQL unique constraints.
 
 ## Durable lifecycle accounting (the provider boundary rule)
 
-**Evidence beats the boundary marker.** `run.workStartedAt` is written by a
-best-effort fire-and-forget write (ADR-0011's `markGenerationWorkStarted`),
-so its absence must never refund a run that provably consumed usage. The
-settlement decision, in order:
+**Evidence beats the boundary marker.** For cancellation-settlement protocol
+v1 runs, `run.workStartedAt` is committed before provider dispatch and the
+worker awaits its acknowledgement. A lost acknowledgement can leave the marker
+committed even though the worker correctly refuses dispatch, so trusted worker
+`not-started` evidence releases when no durable usage exists. Without worker
+evidence, the marker remains the conservative fallback. Legacy runs lack this
+guarantee and retain a conservative compatibility fallback. The settlement
+decision, in order:
 
 | Evidence at terminal                                                                                        | Accounting                                                                                                                                                                          |
 | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | onEnd aggregate usage present                                                                               | settle actual (`basis: actual`; `actual_with_estimated_title` when the title call's usage never arrived, carried no token counts, or named a route absent from the pinned snapshot) |
 | Per-step accumulated usage present                                                                          | settle observed (`basis: observed_partial`) — the runtime records EVERY step's usage durably, tool calls or not                                                                     |
-| No evidence, `workStartedAt` never written                                                                  | release (provider consumption never began)                                                                                                                                          |
+| Trusted protocol-v1 worker reports `not-started`, with no durable usage                                      | release even if the authorization marker committed — its acknowledgement may have been lost, and the worker did not dispatch                                                       |
+| Protocol-v1, no evidence, `workStartedAt` never written                                                     | release (provider consumption never began)                                                                                                                                          |
 | No evidence, terminal is `provider_error` with ZERO accepted content checkpoints (`lastSnapshotSequence` 0) | release (`provider_error_before_output`) — an instant 400/401/429 is not billed by providers; charging the full estimate for a provider outage would drain allowances for nothing   |
-| No evidence otherwise (user Stop mid-step, reaped lease)                                                    | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — the provider may have generated tokens nobody observed; never silently refunded                             |
+| `user_stop` / `superseded` (cancellation)                                                                   | protocol-v1 after dispatch **defers** (amendment below); pre-dispatch releases and legacy runs settle immediately through the bounded compatibility fallback — never `estimated_after_unknown_usage` |
+| `lease_expired` (no live worker to acknowledge)                                                             | settle immediately from durable facts via the same cancellation fallback: completed-step usage when accumulated, else release for a protocol-v1 run with no dispatch marker, otherwise estimated input plus a bounded persisted-partial-output estimate |
+| No evidence otherwise (legacy rows, evidence-free `request_aborted`, approval/continuation strands)        | settle the reserved estimate (`basis: estimated_after_unknown_usage`) — legacy conservative behavior, retained only where no cancellation evidence channel exists                    |
 | Duplicate terminal delivery                                                                                 | absorbed by first-terminal-wins **and** the reservation status guard — no second charge                                                                                             |
 | Awaiting approval                                                                                           | the pause settles this run's usage; an approval continuation is a NEW request → new reservation → new run                                                                           |
 
-Lease-expired / approval-expired / continuation-lost / superseded all apply
-the same table through the shared lifecycle-verdict path.
+Approval-expired / continuation-lost apply the same table through the shared
+lifecycle-verdict path.
+
+## Cancellation-aware settlement (amended 2026-08-28)
+
+**Reservation is not spend.** The worst-case output reservation is an
+admission-control fact; treating an unknown cancellation as proof the entire
+reservation was consumed overcharged every first-step Stop. The amendment
+separates **visible terminality** (immediate, unchanged: Stop commits
+`aborted/user_stop` and revokes the normal execution grant in one
+transaction) from **accounting finality** (deferred to a bounded
+cancellation-evidence window). No user-facing state is added — accounting
+pending is represented only on the reservation, which keeps
+`status: "reserved"` (so the amount stays in `bucket.reservedCredits`,
+fail-closed for concurrent admission) plus `terminalPendingAt`,
+`settlementDeadlineAt`, `providerMayHaveStarted`, and durable
+`terminalEstimatedOutputTokens` partial-output fallback captured before
+run/message cleanup can erase it. Protocol-v1 reservations mirror the durable
+dispatch-authorization marker, completed-step tokens, and title evidence. A
+Stop that wins before the marker releases immediately; a Stop after the
+marker defers. Trusted worker `not-started` evidence still releases, while a
+missing worker receipt lets the deadline fallback charge from the strongest
+mirrored evidence. Legacy callers do not opt into deferred settlement and use the
+immediate bounded compatibility fallback. Approval continuations additionally
+freeze
+`generationRuns.resumedOutputTokensBaseline` at prepare (the partial-output
+estimate over the reused message's parts, already billed to the paused run's
+settled reservation); every partial-output estimate for the continuation —
+deferral capture, lease fallback, and worker-supplied receipt values alike —
+is reduced by that baseline so a stopped continuation never rebills the prior
+run's output. Direct chat deletion and every child processed by project
+deletion route live runs through the same supersede close (terminalize +
+defer, seeding these pending facts) BEFORE tombstoning, so deletion cannot
+erase the only settlement evidence.
+
+**Settlement-only authorization.** The Stop/supersede transaction copies the
+run's grant digest to `usageReservations.settlementGrantDigest` (expiring at
+the same `settlementDeadlineAt`, derived from the execution budget's
+settlement reserve) while clearing the run grant as before. The stopped
+worker's secret then authorizes exactly ONE narrowly scoped operation — the
+`finalizeTerminalUsage` worker-wire receipt for its exact run/reservation
+pair — and nothing else: no snapshots, tools, approvals, heartbeats, or
+lifecycle writes. Wrong-run, wrong-digest, expired, malformed, and replayed
+receipts are rejected without balance changes; a receipt against an
+already-finalized reservation is acknowledged as a benign no-op.
+
+**Evidence order (deterministic, shared by receipt and reaper —
+`resolveTerminalUsageSettlement`):**
+
+1. provider work definitely never began → release (primary and an un-run
+   title component);
+2. authoritative aggregate usage → priced at the pinned primary route
+   (`actual`; may honestly exceed the reservation);
+3. completed-step usage → priced as `observed_partial`; the persisted
+   partial-output estimate combines by `max()`, never by addition;
+4. started without usage → `estimatedInputTokens` only
+   (`estimated_input_floor`), plus a bounded estimate of persisted partial
+   output when any exists (`estimated_input_with_partial_output`).
+
+Locally estimated fallbacks are capped at the reservation — but the cap
+bounds the ESTIMATED component only: a provider-reported actual title rides
+above the capped estimate (honest overrun, invariant "provider-reported
+actual may exceed"), never inside it. The partial estimate is capped at
+`estimatedOutputTokens`. The partial-output estimator
+(`lib/usage/terminal-usage-estimate.ts`) counts model output only — text,
+reasoning, tool-call names + arguments — never tool results or user content.
+
+**Title settles independently** via `titleSettlementBasis`
+(`actual | input_floor | not_run`): zero when no attempt started; actual
+route-pinned usage when observed; otherwise `titleEstimatedInputTokens` (the
+input floor of the exact clipped title prompt, pinned at reservation time and
+signed into the reservation authorization via a versioned v1→v2 proof
+expansion) priced at the attempted pinned route, capped by the reserved title
+component. An unknown route identity is logged and priced at the pinned
+title floor. The worker durably records title start before provider dispatch
+and route-aware actual usage after completion. Both facts are mirrored to the
+reservation. Deadline and lease fallbacks therefore use actual usage when
+available, the title input floor after an acknowledged start, and zero only
+when no durable title attempt exists.
+
+**Deadline finality.** The first finalization wins — worker receipt, deadline
+reconciler (`reconcileDueTerminalSettlements`, second-level cadence, bounded,
+immediately scheduling another bounded pass whenever a batch is full), or the
+30-minute stale reconciler as the final crash/deploy net (pending rows route
+through the same fallback, never the legacy full-estimate charge). Later
+conflicting evidence is logged
+(`usage_terminal_late_evidence_ignored`) and can never rebill. A worker-owned
+abort that beats any Stop still settles atomically: its terminal write
+carries the same normalized evidence. `estimated_after_unknown_usage`
+remains readable on historical rows and is never written for new
+`user_stop`/`superseded` settlements.
 
 Per-step usage evidence: `recordToolInvocations` (fired every step, not just
 tool steps) now carries the step's token usage and accumulates it onto the
 run row while streaming, so abort/failure/reaper settlement does not depend
-on the happy-path `onEnd` callback. The runtime drains every already-started
+on the happy-path `onEnd` callback. Accumulation is idempotent and
+order-independent: the run stores a bounded set keyed by step number, absorbs
+an exact redelivery, rejects a conflicting duplicate, and derives totals from
+that set. The legacy `lastUsageStepNumber` field remains compatibility/audit
+data, not the deduplication rule. The runtime drains every already-started
 step write before any local abort/failure/completion mutation can revoke its
 grant. Completion overwrites the accumulation with the SDK's authoritative
 all-steps aggregate (the existing ai@7 `onEnd` behavior is preserved).
@@ -176,6 +279,11 @@ estimate; it never introduces an unpinned rate or rolls back completion. During
 the Convex-first deployment window, the worker validator also accepts the prior
 token-only evidence shape and prices it at the reserved title route. New
 workers always send route-aware evidence.
+
+All token counts accepted at worker boundaries must be finite, non-negative
+safe integers. Pricing and bucket transitions use checked `bigint` arithmetic
+and reject a value that cannot be represented as a safe integer before it can
+become durable settlement evidence.
 
 The stale-reservation reconciler (cron, batch-bounded, idempotent) is the
 final net: old `reserved` rows whose run is terminal apply the boundary rule;

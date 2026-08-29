@@ -1122,7 +1122,7 @@ describe("createChatTurnRuntime — evidence-gated word chunking", () => {
 })
 
 describe("createChatTurnRuntime — durable completion handoff", () => {
-  it("does not delay response construction on the best-effort work-start write", async () => {
+  it("does not dispatch until the durable work-start boundary commits", async () => {
     const harness = makeStreamHarness()
     let releaseWorkStart: (() => void) | undefined
     const workStartPending = new Promise<void>((resolve) => {
@@ -1152,13 +1152,77 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
         expect(wireCall(wire, "markGenerationWorkStarted")).toBeDefined()
       })
       await vi.waitFor(() => {
-        expect(responseReturned).toBe(true)
+        expect(responseReturned).toBe(false)
       })
     } finally {
       releaseWorkStart?.()
     }
 
     await expect(responsePending).resolves.toBeInstanceOf(Response)
+  })
+
+  it("never calls the provider when the durable dispatch boundary fails", async () => {
+    const harness = makeStreamHarness()
+    const wire = makeWorkerWire({
+      markGenerationWorkStarted: () => {
+        throw new Error("boundary unavailable")
+      },
+    })
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        durableWorkerWire: wire,
+      }),
+    })
+
+    await runtime.prepare()
+    await expect(runtime.toResponse(notAbortedSignal())).rejects.toThrow(
+      "Provider dispatch no longer authorized"
+    )
+    expect(harness.streamText).not.toHaveBeenCalled()
+    expect(wireCall(wire, "markGenerationRunAborted")?.args).toMatchObject({
+      terminalUsage: {
+        primary: { kind: "not-started" },
+        title: { kind: "not-run" },
+      },
+    })
+  })
+
+  it("never calls the provider when the start write commits but its acknowledgement is lost", async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      const harness = makeStreamHarness()
+      const wire = makeWorkerWire({
+        // The request reached Convex, but the transport never delivered its
+        // response. The worker must time out without dispatching the provider.
+        markGenerationWorkStarted: () => new Promise<never>(() => {}),
+      })
+      const runtime = createChatTurnRuntime({
+        input: makeInput(),
+        deps: makeDeps(harness, makeFetchMutation(), {
+          durableWorkerWire: wire,
+        }),
+      })
+
+      await runtime.prepare()
+      const response = expect(
+        runtime.toResponse(notAbortedSignal())
+      ).rejects.toThrow("Provider dispatch no longer authorized")
+      await vi.advanceTimersByTimeAsync(10_000)
+      await response
+
+      expect(harness.streamText).not.toHaveBeenCalled()
+      expect(wireCall(wire, "markGenerationRunAborted")?.args).toMatchObject({
+        terminalUsage: {
+          primary: { kind: "not-started" },
+          title: { kind: "not-run" },
+        },
+      })
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
   })
 
   it("completes with durableFinal tool counts from streamText onEnd, not the countToolParts fallback", async () => {
@@ -1313,6 +1377,50 @@ describe("createChatTurnRuntime — durable completion handoff", () => {
     } finally {
       warn.mockRestore()
     }
+  })
+
+  it("a zero-step abort reports started-without-usage, never zero actual usage", async () => {
+    // AI SDK 7 exposes only previously FINISHED steps at abort — an empty
+    // array is not evidence of zero provider usage (ADR-0021 amendment).
+    const harness = makeStreamHarness()
+    const wire = makeWorkerWire()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), { durableWorkerWire: wire }),
+    })
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    await harness.captured.streamOpts.onAbort({ steps: [] })
+
+    const aborted = wireCall(wire, "markGenerationRunAborted")
+    expect(aborted?.args.terminalUsage).toMatchObject({
+      primary: { kind: "started-without-usage" },
+      title: { kind: "not-run" },
+    })
+  })
+
+  it("an abort after finished steps aggregates their usage once", async () => {
+    const harness = makeStreamHarness()
+    const wire = makeWorkerWire()
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), { durableWorkerWire: wire }),
+    })
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    await harness.captured.streamOpts.onAbort({
+      steps: [
+        { usage: { inputTokens: 300, outputTokens: 20 } },
+        { usage: { inputTokens: 200, outputTokens: 5 } },
+      ],
+    })
+
+    const aborted = wireCall(wire, "markGenerationRunAborted")
+    expect(aborted?.args.terminalUsage).toMatchObject({
+      primary: { kind: "completed-steps", inputTokens: 500, outputTokens: 25 },
+    })
   })
 
   it("fail() persists one context-normalized error with the assistant message", async () => {

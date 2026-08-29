@@ -45,6 +45,11 @@ const WORKER_OPS: {
       internal.chatRuntimeWorker.markGenerationWorkStarted,
       args
     ),
+  recordTitleUsageEvidence: (ctx, args) =>
+    ctx.runMutation(
+      internal.chatRuntimeWorker.recordTitleUsageEvidence,
+      args
+    ),
   updateAssistantSnapshot: (ctx, args) =>
     ctx.runMutation(internal.chatRuntimeWorker.updateAssistantSnapshot, args),
   recordToolInvocations: (ctx, args) =>
@@ -62,6 +67,10 @@ const WORKER_OPS: {
     ctx.runMutation(internal.chatRuntimeWorker.markGenerationRunAborted, args),
   heartbeatGenerationRun: (ctx, args) =>
     ctx.runMutation(internal.chatRuntimeWorker.heartbeatGenerationRun, args),
+  // Settlement-only receipt: authenticated against the reservation's
+  // settlement digest, not the (revoked) run grant — see chatRuntimeWorker.
+  finalizeTerminalUsage: (ctx, args) =>
+    ctx.runMutation(internal.chatRuntimeWorker.finalizeTerminalUsage, args),
 }
 
 function jsonResponse(

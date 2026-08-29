@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   CHAT_ADMISSION_PROOF_MAX_AGE_MS,
   signChatAdmissionProof,
   verifyChatAdmissionProof,
@@ -163,6 +164,41 @@ describe("chat admission proof", () => {
     ).toBe(false)
     expect(
       verifyChatAdmissionProof(payload, proof, { secret: SECRET, now: NOW })
+    ).toBe(false)
+  })
+
+  it("binds deferred-settlement capability without breaking legacy v2 proofs", () => {
+    const legacyProof = signChatAdmissionProof(payload, SECRET)
+    expect(
+      verifyChatAdmissionProof(payload, legacyProof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(true)
+
+    const capable = {
+      ...payload,
+      cancellationSettlementVersion:
+        CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
+    }
+    const capableProof = signChatAdmissionProof(capable, SECRET)
+    expect(
+      verifyChatAdmissionProof(capable, capableProof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(true)
+    expect(
+      verifyChatAdmissionProof(payload, capableProof, {
+        secret: SECRET,
+        now: NOW,
+      })
+    ).toBe(false)
+    expect(
+      verifyChatAdmissionProof(capable, legacyProof, {
+        secret: SECRET,
+        now: NOW,
+      })
     ).toBe(false)
   })
 

@@ -2,6 +2,7 @@ import { getConvexSize, type Value } from "convex/values"
 import { internal } from "../_generated/api"
 import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
+import { closeSupersededGenerationsForChat } from "../chatRuntime"
 import { takeLinkedChats } from "./chat_project_link"
 
 export const DELETION_PHASES = [
@@ -39,10 +40,7 @@ const CHILD_DELETION_PHASES: readonly ChildDeletionPhase[] = [
   "generationRuns",
 ]
 
-type ChatDeletionCtx = Pick<
-  MutationCtx,
-  "db" | "meta" | "storage" | "scheduler"
->
+type ChatDeletionCtx = MutationCtx
 
 type ChildRow =
   | Doc<"assistantMessageSnapshots">
@@ -330,6 +328,15 @@ async function runProjectBatch(
   const chat = chats[0]
   if (!chat) return { phase: "projectRoot", complete: false }
 
+  // Project deletion reaches chats through this worker rather than
+  // chats.remove. Close and defer live runs before any child row can be
+  // deleted, using the same lifecycle path as direct Chat deletion.
+  await closeSupersededGenerationsForChat(
+    ctx,
+    chat._id,
+    job.userId,
+    Date.now()
+  )
   if (chat.deletingAt === undefined) {
     await ctx.db.patch(chat._id, { deletingAt: Date.now() })
   }
