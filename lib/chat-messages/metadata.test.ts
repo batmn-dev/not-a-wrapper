@@ -9,6 +9,7 @@ import {
   getWorkDurationMs,
   getServerMessageId,
   getToolDisplayMetadataRecords,
+  getGenerationBudget,
   SERVER_OWNED_METADATA_KEYS,
   stampServerFields,
   type DurableMetadataSource,
@@ -46,6 +47,7 @@ const fullSource: DurableMetadataSource = {
   _id: "server_1",
   status: "complete",
   error: { message: "boom" },
+  errorRecovery: "retry_with_shorter_generation_budget",
   generationRunId: "run_1",
   requestId: "req_1",
   model: "claude",
@@ -71,7 +73,13 @@ describe("stampServerFields", () => {
   it("projects only id, provider, status, and error in runtime mode", () => {
     const result = stampServerFields({}, fullSource, "runtime")
     expect(new Set(Object.keys(result))).toEqual(
-      new Set(["serverMessageId", "durableStatus", "durableError", "provider"])
+      new Set([
+        "serverMessageId",
+        "durableStatus",
+        "durableError",
+        "provider",
+        "errorRecovery",
+      ])
     )
   })
 
@@ -146,6 +154,14 @@ describe("getWorkDurationMs", () => {
     expect(getWorkDurationMs({ workDurationMs: 4360 })).toBe(4360)
     expect(getWorkDurationMs({ workDurationMs: -1 })).toBeUndefined()
     expect(getWorkDurationMs({ workDurationMs: Number.NaN })).toBeUndefined()
+  })
+})
+
+describe("getGenerationBudget", () => {
+  it("reads only a positive integer applied budget", () => {
+    expect(getGenerationBudget({ generationBudget: 16_384 })).toBe(16_384)
+    expect(getGenerationBudget({ generationBudget: 0 })).toBeUndefined()
+    expect(getGenerationBudget({ generationBudget: 1.5 })).toBeUndefined()
   })
 })
 

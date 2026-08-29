@@ -1027,4 +1027,37 @@ describe("MessageAssistant activity trigger", () => {
     })
     expect(onReload).toHaveBeenCalledWith("assistant-1")
   })
+
+  it("offers an explicit shorter-budget retry for an affordability failure", async () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const onReload = vi.fn()
+
+    await act(async () => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView([], "ready", {
+              durableError: "OpenRouter could not afford the Auto allowance.",
+              errorRecovery: "retry_with_shorter_generation_budget",
+            })}
+            status="failed"
+            isDurableChat
+            onReload={onReload}
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    const retry = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent === "Retry with 16K budget"
+    )
+    expect(retry).toBeTruthy()
+    act(() => retry?.click())
+    expect(onReload).toHaveBeenCalledWith("assistant-1", {
+      generationBudget: 16_384,
+    })
+  })
 })

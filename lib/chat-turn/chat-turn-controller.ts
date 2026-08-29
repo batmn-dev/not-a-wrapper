@@ -205,7 +205,12 @@ export type EditTurnResult =
       message: string
     }
 
-export type RegenerationTurnArgs = {
+export type RegenerationTurnOverrides = {
+  /** One-turn override used by an explicit shorter-budget retry. */
+  generationBudget?: number
+}
+
+export type RegenerationTurnArgs = RegenerationTurnOverrides & {
   chatId: string | null
   messages: ChatTurnMessage[]
   targetAssistantMessageId: string
@@ -713,6 +718,7 @@ async function runRegenerationTurn(
     chatVersion,
     isSubmitting,
     status,
+    generationBudget,
   }: RegenerationTurnArgs
 ) {
   // Read the Turn context at run time — never from a render-time closure.
@@ -769,6 +775,7 @@ async function runRegenerationTurn(
         systemPrompt: snapshot.systemPrompt,
         enableSearch: snapshot.enableSearch,
         reasoningEffort: snapshot.reasoningEffort,
+        generationBudget,
         chatVersion,
         regeneration: regenerationPlan.regeneration,
       }),

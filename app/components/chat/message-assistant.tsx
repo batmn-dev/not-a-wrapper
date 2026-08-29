@@ -10,8 +10,10 @@ import {
   type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
-import { getDurableError } from "@/lib/chat-messages/metadata"
+import { getDurableError, getErrorRecovery } from "@/lib/chat-messages/metadata"
+import type { RegenerationTurnOverrides } from "@/lib/chat-turn/chat-turn-controller"
 import { getModelInfo } from "@/lib/models"
+import { AFFORDABILITY_RETRY_GENERATION_BUDGET } from "@/lib/openproviders/output-budget"
 import { cn } from "@/lib/utils"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
@@ -38,7 +40,7 @@ type MessageAssistantProps = {
   isLast?: boolean
   copied?: boolean
   copyToClipboard?: () => void
-  onReload?: (messageId: string) => void
+  onReload?: (messageId: string, overrides?: RegenerationTurnOverrides) => void
   retryModelId?: string
   retryDisabled?: boolean
   status?: DurableMessageStatus | "ready" | "error"
@@ -78,6 +80,7 @@ export function MessageAssistant({
   // content survived, and the persisted error summary for failed turns.
   const preservedResponse = hasPreservedResponseContent(view)
   const durableError = getDurableError(view.metadata)
+  const errorRecovery = getErrorRecovery(view.metadata)
 
   // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
   // row with activity keeps its own trigger; only the row currently projected
@@ -311,8 +314,22 @@ export function MessageAssistant({
                   cta={
                     canRegenerate
                       ? {
-                          label: "Retry",
-                          onClick: () => onReload?.(messageId),
+                          label:
+                            errorRecovery ===
+                            "retry_with_shorter_generation_budget"
+                              ? "Retry with 16K budget"
+                              : "Retry",
+                          onClick: () =>
+                            onReload?.(
+                              messageId,
+                              errorRecovery ===
+                                "retry_with_shorter_generation_budget"
+                                ? {
+                                    generationBudget:
+                                      AFFORDABILITY_RETRY_GENERATION_BUDGET,
+                                  }
+                                : undefined
+                            ),
                           disabled: retryDisabled,
                         }
                       : undefined

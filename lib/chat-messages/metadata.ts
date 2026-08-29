@@ -26,6 +26,7 @@
  * promotes the persisted reasoning/work clocks.
  */
 
+import { isChatErrorRecovery, type ChatErrorRecovery } from "@/lib/chat-errors"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import { isModelReasoningEffort } from "@/lib/models/types"
 import {
@@ -72,6 +73,7 @@ const DURABLE_FIELD_MAP = [
   ["provider", "provider"],
   ["finishReason", "finishReason"],
   ["usage", "usage"],
+  ["errorRecovery", "errorRecovery"],
 ] as const
 
 /** A metadata key the server owns (the projection of a durable Doc field). */
@@ -90,6 +92,7 @@ const RUNTIME_METADATA_KEYS: readonly ServerOwnedMetadataKey[] = [
   "durableStatus",
   "durableError",
   "provider",
+  "errorRecovery",
 ]
 
 /**
@@ -119,6 +122,16 @@ export function getDurableError(metadata: unknown): string | undefined {
   if (!isRecord(metadata)) return undefined
   const value = metadata.durableError
   return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+/** Structured recovery owned by the normalized server error contract. */
+export function getErrorRecovery(
+  metadata: unknown
+): ChatErrorRecovery | undefined {
+  if (!isRecord(metadata)) return undefined
+  return isChatErrorRecovery(metadata.errorRecovery)
+    ? metadata.errorRecovery
+    : undefined
 }
 
 /**
@@ -165,6 +178,15 @@ export function getReasoningEffort(
   if (!isRecord(metadata)) return undefined
   return isModelReasoningEffort(metadata.reasoningEffort)
     ? metadata.reasoningEffort
+    : undefined
+}
+
+/** Read the applied total generation allowance stamped on an assistant turn. */
+export function getGenerationBudget(metadata: unknown): number | undefined {
+  if (!isRecord(metadata)) return undefined
+  const value = metadata.generationBudget
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
     : undefined
 }
 
@@ -223,6 +245,7 @@ export type DurableMetadataSource = {
   _id: string
   status?: unknown
   error?: unknown
+  errorRecovery?: unknown
   generationRunId?: unknown
   requestId?: unknown
   model?: unknown
@@ -323,16 +346,17 @@ export function adoptServerOwned(
     return !metadataValueEquals(localRecord[key], serverRecord[key])
   })
   // Blob-owned keys: persisted inside the validated metadata blob rather than
-  // as top-level message fields (terminal stream durations plus the applied
-  // per-turn effort, ADR-0026). Adopt them when the durable snapshot has a
+  // as top-level message fields (terminal durations and applied turn policy).
+  // Adopt them when the durable snapshot has a
   // value, but never clear a fresher live value merely because an
   // intermediate server snapshot has not landed it yet.
-  const terminalDurationKeys = [
+  const persistedStreamKeys = [
     "reasoningDurationMs",
     "workDurationMs",
     "reasoningEffort",
+    "generationBudget",
   ] as const
-  const terminalDurationChanged = terminalDurationKeys.some(
+  const persistedStreamMetadataChanged = persistedStreamKeys.some(
     (key) =>
       serverRecord &&
       Object.prototype.hasOwnProperty.call(serverRecord, key) &&
@@ -343,7 +367,7 @@ export function adoptServerOwned(
     !messageIdChanged &&
     !branchChanged &&
     !serverOwnedChanged &&
-    !terminalDurationChanged
+    !persistedStreamMetadataChanged
   ) {
     return localMetadata
   }
@@ -357,7 +381,7 @@ export function adoptServerOwned(
     if (serverRecord && key in serverRecord) next[key] = serverRecord[key]
     else delete next[key]
   }
-  for (const key of terminalDurationKeys) {
+  for (const key of persistedStreamKeys) {
     if (serverRecord && key in serverRecord) next[key] = serverRecord[key]
   }
 

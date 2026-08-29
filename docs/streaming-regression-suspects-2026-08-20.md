@@ -23,17 +23,17 @@ model identities + server-owned route selection).
 
 ## Suspects, ranked
 
-1. **`maxOutputTokens` cap on platform-funded runs** (ADR-0021,
-   `chat-turn-runtime.ts` ~1300). Platform runs are capped at 8,192 output
-   tokens (+10k headroom for Anthropic fixed thinking only). Long answers
-   truncate mid-stream (`finishReason: "length"`), and OpenAI/Google
-   reasoning tokens burn the cap with **no headroom** — a heavy-thinking turn
-   leaves little room for visible text. BYOK runs are uncapped, so the same
-   model behaves differently per credential.
+1. **Platform generation budget** (ADR-0028, `chat-turn-runtime.ts` ~1490).
+   Platform response policy allows 8,192 tokens; fixed Anthropic thinking adds
+   separately billed reservation headroom. Long answers truncate mid-stream
+   (`finishReason: "length"`), and OpenAI/Google reasoning tokens share the
+   8,192-token allowance, so a heavy-thinking turn leaves little room for
+   visible text. BYOK Auto omits the provider limit, while an explicit manual
+   retry can apply a shorter budget.
 2. **Route flapping / silent credential switching** (#143 + ADR-0021).
    Observed live: gpt-5-mini ran `platform` → `priority_byok` →
    `fallback_byok` → `platform` within 40 minutes. Different credential =
-   different upstream + different output cap per turn. Structural cause:
+   different upstream + different funding ceiling per turn. Structural cause:
    `validateAndResolveChatCredential` supplies the route resolver's
    `platformFunding` context only when `isServerChatId(chatId)`
    (`app/api/chat/api.ts`), so **the first turn of a new chat (local optimistic

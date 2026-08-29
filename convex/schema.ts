@@ -197,6 +197,9 @@ export default defineSchema({
       })
     ),
     error: v.optional(v.string()),
+    errorRecovery: v.optional(
+      v.literal("retry_with_shorter_generation_budget")
+    ),
     metadata: v.optional(vToolInvocationStreamMetadata),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -235,6 +238,10 @@ export default defineSchema({
     // prepare; display/audit only.
     reasoningEffort: v.optional(vReasoningEffort),
     appliedReasoningEffort: v.optional(vReasoningEffort),
+    // Per-turn generation allowance receipt (ADR-0028). Both values include
+    // hidden reasoning output; applied is route/funding clamped.
+    requestedGenerationBudget: v.optional(v.number()),
+    appliedGenerationBudget: v.optional(v.number()),
     status: generationRunStatus,
     // Compatibility field: no longer written, but production may still contain
     // older run docs. Drop only after preflight proves zero legacy documents.
@@ -249,6 +256,9 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     updatedAt: v.number(),
     error: v.optional(v.string()),
+    errorRecovery: v.optional(
+      v.literal("retry_with_shorter_generation_budget")
+    ),
     finishReason: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),

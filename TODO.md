@@ -132,8 +132,8 @@ compatible; and handle ESLint 10, Motion 13, and Recharts 3.10 as separate,
 focused upgrades with migration-specific lint, animation, and visual checks.
 - **Assistant responsiveness:** investigate and improve time to first token and
 text-streaming feel end to end. Known suspects are catalogued in
-`docs/streaming-regression-suspects-2026-08-20.md`: the platform
-`maxOutputTokens` cap (no reasoning headroom for OpenAI/Google), route
+`docs/streaming-regression-suspects-2026-08-20.md`: the platform generation
+budget (OpenAI/Google reasoning shares the 8,192-token allowance), route
 flapping incl. first-turn local chat ids skipping the platform tier,
 sequential Convex roundtrips on the admission critical path
 (reserve/getKeySettings/getUserKey), and settle waiting on title usage.

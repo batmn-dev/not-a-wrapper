@@ -100,9 +100,23 @@ const STEP_USAGE = {
   outputTokens: { total: 5, text: 5, reasoning: undefined },
 }
 
+function stepUsage(outputTokens: number): typeof STEP_USAGE {
+  return {
+    ...STEP_USAGE,
+    outputTokens: {
+      total: outputTokens,
+      text: outputTokens,
+      reasoning: undefined,
+    },
+  }
+}
+
 const TOOL_STEPS = 4 // crosses PREPARE_STEP_THRESHOLD (3) on the final step
 
-function makeToolCallStepChunks(step: number): LanguageModelV4StreamPart[] {
+function makeToolCallStepChunks(
+  step: number,
+  usage: typeof STEP_USAGE = STEP_USAGE
+): LanguageModelV4StreamPart[] {
   return [
     { type: "stream-start" as const, warnings: [] },
     {
@@ -114,7 +128,7 @@ function makeToolCallStepChunks(step: number): LanguageModelV4StreamPart[] {
     {
       type: "finish" as const,
       finishReason: { unified: "tool-calls" as const, raw: "tool_use" },
-      usage: STEP_USAGE,
+      usage,
     },
   ]
 }
@@ -146,6 +160,24 @@ function makeToolLoopModel() {
             call <= TOOL_STEPS
               ? makeToolCallStepChunks(call)
               : makeFinalTextStepChunks(),
+          chunkDelayInMs: null,
+        }),
+      }
+    },
+  })
+}
+
+/** A tool-only loop whose usage exactly consumes a 12-token turn budget. */
+function makeBudgetedToolLoopModel() {
+  const outputByStep = [5, 4, 3]
+  let call = 0
+  return new MockLanguageModelV4({
+    doStream: async () => {
+      const outputTokens = outputByStep[call] ?? 1
+      call += 1
+      return {
+        stream: simulateReadableStream({
+          chunks: makeToolCallStepChunks(call, stepUsage(outputTokens)),
           chunkDelayInMs: null,
         }),
       }
@@ -561,9 +593,9 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     // usage as abort/failure settlement evidence.
     const invocationWrites = wireCalls(wire, "recordToolInvocations")
     expect(invocationWrites).toHaveLength(TOOL_STEPS + 1)
-    expect(
-      invocationWrites.map((call) => call.args.stepNumber)
-    ).toEqual([1, 2, 3, 4, 5])
+    expect(invocationWrites.map((call) => call.args.stepNumber)).toEqual([
+      1, 2, 3, 4, 5,
+    ])
     expect(invocationWrites[0].args).toMatchObject({
       runId: "run1",
       messageId: "msg1",
@@ -607,6 +639,36 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     // No failure/abort writes on the happy path.
     expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
     expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(0)
+  })
+
+  it("applies one cumulative output budget across real AI SDK tool steps, including fixed reasoning", async () => {
+    const { loadResult, weatherExecute } = makeMcpToolsFixture()
+    vi.mocked(loadUserMcpTools).mockResolvedValue(
+      loadResult as unknown as Awaited<ReturnType<typeof loadUserMcpTools>>
+    )
+    const model = makeBudgetedToolLoopModel()
+    vi.mocked(createLanguageModel).mockReturnValue(
+      model as unknown as ReturnType<typeof createLanguageModel>
+    )
+    const wire = makeWorkerWire()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        requestId: "req-seam-output-budget",
+        // Haiku's catalogued fixed-thinking budget is 5,000. The AI SDK-facing
+        // visible-output remainder is therefore 12, then 7, then 3.
+        generationBudget: 5_012,
+      }),
+      deps: makeDeps(makeDurableFetchMutation(), wire),
+    })
+
+    await runtime.prepare()
+    await (await runtime.toResponse(new AbortController().signal)).text()
+
+    expect(model.doStreamCalls.map((call) => call.maxOutputTokens)).toEqual([
+      12, 7, 3,
+    ])
+    expect(weatherExecute).toHaveBeenCalledTimes(3)
+    expect(wireCalls(wire, "recordToolInvocations")).toHaveLength(3)
   })
 
   it("keeps streaming to durable completion when the request signal aborts mid-stream (client disconnect)", async () => {

@@ -28,6 +28,8 @@ export type ToolInvocationStreamMetadata = {
   reasoningDurationMs?: number
   /** Applied per-turn reasoning effort (ADR-0026), stamped at stream start. */
   reasoningEffort?: ModelReasoningEffort
+  /** Applied total generation allowance (ADR-0028), including reasoning. */
+  generationBudget?: number
   /**
    * Cumulative active assistant generation time across provider-stream segments
    * for this assistant turn. Each segment runs from provider-stream start

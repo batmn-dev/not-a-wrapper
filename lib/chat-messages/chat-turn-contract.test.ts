@@ -80,6 +80,28 @@ describe("parseChatTurnRequest", () => {
     expect(invalid.ok && invalid.request.reasoningEffort).toBeUndefined()
   })
 
+  it("keeps a valid generation budget and rejects invalid spend limits", () => {
+    const valid = parseChatTurnRequest(
+      { ...validBody, generationBudget: 16_384 },
+      { isAuthenticated: true }
+    )
+    expect(valid.ok && valid.request.generationBudget).toBe(16_384)
+
+    for (const generationBudget of [0, -1, 1.5, "16384", 2_000_001]) {
+      const invalid = parseChatTurnRequest(
+        { ...validBody, generationBudget },
+        { isAuthenticated: true }
+      )
+      expect(invalid).toEqual({
+        ok: false,
+        status: 400,
+        code: "INVALID_GENERATION_BUDGET",
+        error:
+          "Generation budget must be a positive whole number within the supported range",
+      })
+    }
+  })
+
   it("requires a guest id only for unauthenticated turns", () => {
     expect(parseChatTurnRequest(validBody, { isAuthenticated: false })).toEqual(
       {

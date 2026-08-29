@@ -428,6 +428,7 @@ describe("createChatTurnRuntime — prepare()", () => {
     expect(harness.captured.streamOpts.providerOptions).toEqual({
       anthropic: { thinking: { type: "enabled", budgetTokens: 10000 } },
     })
+    expect(harness.captured.streamOpts).not.toHaveProperty("maxOutputTokens")
     const prepareArgs = findCall(
       fetchMutation,
       api.chatRuntime.prepareGeneration
@@ -439,6 +440,96 @@ describe("createChatTurnRuntime — prepare()", () => {
     expect(
       harness.captured.responseOpts.messageMetadata({ part: { type: "start" } })
     ).not.toHaveProperty("reasoningEffort")
+  })
+
+  it("translates platform fixed thinking without double-adding headroom", async () => {
+    vi.mocked(getAllModels).mockResolvedValue([
+      {
+        id: "test-model",
+        provider: "Anthropic",
+        providerId: "anthropic",
+        reasoningText: true,
+        thinkingMode: "enabled",
+        thinkingBudget: 10_000,
+        maxOutput: 64_000,
+      },
+    ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        credential: {
+          provider: "anthropic",
+          apiKey: "platform-key",
+          source: "platform",
+        },
+        route: {
+          modelId: "test-model",
+          routeId: "test-model",
+          providerId: "anthropic",
+          upstreamModelId: "test-model",
+          credentialSource: "platform",
+          routeReason: "platform",
+        },
+      }),
+      deps: makeDeps(harness, fetchMutation),
+    })
+
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    expect(harness.captured.streamOpts.maxOutputTokens).toBe(8_192)
+    expect(
+      findCall(fetchMutation, api.chatRuntime.prepareGeneration)?.[1]
+    ).toEqual(
+      expect.objectContaining({
+        generationBudget: { applied: 18_192 },
+      })
+    )
+  })
+
+  it("applies an explicit BYOK generation budget", async () => {
+    vi.mocked(getAllModels).mockResolvedValue([
+      {
+        id: "test-model",
+        provider: "OpenRouter",
+        providerId: "openrouter",
+        maxOutput: 65_536,
+      },
+    ] as unknown as Awaited<ReturnType<typeof getAllModels>>)
+    const harness = makeStreamHarness()
+    const fetchMutation = makeFetchMutation()
+    const runtime = createChatTurnRuntime({
+      input: makeInput({
+        generationBudget: 16_384,
+        credential: {
+          provider: "openrouter",
+          apiKey: "byok-key",
+          source: "byok",
+        },
+        route: {
+          modelId: "test-model",
+          routeId: "test-model",
+          providerId: "openrouter",
+          upstreamModelId: "openai/gpt-5.2-pro",
+          credentialSource: "byok",
+          routeReason: "priority_byok",
+        },
+      }),
+      deps: makeDeps(harness, fetchMutation),
+    })
+
+    await runtime.prepare()
+    await runtime.toResponse(notAbortedSignal())
+
+    expect(harness.captured.streamOpts.maxOutputTokens).toBe(16_384)
+    expect(
+      findCall(fetchMutation, api.chatRuntime.prepareGeneration)?.[1]
+    ).toEqual(
+      expect.objectContaining({
+        generationBudget: { requested: 16_384, applied: 16_384 },
+      })
+    )
   })
 
   it("records the concrete default without sending a wire override", async () => {

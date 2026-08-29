@@ -21,6 +21,7 @@ import type {
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import { estimatePartialOutputTokens } from "@/lib/usage/terminal-usage-estimate"
 import type { ModelReasoningEffort } from "@/lib/models/types"
+import type { ChatErrorRecovery } from "@/lib/chat-errors"
 import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
@@ -60,6 +61,15 @@ import { toInvalidDurableRequestError } from "./utils"
 // 2026-07-14 incident class).
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
+
+type DurableFailure = string | { message: string; recovery?: ChatErrorRecovery }
+
+function normalizeDurableFailure(failure: DurableFailure): {
+  message: string
+  recovery?: ChatErrorRecovery
+} {
+  return typeof failure === "string" ? { message: failure } : failure
+}
 
 // Edit/regeneration request shapes live on the Chat turn wire contract
 // (lib/chat-messages/chat-turn-contract.ts) — declared once for the client
@@ -321,7 +331,7 @@ export type DurableStreamBinding = {
     ): Promise<boolean>
     onChunk(chunk: TextStreamPart<ToolSet>): void
     recordStep(step: DurableStepRecord): void
-    noteStreamError(errorMessage: string, workDurationMs: number): void
+    noteStreamError(failure: DurableFailure, workDurationMs: number): void
     /**
      * Flush the snapshot, then mark the run aborted — carrying terminal
      * usage evidence when the parent observed any. If a Stop/supersession
@@ -432,6 +442,11 @@ export type DurableTurnRuntime = {
       requested?: ModelReasoningEffort
       applied?: ModelReasoningEffort
     }
+    /** Total generation allowance receipt (ADR-0028). */
+    generationBudget?: {
+      requested?: number
+      applied?: number
+    }
   }): Promise<MessageAISDK[]>
 
   /** The provisional title version authorized by durable prepare. Guest turns
@@ -448,7 +463,7 @@ export type DurableTurnRuntime = {
    * Legal at ANY phase: pre-prepare (no run → no-op), mid-stream, or after
    * settlement (first-terminal-wins absorbs it). Never throws.
    */
-  fail(errorMessage: string): Promise<void>
+  fail(failure: DurableFailure): Promise<void>
 }
 
 export type DurableUiMessage = UIMessage & {
@@ -1468,7 +1483,7 @@ export function createConvexDurableTurn(args: {
       return [executionAbortController.signal]
     },
 
-    async prepare({ provider, route, reasoningEffort }) {
+    async prepare({ provider, route, reasoningEffort, generationBudget }) {
       if (prepareCalled) {
         throw new Error(
           "Durable turn runtime: prepare() may only be called once"
@@ -1486,6 +1501,7 @@ export function createConvexDurableTurn(args: {
         provider,
         route,
         reasoningEffort,
+        generationBudget,
         grantDigest,
         reservationId,
         cancellationSettlementVersion:
@@ -1503,6 +1519,7 @@ export function createConvexDurableTurn(args: {
           provider,
           route,
           reasoningEffort,
+          generationBudget,
           expectedVisibleMessageCount,
           tailMessageId,
           latestUserMessage: latestUserMessage
@@ -1829,12 +1846,16 @@ export function createConvexDurableTurn(args: {
             )
           },
 
-          noteStreamError(errorMessage, workDurationMs) {
+          noteStreamError(failure, workDurationMs) {
+            const normalizedFailure = normalizeDurableFailure(failure)
             void (async () => {
               await drainPendingWrites(stepWritePromises)
               await workerWrite("markGenerationRunFailed", {
                 messageId: currentMessageId,
-                error: errorMessage,
+                error: normalizedFailure.message,
+                ...(normalizedFailure.recovery !== undefined
+                  ? { errorRecovery: normalizedFailure.recovery }
+                  : {}),
                 workDurationMs,
               })
             })().catch((error: unknown) => {
@@ -2080,7 +2101,8 @@ export function createConvexDurableTurn(args: {
       }
     },
 
-    async fail(errorMessage) {
+    async fail(failure) {
+      const normalizedFailure = normalizeDurableFailure(failure)
       const currentRunId = runId
       const currentMessageId = assistantMessageId
       if (!currentRunId || !currentMessageId) return
@@ -2094,7 +2116,10 @@ export function createConvexDurableTurn(args: {
         await withWorkerWriteTimeout(
           workerWrite("markGenerationRunFailed", {
             messageId: currentMessageId,
-            error: errorMessage,
+            error: normalizedFailure.message,
+            ...(normalizedFailure.recovery !== undefined
+              ? { errorRecovery: normalizedFailure.recovery }
+              : {}),
           }),
           "writing terminal operation markGenerationRunFailed"
         ).catch((writeError: unknown) => {

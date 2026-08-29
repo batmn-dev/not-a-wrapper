@@ -141,6 +141,8 @@ type ChatCredentialAdmissionParams = {
   enableSearch: boolean
   /** Per-turn effort selection (ADR-0026); parser-validated, still soft. */
   reasoningEffort?: ModelReasoningEffort
+  /** Optional user-selected total generation allowance (ADR-0028). */
+  generationBudget?: number
   /** Server-planned approval continuation pin, when this is one. */
   pinnedProviderId?: Provider
   /**
@@ -275,6 +277,7 @@ export async function validateAndResolveChatCredential({
   systemPrompt,
   enableSearch,
   reasoningEffort,
+  generationBudget,
   pinnedProviderId: plannedPinnedProviderId,
   keySettingsPromise,
   perf,
@@ -328,6 +331,7 @@ export async function validateAndResolveChatCredential({
               messages,
               systemPrompt,
               toolsLikely: effectiveEnableSearch,
+              ...(generationBudget !== undefined ? { generationBudget } : {}),
             },
           }
         : {}),

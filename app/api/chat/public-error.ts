@@ -1,3 +1,7 @@
+import {
+  OPENROUTER_AFFORDABILITY_MESSAGE,
+  type ChatErrorRecovery,
+} from "@/lib/chat-errors"
 import type { Provider } from "@/lib/provider-identity"
 import type { ApiKeySource } from "@/lib/user-keys"
 
@@ -19,6 +23,7 @@ export type PublicChatError = {
   retryable: boolean
   provider?: Provider
   credentialSource?: ApiKeySource
+  recovery?: ChatErrorRecovery
 }
 
 type ErrorRecord = {
@@ -26,6 +31,8 @@ type ErrorRecord = {
   status?: unknown
   code?: unknown
   message?: unknown
+  error_type?: unknown
+  metadata?: unknown
   responseBody?: unknown
   error?: unknown
   cause?: unknown
@@ -88,23 +95,64 @@ function parseStatus(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-function extractResponseBodyMessage(responseBody: unknown): string | null {
-  if (typeof responseBody !== "string" || responseBody.length === 0) return null
+type ResponseBodyDetails = { message?: string; errorType?: string }
+
+function extractResponseBodyDetails(
+  responseBody: unknown
+): ResponseBodyDetails {
+  if (typeof responseBody !== "string" || responseBody.length === 0) return {}
   try {
     const parsed = JSON.parse(responseBody) as {
-      error?: { message?: unknown } | string
+      error?:
+        | {
+            message?: unknown
+            error_type?: unknown
+            metadata?: { error_type?: unknown }
+          }
+        | string
       message?: unknown
+      error_type?: unknown
+      metadata?: { error_type?: unknown }
     }
     if (typeof parsed.error === "object" && parsed.error) {
-      return typeof parsed.error.message === "string"
-        ? parsed.error.message
-        : null
+      const errorType =
+        typeof parsed.error.error_type === "string"
+          ? parsed.error.error_type
+          : typeof parsed.error.metadata?.error_type === "string"
+            ? parsed.error.metadata.error_type
+            : undefined
+      return {
+        ...(typeof parsed.error.message === "string"
+          ? { message: parsed.error.message }
+          : {}),
+        ...(errorType ? { errorType } : {}),
+      }
     }
-    if (typeof parsed.error === "string") return parsed.error
-    return typeof parsed.message === "string" ? parsed.message : null
+    const errorType =
+      typeof parsed.error_type === "string"
+        ? parsed.error_type
+        : typeof parsed.metadata?.error_type === "string"
+          ? parsed.metadata.error_type
+          : undefined
+    return {
+      ...(typeof parsed.error === "string"
+        ? { message: parsed.error }
+        : typeof parsed.message === "string"
+          ? { message: parsed.message }
+          : {}),
+      ...(errorType ? { errorType } : {}),
+    }
   } catch {
-    return null
+    return {}
   }
+}
+
+function extractDirectErrorType(record: ErrorRecord): string | undefined {
+  if (typeof record.error_type === "string") return record.error_type
+  const metadata = asRecord(record.metadata)
+  return typeof metadata?.error_type === "string"
+    ? metadata.error_type
+    : undefined
 }
 
 function includesAny(values: string[], needles: string[]): boolean {
@@ -163,6 +211,7 @@ export function normalizeChatError(
     .flatMap((record) => [
       parseStatus(record.statusCode),
       parseStatus(record.status),
+      parseStatus(record.code),
     ])
     .filter((status): status is number => status !== undefined)
   const codes = records
@@ -170,10 +219,19 @@ export function normalizeChatError(
       typeof record.code === "string" ? record.code.toLowerCase() : ""
     )
     .filter(Boolean)
+  const responseDetails = records.map((record) =>
+    extractResponseBodyDetails(record.responseBody)
+  )
+  const providerErrorTypes = records
+    .flatMap((record, index) => [
+      extractDirectErrorType(record)?.toLowerCase() ?? "",
+      responseDetails[index]?.errorType?.toLowerCase() ?? "",
+    ])
+    .filter(Boolean)
   const messages = records
     .flatMap((record) => [
       typeof record.message === "string" ? record.message : "",
-      extractResponseBodyMessage(record.responseBody) ?? "",
+      extractResponseBodyDetails(record.responseBody).message ?? "",
     ])
     .filter(Boolean)
   if (typeof error === "string" && error.length > 0) messages.unshift(error)
@@ -181,10 +239,9 @@ export function normalizeChatError(
   const rootError = records[0]
   const internalMissingApiKeyMessage =
     rootError?.code === "MISSING_API_KEY" &&
-    [
-      rootError.statusCode,
-      rootError.status,
-    ].some((status) => parseStatus(status) === 401) &&
+    [rootError.statusCode, rootError.status].some(
+      (status) => parseStatus(status) === 401
+    ) &&
     typeof rootError.message === "string" &&
     rootError.message.length > 0
       ? rootError.message
@@ -226,6 +283,10 @@ export function normalizeChatError(
   if (
     statuses.includes(402) ||
     includesAny(codes, ["payment_required", "insufficient_quota"]) ||
+    includesAny(providerErrorTypes, [
+      "payment_required",
+      "token_limit_exceeded",
+    ]) ||
     includesAny(normalizedMessages, [
       "payment required",
       "insufficient credit",
@@ -234,11 +295,22 @@ export function normalizeChatError(
       "credits",
     ])
   ) {
+    const openRouterAffordability =
+      context.provider === "openrouter" &&
+      context.credentialSource === "byok" &&
+      (providerErrorTypes.includes("token_limit_exceeded") ||
+        (includesAny(normalizedMessages, ["max_tokens", "maximum output"]) &&
+          includesAny(normalizedMessages, ["afford", "credit", "balance"])))
     return {
       ...base,
       code: "PAYMENT_REQUIRED",
-      message: paymentMessage(context),
+      message: openRouterAffordability
+        ? OPENROUTER_AFFORDABILITY_MESSAGE
+        : paymentMessage(context),
       retryable: false,
+      ...(openRouterAffordability
+        ? { recovery: "retry_with_shorter_generation_budget" as const }
+        : {}),
     }
   }
 

@@ -10,7 +10,10 @@ import {
 import { getFinishReason } from "@/lib/chat-messages/metadata"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import type { TurnRowModel } from "@/lib/chat-messages/turn-row"
-import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
+import type {
+  EditTurnResult,
+  RegenerationTurnOverrides,
+} from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import { UIMessage as MessageType } from "@ai-sdk/react"
 import {
@@ -277,7 +280,7 @@ type ConversationProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
-  onReload: (messageId: string) => void
+  onReload: (messageId: string, overrides?: RegenerationTurnOverrides) => void
   retryModelId?: string
   onQuote?: (text: string, messageId: string) => void
   onSelectBranch?: (messageId: string) => void

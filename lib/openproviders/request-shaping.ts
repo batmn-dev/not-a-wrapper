@@ -2,6 +2,7 @@ import { ANTHROPIC_BETA_HEADERS } from "@/lib/config"
 import type { ModelConfig, ModelReasoningEffort } from "@/lib/models/types"
 import { clampToNearestEffortLevel } from "@/lib/models/types"
 import type { ProviderOptions } from "@ai-sdk/provider-utils"
+import { fixedThinkingBudgetTokens } from "./output-budget"
 
 /**
  * Request shaping (CONTEXT.md): everything provider-specific about issuing
@@ -82,17 +83,6 @@ export type ShapedRequest = {
   headers: Record<string, string>
 }
 
-/** Thinking budget for models that don't declare `thinkingBudget`. */
-const DEFAULT_THINKING_BUDGET_TOKENS = 10000
-
-/**
- * Budget for the pause_turn search downgrade (see resolveProviderOptions).
- * Server-side web search results (encrypted_content) are counted as INPUT
- * tokens, so they don't consume from max_tokens — no reduction needed.
- * (Source: Anthropic web search tool docs)
- */
-const SEARCH_DOWNGRADE_BUDGET_TOKENS = 10000
-
 export function shapeRequest(
   modelConfig: ModelConfig,
   ctx: RequestShapingContext
@@ -139,10 +129,10 @@ function resolveProviderOptions(
       // Fixed-budget path (pause_turn downgrade or budget-era models):
       // `effort` and `budget_tokens` don't combine — the budget wins and the
       // receipt omits applied effort because no named level represents it.
-      const budgetTokens =
-        modelConfig.thinkingMode === "adaptive"
-          ? SEARCH_DOWNGRADE_BUDGET_TOKENS
-          : (modelConfig.thinkingBudget ?? DEFAULT_THINKING_BUDGET_TOKENS)
+      const budgetTokens = fixedThinkingBudgetTokens(
+        modelConfig,
+        ctx.searchToolsActive
+      )
       return { anthropic: { thinking: { type: "enabled", budgetTokens } } }
     }
     case "google":

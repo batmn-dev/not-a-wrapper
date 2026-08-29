@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
+import type { TitleTerminalUsageEvidence } from "@/convex/domain/usage_accounting"
 import type { ChatAdmissionProofPayload } from "@/convex/lib/chatAdmissionProof"
 import type {
   ChatTurnEditRequest,
@@ -51,11 +52,7 @@ import {
   sanitizeExceptionForTelemetry,
 } from "@/lib/observability/sentry-scrubbing"
 import { createLanguageModel } from "@/lib/openproviders/create-language-model"
-import {
-  createDeterministicChatModel,
-  createDeterministicTitleModel,
-  parseDeterministicPerfDirective,
-} from "./deterministic-provider"
+import { resolveGenerationBudget } from "@/lib/openproviders/output-budget"
 import {
   resolveReasoningEffort,
   shapeRequest,
@@ -73,7 +70,6 @@ import {
   type ToolInvocationMetadataByCallId,
   type ToolInvocationMetadataByName,
 } from "@/lib/tools/ui-metadata"
-import { platformOutputTokenBudget } from "@/lib/usage/platform-usage-estimate"
 import type {
   ApiKeySource,
   Provider,
@@ -103,8 +99,12 @@ import { after } from "next/server"
 import { adaptHistoryForProvider } from "./adapters"
 import type { AdaptationContext, AdaptationWarning } from "./adapters/types"
 import { splitAndValidateApprovalContinuation } from "./approval-continuation"
+import {
+  createDeterministicChatModel,
+  createDeterministicTitleModel,
+  parseDeterministicPerfDirective,
+} from "./deterministic-provider"
 import type { DurableGenerationInputPlan } from "./durable-generation-input"
-import type { TitleTerminalUsageEvidence } from "@/convex/domain/usage_accounting"
 import {
   createDurableTurnRuntime,
   isDurableConvexChat,
@@ -165,6 +165,8 @@ export type ChatTurnInput = {
   /** Parser-validated per-turn effort request (ADR-0026); the runtime clamps
    * it to the resolved route via `resolveReasoningEffort`. */
   reasoningEffort?: ModelReasoningEffort
+  /** Parser-validated total generation allowance; absent = Auto. */
+  generationBudget?: number
   chatVersion?: number
   expectedVisibleMessageCount?: number
   tailMessageId?: string
@@ -243,6 +245,31 @@ type ChatStreamPhase =
 type ToolExecutionOutcome =
   "none" | "success" | "failure" | "timeout" | "budget_denied"
 
+type CompletedGenerationStep = {
+  readonly usage: { readonly outputTokens: number | undefined }
+}
+
+/** Null means the provider omitted trustworthy output usage, so another
+ * spend-bearing model step must fail closed. */
+function completedOutputTokens(
+  steps: ReadonlyArray<CompletedGenerationStep>
+): number | null {
+  let total = 0
+  for (const step of steps) {
+    const outputTokens = step.usage.outputTokens
+    if (
+      outputTokens === undefined ||
+      !Number.isSafeInteger(outputTokens) ||
+      outputTokens < 0
+    ) {
+      return null
+    }
+    total += outputTokens
+    if (!Number.isSafeInteger(total)) return null
+  }
+  return total
+}
+
 type PreparedTurn = {
   aiModel: ReturnType<typeof createLanguageModel>
   titleModel: ReturnType<typeof createLanguageModel>
@@ -252,6 +279,10 @@ type PreparedTurn = {
   provider: Provider
   /** Concrete effective effort recorded for badges and reopen (ADR-0026). */
   appliedReasoningEffort: ModelReasoningEffort | undefined
+  /** Provider-facing max after route/provider translation (ADR-0028). */
+  providerMaxOutputTokens: number | undefined
+  /** Total applied generation allowance recorded on the assistant turn. */
+  appliedGenerationBudget: number | undefined
   normalizedChatVersion: number
   hasAnyTools: boolean
   shouldInjectSearch: boolean
@@ -419,6 +450,7 @@ export function createChatTurnRuntime(args: {
     systemPrompt,
     enableSearch,
     reasoningEffort,
+    generationBudget,
     chatVersion,
     expectedVisibleMessageCount,
     tailMessageId,
@@ -639,6 +671,19 @@ export function createChatTurnRuntime(args: {
         platformFunded: credentialSource === "platform",
         searchToolsActive: shouldInjectSearch,
       })
+    const outputBudget = resolveGenerationBudget({
+      route: modelConfig,
+      credentialSource,
+      requestedGenerationBudget: generationBudget,
+      searchToolsActive: shouldInjectSearch,
+    })
+    if (!outputBudget.ok) {
+      throw new PublicChatHttpError({
+        message: `This model needs a generation budget of at least ${outputBudget.minimumGenerationBudget.toLocaleString()} tokens when fixed reasoning is enabled.`,
+        statusCode: 400,
+        code: "INVALID_GENERATION_BUDGET",
+      })
+    }
 
     // Deterministic perf provider (measurement plan Phase 3 §3.1): active
     // only when the SERVER environment sets CHAT_PERF_DETERMINISTIC_PROVIDER
@@ -722,6 +767,19 @@ export function createChatTurnRuntime(args: {
                   : {}),
                 ...(appliedReasoningEffort !== undefined
                   ? { applied: appliedReasoningEffort }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(outputBudget.requestedGenerationBudget !== undefined ||
+        outputBudget.appliedGenerationBudget !== undefined
+          ? {
+              generationBudget: {
+                ...(outputBudget.requestedGenerationBudget !== undefined
+                  ? { requested: outputBudget.requestedGenerationBudget }
+                  : {}),
+                ...(outputBudget.appliedGenerationBudget !== undefined
+                  ? { applied: outputBudget.appliedGenerationBudget }
                   : {}),
               },
             }
@@ -1110,6 +1168,8 @@ export function createChatTurnRuntime(args: {
       modelConfig,
       provider: resolvedProvider,
       appliedReasoningEffort,
+      providerMaxOutputTokens: outputBudget.providerMaxOutputTokens,
+      appliedGenerationBudget: outputBudget.appliedGenerationBudget,
       normalizedChatVersion,
       hasAnyTools,
       shouldInjectSearch,
@@ -1154,6 +1214,8 @@ export function createChatTurnRuntime(args: {
       titleRouteId,
       modelConfig,
       provider: resolvedProvider,
+      providerMaxOutputTokens,
+      appliedGenerationBudget,
       normalizedChatVersion,
       hasAnyTools,
       shouldInjectSearch,
@@ -1410,7 +1472,8 @@ export function createChatTurnRuntime(args: {
     // write is load-bearing billing state: if Stop/revocation wins, the worker
     // reports not-started and never calls the provider.
     const dispatchBoundaryAt = Date.now()
-    const dispatchAuthorized = await lifecycle.stream.startWork(dispatchBoundaryAt)
+    const dispatchAuthorized =
+      await lifecycle.stream.startWork(dispatchBoundaryAt)
     if (!dispatchAuthorized) {
       await lifecycle.stream.onAbort(
         "provider dispatch not authorized",
@@ -1443,20 +1506,28 @@ export function createChatTurnRuntime(args: {
         "provider_request_started",
         streamStartMs - requestReceivedAtMs
       )
+      const budgetStopCondition =
+        providerMaxOutputTokens === undefined
+          ? undefined
+          : ({ steps }: { steps: CompletedGenerationStep[] }) => {
+              const used = completedOutputTokens(steps)
+              return used === null || used >= providerMaxOutputTokens
+            }
       return streamText({
         model: aiModel,
         instructions: enrichedSystemPrompt,
         messages: modelMessages,
         tools: tool.tools,
-        stopWhen: isStepCount(maxSteps),
+        stopWhen: budgetStopCondition
+          ? [isStepCount(maxSteps), budgetStopCondition]
+          : isStepCount(maxSteps),
         abortSignal: executionSignal,
-        // Platform-funded runs cap per-step output at the SAME route-aware
-        // budget the allowance reservation used (ADR-0021), so the
-        // reservation and the runtime limit agree — including fixed-thinking
-        // headroom, which must exceed any Anthropic thinking budget. BYOK
-        // runs stay uncapped — their spend is the user's own key.
-        ...(credential.source === "platform"
-          ? { maxOutputTokens: platformOutputTokenBudget(modelConfig) }
+        // Credential ownership decides funding, not response policy. Auto BYOK
+        // omits the parameter; an explicit user budget applies to either key
+        // source. Provider translation keeps fixed Anthropic reasoning from
+        // being added twice to the platform reservation (ADR-0028).
+        ...(providerMaxOutputTokens !== undefined
+          ? { maxOutputTokens: providerMaxOutputTokens }
           : {}),
         // Request dimensions use Sentry because AI SDK 7 telemetry has no
         // per-call metadata field.
@@ -1465,10 +1536,26 @@ export function createChatTurnRuntime(args: {
           functionId: "api.chat.streamText",
         },
 
-        // Centralized step gating from the Tool runtime. After
-        // PREPARE_STEP_THRESHOLD, only late-step-safe tools remain; built-in
-        // Tool budget is probed per step. Resolves to `undefined` when no tools.
-        prepareStep: tool.prepareStep,
+        // Compose the Tool runtime's step gate with the remaining provider
+        // output allowance. AI SDK maxOutputTokens is per model call, so each
+        // later call receives only the unused turn budget. Missing usage stops
+        // the loop through budgetStopCondition instead of guessing about spend.
+        prepareStep:
+          tool.prepareStep || providerMaxOutputTokens !== undefined
+            ? async (options) => {
+                const toolStep = await tool.prepareStep?.(options)
+                if (providerMaxOutputTokens === undefined) return toolStep
+                const used = completedOutputTokens(options.steps)
+                return {
+                  ...toolStep,
+                  maxOutputTokens: Math.max(
+                    1,
+                    providerMaxOutputTokens -
+                      (used === null ? providerMaxOutputTokens : used)
+                  ),
+                }
+              }
+            : undefined,
 
         // Per-step structured tracing: tool name, duration, token usage, success.
         onStepEnd: async ({ toolCalls, toolResults, usage, finishReason }) => {
@@ -1574,7 +1661,7 @@ export function createChatTurnRuntime(args: {
           // Mark the durable run failed (guest: inert). The parent already
           // computed `errorMessage` for its telemetry below — pass the string.
           lifecycle.stream.noteStreamError(
-            errorMessage,
+            { message: errorMessage, recovery: publicError.recovery },
             currentWorkDurationMs()
           )
           logBraintrustTraceMetadata(braintrustSpan, {
@@ -1640,10 +1727,9 @@ export function createChatTurnRuntime(args: {
             "stream aborted",
             currentWorkDurationMs(),
             {
-              primary:
-                aggregateAbortStepUsage(event?.steps ?? []) ?? {
-                  kind: "started-without-usage",
-                },
+              primary: aggregateAbortStepUsage(event?.steps ?? []) ?? {
+                kind: "started-without-usage",
+              },
               title: titleAttempt.current,
             }
           )
@@ -1945,7 +2031,9 @@ export function createChatTurnRuntime(args: {
               inputTokens: generated.usage.inputTokens,
               outputTokens: generated.usage.outputTokens,
             }
-            await lifecycle.stream.recordTitleUsageEvidence(titleAttempt.current)
+            await lifecycle.stream.recordTitleUsageEvidence(
+              titleAttempt.current
+            )
           },
         })
           .then((generated) => {
@@ -1959,22 +2047,22 @@ export function createChatTurnRuntime(args: {
             return generated
           })
           .catch((error: unknown) => {
-          // Stop, grant loss, and the provider deadline cancel the title
-          // alongside the answer — a normal shutdown, not a title failure.
-          // (A still-provisional chat re-requests a title on its next turn.)
-          if (titleSignal.aborted) return null
-          console.warn(
-            JSON.stringify({
-              _tag: "chat_title_generation_failed",
-              requestId,
-              chatId,
-              provider: resolvedProvider,
-              model,
-              errorType: error instanceof Error ? error.name : typeof error,
-            })
-          )
-          return null
-        })
+            // Stop, grant loss, and the provider deadline cancel the title
+            // alongside the answer — a normal shutdown, not a title failure.
+            // (A still-provisional chat re-requests a title on its next turn.)
+            if (titleSignal.aborted) return null
+            console.warn(
+              JSON.stringify({
+                _tag: "chat_title_generation_failed",
+                requestId,
+                chatId,
+                provider: resolvedProvider,
+                model,
+                errorType: error instanceof Error ? error.name : typeof error,
+              })
+            )
+            return null
+          })
       : null
 
     // Title-call usage evidence for allowance settlement (ADR-0021):
@@ -2045,6 +2133,9 @@ export function createChatTurnRuntime(args: {
             // badge shows while the turn streams; persisted by the projector.
             ...(appliedReasoningEffort !== undefined
               ? { reasoningEffort: appliedReasoningEffort }
+              : {}),
+            ...(appliedGenerationBudget !== undefined
+              ? { generationBudget: appliedGenerationBudget }
               : {}),
           }
         }
@@ -2217,7 +2308,10 @@ export function createChatTurnRuntime(args: {
     // any phase — the Generation run lifecycle's first-terminal-wins absorbs a
     // double terminal write. Never throws.
     const publicError = lastPublicError ?? normalizeTurnError(err)
-    await durableTurn.fail(publicError.message)
+    await durableTurn.fail({
+      message: publicError.message,
+      recovery: publicError.recovery,
+    })
 
     const errorType = classifyChatError(err)
     Sentry.captureException(sanitizeExceptionForTelemetry(err), {

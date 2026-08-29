@@ -1,16 +1,13 @@
 import { getLogicalModel } from "@/lib/models/catalog"
 import type { ModelConfig } from "@/lib/models/types"
+import { PLATFORM_RESPONSE_OUTPUT_TOKENS } from "@/lib/openproviders/output-budget"
 import { describe, expect, it } from "vitest"
 import {
   buildPricingSnapshot,
   buildRoutePricingRate,
   PLATFORM_PRICING_REVISION,
 } from "./billable-pricing"
-import {
-  estimatePlatformUsage,
-  PLATFORM_OUTPUT_TOKEN_RESERVATION,
-  platformOutputTokenBudget,
-} from "./platform-usage-estimate"
+import { estimatePlatformUsage } from "./platform-usage-estimate"
 
 function routeOf(modelId: string) {
   const model = getLogicalModel(modelId)
@@ -86,37 +83,7 @@ describe("billable route pricing (ADR-0021)", () => {
   })
 })
 
-describe("platform output token budget", () => {
-  it("adds fixed-thinking headroom only for Anthropic fixed budgets", () => {
-    // Effort-based reasoning (OpenAI) fits inside the base cap.
-    expect(
-      platformOutputTokenBudget({
-        providerId: "openai",
-        reasoningText: true,
-      })
-    ).toBe(PLATFORM_OUTPUT_TOKEN_RESERVATION)
-    // Anthropic fixed-budget thinking: maxOutputTokens must EXCEED the
-    // thinking budget or the request 400s after reserving.
-    const withBudget = platformOutputTokenBudget({
-      providerId: "anthropic",
-      reasoningText: true,
-      thinkingBudget: 12_000,
-    })
-    expect(withBudget).toBe(PLATFORM_OUTPUT_TOKEN_RESERVATION + 12_000)
-    expect(withBudget).toBeGreaterThan(12_000)
-    // No declared budget → request-shaping's 10k default is covered.
-    expect(
-      platformOutputTokenBudget({
-        providerId: "anthropic",
-        reasoningText: true,
-      })
-    ).toBe(PLATFORM_OUTPUT_TOKEN_RESERVATION + 10_000)
-    // Non-reasoning models keep the base.
-    expect(
-      platformOutputTokenBudget({ providerId: "anthropic" })
-    ).toBe(PLATFORM_OUTPUT_TOKEN_RESERVATION)
-  })
-
+describe("platform output token reservation", () => {
   it("flows into the estimate's output component", () => {
     const snapshot = buildPricingSnapshot(routeOf("gpt-5-mini"))!
     const estimate = estimatePlatformUsage({
@@ -144,8 +111,9 @@ describe("platform usage estimation", () => {
       systemPrompt: "b".repeat(400),
       toolsLikely: false,
       pricingSnapshot: snapshot,
+      outputTokenBudget: PLATFORM_RESPONSE_OUTPUT_TOKENS,
     })
-    expect(base.estimatedOutputTokens).toBe(PLATFORM_OUTPUT_TOKEN_RESERVATION)
+    expect(base.estimatedOutputTokens).toBe(PLATFORM_RESPONSE_OUTPUT_TOKENS)
     expect(base.estimatedInputTokens).toBeGreaterThanOrEqual(200)
     expect(base.estimatedCredits).toBeGreaterThan(0)
     expect(base.titleEstimatedCredits).toBeGreaterThan(0)
@@ -154,11 +122,13 @@ describe("platform usage estimation", () => {
       messages: [],
       toolsLikely: true,
       pricingSnapshot: snapshot,
+      outputTokenBudget: PLATFORM_RESPONSE_OUTPUT_TOKENS,
     })
     const withoutTools = estimatePlatformUsage({
       messages: [],
       toolsLikely: false,
       pricingSnapshot: snapshot,
+      outputTokenBudget: PLATFORM_RESPONSE_OUTPUT_TOKENS,
     })
     expect(withTools.estimatedInputTokens).toBeGreaterThan(
       withoutTools.estimatedInputTokens
@@ -179,6 +149,7 @@ describe("platform usage estimation", () => {
       ] as never,
       toolsLikely: false,
       pricingSnapshot: snapshot,
+      outputTokenBudget: PLATFORM_RESPONSE_OUTPUT_TOKENS,
     })
     const withoutImage = estimatePlatformUsage({
       messages: [
@@ -190,6 +161,7 @@ describe("platform usage estimation", () => {
       ] as never,
       toolsLikely: false,
       pricingSnapshot: snapshot,
+      outputTokenBudget: PLATFORM_RESPONSE_OUTPUT_TOKENS,
     })
     expect(
       withImage.estimatedInputTokens - withoutImage.estimatedInputTokens
@@ -220,6 +192,7 @@ describe("platform usage estimation", () => {
       ] as never,
       toolsLikely: false,
       pricingSnapshot: freeSnapshot,
+      outputTokenBudget: PLATFORM_RESPONSE_OUTPUT_TOKENS,
     })
     expect(estimate.estimatedCredits).toBe(0)
     expect(estimate.estimatedInputTokens).toBeGreaterThan(0)

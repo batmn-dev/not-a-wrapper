@@ -566,7 +566,13 @@ describe("durable turn runtime — settlement ordering", () => {
       toolCalls: [] as never,
       toolResults: [] as never,
     })
-    binding.stream.noteStreamError("provider exploded", 2500)
+    binding.stream.noteStreamError(
+      {
+        message: "provider exploded",
+        recovery: "retry_with_shorter_generation_budget",
+      },
+      2500
+    )
     await flush()
 
     expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(0)
@@ -574,6 +580,10 @@ describe("durable turn runtime — settlement ordering", () => {
     stepDeferred.resolve(undefined)
     await vi.waitFor(() => {
       expect(wireCalls(wire, "markGenerationRunFailed")).toHaveLength(1)
+    })
+    expect(wireCalls(wire, "markGenerationRunFailed")[0]?.args).toMatchObject({
+      error: "provider exploded",
+      errorRecovery: "retry_with_shorter_generation_budget",
     })
 
     const ops = orderedOps(wire)

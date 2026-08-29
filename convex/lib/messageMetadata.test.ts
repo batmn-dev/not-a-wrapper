@@ -26,12 +26,14 @@ describe("projectPersistedMessageMetadata", () => {
     const result = projectPersistedMessageMetadata({
       reasoningDurationMs: 1200,
       workDurationMs: 5200,
+      generationBudget: 16_384,
       toolMetadataByName: { web_search: display },
       toolMetadataByCallId: { call_1: display },
     })
     expect(result).toEqual({
       reasoningDurationMs: 1200,
       workDurationMs: 5200,
+      generationBudget: 16_384,
       toolMetadataByName: { web_search: display },
       toolMetadataByCallId: { call_1: display },
     })

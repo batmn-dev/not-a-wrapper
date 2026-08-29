@@ -279,6 +279,24 @@ describe("resolveModelRoute", () => {
     )
   })
 
+  it("lets an explicit smaller generation budget lower the platform reservation", async () => {
+    const deps = makeDeps()
+    const result = await resolveModelRoute(
+      {
+        modelId: "gpt-5-mini",
+        ...authed,
+        platformFunding: { ...funding, generationBudget: 4_096 },
+      },
+      deps
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      route: { credentialSource: "platform" },
+    })
+    expect(deps.reserveCalls[0]?.estimatedOutputTokens).toBe(4_096)
+  })
+
   it("priority BYOK bypasses platform reservation entirely", async () => {
     const deps = makeDeps({
       userKeys: { openai: { key: "sk-user", preference: "priority" } },

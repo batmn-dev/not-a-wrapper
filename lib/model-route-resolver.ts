@@ -6,13 +6,11 @@ import {
 } from "@/convex/lib/usageReservationAuthorization"
 import type { UsageReservationArgs } from "@/convex/lib/usageValidators"
 import type { ReserveUsageResult } from "@/convex/usageAllowance"
+import { resolveGenerationBudget } from "@/lib/openproviders/output-budget"
 import { getProviderStrategy } from "@/lib/openproviders/provider-strategy"
 import type { Provider } from "@/lib/provider-identity"
 import { buildPricingSnapshot } from "@/lib/usage/billable-pricing"
-import {
-  estimatePlatformUsage,
-  platformOutputTokenBudget,
-} from "@/lib/usage/platform-usage-estimate"
+import { estimatePlatformUsage } from "@/lib/usage/platform-usage-estimate"
 import { getUserKeyFromConvex } from "@/lib/user-keys"
 import type { UIMessage } from "ai"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
@@ -124,6 +122,8 @@ export type PlatformFundingContext = {
   systemPrompt?: string
   /** Tools may run this turn (search enabled); widens the input estimate. */
   toolsLikely: boolean
+  /** Optional user-selected total generation allowance. */
+  generationBudget?: number
 }
 
 export type ReservePlatformUsageArgs = Omit<
@@ -418,12 +418,21 @@ async function resolveModelRouteOnce(
       if (!funding || !args.token) continue
       const pricingSnapshot = buildPricingSnapshot(candidate.route)
       if (!pricingSnapshot) continue
+      const outputBudget = resolveGenerationBudget({
+        route: candidate.route.config,
+        credentialSource: "platform",
+        requestedGenerationBudget: funding.generationBudget,
+        searchToolsActive: funding.toolsLikely,
+      })
+      if (!outputBudget.ok) continue
+      const outputTokenBudget = outputBudget.platformOutputTokenReservation
+      if (outputTokenBudget === undefined) continue
       const estimate = estimatePlatformUsage({
         messages: funding.messages,
         systemPrompt: funding.systemPrompt,
         toolsLikely: funding.toolsLikely,
         pricingSnapshot,
-        outputTokenBudget: platformOutputTokenBudget(candidate.route.config),
+        outputTokenBudget,
       })
       const reserved = await deps.reservePlatformUsage({
         token: args.token,
