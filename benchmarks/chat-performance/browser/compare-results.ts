@@ -1,6 +1,5 @@
 /**
- * Regression comparison for browser benchmark result files (measurement plan
- * Phase 6). Compares a current run against a baseline captured on the SAME
+ * Compares browser benchmark results against a baseline captured on the same
  * runner class — absolute numbers do not transfer across hardware, so the
  * gate is relative (percentage) with an absolute slack floor that keeps
  * small-millisecond metrics from tripping on scheduler noise.

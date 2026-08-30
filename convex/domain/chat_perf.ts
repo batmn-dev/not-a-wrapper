@@ -1,6 +1,6 @@
 /**
- * Content-free, sampled perf logging for Convex functions (measurement plan
- * Phase 2 §2.3). Deliberately correlation-free: the x-chat-perf-id never
+ * Content-free, sampled perf logging for Convex functions. Deliberately
+ * correlation-free: the x-chat-perf-id never
  * crosses the worker wire, so these lines join Next-side `chat_perf` events
  * statistically, not per-request. Every numeric field is a power-of-two
  * bucket or a small count; string fields are closed enums chosen at the call

@@ -1,6 +1,6 @@
 /**
- * Responsive thread variables use ChatGPT's explicit 40rem/53.5rem/64rem
- * container thresholds; Tailwind's named container scale resolves to different
+ * Responsive thread variables use explicit 40rem/53.5rem/64rem container
+ * thresholds; Tailwind's named container scale resolves to different
  * widths. Keep these declaration fragments last at call sites so their class
  * order remains stable. The main container spans the dock slot intentionally,
  * avoiding a width-tier jump while the Activity panel closes.

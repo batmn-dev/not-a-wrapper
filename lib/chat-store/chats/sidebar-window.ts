@@ -14,7 +14,6 @@ type OptimisticDelete = { type: "delete"; id: string }
 export type OptimisticOperation =
   OptimisticAdd | OptimisticUpdate | OptimisticDelete
 
-/** Map a stored Convex chat to the unified client Chat type. */
 export function mapConvexChat(chat: Doc<"chats">): Chats {
   return {
     id: chat._id,

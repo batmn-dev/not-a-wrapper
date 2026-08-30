@@ -17,13 +17,6 @@ import {
 } from "./durable-turn-runtime"
 
 // Durable turn runtime — the interface IS the test surface (ADR-0009/0011).
-// The admission call (`prepareGeneration`) is driven through a recording
-// `fetchMutation` fake; every post-prepare write is driven through a recording
-// Durable worker wire fake — the ADR-0011 test seam. Behaviors:
-//   1. handoff loud-miss, 2. settlement ordering + final full-parts snapshot,
-//   3. degraded receipts (settle NEVER rejects), 4. prepare() error mapping +
-//   grant minting, 5. guest inertness, 6. fail() at each phase.
-
 // The module default `fetchMutation` is never used by the Convex adapter (it
 // injects deps.fetchMutation) nor the guest adapter (no network) — mock it so
 // guest inertness can assert zero calls against the default.

@@ -25,8 +25,8 @@ type SharePublishedChatOptions = {
 }
 
 /**
- * Publishes first, then follows ChatGPT's share capability order: native share
- * when supported, otherwise the existing custom surface. Dismissal is a user
+ * Publishes first, then uses native share when supported and the existing
+ * custom surface otherwise. Dismissal is a user
  * decision, while a capability or operational failure opens the fallback.
  */
 export async function sharePublishedChat({

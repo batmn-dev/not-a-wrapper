@@ -32,8 +32,8 @@ type ThreadBottomContainerProps = {
   surface?: ChatSurface
   /**
    * System banners rendered above the composer inside the footer's fade
-   * backdrop (ChatGPT's empty:hidden slot between the overflow spacer and the
-   * scroll control — "continue generating", error retries, and similar).
+   * backdrop between the overflow spacer and the scroll control, including
+   * "continue generating", error retries, and similar notices.
    */
   aboveComposer?: ReactNode
 }
@@ -168,8 +168,8 @@ function ThreadDisclaimer() {
       animate={{ height: "auto", opacity: 1, y: 0 }}
       exit={{ height: 0, opacity: 0, y: 8 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      // ChatGPT keys the side padding to the thread container (their
-      // @w-sm/main = 40rem), not the viewport, so it tracks the sidebar.
+      // Key side padding to the 40rem thread container, not the viewport, so
+      // it tracks the sidebar.
       className="relative min-h-9 w-full overflow-hidden pt-2 pb-4 text-center text-xs [view-transition-name:var(--vt-disclaimer)] @[40rem]/main:px-[60px]"
     >
       <div
@@ -178,8 +178,8 @@ function ThreadDisclaimer() {
         <div
           className={`${threadColumnClassName} ${THREAD_MAXWIDTH_VARS}`}
         >
-          {/* ChatGPT parity: plain tertiary text with no background halo —
-              the strip fades under the composer with everything else. */}
+          {/* Plain tertiary text lets the strip fade under the composer with
+              everything else. */}
           <div className="pointer-events-auto mx-auto flex max-w-fit items-center justify-center text-balance text-[var(--text-tertiary)] select-none active:select-auto">
             Not A Wrapper can make mistakes. Check important info.
           </div>

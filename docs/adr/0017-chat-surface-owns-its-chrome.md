@@ -40,8 +40,7 @@ fact from a pre-paint layout effect; the slot renders it BEFORE
 `<main id="main">`, so the `#main` skip link bypasses the header and
 `<header>` keeps its implicit banner role — nesting it inside `<main>`
 forfeits both (found in review of the first cut, which rendered it inside
-`#thread`). ChatGPT's live DOM uses the same skip-link + header-before-main
-structure (verified 2026-07-30). `initialAppHeader` mirrors the route's
+`#thread`). `initialAppHeader` mirrors the route's
 SSR-known first surface (`/p/` false — always project onboarding; `/` and
 `/c/` true), so server HTML, hydration, and the first client render agree.
 
@@ -52,10 +51,10 @@ Rules:
 - `LayoutApp`'s `header` slot remains for NON-chat pages only (e.g.
   `/projects`), whose chrome never flips client-side.
 - Project onboarding keeps surface-owned chrome (compact mobile header inside
-  `ProjectDetailSurface`, no desktop app header). ChatGPT parity for the
-  project surface (52px sticky page header; project/chat breadcrumb on threads
-  opened from a project — both measured live 2026-07-30) is deliberately out of
-  scope here and becomes a single-file change in this seam when taken up.
+  `ProjectDetailSurface`, no desktop app header). The project surface (52px
+  sticky page header; project/chat breadcrumb on threads opened from a project)
+  is deliberately out of scope here and becomes a single-file change in this
+  seam when taken up.
 
 ## Consequences
 
@@ -73,8 +72,8 @@ Rules:
 
 ## 2026-08-23 rendering addendum
 
-The ownership and DOM-position decision above is unchanged. The live ChatGPT
-header contract has since been reverified as a transparent, shadowless sticky
+The ownership and DOM-position decision above is unchanged. The header contract
+has since been reverified as a transparent, shadowless sticky
 header whose fixed mode follows the resolved surface: home onboarding uses
 `data-fixed-header="always"`, while threads use `data-fixed-header="never"`.
 `ScrollRoot` therefore reserves the header height on onboarding and zeroes

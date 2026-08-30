@@ -8,7 +8,9 @@ Use this skill as a routing index. Use reference implementations to find proven 
 Keep the Convex and AI SDK skills authoritative for current first-party
 guidance. Use these repositories as complementary implementation evidence.
 
-For product behavior, interaction, or visual parity, inspect the user's existing authenticated ChatGPT or Claude session first. Do not let an open-source implementation override behavior observed in ChatGPT or Claude.
+For product behavior, interaction, or visual parity, inspect the user's
+authenticated reference product named in the task first. Do not let an
+open-source implementation override directly observed behavior.
 
 Prefer the local clone path in each entry when that directory exists. If it is
 missing, use the GitHub URL.

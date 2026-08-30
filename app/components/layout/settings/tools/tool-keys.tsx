@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils"
 import {
   RiKeyLine,
   RiSearchLine,
-  RiWrenchLine,
   type RemixiconComponentType,
 } from "@remixicon/react"
 import { ProviderKeyPanel } from "../provider-key-panel"
@@ -27,7 +26,6 @@ type ToolProviderTile = ProviderKeyConfig & {
 // glyphs, not vendor identity.
 const TOOL_GLYPHS: Record<ToolProvider, RemixiconComponentType> = {
   exa: RiSearchLine,
-  firecrawl: RiWrenchLine,
 }
 
 // Thin adapter over the Provider identity module's tool-provider facts.
@@ -38,7 +36,6 @@ const TOOL_PROVIDERS: ToolProviderTile[] = TOOL_PROVIDER_IDS.map((id) => {
     name: identity.name,
     description: identity.description,
     costEstimate: identity.costEstimate,
-    available: identity.available,
     icon: TOOL_GLYPHS[id],
     ...identity.keySetup,
   }
@@ -86,15 +83,13 @@ export function ToolKeys() {
         <button
           key={provider.id}
           type="button"
-          disabled={!provider.available}
-          aria-pressed={provider.available ? selected : undefined}
+          aria-pressed={selected}
           onClick={onSelect}
           className={cn(
             "relative flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
-            selected && provider.available
+            selected
               ? "border-primary ring-primary/30 ring-2"
-              : "border-border",
-            !provider.available && "cursor-not-allowed opacity-50"
+              : "border-border"
           )}
         >
           <div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-md">
@@ -107,13 +102,7 @@ export function ToolKeys() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{provider.name}</span>
-              {provider.available ? (
-                <StatusBadge hasKey={hasKey} />
-              ) : (
-                <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
-                  Coming soon
-                </span>
-              )}
+              <StatusBadge hasKey={hasKey} />
             </div>
             <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
               {provider.description}

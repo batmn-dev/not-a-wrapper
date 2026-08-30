@@ -12,11 +12,9 @@ import {
   type StreamChunkEvent,
 } from "./fixtures"
 
-// Phase 6 (measurement plan): the payload hashes are PINNED, not just
-// printed. Every cross-commit comparison — checked-in CI baselines, dated
-// reports, the browser harness's correctness oracle — assumes these bytes
-// never drift. Changing a fixture is allowed but must be deliberate: update
-// the constant here AND regenerate any stored baseline in the same change.
+// Payload hashes are pinned because baselines, reports, and the browser
+// harness's oracle assume these bytes never drift. A fixture change must update
+// this constant and every stored baseline together.
 const PINNED_PAYLOAD_HASHES = {
   markdown: "f42a045150755c72",
   longMarkdown: "7eac4d6cfe004f8b",

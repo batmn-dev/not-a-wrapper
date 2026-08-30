@@ -14,12 +14,12 @@ import type { EditorView } from "prosemirror-view"
 
 export type PromptInputEntity = Readonly<{
   id: string
-  /** ChatGPT's mention kinds: "capability" renders as an ecosystemMention
-   * pill, "tool" as a skillMention pill. */
+  /** "capability" renders as an ecosystemMention pill and "tool" as a
+   * skillMention pill. */
   kind: "capability" | "tool"
   label: string
-  /** Connector-style pills carry an icon image (ChatGPT's iconUrl); built-in
-   * capabilities without one fall back to the web-search glyph. */
+  /** Connector-style pills carry an icon image; built-in capabilities without
+   * one fall back to the web-search glyph. */
   iconUrl?: string | null
   /** False for status entities that are visible but cannot be removed. */
   removable?: boolean

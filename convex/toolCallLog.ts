@@ -131,7 +131,6 @@ export const log = authenticatedMutation({
   },
 })
 
-/** Return a conversation's newest-first tool audit trail to its owner. */
 export const listByChat = maybeAuthQuery({
   args: { chatId: v.id("chats") },
   handler: async (ctx, { chatId }) => {
@@ -155,7 +154,6 @@ export const listByChat = maybeAuthQuery({
   },
 })
 
-/** Return the current user's newest-first paginated tool history. */
 export const listByUser = maybeAuthQuery({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {

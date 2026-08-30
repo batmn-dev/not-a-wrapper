@@ -3,9 +3,8 @@
 - Status: accepted
 - Date: 2026-08-07
 - Related: `app/components/layout/sidebar/sidebar-geometry.test.ts` (the token
-  contract this decision makes canonical),
-  `docs/sidebar-chat-grouping-reference.md` (the live parity evidence for row
-  anatomy and geometry), ADR-0005 (chat list window — the data the rows render).
+  contract this decision makes canonical), ADR-0005 (chat list window — the
+  data the rows render).
 
 ## Context
 
@@ -13,8 +12,8 @@ The repository contained two unrelated "sidebar item" systems that both
 claimed the name. The production system — `SidebarMenuItem`, `SidebarRow`,
 `SidebarLeadingIcon`, `SidebarRowActions` in `app/components/layout/sidebar/`,
 styled by the `--sidebar-*` token + `.sidebar-row*` utility contract in
-`app/globals.css` and pinned by `sidebar-geometry.test.ts` — is the
-ChatGPT-parity implementation every app surface renders. The second was a
+`app/globals.css` and pinned by `sidebar-geometry.test.ts` — is the production
+implementation every app surface renders. The second was a
 vendored shadcn/ui sidebar kit in `components/ui/sidebar.tsx` (~20 menu
 components) with zero production consumers, different hover/active color
 tokens, and its own dead mobile Sheet branch.

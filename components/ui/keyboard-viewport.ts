@@ -32,7 +32,7 @@ function readRootKeyboardOverride(root: HTMLElement) {
 }
 
 /**
- * ChatGPT's keyboard signal contract: `keyboard-opened` dispatches when a
+ * The keyboard signal contract: `keyboard-opened` dispatches when a
  * keyboard-summoning element gains focus, `keyboard-closed` after the
  * keyboard geometry actually collapses (or a 500ms fallback). Consumers use
  * `closeVirtualKeyboard` to sequence UI (open a sheet only after the
@@ -47,9 +47,9 @@ type VirtualKeyboardSignal =
   typeof KEYBOARD_OPENED_EVENT | typeof KEYBOARD_CLOSED_EVENT
 
 /**
- * The document-wide keyboard store (ChatGPT's controller keeps this state in
- * a store with an event bus). Open-state writes and signal dispatches are
- * deliberately decoupled: the controller keeps `isOpen` current per
+ * The document-wide keyboard store uses an event bus. Open-state writes and
+ * signal dispatches are deliberately decoupled: the controller keeps `isOpen`
+ * current per
  * focus/geometry transition, while `keyboard-closed` fires only once the
  * geometry has actually settled (or the fallback lands).
  */
@@ -82,9 +82,9 @@ function subscribeVirtualKeyboard(listener: () => void) {
 }
 
 /**
- * ChatGPT's closeKeyboard: blur the focused keyboard target, then invoke the
- * callback once the keyboard has actually closed — via the `keyboard-closed`
- * signal or a 500ms fallback, whichever lands first. When no keyboard target
+ * Blur the focused keyboard target, then invoke the callback once the keyboard
+ * has closed via the `keyboard-closed` signal or a 500ms fallback, whichever
+ * lands first. When no keyboard target
  * is focused the callback runs immediately.
  */
 function closeVirtualKeyboard(onClosed?: () => void) {
@@ -117,12 +117,11 @@ function closeVirtualKeyboard(onClosed?: () => void) {
 }
 
 /**
- * Owns ChatGPT's document-level mobile-keyboard contract (their controller is
- * VirtualKeyboard-API-only; the visualViewport branch below is our extension
- * for browsers without that API, notably iOS Safari, where ChatGPT accepts
- * the browser-default keyboard behavior).
+ * Owns the document-level mobile-keyboard contract. The primary branch uses
+ * the Virtual Keyboard API; the visualViewport branch supports browsers
+ * without it, notably iOS Safari.
  *
- * VirtualKeyboard branch semantics, ported from their code: overlay mode on,
+ * VirtualKeyboard branch semantics: overlay mode on,
  * `focusin` on a keyboard target arms `geometrychange`, which writes the RAW
  * `boundingRect.height` to `--screen-keyboard-height` and adds the
  * `keyboard-open` class — the class stays on until focus leaves the target,
@@ -179,7 +178,7 @@ function createKeyboardViewportController(root: HTMLElement) {
       const height = override ?? keyboard.boundingRect.height
       body.style.setProperty("--screen-keyboard-height", `${height}px`)
       ownsBodyHeight = true
-      // ChatGPT parity: any geometry while focused keeps keyboard-open on —
+      // Any geometry while focused keeps keyboard-open on;
       // it only comes off in the focus-out teardown.
       root.toggleAttribute("data-keyboard-open", true)
       documentElement.classList.add("keyboard-open")
@@ -261,8 +260,7 @@ function createKeyboardViewportController(root: HTMLElement) {
 
   if (!viewport) return clearHeight
 
-  // ChatGPT does not initialize its keyboard signal store without the
-  // Virtual Keyboard API. This fallback publishes layout geometry only, so
+  // Without the Virtual Keyboard API, publish layout geometry only so
   // unsupported browsers keep their native focus and menu-opening behavior.
   const writeViewportGeometry = () => {
     frame = null

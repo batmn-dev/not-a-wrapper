@@ -32,12 +32,8 @@ describe("resolveShikiLanguage", () => {
   })
 
   it("covers the ENTIRE historical eager-highlighter language surface", () => {
-    // Enumerated 2026-07-27 from the pre-PR-C highlighter:
-    // createHighlighter({ langs: <the 35-id DEFAULT_LANGS> }) followed by
-    // getLoadedLanguages() — grammar ids, their aliases, AND transitively
-    // embedded grammars (cpp → cpp-macro/glsl, ruby → haml, js → regexp).
-    // Every id that highlighted before the lazy service must still resolve
-    // to a loadable grammar, never to plain text (2026-07-27 review P2).
+    // Includes aliases and transitive grammars from the eager highlighter.
+    // Every historical id must still resolve to a grammar, not plain text.
     const historicalSurface = [
       "bash", "c", "c#", "c++", "cjs", "cpp", "cpp-macro", "cs", "csharp",
       "css", "cts", "diff", "docker", "dockerfile", "glsl", "go", "gql",

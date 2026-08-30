@@ -99,8 +99,7 @@ const MarkdownBlockStabilityContext =
   createContext<MarkdownBlockStability>("stable")
 
 /**
- * Projection-advance duration capture (measurement plan Phase 2): keyed by
- * result identity so only the committed projection's duration is emitted —
+ * Keyed by result identity so only the committed projection's duration is emitted;
  * an abandoned concurrent render's result never reaches the effect that
  * reads this map. Instrumentation builds only; render stays pure (no refs).
  */
@@ -356,8 +355,7 @@ const MemoizedMarkdownBlock = memo(
 MemoizedMarkdownBlock.displayName = "MemoizedMarkdownBlock"
 
 /**
- * Direct render for a growing OPEN fenced code block (investigation
- * 2026-07-28, fix 1): while the fence is open, every appended line is inert
+ * Direct render for a growing open fence: every appended line is inert
  * interior text, so running the full Markdown pipeline per update just to
  * reach the same `CodeBlock` is pure O(block) overhead. This component
  * mirrors the block branch of `INITIAL_COMPONENTS.code` exactly — same
@@ -456,7 +454,7 @@ function MarkdownComponent({
     [components]
   )
 
-  // Streaming color-decay overlay (ADR-0016 amendment 2026-08-11): after
+  // After every streamed commit, the ADR-0016 decay overlay
   // every streamed commit the overlay diffs this container's rendered text
   // and paints appended cohorts via CSS Custom Highlights — paint only, no
   // DOM ownership. Layout effect on purpose: a passive effect runs after the
@@ -501,7 +499,7 @@ function MarkdownComponent({
             )
           }
         }
-        // Render-boundary mend (ADR-0016 amendment 2026-08-11): the growing
+        // The ADR-0016 render-boundary mend completes the growing
         // terminal block completes provably-incomplete trailing inline
         // constructs and gates unproven table candidates, closing the
         // measured construct-wide raw-delimiter windows (`**Apache Fl`,

@@ -53,7 +53,6 @@ export const getByIdWithOwner = internalQuery({
     if (!project) return null
     if (project.deletingAt !== undefined) return null
 
-    // Get the owner's WorkOS user ID for ownership verification
     const owner = await ctx.db.get(project.userId)
     if (!owner) return null
 

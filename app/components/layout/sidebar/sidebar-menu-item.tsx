@@ -35,13 +35,10 @@ type SidebarMenuItemProps = Omit<
 
 const baseClassName = cn(
   "sidebar-menu-row sidebar-row-content menu-item-hoverable group/menu-item relative inline-flex items-center bg-transparent text-sm",
-  // Native buttons default to cursor: default; sidebar rows should feel clickable.
   "cursor-pointer",
   "disabled:cursor-not-allowed disabled:hover:bg-transparent",
   "aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent",
-  // Colors (instant hover — no transition)
   "text-foreground hover:bg-sidebar-row hover:text-foreground active:bg-sidebar-row",
-  // Focus states
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
 )
 

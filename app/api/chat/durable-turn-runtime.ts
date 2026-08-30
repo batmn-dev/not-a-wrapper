@@ -57,8 +57,7 @@ import { toInvalidDurableRequestError } from "./utils"
 // proof authorize exactly one call — `prepareGeneration`. Every write after
 // prepare travels over the Durable worker wire, authenticated by a run-scoped
 // execution grant whose raw secret exists only in this process's memory. A
-// mid-run user-token expiry can no longer reject a worker write (the
-// 2026-07-14 incident class).
+// mid-run user-token expiry cannot reject a worker write.
 
 export type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 
@@ -209,13 +208,7 @@ export type DurableTurnDeps = {
   perf?: ChatPerfServerSession
 }
 
-/**
- * The one port onto the Tool runtime. Structural — `ToolRuntime` satisfies it
- * as-is, tests hand in a literal. Subsumes the map+resolver threading the
- * approval-persistence transform used to require: `approvalFor` carries the
- * `reason`/`riskClass` the transform reads. `outcomeSummary()` is deliberately
- * excluded — finish counts are pushed as data via `captureFinish`.
- */
+/** Minimal Tool runtime view for approval persistence. */
 export type ToolFacts = {
   metadata: { source(toolName: string): ToolSource }
   approvalFor(
@@ -560,10 +553,8 @@ function isApprovalRespondedToolPart(
   state: "approval-responded"
   approval: { id: string; approved: boolean; reason?: string }
 } {
-  // Both tool-part shapes: MCP tools — the ONLY runtime-approval source in
-  // production — stream as `dynamic-tool`, and a static-only guard here made
-  // every MCP continuation classify as a fresh send (missing selected-path
-  // token) instead of an approval continuation.
+  // MCP approvals stream as dynamic-tool parts, so this must accept both tool
+  // part shapes.
   return (
     isToolUIPart(part) &&
     part.state === "approval-responded" &&
@@ -575,16 +566,8 @@ function isApprovalRespondedToolPart(
 export function extractApprovalResponses(
   messages: UIMessage[]
 ): ApprovalResponseForPersistence[] {
-  // ONLY the trailing assistant message is a live approval continuation —
-  // the same scope splitAndValidateApprovalContinuation validates against the
-  // tool registry. Historical approval-responded parts are persisted evidence
-  // (deny-on-new-send writes `approved:false` parts into durable history via
-  // denyPendingApprovalsForChat) and re-arrive with every later request; if
-  // they were extracted here, every subsequent send would be misclassified as
-  // a continuation: the user's new message would be dropped
-  // (latestUserMessage gating below) and the turn would 409 on the already
-  // settled run — silently, since the client swallows
-  // APPROVAL_CONTINUATION_CONFLICT as a lost tab race.
+  // Only the trailing assistant can continue. Historical responses are
+  // persisted evidence and must not reclassify later sends as continuations.
   const trailingMessage = messages[messages.length - 1]
   if (!trailingMessage || trailingMessage.role !== "assistant") {
     return []
@@ -1074,9 +1057,8 @@ export function createConvexDurableTurn(args: {
     const write = () =>
       wire({ op, args: { runId, ...opArgs } } as DurableWorkerCall)
     const perfSession = deps.perf
-    // Per-op write duration (measurement plan Phase 2): the one seam every
-    // post-prepare durable write crosses. Unsampled requests return the raw
-    // promise — the snapshot persist path's rejection handler attaches at a
+    // Every post-prepare write crosses this timing seam. Unsampled requests
+    // return the raw promise; the snapshot rejection handler attaches at a
     // depth callers rely on, so the timing hop exists only when it can emit.
     if (!perfSession?.sampled) return write()
     const writeStartedAtMs = Date.now()
@@ -1900,10 +1882,8 @@ export function createConvexDurableTurn(args: {
             // degraded exit stops too: lease expiry is the honest convergence
             // path once retries are exhausted.
             try {
-              // A generated answer was delivered but its terminal persistence
-              // was not confirmed. The receipt degrades — loudly, on every
-              // path — and the response pipe does NOT fail (the 2026-07-14
-              // incident inverted this).
+              // Unconfirmed terminal persistence degrades the receipt loudly
+              // without failing an already delivered response.
               const degrade = (reason: string): DurableSettlementReceipt => {
                 warnDurable("durable_settlement_degraded", {
                   requestId,

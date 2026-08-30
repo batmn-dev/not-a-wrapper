@@ -139,25 +139,14 @@ export function SourceContent({
 }
 
 export type SourcesGalleryItemProps = {
-  /** Anchor href; opened in a new tab. */
   href: string
-  /** Primary, two-line-clamped title. */
   title: string
-  /** Row-1 site text; falls back to `new URL(href).hostname`. */
   siteName?: string
-  /** Two-line-clamped snippet; the slot is rendered even when empty. */
   description?: string
-  /** Favicon ORIGIN; falls back to `new URL(href).origin`. */
   faviconDomain?: string
 }
 
-/**
- * SourcesGalleryItem — a single full-bleed source row for the Activity panel
- * sources gallery. Unlike `Source`/`SourceTrigger`/`SourceContent` (a HoverCard
- * citation pill), this is a plain anchor with an internal favicon, site name,
- * semibold title, and a reserved description slot. Favicon is rendered in a
- * fixed 16px box to avoid layout shift across a large gallery.
- */
+/** Activity sources are plain anchors; inline citations remain HoverCards. */
 export function SourcesGalleryItem({
   href,
   title,

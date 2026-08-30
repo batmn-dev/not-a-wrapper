@@ -6,12 +6,6 @@ import {
   ownedMcpServerMutation,
 } from "./lib/authedFunctions"
 
-// Queries
-
-/**
- * List all tool approvals for a specific MCP server the caller owns. Returns []
- * when unauthenticated or the server is not owned.
- */
 export const listByServer = maybeAuthQuery({
   args: { serverId: v.id("mcpServers") },
   handler: async (ctx, { serverId }) => {
@@ -30,9 +24,6 @@ export const listByServer = maybeAuthQuery({
   },
 })
 
-/**
- * List all tool approvals across all servers for the authenticated user.
- */
 export const listByUser = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
@@ -46,12 +37,6 @@ export const listByUser = maybeAuthQuery({
   },
 })
 
-// Mutations
-
-/**
- * Upsert a tool approval. Uses by_user_server_tool index to avoid duplicates.
- * If an approval for this tool already exists, updates it. Otherwise creates a new one.
- */
 export const upsertApproval = ownedMcpServerMutation({
   args: {
     toolName: v.string(),
@@ -87,11 +72,8 @@ export const upsertApproval = ownedMcpServerMutation({
 })
 
 /**
- * Auto-approve all discovered tools for a server.
- *
- * v1 trust model: when a user adds an MCP server, ALL discovered tools are
- * auto-approved. The trust boundary is server-level — the user chose to add
- * the URL. Users can individually disable tools after discovery.
+ * Server-level trust auto-approves discovered tools; users can disable them
+ * individually afterward.
  */
 export const bulkApprove = ownedMcpServerMutation({
   args: {
@@ -127,9 +109,8 @@ export const bulkApprove = ownedMcpServerMutation({
 })
 
 /**
- * Toggle individual tool approved status. Approval ownership is a per-row check
- * on the approval, so this stays an authenticatedMutation with an inline owner
- * check rather than a server-scoped builder.
+ * Approval ownership is row-scoped, so this uses an inline owner check instead
+ * of the server-scoped builder.
  */
 export const toggleApproval = authenticatedMutation({
   args: { approvalId: v.id("mcpToolApprovals") },
@@ -147,12 +128,6 @@ export const toggleApproval = authenticatedMutation({
   },
 })
 
-// Internal Mutations
-
-/**
- * Remove all approvals for a server. Called during server deletion cleanup
- * or from scheduled cleanup jobs.
- */
 export const removeByServer = internalMutation({
   args: { serverId: v.id("mcpServers") },
   handler: async (ctx, { serverId }) => {

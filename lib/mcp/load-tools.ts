@@ -12,28 +12,17 @@ import { buildStoredMcpAuthHeaders } from "./auth-headers"
 import { createPinnedMcpFetch } from "./pinned-fetch"
 import { resolveMcpUrlForConnection } from "./url-validation"
 
-
-/** MCP client instance — inferred from createMCPClient return type */
 type MCPClient = Awaited<ReturnType<typeof createMCPClient>>
 
-/** Tool set returned by client.tools() — compatible with streamText() */
 type MCPToolSet = Awaited<ReturnType<MCPClient["tools"]>>
 
-/** Maps a namespaced tool name to its source server info */
 export type ServerInfo = {
-  /** Original tool name (without namespace prefix) */
   displayName: string
-  /** Human-readable server name from user config */
   serverName: string
-  /** Convex document ID of the MCP server */
   serverId: string
-  /** Whether this tool is read-only (from MCP tool annotations) */
   readOnly?: boolean
-  /** Whether this tool performs destructive actions (from MCP annotations) */
   destructive?: boolean
-  /** Whether this tool is idempotent (from MCP annotations) */
   idempotent?: boolean
-  /** Whether this tool operates in an open-world context (from MCP annotations) */
   openWorld?: boolean
   /**
    * Whether MCP annotation hints are trusted for retry safety decisions.
@@ -47,15 +36,11 @@ export type ServerInfo = {
   policyHintsTrusted?: boolean
 }
 
-/** Result from loadUserMcpTools — everything the chat route needs */
 export type LoadToolsResult = {
-  /** Merged, namespaced tools from all enabled servers. Pass to streamText(). */
   tools: MCPToolSet
   /** Active MCP client connections. Must be closed after streaming via after(). */
   clients: MCPClient[]
-  /** Namespaced tool name → server info. Used for UI display and audit logging. */
   toolServerMap: Map<string, ServerInfo>
-  /** Number of enabled servers that failed to connect (rejected + circuit-breaker-skipped). */
   failedServerCount: number
 }
 
@@ -75,7 +60,6 @@ type RetryTrustServer = {
   name: string
   url: string
 }
-
 
 /**
  * Minimal runtime guard — confirms a tool value has the shape streamText() expects.
@@ -130,14 +114,8 @@ function extractToolAnnotationHints(tool: unknown): ToolAnnotationHints {
 }
 
 /**
- * Convert a server name to a stable URL-safe slug for tool namespacing.
- *
- * IMPORTANT: The slug must be deterministic and treated as immutable once tools
- * are used in a conversation. Changing the slug orphans historical tool names
- * stored in message history (tool-call and tool-result parts reference the
- * namespaced name).
- *
- * @example slugify("My GitHub Server") → "my_github_server"
+ * Slugs are persisted in tool-call history; changing this algorithm orphans
+ * historical tool names.
  */
 export function slugify(name: string): string {
   return (
@@ -200,10 +178,7 @@ export function describeMcpConnectionError(reason: unknown): string {
   return reason instanceof Error ? reason.message : "Connection failed"
 }
 
-/**
- * Update MCP server connection status (best-effort, non-blocking).
- * Failures are silently caught — these are observability updates, not critical path.
- */
+/** Connection status is best-effort and never blocks tool loading. */
 function updateConnectionStatus(
   serverId: Id<"mcpServers">,
   status: { lastConnectedAt?: number; lastError?: string },
@@ -213,9 +188,7 @@ function updateConnectionStatus(
     api.mcpServers.updateConnectionStatus,
     { serverId, ...status },
     { token }
-  ).catch(() => {
-    // Intentionally swallowed — connection status updates are best-effort
-  })
+  ).catch(() => {})
 }
 
 /**
@@ -237,7 +210,6 @@ export async function loadUserMcpTools(
     failedServerCount: 0,
   }
 
-  // 1. Load server configs + tool approvals in parallel (~50-100ms Convex RTT)
   const [allServers, allApprovals, currentUser] = await Promise.all([
     fetchQuery(api.mcpServers.list, {}, { token: convexToken }),
     fetchQuery(api.mcpToolApprovals.listByUser, {}, { token: convexToken }),
@@ -251,7 +223,6 @@ export async function loadUserMcpTools(
   const enabledServers = allServers.filter((s) => s.enabled)
   if (enabledServers.length === 0) return emptyResult
 
-  // Build approval lookup: `serverId_toolName` → approved
   const approvalMap = new Map<string, boolean>()
   for (const approval of allApprovals) {
     approvalMap.set(
@@ -260,7 +231,6 @@ export async function loadUserMcpTools(
     )
   }
 
-  // 2. Filter out servers with open circuits (too many consecutive failures)
   let circuitBreakerSkipped = 0
   const serversToConnect = enabledServers.filter((server) => {
     if (isCircuitOpen(server._id)) {
@@ -277,9 +247,7 @@ export async function loadUserMcpTools(
     return { ...emptyResult, failedServerCount: circuitBreakerSkipped }
   }
 
-  // 3. Create MCP clients in parallel with per-server timeout
-  //    Total time = max(individual server times), not sum.
-  //    A slow server doesn't block fast servers.
+  // Isolate slow servers with parallel, per-server timeouts.
   const clientResults = await Promise.allSettled(
     serversToConnect.map(async (server) => {
       // SSRF gate — string + DNS-rebinding checks. The returned address is also
@@ -289,8 +257,7 @@ export async function loadUserMcpTools(
 
       const headers = buildStoredMcpAuthHeaders(server, ownerId)
 
-      // Hold a reference to the client promise so we can clean up orphaned
-      // connections when the timeout wins the race (prevents resource leaks).
+      // Keep the losing promise so a late client can still be closed.
       // Note: @ai-sdk/mcp 2.x HTTP/SSE transports reject 3xx responses by
       // default (redirect: "error") — deliberate here; see
       // describeMcpConnectionError for the rationale and the user-facing error.
@@ -314,9 +281,6 @@ export async function loadUserMcpTools(
           ),
         ])
       } catch (error) {
-        // When timeout wins the race, createMCPClient may still be in-flight.
-        // If it eventually resolves, the client would never be closed — resource leak.
-        // Attach a cleanup handler to close any orphaned client.
         clientPromise.then(
           (orphanedClient) => void orphanedClient.close().catch(() => {}),
           () => {} // Client also failed — nothing to clean up
@@ -326,12 +290,8 @@ export async function loadUserMcpTools(
     })
   )
 
-  // 4. Collect tools from successful clients
   const clients: MCPClient[] = []
-  // MCPToolSet is an opaque mapped type from @ai-sdk/mcp that does not expose a
-  // mutable builder interface. We accumulate tools as Record<string, unknown> and
-  // cast to MCPToolSet at the return boundary — this is the only safe escape hatch
-  // without introducing a runtime wrapper around each tool descriptor.
+  // The SDK's opaque mapped type has no mutable builder interface.
   const mergedTools: Record<string, unknown> = {}
   const toolServerMap = new Map<string, ServerInfo>()
   const namespacedOwners = new Map<string, NamespacedToolOwner>()
@@ -344,7 +304,6 @@ export async function loadUserMcpTools(
     const result = clientResults[i]
     const server = serversToConnect[i]
 
-    // --- Failed connection: log, record failure for circuit breaker, skip ---
     if (result.status === "rejected") {
       const errorMsg = describeMcpConnectionError(result.reason)
 
@@ -355,7 +314,6 @@ export async function loadUserMcpTools(
       continue
     }
 
-    // --- Successful connection: reset circuit breaker ---
     const client = result.value
     clients.push(client)
     recordSuccess(server._id)
@@ -365,7 +323,6 @@ export async function loadUserMcpTools(
       const serverSlug = slugify(server.name)
       const retrySafetyTrusted = isRetrySafetyTrustedServer(server)
 
-      // Update successful connection status (best-effort)
       updateConnectionStatus(
         server._id,
         { lastConnectedAt: Date.now() },
@@ -373,12 +330,11 @@ export async function loadUserMcpTools(
       )
 
       for (const [toolName, tool] of Object.entries(tools)) {
-        // 4. Filter by approved tools (v1: default auto-approved if no record)
+        // Missing approval rows default to approved.
         const approvalKey = `${server._id}_${toolName}`
         const isApproved = approvalMap.get(approvalKey) ?? true
         if (!isApproved) continue
 
-        // 5. Enforce per-request tool limit
         if (toolCount >= MCP_MAX_TOOLS_PER_REQUEST) {
           console.warn(
             `[MCP] Tool limit (${MCP_MAX_TOOLS_PER_REQUEST}) reached, ` +
@@ -387,7 +343,6 @@ export async function loadUserMcpTools(
           break
         }
 
-        // 6. Runtime shape check — skip malformed descriptors
         if (!isToolDescriptor(tool)) {
           console.warn(
             `[MCP] Skipping tool "${toolName}" from "${server.name}": unexpected descriptor shape`
@@ -395,12 +350,9 @@ export async function loadUserMcpTools(
           continue
         }
 
-        // 7. Read MCP annotation hints.
-        // These are advisory/untrusted by default and may be absent.
-        // Downstream policy and retry code must fail safe without them.
+        // Annotation hints are untrusted unless server policy says otherwise.
         const annotationHints = extractToolAnnotationHints(tool)
 
-        // 8. Namespace tool name: `${serverSlug}_${toolName}`
         const namespacedName = `${serverSlug}_${toolName}`
         const owner: NamespacedToolOwner = {
           serverId: server._id,

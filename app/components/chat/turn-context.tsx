@@ -187,8 +187,8 @@ export function TurnContextProvider({
       byChatId: new Map(),
     }))
 
-  // ChatGPT owns effort on its conversation object. Keep the same boundary:
-  // real chat switches select separate state, while null → id moves the new
+  // Keep effort at the conversation boundary: real chat switches select
+  // separate state, while null → id moves the new
   // conversation's state across its first-turn route handoff.
   if (conversationEfforts.activeChatId !== chatId) {
     const byChatId = new Map(conversationEfforts.byChatId)

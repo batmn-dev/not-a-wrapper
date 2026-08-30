@@ -30,7 +30,7 @@ describe("Composer action registry", () => {
     })
   })
 
-  it("matches ChatGPT's @ action discovery defaults and filtering", () => {
+  it("returns the default @ actions and filters their searchable text", () => {
     expect(getComposerActionQueryMatches("").map(({ id }) => id)).toEqual([
       "add-files",
       "web-search",
@@ -44,7 +44,7 @@ describe("Composer action registry", () => {
     expect(getComposerActionQueryMatches("zzzzzzzz")).toEqual([])
   })
 
-  it("matches multi-word queries as one ordered substring, like ChatGPT", () => {
+  it("matches multi-word queries as one ordered substring", () => {
     expect(
       getComposerActionQueryMatches("add photos").map(({ id }) => id)
     ).toEqual(["add-files"])

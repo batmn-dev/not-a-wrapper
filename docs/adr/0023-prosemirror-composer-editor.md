@@ -9,8 +9,8 @@ Accepted.
 The Composer owns a plain-string draft, attachment capture, and the complete
 Chat turn payload. Its textarea duplicated browser-sensitive editing work for
 multiline DOM, selection restoration, IME composition, paste normalization,
-and external draft replacement. ChatGPT instead keeps a stable ProseMirror
-contenteditable as the primary editor with a non-interactive textarea fallback.
+and external draft replacement. A stable ProseMirror contenteditable handles
+those browser contracts while retaining a non-interactive textarea fallback.
 
 ## Decision
 
@@ -29,7 +29,7 @@ write through the existing `onValueChange` port. External draft changes replace
 the editor document without entering undo history. No React `useEffect` or
 timeout coordinates editor state.
 
-Capability entities retain ChatGPT's sibling DOM projection: an invisible
+Capability entities use a sibling DOM projection: an invisible
 leading cursor-target node, one protected entity atom, and an initial
 structural spacer. Deleting the spacer exposes a trailing cursor-target widget
 decoration at the collapsed selection; the next Backspace deletes the complete
@@ -52,15 +52,15 @@ ProseMirror's raw-widget separator image is hidden inside the editor scope. It
 is a cursor-addressing sentinel, not content; allowing the global image reset
 to make it block-level would add a false line while deleting an entity spacer.
 
-A `display: none` textarea with ChatGPT's fallback field attributes remains
+A `display: none` textarea with fallback field attributes remains
 beside the contenteditable. The app also clones it transiently as the
-source-parity measurement surface for the existing bounded multiline expansion
+measurement surface for the existing bounded multiline expansion
 calculation.
 
 ## Alternatives considered
 
-- Keep the native textarea. Rejected because it cannot preserve ChatGPT's
-  stable editor DOM and paragraph model across controlled draft replacement.
+- Keep the native textarea. Rejected because it cannot preserve a stable editor
+  DOM and paragraph model across controlled draft replacement.
 - Build a hand-rolled contenteditable. Rejected because IME, undo, selection,
   paste, and browser mutation reconciliation would become local editor code.
 - Adopt a richer editor framework such as Tiptap or Lexical. Rejected because

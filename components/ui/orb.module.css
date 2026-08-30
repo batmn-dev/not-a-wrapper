@@ -28,7 +28,6 @@
   color: var(--orb-fg);
 }
 
-/* The inline pill form - same component, wrapped. */
 .root[data-pill] {
   gap: 7px;
   height: 30px;
@@ -57,8 +56,6 @@
   overflow: hidden;
   contain: strict;
 }
-
-/* --- Lattice: discrete dots on a fixed 3×3 grid ------------------- */
 
 .lattice {
   position: absolute;
@@ -166,8 +163,6 @@
   }
 }
 
-/* --- Lens: three circles at depth, blur reads as distance --------- */
-
 .lens {
   position: absolute;
   left: 0;
@@ -253,21 +248,18 @@
     transform: translate(var(--orb-ox), var(--orb-oy)) scale(1);
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
-  /* Next neighbour - one quarter away: clearly visible */
   38% {
     opacity: 0.3;
     filter: blur(1.2px);
     transform: translate(var(--orb-ox), var(--orb-oy)) scale(1.06);
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
-  /* Diagonal - half a cycle away: ghost */
   58% {
     opacity: 0.1;
     filter: blur(1.8px);
     transform: translate(var(--orb-ox), var(--orb-oy)) scale(1.1);
     animation-timing-function: linear;
   }
-  /* Far neighbour - three quarters away: barely there */
   82% {
     opacity: 0.05;
     filter: blur(2px);
@@ -531,8 +523,6 @@
   }
 }
 
-/* --- Ring: eight circles on a fixed ring ----------------------------- */
-
 .ring {
   position: absolute;
   inset: 0;
@@ -629,7 +619,6 @@
   animation: orb-ring-comet 1.8s ease-in-out infinite both;
 }
 
-/* ---- Globe (Helix family) ---- */
 .helix {
   position: absolute;
   inset: 0;
@@ -876,7 +865,6 @@
   }
 }
 
-/* ---- Morph ---- */
 .morph {
   position: absolute;
   inset: 0;

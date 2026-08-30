@@ -30,8 +30,8 @@ const base = {
 }
 
 /**
- * The standard suite (measurement plan §3.3): the most representative slice
- * of the full matrix, run on every benchmark invocation. The full Cartesian
+ * The standard suite is the representative slice run on every benchmark.
+ * The full Cartesian
  * matrix stays a manual/scheduled exercise.
  */
 export const STANDARD_SUITE: BrowserScenarioConfig[] = [
@@ -56,8 +56,8 @@ export const SMOKE_SUITE: BrowserScenarioConfig[] = [
 ]
 
 /**
- * Authenticated durable-path scenarios (measurement plan B5): real WorkOS
- * session, server chat ids, prepareGeneration, 750 ms snapshots, settlement.
+ * Authenticated durable-path scenarios: real WorkOS session, server chat ids,
+ * prepareGeneration, snapshots, and settlement.
  * Kept as a separate suite so the guest baseline stays comparable.
  */
 export const DURABLE_SUITE: BrowserScenarioConfig[] = [

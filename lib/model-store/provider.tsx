@@ -208,7 +208,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     setModelPrefsHydrated(true)
   }, [])
 
-  // Initial data fetch for non-Convex data
   useEffect(() => {
     const initFetch = async () => {
       setIsLoading(true)
@@ -240,7 +239,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Custom hook to use the model context
 export function useModel() {
   const context = useContext(ModelContext)
   if (context === undefined) {

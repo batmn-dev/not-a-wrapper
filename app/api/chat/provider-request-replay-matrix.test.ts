@@ -224,7 +224,6 @@ async function captureRequest(options: {
   origin: Provider
   target: Provider
   searchEnabled: boolean
-  compilerEnabled: boolean
   history?: UIMessage[]
 }) {
   const target = makeTarget(options.target)
@@ -242,8 +241,7 @@ async function captureRequest(options: {
     {
       targetModelId: modelIds[options.target],
       hasTools: options.searchEnabled,
-    },
-    { useReplayCompiler: options.compilerEnabled }
+    }
   )
   const validation = await safeValidateUIMessages({
     messages: adapted.messages,
@@ -262,45 +260,42 @@ async function captureRequest(options: {
 }
 
 describe("hosted replay final provider-request matrix", () => {
-  it("keeps every origin safe for every target, search policy, and compiler state", async () => {
+  it("keeps every origin safe for every target and search policy", async () => {
     for (const origin of providers) {
       for (const target of providers) {
         for (const searchEnabled of [false, true]) {
-          for (const compilerEnabled of [false, true]) {
-            const label = `${origin}->${target} search=${searchEnabled} compiler=${compilerEnabled}`
-            const result = await captureRequest({
-              origin,
-              target,
-              searchEnabled,
-              compilerEnabled,
-            })
-            const modelJson = JSON.stringify(result.modelMessages)
-            const bodyJson = JSON.stringify(result.body)
+          const label = `${origin}->${target} search=${searchEnabled}`
+          const result = await captureRequest({
+            origin,
+            target,
+            searchEnabled,
+          })
+          const modelJson = JSON.stringify(result.modelMessages)
+          const bodyJson = JSON.stringify(result.body)
 
-            expect(result.body, label).toBeDefined()
-            expect(hasToolCall(result.modelMessages), label).toBe(false)
-            expect(hasFile(result.modelMessages), label).toBe(true)
-            expect(modelJson, label).not.toContain(ENCRYPTED)
-            expect(bodyJson, label).not.toContain(ENCRYPTED)
-            expect(bodyJson, label).not.toMatch(
-              /ws_openai_foreign_id|srvtoolu_anthropic_foreign_id|xai_foreign_response_id|google-grounding-private-id/
-            )
-            expect(bodyJson, label).toContain("Find one source")
-            expect(bodyJson, label).toContain(
-              origin === "google" ? "Grounded answer" : `${origin} answer`
-            )
-            expect(bodyJson, label).toContain("Now inspect this image")
-            expect(bodyJson, label).toContain(CURRENT_IMAGE_URL)
-            expect(bodyJson, label).toContain("example.com/")
-            expect(hasSearchDeclaration(result.body, target), label).toBe(
-              searchEnabled
-            )
+          expect(result.body, label).toBeDefined()
+          expect(hasToolCall(result.modelMessages), label).toBe(false)
+          expect(hasFile(result.modelMessages), label).toBe(true)
+          expect(modelJson, label).not.toContain(ENCRYPTED)
+          expect(bodyJson, label).not.toContain(ENCRYPTED)
+          expect(bodyJson, label).not.toMatch(
+            /ws_openai_foreign_id|srvtoolu_anthropic_foreign_id|xai_foreign_response_id|google-grounding-private-id/
+          )
+          expect(bodyJson, label).toContain("Find one source")
+          expect(bodyJson, label).toContain(
+            origin === "google" ? "Grounded answer" : `${origin} answer`
+          )
+          expect(bodyJson, label).toContain("Now inspect this image")
+          expect(bodyJson, label).toContain(CURRENT_IMAGE_URL)
+          expect(bodyJson, label).toContain("example.com/")
+          expect(hasSearchDeclaration(result.body, target), label).toBe(
+            searchEnabled
+          )
 
-            if (origin === "google") {
-              expect(result.projection.sourceProjectionCount, label).toBe(1)
-            } else {
-              expect(result.projection.loweredCount, label).toBe(1)
-            }
+          if (origin === "google") {
+            expect(result.projection.sourceProjectionCount, label).toBe(1)
+          } else {
+            expect(result.projection.loweredCount, label).toBe(1)
           }
         }
       }
@@ -376,26 +371,23 @@ describe("hosted replay final provider-request matrix", () => {
         ]
 
         for (const target of providers) {
-          for (const compilerEnabled of [false, true]) {
-            const label = `${state} provenance=${metadataCase} target=${target} compiler=${compilerEnabled}`
-            const result = await captureRequest({
-              origin: "anthropic",
-              target,
-              searchEnabled: true,
-              compilerEnabled,
-              history,
-            })
-            const serialized = JSON.stringify({
-              messages: result.modelMessages,
-              body: result.body,
-            })
-            expect(result.body, label).toBeDefined()
-            expect(result.projection.loweredCount, label).toBe(1)
-            expect(hasToolCall(result.modelMessages), label).toBe(false)
-            expect(serialized, label).not.toContain("state-matrix-foreign-id")
-            expect(serialized, label).not.toContain("state-matrix-approval-id")
-            expect(serialized, label).not.toContain(ENCRYPTED)
-          }
+          const label = `${state} provenance=${metadataCase} target=${target}`
+          const result = await captureRequest({
+            origin: "anthropic",
+            target,
+            searchEnabled: true,
+            history,
+          })
+          const serialized = JSON.stringify({
+            messages: result.modelMessages,
+            body: result.body,
+          })
+          expect(result.body, label).toBeDefined()
+          expect(result.projection.loweredCount, label).toBe(1)
+          expect(hasToolCall(result.modelMessages), label).toBe(false)
+          expect(serialized, label).not.toContain("state-matrix-foreign-id")
+          expect(serialized, label).not.toContain("state-matrix-approval-id")
+          expect(serialized, label).not.toContain(ENCRYPTED)
         }
       }
     }
@@ -435,8 +427,7 @@ describe("hosted replay final provider-request matrix", () => {
       const adapted = await adaptHistoryForProvider(
         projected.messages,
         target,
-        { targetModelId: modelIds[target], hasTools: true },
-        { useReplayCompiler: false }
+        { targetModelId: modelIds[target], hasTools: true }
       )
       const modelMessages = await convertToModelMessages(adapted.messages, {
         tools: targetRuntime.searchTools,
@@ -504,61 +495,55 @@ describe("hosted replay final provider-request matrix", () => {
     ]
 
     for (const targetProvider of providers) {
-      for (const compilerEnabled of [false, true]) {
-        const target = makeTarget(targetProvider)
-        const projected = lowerForeignHostedToolParts(clientHistory, {
-          targetProvider,
-          tools: clientTools,
-        })
-        expect(projected.loweredCount).toBe(0)
-        const adapted = await adaptHistoryForProvider(
-          projected.messages,
-          targetProvider,
-          { targetModelId: modelIds[targetProvider], hasTools: true },
-          { useReplayCompiler: compilerEnabled }
+      const target = makeTarget(targetProvider)
+      const projected = lowerForeignHostedToolParts(clientHistory, {
+        targetProvider,
+        tools: clientTools,
+      })
+      expect(projected.loweredCount).toBe(0)
+      const adapted = await adaptHistoryForProvider(
+        projected.messages,
+        targetProvider,
+        { targetModelId: modelIds[targetProvider], hasTools: true }
+      )
+      const validation = await safeValidateUIMessages({
+        messages: adapted.messages,
+        tools: clientTools as never,
+      })
+      expect(validation.success).toBe(true)
+      const modelMessages = await convertToModelMessages(adapted.messages, {
+        tools: clientTools,
+        ignoreIncompleteToolCalls: true,
+      })
+      const pairCounts = modelToolPairCounts(modelMessages)
+      for (const [toolCallId, counts] of pairCounts) {
+        expect(counts.calls, `${targetProvider} ${toolCallId}`).toBe(
+          counts.results
         )
-        const validation = await safeValidateUIMessages({
-          messages: adapted.messages,
-          tools: clientTools as never,
-        })
-        expect(validation.success).toBe(true)
-        const modelMessages = await convertToModelMessages(adapted.messages, {
-          tools: clientTools,
-          ignoreIncompleteToolCalls: true,
-        })
-        const pairCounts = modelToolPairCounts(modelMessages)
-        for (const [toolCallId, counts] of pairCounts) {
-          expect(counts.calls, `${targetProvider} ${toolCallId}`).toBe(
-            counts.results
-          )
-        }
+      }
 
-        try {
-          await generateText({
-            model: target.model,
-            messages: modelMessages,
-            tools: clientTools,
-          })
-        } catch {}
-        const body = JSON.stringify(target.getBody())
-        expect(target.getBody()).toBeDefined()
-        for (const toolCallId of [
-          "static-client-call",
-          "dynamic-client-call",
-        ]) {
-          const occurrences = body.split(toolCallId).length - 1
-          expect(
-            occurrences === 0 || occurrences >= 2,
-            `${targetProvider} compiler=${compilerEnabled} ${toolCallId}`
-          ).toBe(true)
-        }
+      try {
+        await generateText({
+          model: target.model,
+          messages: modelMessages,
+          tools: clientTools,
+        })
+      } catch {}
+      const body = JSON.stringify(target.getBody())
+      expect(target.getBody()).toBeDefined()
+      for (const toolCallId of ["static-client-call", "dynamic-client-call"]) {
+        const occurrences = body.split(toolCallId).length - 1
+        expect(
+          occurrences === 0 || occurrences >= 2,
+          `${targetProvider} ${toolCallId}`
+        ).toBe(true)
       }
     }
   })
 
   it("replays same-provider OpenAI text/reasoning history as content, never item_reference lookups", async () => {
-    // Regression (live 2026-08-01): durable replay persists
-    // providerMetadata.openai.itemId on text and reasoning parts. With the
+    // Durable replay persists providerMetadata.openai.itemId on text and
+    // reasoning parts. With the
     // Responses default `store: true`, the serializer turns those into
     // server-side item_reference lookups (msg_/rs_) and the API 400s with
     // `invalid_value` on `input` — killing every follow-up OpenAI turn.
@@ -604,22 +589,18 @@ describe("hosted replay final provider-request matrix", () => {
       },
     ] as unknown as UIMessage[]
 
-    for (const compilerEnabled of [false, true]) {
-      const result = await captureRequest({
-        origin: "openai",
-        target: "openai",
-        searchEnabled: false,
-        compilerEnabled,
-        history,
-      })
-      const bodyJson = JSON.stringify(result.body)
-      const label = `compiler=${compilerEnabled}`
-      expect(bodyJson, label).not.toContain("item_reference")
-      expect(bodyJson, label).not.toContain("rs_stored_reasoning_id")
-      expect(bodyJson, label).not.toContain("msg_stored_text_id")
-      expect(bodyJson, label).toContain("The prior visible answer is 42.")
-      expect(bodyJson, label).toContain(CURRENT_IMAGE_URL)
-    }
+    const result = await captureRequest({
+      origin: "openai",
+      target: "openai",
+      searchEnabled: false,
+      history,
+    })
+    const bodyJson = JSON.stringify(result.body)
+    expect(bodyJson).not.toContain("item_reference")
+    expect(bodyJson).not.toContain("rs_stored_reasoning_id")
+    expect(bodyJson).not.toContain("msg_stored_text_id")
+    expect(bodyJson).toContain("The prior visible answer is 42.")
+    expect(bodyJson).toContain(CURRENT_IMAGE_URL)
   })
 })
 

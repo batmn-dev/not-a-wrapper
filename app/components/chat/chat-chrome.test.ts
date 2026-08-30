@@ -25,8 +25,8 @@ describe("resolveChatChrome", () => {
   })
 
   it("an optimistic first send flips to a thread WITH the app header before any navigation", () => {
-    // The regression this pins: the send-frame insert (chatId still null)
-    // must bring the header with the thread — on home AND project surfaces.
+    // The pre-navigation send frame must bring the header with the thread on
+    // both home and project surfaces.
     for (const hasProject of [false, true]) {
       expect(
         resolveChatChrome({ chatId: null, messageCount: 1, hasProject })

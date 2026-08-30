@@ -5290,8 +5290,7 @@ describe("chat status projection", () => {
   })
 
   it("ignores a terminal projection from a run that no longer owns the slot (run-id guard)", async () => {
-    // Race (review round 4, #1): run A completes, the user starts run B (which
-    // claims the slot and projects streaming), then A's late `fail` lands. The
+    // Run A completes, run B claims the slot, then A's late `fail` lands. The
     // lifecycle lets fail overwrite completed, so A's run transition is real —
     // but the guard must keep it from clobbering B's live row.
     vi.spyOn(Date, "now").mockReturnValue(1700000000000)

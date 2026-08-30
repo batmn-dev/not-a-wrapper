@@ -282,5 +282,3 @@ export function filterMetadataMapByPolicy<T>(
     Array.from(metadata.entries()).filter(([name]) => allowed.has(name))
   )
 }
-
-// ── Payment Policy Overrides ────────────────────────────────

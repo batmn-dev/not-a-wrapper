@@ -1,6 +1,5 @@
 /**
- * Versioned machine-readable result schema for the browser benchmark
- * (measurement plan Phase 3 §3.2 / Phase 6). Raw runs are kept alongside the
+ * Versioned machine-readable browser benchmark results. Raw runs stay alongside
  * aggregates so a later analysis can re-derive percentiles; content never
  * appears — correctness is carried as a hash plus booleans.
  */

@@ -279,7 +279,6 @@ function SidebarTrigger({
       aria-controls={SIDEBAR_CONTAINER_ID}
       className={cn(
         "size-9 rounded-md",
-        // Resize cursor indicates expandability
         state === "collapsed"
           ? "cursor-e-resize rtl:cursor-w-resize"
           : "cursor-w-resize rtl:cursor-e-resize",

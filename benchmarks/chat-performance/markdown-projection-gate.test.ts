@@ -3,14 +3,10 @@
  * projection cost must track the mutable region plus
  * appended text, never the accumulated source.
  *
- * The scaling gate samples EACH update individually (fixed 2026-07-27
- * review P2: the earlier version timed a 40-update batch, letting a slow
- * isolated update hide inside the aggregate): p95 over every per-update
+ * The scaling gate samples each update so an isolated slow update cannot hide
+ * inside an aggregate. The p95 over every per-update
  * sample of the ~100 KB payload must stay within the accepted 2× bound of
  * the ~12 KB payload's per-update p95 — both carry the same growing tail.
- * The legacy splitter measured ~10× (88.6 ms vs 8.7 ms per update) in the
- * 2026-07-27 baseline.
- *
  * The construct gates pin the other required cases to the fast path with
  * tail-proportional parse work: growing fenced code, growing
  * table construction, and the one-very-long-paragraph bound (a single

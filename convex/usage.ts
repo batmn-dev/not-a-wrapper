@@ -117,7 +117,6 @@ export const checkUsage = optionalAuthQuery({
   },
 })
 
-/** Check and increment the daily abuse counter in one Convex transaction. */
 export async function admitUsageHandler(
   ctx: AbuseAdmissionCtx,
   { anonymousId }: { anonymousId?: string }

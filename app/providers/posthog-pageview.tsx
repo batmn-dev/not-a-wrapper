@@ -24,7 +24,7 @@ function PostHogPageViewTracker() {
   return null
 }
 
-// Wrap in Suspense for searchParams hook
+// Next requires a Suspense boundary around useSearchParams.
 export function PostHogPageView() {
   return (
     <Suspense fallback={null}>

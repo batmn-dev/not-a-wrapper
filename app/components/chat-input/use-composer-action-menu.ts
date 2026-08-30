@@ -327,8 +327,7 @@ function useComposerActionMenu({
       eventDetails.cancel()
       return
     }
-    // ChatGPT parity: the + handler defers opening past keyboard collapse in
-    // both auth states.
+    // Defer opening until the virtual keyboard collapses in both auth states.
     if (open && isVirtualKeyboardOpen()) {
       closeVirtualKeyboard(() => {
         setIsTriggerMenuOpen(true)
@@ -342,9 +341,8 @@ function useComposerActionMenu({
   }
 
   const handleTriggerMenuOpenChange = (open: boolean) => {
-    // ChatGPT parity (mobile + button): with the on-screen keyboard up, defer
-    // opening until the keyboard has actually closed — blur the editor, wait
-    // for the keyboard-closed signal (500ms fallback), then open.
+    // With the on-screen keyboard up, blur the editor and wait for the
+    // keyboard-closed signal (500ms fallback) before opening.
     if (open && isVirtualKeyboardOpen()) {
       closeVirtualKeyboard(() => {
         setIsTriggerMenuOpen(true)

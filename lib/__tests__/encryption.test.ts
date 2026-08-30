@@ -53,8 +53,6 @@ describe("encryptSecret / decryptSecret", () => {
     expect(encrypted).not.toContain(plaintext)
   })
 
-  // ---- AAD binding: the owner-splice defense ----
-
   it("rejects decryption under a different owner", () => {
     const { encrypted, iv } = encryptSecret("secret", userKeyBinding)
     expect(() =>
@@ -95,8 +93,6 @@ describe("encryptSecret / decryptSecret", () => {
     ).toThrow()
   })
 
-  // ---- Tamper evidence ----
-
   it("rejects a tampered ciphertext body", () => {
     const { encrypted, iv } = encryptSecret("secret", userKeyBinding)
     const [version, body, tag] = encrypted.split(":")
@@ -119,8 +115,6 @@ describe("encryptSecret / decryptSecret", () => {
       decryptSecret(`${encrypted}:trailing-data`, iv, userKeyBinding)
     ).toThrow(/Unsupported or malformed/)
   })
-
-  // ---- Key rotation ----
 
   it("decrypts a value encrypted under a rotated-out key", async () => {
     // Encrypt with the (soon-to-be) previous key under a fresh module instance...

@@ -33,7 +33,7 @@ Two providers publish per-level support programmatically (Anthropic
 `GET /api/v1/models` → `reasoning.supported_efforts`); the rest are docs-only
 and must be snapshot data, consistent with ADR-0007/0022.
 
-Product expectation (verified against shipped ChatGPT and Claude.ai behavior):
+Product expectation, verified against shipped reference behavior:
 the choice is per turn, the menu shows only the selected model's real levels,
 the conversation restores the effort that last actually ran, and switching
 models keeps the level when supported or visibly snaps to a valid one.

@@ -155,7 +155,7 @@ function MorphingDialogContent({
 }: MorphingDialogContentProps) {
   const { setIsOpen, isOpen, uniqueId, triggerRef } = useMorphingDialog()
   const containerRef = useRef<HTMLDivElement>(null!)
-  // Use refs instead of state for focus trap elements (not needed for rendering)
+  // Focus-trap elements do not affect rendering.
   const firstFocusableRef = useRef<HTMLElement | null>(null)
   const lastFocusableRef = useRef<HTMLElement | null>(null)
 

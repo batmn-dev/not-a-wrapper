@@ -147,7 +147,6 @@ function DesktopAppSidebar() {
           isCollapsed
             ? "motion-safe:ease-[steps(1,start)]"
             : "motion-safe:ease-[steps(1,end)]",
-          // Visibility based on state
           isCollapsed
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -258,9 +257,7 @@ function DesktopAppSidebar() {
           // Opaque bg so the crossfade masks the rail beneath (see paint-order
           // note above); the container's own bg makes this invisible at rest.
           "bg-sidebar",
-          // Linear crossfade in both directions
           "motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-linear",
-          // Visibility based on state
           isCollapsed
             ? "pointer-events-none opacity-0"
             : "pointer-events-auto opacity-100"

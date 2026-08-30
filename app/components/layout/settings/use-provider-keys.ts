@@ -12,8 +12,6 @@ export type ProviderKeyConfig = {
   getKeyUrl: string
   /** Shown in the password field when a key is stored; falls back to generic dots. */
   maskHint?: string
-  /** false → not selectable and the key form is hidden ("coming soon"). Defaults true. */
-  available?: boolean
 }
 
 type SaveResult = { isNewKey?: boolean }

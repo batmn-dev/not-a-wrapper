@@ -421,8 +421,7 @@ describe("resets and lifecycle", () => {
   })
 
   it("live-corrects the review's parser-state counterexample without divergence", () => {
-    // 2026-07-27 review P1: `2. two\n===\n=` after an indented code block
-    // parses as heading + paragraph in context but as one list standalone.
+    // This parses as heading + paragraph in context but as one list standalone.
     // The context-verified tail parse must match the authoritative parser at
     // every step — never commit the standalone (list) reading.
     const before = "\tindented\n\n2. two\n===\n="

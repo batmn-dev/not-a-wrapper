@@ -507,8 +507,8 @@ describe("chat turn controller", () => {
   })
 
   it("retries a committed first turn under the ORIGINAL persisted identity", async () => {
-    // The regression this pins: after an atomic commit whose dispatch failed,
-    // the retry allocates a fresh optimistic id — dispatching under it would
+    // After an atomic commit whose dispatch failed, a retry allocates a fresh
+    // optimistic id. Dispatching under it would
     // either duplicate the prompt or trip the stale-token guard. The provider
     // re-presents the committed identity; the runner must adopt it wholesale.
     const { adapters, controller, getMessages, setSnapshot } = createHarness()

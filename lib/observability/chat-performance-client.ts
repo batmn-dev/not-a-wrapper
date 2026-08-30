@@ -19,8 +19,6 @@ import {
   type ChatPerfFields,
 } from "./chat-performance"
 
-// Per-turn correlation id
-
 let currentTurnId: string | undefined
 let pendingHeaderTurnId: string | undefined
 let stopIntentNoted = false

@@ -12,9 +12,6 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// ── Helpers ──────────────────────────────────────────────
-
-/** Create a minimal tool with the given execute function */
 function makeTool(
   executeFn: (
     params: unknown,
@@ -32,7 +29,6 @@ function makeTool(
   }
 }
 
-/** Create a standard WrapMcpToolsConfig for tests */
 function makeConfig(overrides?: {
   timeoutMs?: number
   maxResultBytes?: number
@@ -54,8 +50,6 @@ function makeConfig(overrides?: {
   }
 }
 
-// ── wrapMcpTools ─────────────────────────────────────────
-
 describe("wrapMcpTools", () => {
   it("wraps a tool that resolves before timeout", async () => {
     const config = makeConfig({ timeoutMs: 5000 })
@@ -71,7 +65,6 @@ describe("wrapMcpTools", () => {
 
     expect(result).toEqual({ answer: 42 })
 
-    // Trace recorded
     const trace = config.traceCollector.get("call_1")
     expect(trace).toBeDefined()
     expect(trace!.success).toBe(true)
@@ -99,7 +92,6 @@ describe("wrapMcpTools", () => {
     await expect(execution).rejects.toThrow(ToolTimeoutError)
     timeoutSpy.mockRestore()
 
-    // Trace records the failure
     const trace = config.traceCollector.get("call_timeout")
     expect(trace).toBeDefined()
     expect(trace!.success).toBe(false)
@@ -551,19 +543,15 @@ describe("wrapMcpTools", () => {
       { toolCallId: "call_large" }
     )
 
-    // Raw string result should be truncated (contains truncation marker)
     const resultStr =
       typeof result === "string" ? result : JSON.stringify(result)
     expect(resultStr.length).toBeLessThan(1000)
 
-    // Trace should record original size
     const trace = config.traceCollector.get("call_large")
     expect(trace).toBeDefined()
     expect(trace!.resultSizeBytes).toBeGreaterThan(100)
   })
 })
-
-// ── ToolTraceCollector ───────────────────────────────────
 
 describe("ToolTraceCollector", () => {
   it("records and retrieves traces by toolCallId", () => {
@@ -614,8 +602,6 @@ describe("ToolTraceCollector", () => {
     )
   })
 })
-
-// ── ToolTimeoutError ─────────────────────────────────────
 
 describe("ToolTimeoutError", () => {
   it("has correct name, toolName, and timeoutMs", () => {

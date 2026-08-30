@@ -3,13 +3,9 @@ export type ComposerPrimaryActionMode = "send" | "stop"
 export type ComposerPrimaryActionIntent = "send" | "stop"
 
 type ResolveComposerPrimaryActionInput = {
-  /** True when the UI should present Stop instead of Send. */
   isStreaming: boolean
-  /** True when an active stream can still be aborted. */
   isAbortable: boolean
-  /** True when a send action is currently valid. */
   canSend: boolean
-  /** True when emptiness is the reason Send is unavailable. */
   isMessageEmpty: boolean
 }
 

@@ -1,8 +1,7 @@
 "use client"
 
 /**
- * Browser responsiveness marks (measurement plan Phase 2 §2.2): main-thread
- * long tasks and animation-frame gaps, emitted as content-free User Timing
+ * Main-thread long tasks and animation-frame gaps, emitted as content-free User Timing
  * marks through the same allow-listed gate as every other chat-perf event.
  * Everything is a no-op unless `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION` is on,
  * so normal production builds mount neither observer.

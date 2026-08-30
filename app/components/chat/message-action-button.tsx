@@ -5,27 +5,17 @@ import { cn } from "@/lib/utils"
 import type { ReactNode } from "react"
 
 type MessageActionButtonProps = {
-  /** aria-label, and the tooltip text unless `tooltip` overrides it. */
   label: string
-  /** The glyph (often state-dependent, e.g. copied ? check : copy). */
   icon: ReactNode
   onClick?: () => void
-  /** Tooltip text; defaults to `label` (copy actions use "Copied!" when done). */
   tooltip?: ReactNode
   disabled?: boolean
-  /** Keeps a temporarily unavailable action discoverable and explains why. */
   disabledReason?: ReactNode
   side?: "top" | "bottom" | "left" | "right"
   size?: "default" | "branch"
 }
 
-/**
- * One message-footer action: the shared tooltip (MessageAction) around the
- * shared icon-button box, with reference-sized default and branch variants plus
- * the touch-target sizing and muted tokens in one place. Replaces six
- * copy-pasted `<MessageAction><button>…</button>` pairs (copy / edit /
- * regenerate / branch prev+next).
- */
+/** Shared message-footer action with tooltip and disabled-reason handling. */
 export function MessageActionButton({
   label,
   icon,

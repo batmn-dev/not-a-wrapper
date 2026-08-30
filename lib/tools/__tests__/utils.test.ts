@@ -18,15 +18,12 @@ function serializedSize(value: unknown): number {
   }
 }
 
-// Mock the config module to control MAX_TOOL_RESULT_SIZE in tests
 vi.mock("@/lib/config", () => ({
   MAX_TOOL_RESULT_SIZE: 100 * 1024, // 100KB default
   TOOL_EXECUTION_TIMEOUT_MS: 15_000,
 }))
 
 describe("truncateToolResult", () => {
-  // No truncation needed — results pass through unchanged
-
   describe("results within size limit", () => {
     it("returns representative small values unchanged", () => {
       const values = [
@@ -44,8 +41,6 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // Oversized string truncation
-
   describe("oversized string truncation", () => {
     it("truncates strings over the byte limit with marker", () => {
       const largeString = "a".repeat(2000)
@@ -57,8 +52,7 @@ describe("truncateToolResult", () => {
     })
 
     it("uses the configured default byte boundary", () => {
-      // A string under 100KB should not be truncated.
-      // Account for JSON serialization overhead (2 bytes for quotes)
+      // Leave room for JSON's surrounding quotes.
       const underLimit = "a".repeat(100 * 1024 - 3)
       const overLimit = "a".repeat(100 * 1024 + 1)
 
@@ -69,11 +63,8 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // Oversized array truncation (shape-preserving)
-
   describe("oversized array truncation", () => {
     it("returns shape-preserved truncation with metadata", () => {
-      // Create an array large enough to exceed the limit
       const items = Array.from({ length: 100 }, (_, i) => ({
         id: i,
         content: "x".repeat(100),
@@ -110,8 +101,6 @@ describe("truncateToolResult", () => {
       expect(result.data).toEqual([])
     })
   })
-
-  // Oversized object truncation
 
   describe("oversized object truncation", () => {
     it("returns truncated representation with metadata", () => {
@@ -273,8 +262,6 @@ describe("truncateToolResult", () => {
     })
   })
 
-  // Edge cases
-
   describe("edge cases", () => {
     it("logs a warning when truncation occurs", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -289,8 +276,6 @@ describe("truncateToolResult", () => {
     })
   })
 })
-
-// isTruncated
 
 describe("isTruncated", () => {
   it("recognizes only explicit truncation envelopes", () => {
@@ -318,8 +303,6 @@ describe("isTruncated", () => {
     expect(isTruncated({ _truncated: "yes" })).toBe(false)
   })
 })
-
-// wrapToolsWithTruncation
 
 describe("wrapToolsWithTruncation", () => {
   it("wraps execute functions with truncation", async () => {

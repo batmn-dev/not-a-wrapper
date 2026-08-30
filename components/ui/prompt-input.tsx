@@ -50,7 +50,7 @@ export type PromptInputEditorHandle = {
     entity?: PromptInputEntity
   ) => boolean
   /** Open a synthetic action-query session at the caret (the + button), or
-   * close the current one when it is already synthetic — ChatGPT's toggle. */
+   * close the current one when it is already synthetic. */
   toggleSyntheticActionQuery: () => void
   /** End the active action-query session (synthetic Escape / focus-out). */
   endActionQuery: () => void
@@ -623,7 +623,7 @@ const PromptInputTextarea = React.forwardRef<
             const nextState = view.state.apply(transaction)
             view.updateState(nextState)
             paintController?.onEditorUpdate()
-            // The action-query plugin owns ChatGPT's re-evaluation rules
+            // The action-query plugin owns re-evaluation rules
             // (typed sessions on doc changes, synthetic sessions every
             // transaction); publishing just diffs its state.
             publishActionQuery(nextState)

@@ -26,7 +26,7 @@ describe("chat title generation", () => {
     ).toBe("Reliable Durable AI Chat")
   })
 
-  it("uses ChatGPT-like wording for a greeting-only conversation", () => {
+  it("uses concise wording for a greeting-only conversation", () => {
     expect(fallbackChatTitle("Hello! ")).toBe("Greeting Exchange")
   })
 
