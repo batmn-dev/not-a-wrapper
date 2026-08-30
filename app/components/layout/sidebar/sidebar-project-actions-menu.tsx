@@ -29,7 +29,7 @@ type SidebarProjectActionsMenuProps = {
   project: {
     _id: Id<"projects">
     name: string
-    pinned?: boolean
+    pinned: boolean
   }
   onStartEditing: () => void
   onTogglePinned: () => void

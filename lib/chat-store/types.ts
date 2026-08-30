@@ -1,7 +1,6 @@
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 
 export type ConvexChat = Doc<"chats">
-export type ConvexMessage = Doc<"messages">
 
 /** App-facing chat shape; snake_case is retained for existing consumers. */
 export type Chat = {
@@ -67,18 +66,6 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
     last_run_ended_at: convexChat.lastRunEndedAt ?? null,
     last_run_status: convexChat.lastRunStatus ?? null,
     last_read_at: convexChat.lastReadAt ?? null,
-  }
-}
-
-export function convexMessageToMessage(convexMessage: ConvexMessage): Message {
-  return {
-    id: convexMessage._id,
-    chat_id: convexMessage.chatId,
-    user_id: convexMessage.userId ?? null,
-    role: convexMessage.role,
-    content: convexMessage.content,
-    parts: convexMessage.parts,
-    created_at: new Date(convexMessage.createdAt).toISOString(),
   }
 }
 

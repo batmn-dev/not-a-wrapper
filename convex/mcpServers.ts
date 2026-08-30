@@ -6,7 +6,6 @@ import {
   ownedMcpServerMutation,
 } from "./lib/authedFunctions"
 
-// Mirror of lib/config.ts MAX_MCP_SERVERS_PER_USER — keep in sync
 const MAX_MCP_SERVERS_PER_USER = 10
 
 // SSRF Validation

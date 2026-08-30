@@ -11,8 +11,8 @@ export type DirectoryProject = {
   _id: Id<"projects">
   name: string
   _creationTime: number
-  updatedAt?: number
-  pinned?: boolean
+  updatedAt: number
+  pinned: boolean
 }
 
 type ProjectsGridProps = {

@@ -105,8 +105,6 @@ with the supported runtime; defer jsdom 30 until the Node engine floor is
 compatible; and handle ESLint 10, Motion 13, and Recharts 3.10 as separate,
 focused upgrades with migration-specific lint, animation, and visual checks.
 - **Assistant responsiveness:** investigate and improve time to first token and
-text-streaming feel end to end. Known suspects are catalogued in
-`docs/streaming-regression-suspects-2026-08-20.md`: the platform generation
-budget (OpenAI/Google reasoning shares the 8,192-token allowance) and settle
-waiting on title usage. Measure TTFT via the chat-perf spans and
-re-verify perceived streaming smoothness in the browser.
+text-streaming feel end to end. Measure TTFT through the chat-performance spans,
+check whether title usage delays terminal settlement, and re-verify perceived
+streaming smoothness in the browser.

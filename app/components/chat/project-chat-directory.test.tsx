@@ -85,7 +85,7 @@ vi.mock("@/app/components/projects/use-rename-project", () => ({
 
 vi.mock("@/app/components/projects/use-project-pinning", () => ({
   useProjectPinning: () => ({
-    isPinned: (project: { pinned?: boolean }) => Boolean(project.pinned),
+    isPinned: (project: { pinned: boolean }) => project.pinned,
     isPinPending: () => false,
     togglePinned: directoryMocks.togglePinned,
   }),

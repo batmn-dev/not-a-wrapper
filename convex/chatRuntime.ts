@@ -3030,11 +3030,7 @@ async function expireToolApprovalForChat(
   now: number,
   source: "decision" | "reaper"
 ): Promise<boolean> {
-  if (
-    approval.status !== "pending" ||
-    approval.expiresAt === undefined ||
-    now < approval.expiresAt
-  ) {
+  if (approval.status !== "pending" || now < approval.expiresAt) {
     return false
   }
 
@@ -3120,7 +3116,7 @@ export async function resolveToolCallDecision(
   // the cron: a decision racing in after `expiresAt` settles the row as
   // expired here — approving expired work must be impossible regardless of
   // reaper cadence.
-  if (approval.expiresAt !== undefined && now >= approval.expiresAt) {
+  if (now >= approval.expiresAt) {
     await expireToolApprovalForChat(ctx, approval, now, "decision")
     return { status: "expired", alreadyResolved: true, reason: approval.reason }
   }
@@ -3533,16 +3529,11 @@ export async function reapExpiredToolApprovalsPass(
     const candidates = await ctx.db
       .query("toolApprovalRequests")
       .withIndex("by_status_expires", (q) =>
-        q
-          .eq("status", "pending")
-          .gt("expiresAt", undefined)
-          .lte("expiresAt", now)
+        q.eq("status", "pending").lte("expiresAt", now)
       )
       .take(REAPER_BATCH_LIMIT)
     for (const approval of candidates) {
-      if (approval.expiresAt === undefined || approval.expiresAt > now) {
-        continue
-      }
+      if (approval.expiresAt > now) continue
       const run = await ctx.db.get(approval.runId)
       if (!run) continue
       const chat = await ctx.db.get(run.chatId)

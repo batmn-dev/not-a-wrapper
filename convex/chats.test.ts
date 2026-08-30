@@ -55,6 +55,8 @@ describe("project conversation previews", () => {
       _creationTime: 1,
       userId: user._id,
       name: "Investing",
+      updatedAt: 1,
+      pinned: false,
     }
     const older = createChat({
       _id: asId<"chats">("older"),
@@ -201,6 +203,8 @@ function createProject(
     _creationTime: 1,
     userId,
     name: id,
+    updatedAt: 1,
+    pinned: false,
     ...overrides,
   }
 }

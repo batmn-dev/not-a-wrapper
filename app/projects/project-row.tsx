@@ -48,9 +48,7 @@ export function ProjectRow({
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   const displayName = project.name || "Untitled Project"
-  const modifiedLabel = formatModifiedDate(
-    project.updatedAt ?? project._creationTime
-  )
+  const modifiedLabel = formatModifiedDate(project.updatedAt)
 
   const navigateToProject = () => router.push(`/p/${project._id}`)
 

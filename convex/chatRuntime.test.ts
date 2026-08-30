@@ -584,6 +584,7 @@ function createApprovalContinuationFixture(
       approvalId: decision.approvalId,
       status: decision.approved ? "approved" : "denied",
       createdAt: 1,
+      expiresAt: 60_000,
     })
   )
   const invocations: Doc<"toolInvocations">[] = decisions.map(
@@ -2989,6 +2990,7 @@ describe("generation run linkage validation", () => {
       approvalId: "approval_1",
       status: "pending",
       createdAt: 1,
+      expiresAt: 60_000,
     }
     const { ctx, inserts, patches } = createMutationCtx({
       ...fixture.tables,
@@ -3353,6 +3355,8 @@ describe("reapers", () => {
       _creationTime: 1,
       userId: fixture.userId,
       name: "Deleting project",
+      updatedAt: 1,
+      pinned: false,
       deletingAt: NOW - 1,
     }
     fixture.chat.projectId = project._id
@@ -3574,6 +3578,8 @@ describe("reapers", () => {
       _creationTime: 1,
       userId: fixture.userId,
       name: "Deleting project",
+      updatedAt: 1,
+      pinned: false,
       deletingAt: NOW - 1,
     }
     fixture.chat.projectId = project._id
@@ -3605,53 +3611,32 @@ describe("reapers", () => {
     expect(fixture.run.status).toBe("awaiting_approval")
   })
 
-  it("the approval reaper never touches unexpired or expiry-less pending approvals", async () => {
+  it("the approval reaper never touches an unexpired pending approval", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW)
     const fixture = createGenerationRunLinkageFixture()
     fixture.run.status = "awaiting_approval"
-    fixture.tables.toolApprovalRequests.push(
-      {
-        _id: asId<"toolApprovalRequests">("approval_request_fresh"),
-        _creationTime: 1,
-        chatId: fixture.chatId,
-        runId: fixture.runId,
-        assistantMessageId: fixture.messageId,
-        userId: fixture.userId,
-        toolCallId: "call_fresh",
-        toolName: "send_email",
-        source: "mcp",
-        riskClass: "destructive",
-        approvalId: "approval_fresh",
-        status: "pending",
-        createdAt: 1,
-        expiresAt: NOW + 60_000,
-      },
-      {
-        // Pre-expiry-field row: undefined must be excluded, not treated as
-        // instantly expired (undefined < now in index order — race #36).
-        _id: asId<"toolApprovalRequests">("approval_request_legacy"),
-        _creationTime: 1,
-        chatId: fixture.chatId,
-        runId: fixture.runId,
-        assistantMessageId: fixture.messageId,
-        userId: fixture.userId,
-        toolCallId: "call_legacy",
-        toolName: "send_email",
-        source: "mcp",
-        riskClass: "destructive",
-        approvalId: "approval_legacy",
-        status: "pending",
-        createdAt: 1,
-      }
-    )
+    fixture.tables.toolApprovalRequests.push({
+      _id: asId<"toolApprovalRequests">("approval_request_fresh"),
+      _creationTime: 1,
+      chatId: fixture.chatId,
+      runId: fixture.runId,
+      assistantMessageId: fixture.messageId,
+      userId: fixture.userId,
+      toolCallId: "call_fresh",
+      toolName: "send_email",
+      source: "mcp",
+      riskClass: "destructive",
+      approvalId: "approval_fresh",
+      status: "pending",
+      createdAt: 1,
+      expiresAt: NOW + 60_000,
+    })
     const { ctx } = createMutationCtx(fixture.tables)
 
     const result = await reapExpiredToolApprovalsPass(ctx)
 
     expect(result).toEqual({ expired: 0 })
-    expect(
-      fixture.tables.toolApprovalRequests.map((approval) => approval.status)
-    ).toEqual(["pending", "pending"])
+    expect(fixture.tables.toolApprovalRequests[0]?.status).toBe("pending")
     expect(fixture.run.status).toBe("awaiting_approval")
   })
 })
@@ -3982,6 +3967,7 @@ describe("resolved-approvals-without-continuation reaper", () => {
       approvalId: `approval_${index}`,
       status: "approved",
       createdAt: 1,
+      expiresAt: 60_000,
       resolvedAt: NOW - GRACE,
     }))
     const { ctx, tables } = createMutationCtx({
@@ -4167,6 +4153,8 @@ describe("pending-only approval resolution", () => {
       _creationTime: 1,
       userId: world.userId,
       name: "Deleting project",
+      updatedAt: 1,
+      pinned: false,
       deletingAt: EXPIRY - 2,
     }
     world.chat.projectId = project._id
@@ -5074,6 +5062,7 @@ describe("denyPendingApprovalsForChat", () => {
       approvalId: "approval_1",
       status: "pending",
       createdAt: 1,
+      expiresAt: 60_000,
     }
     const otherUserRequest: Doc<"toolApprovalRequests"> = {
       ...request,
@@ -5732,6 +5721,7 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
       approvalId: "appr_1",
       status: "pending",
       createdAt: 1,
+      expiresAt: 60_000,
     })
     const { ctx, tables } = createMutationCtx(fixture.tables)
 

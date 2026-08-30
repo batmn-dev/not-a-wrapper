@@ -47,9 +47,9 @@ export type ExtendedUIMessage = UIMessage & {
 type MessagesContextType = {
   messages: ExtendedUIMessage[]
   /**
-   * Raw durable facts about the chat's current run, atomically consistent
-   * with `messages` in one Convex query. Null for guests,
-   * public/non-owner viewers, and chats with no current run. Carries NO
+   * Raw durable facts about the chat's current run. The path and run queries
+   * are delivered from one Convex transition. Null for guests,
+   * public/non-owner viewers, and chats with no current run. Carries no
    * time-derived fields; the pure presentation resolver owns clock
    * classification.
    */
@@ -64,16 +64,6 @@ type MessagesContextType = {
   resetMessages: () => Promise<void>
   selectMessageBranch: (messageId: string) => Promise<void>
 }
-
-/**
- * Experiment 2 rollout seam (build-time): split the selected-conversation
- * subscription into path + run-state queries. Default ON since the adoption
- * evidence closed (ADR-0027, accepted 2026-08-28: pause-window delivery
- * −98.6%, regression suite in noise). Rollback: build with
- * NEXT_PUBLIC_SPLIT_SELECTED_QUERY=false to restore the atomic query.
- */
-const SPLIT_SELECTED_QUERY =
-  process.env.NEXT_PUBLIC_SPLIT_SELECTED_QUERY !== "false"
 
 const MessagesContext = createContext<MessagesContextType | null>(null)
 
@@ -92,52 +82,27 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   const isValidConvexId = messagePersistenceMode === "server"
 
-  // Selected-conversation subscription(s). Split mode (Experiment 2): the
-  // message path and the tiny run state subscribe separately, so run-doc
-  // writes (deduped beats, heartbeats, tool steps) no longer re-deliver the
-  // whole path. Both queries are keyed on chatId only and live on one Convex
-  // client, so their values always come from one transition — no value-level
-  // tearing (see the note on getSelectedConversation in convex/messages.ts).
-  // The atomic query remains the rollback path. Either way, the Per-user
-  // subscription seam gates on Convex auth readiness.
-  const atomic = usePerUserQuery(
-    api.messages.getSelectedConversation,
-    isValidConvexId && !SPLIT_SELECTED_QUERY
-      ? { chatId: chatId as Id<"chats"> }
-      : "skip"
-  )
-  const splitPath = usePerUserQuery(
+  // The path and run state subscribe separately so run-only writes do not
+  // re-deliver the full message path. Both queries use the same chatId and
+  // Convex client, so their values are delivered from one transition.
+  const pathQuery = usePerUserQuery(
     api.messages.getSelectedPath,
-    isValidConvexId && SPLIT_SELECTED_QUERY
-      ? { chatId: chatId as Id<"chats"> }
-      : "skip"
+    isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
   )
-  const splitRun = usePerUserQuery(
+  const runStateQuery = usePerUserQuery(
     api.messages.getSelectedRunState,
-    isValidConvexId && SPLIT_SELECTED_QUERY
-      ? { chatId: chatId as Id<"chats"> }
-      : "skip"
+    isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
   )
-  const canSubscribeToMessages = SPLIT_SELECTED_QUERY
-    ? splitPath.isAuthReady
-    : atomic.isAuthReady
-  const isMessagesLoading = SPLIT_SELECTED_QUERY
-    ? splitPath.isLoading || splitRun.isLoading
-    : atomic.isLoading
-  const convexMessages = SPLIT_SELECTED_QUERY
-    ? splitPath.data?.selectedMessages
-    : atomic.data?.selectedMessages
-  const rawSelectedRun = SPLIT_SELECTED_QUERY
-    ? (splitRun.data ?? null)
-    : (atomic.data?.selectedRun ?? null)
-  // Client half of the §7 validation gauntlet in split mode: a run may drive
+  const canSubscribeToMessages = pathQuery.isAuthReady
+  const isMessagesLoading = pathQuery.isLoading || runStateQuery.isLoading
+  const convexMessages = pathQuery.data?.selectedMessages
+  const rawSelectedRun = runStateQuery.data ?? null
+  // Client half of the run validation: a run may drive
   // presentation only while its assistant message is on the DELIVERED
   // selected path (the points-back half stayed server-side). Same-transition
-  // delivery makes this check sound; "run known, path unknown" resolves to
-  // null exactly as the atomic query resolved it.
+  // delivery makes this check sound; "run known, path unknown" resolves null.
   const selectedRun = useMemo(() => {
     if (!canSubscribeToMessages || !rawSelectedRun) return null
-    if (!SPLIT_SELECTED_QUERY) return rawSelectedRun
     const onDeliveredPath =
       convexMessages?.some(
         (message) => message._id === rawSelectedRun.assistantMessageId

@@ -412,10 +412,7 @@ export default defineSchema({
     resolvedAt: v.optional(v.number()),
     resolvedByUserId: v.optional(v.id("users")),
     // Approval pauses are lease-free with their own expiry.
-    // Backfill pending rows before enabling the approval reaper — the
-    // undefined-first index ordering would otherwise expire them instantly;
-    // the reaper range excludes undefined regardless.
-    expiresAt: v.optional(v.number()),
+    expiresAt: v.number(),
   })
     .index("by_user_status", ["userId", "status"])
     .index("by_chat_status", ["chatId", "status"])
@@ -427,12 +424,8 @@ export default defineSchema({
     userId: v.id("users"),
     name: v.string(),
     // Last durable user-visible change to the project or one of its chats.
-    // Optional during the initial production backfill; readers fall back to
-    // `_creationTime` until a legacy row is touched.
-    updatedAt: v.optional(v.number()),
-    // Optional while this first reaches production so existing smoke-test rows
-    // remain valid; false/undefined are intentionally equivalent.
-    pinned: v.optional(v.boolean()),
+    updatedAt: v.number(),
+    pinned: v.boolean(),
     // Deletion tombstone (logical deletion is immediate; physical cleanup is a
     // scheduled drain — see deletionJobs). A set value makes the project
     // invisible and write-dead on every surface. Never cleared once set.

@@ -3,7 +3,6 @@
 export const NON_AUTH_DAILY_MESSAGE_LIMIT = 5
 export const AUTH_DAILY_MESSAGE_LIMIT = 1000
 export const REMAINING_QUERY_ALERT_THRESHOLD = 2
-export const DAILY_FILE_UPLOAD_LIMIT = 5
 
 export const NON_AUTH_ALLOWED_MODELS = ["gpt-5-mini"]
 
@@ -17,9 +16,6 @@ export const FREE_MODELS_IDS = [
 
 export const MODEL_DEFAULT_ANONYMOUS = "gpt-5-mini"
 export const MODEL_DEFAULT_AUTHENTICATED = "gpt-5-mini"
-
-// Legacy alias retained for call sites that still import a single default.
-export const MODEL_DEFAULT = MODEL_DEFAULT_AUTHENTICATED
 
 export function getDefaultModelForUser(isAuthenticated: boolean): string {
   return isAuthenticated ? MODEL_DEFAULT_AUTHENTICATED : MODEL_DEFAULT_ANONYMOUS
@@ -41,7 +37,6 @@ export const ANTHROPIC_BETA_HEADERS = {
 
 // MCP Integration
 
-export const MAX_MCP_SERVERS_PER_USER = 10
 export const MAX_TOOL_RESULT_SIZE = 100 * 1024 // 100KB
 export const MCP_CONNECTION_TIMEOUT_MS = 5000
 
@@ -143,14 +138,3 @@ export const TOOL_BUDGET_LIMITS = {
 export const HISTORY_REPLAY_COMPILER_V1 =
   process.env.HISTORY_REPLAY_COMPILER_V1 === "1" ||
   process.env.HISTORY_REPLAY_COMPILER_V1 === "true"
-export const HISTORY_REPLAY_NORMALIZER_VERSION = 1
-
-// Sub-Agent Model Configuration
-
-export const SUB_AGENT_MODELS = {
-  orchestrator: "claude-opus-4-5-20250929",
-  codeAssistant: "claude-haiku-4-5-20250929",
-  writingEditor: "claude-sonnet-4-5-20250929",
-  researchAnalyst: "claude-sonnet-4-5-20250929",
-  dataAnalyst: "claude-sonnet-4-5-20250929",
-} as const

@@ -1,0 +1,21 @@
+{
+  "kind": "convex-schema-contraction",
+  "id": "2026-08-30-prompt-suggestions-removal",
+  "status": "contracted",
+  "description": "Remove the retired userPreferences.promptSuggestions field after aggregate production verification found no documents containing it.",
+  "fields": [
+    {
+      "table": "userPreferences",
+      "field": "promptSuggestions",
+      "expectedCount": 0
+    }
+  ],
+  "cleanupFunction": "none: aggregate production verification found zero rows with userPreferences.promptSuggestions",
+  "verifier": "bun run convex:schema-preflight",
+  "rollback": "Reintroduce userPreferences.promptSuggestions as an optional field in convex/schema.ts, deploy the compatibility schema, then retry the contraction after aggregate verification returns zero.",
+  "notes": {
+    "verifiedAt": "2026-08-30",
+    "productionCount": 0,
+    "documentContentsPolicy": "Only an aggregate count was queried; no production document contents were printed."
+  }
+}

@@ -57,12 +57,16 @@ describe("tool-call history deletion projection", () => {
       _creationTime: 1,
       userId: user._id,
       name: "Active",
+      updatedAt: 1,
+      pinned: false,
     }
     const deletingProject: Doc<"projects"> = {
       _id: asId<"projects">("project-deleting"),
       _creationTime: 1,
       userId: user._id,
       name: "Deleting",
+      updatedAt: 1,
+      pinned: false,
       deletingAt: 2,
     }
     const activeChat = chat("chat-active", user._id, {

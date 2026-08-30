@@ -53,7 +53,7 @@ const DialogAuth = dynamic(
 export type ChatProjectContext = {
   id: Id<"projects">
   name: string
-  pinned?: boolean
+  pinned: boolean
 }
 
 /**

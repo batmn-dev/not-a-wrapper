@@ -34,8 +34,9 @@ function project(
     _creationTime: options.created ?? 1,
     userId: "user",
     name: id,
+    updatedAt: options.created ?? 1,
     pinned: options.pinned ?? false,
-  } as unknown as Doc<"projects"> & { pinned: boolean }
+  } as unknown as Doc<"projects">
 }
 
 describe("sidebar grouping composition", () => {

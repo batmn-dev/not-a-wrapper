@@ -9,7 +9,6 @@ import {
   getForChatHandler,
   getLastMessagesHandler,
   getPublicForChatHandler,
-  getSelectedConversationForViewer,
   getSelectedPathForViewer,
   getSelectedRunStateForViewer,
   selectBranchForChat,
@@ -207,6 +206,8 @@ describe("getPublicForChatHandler", () => {
       _creationTime: 1,
       userId: user._id,
       name: "Deleting",
+      updatedAt: 1,
+      pinned: false,
       deletingAt: 2,
     }
     chat.projectId = project._id
@@ -364,7 +365,7 @@ describe("message branch selection", () => {
 
 })
 
-describe("getSelectedConversation", () => {
+describe("selected conversation projections", () => {
   function createRunWorld({
     runStatus = "streaming" as Doc<"generationRuns">["status"],
     assistantSelected = true,
@@ -413,41 +414,13 @@ describe("getSelectedConversation", () => {
     return { user, chat, userId, chatId, runId, assistantId, messages, run }
   }
 
-  it("returns messages and the linked run's raw facts atomically for the owner", async () => {
+  it("returns the selected path and linked run facts for the owner", async () => {
     const world = createRunWorld()
     const { ctx } = createMutationCtx({
       users: [world.user],
       chats: [world.chat],
       messages: world.messages,
       generationRuns: [world.run],
-      toolInvocations: [
-        {
-          _id: asId<"toolInvocations">("tool_invocation_1"),
-          _creationTime: 1,
-          runId: world.runId,
-          chatId: world.chatId,
-          messageId: world.assistantId,
-          toolCallId: "call_1",
-          toolName: "web_search",
-          source: "builtin",
-          status: "called",
-          createdAt: 1,
-          updatedAt: 1,
-        },
-        {
-          _id: asId<"toolInvocations">("tool_invocation_2"),
-          _creationTime: 1,
-          runId: world.runId,
-          chatId: world.chatId,
-          messageId: world.assistantId,
-          toolCallId: "call_2",
-          toolName: "extract_content",
-          source: "builtin",
-          status: "completed",
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      ],
       toolApprovalRequests: [
         {
           _id: asId<"toolApprovalRequests">("approval_request_1"),
@@ -468,26 +441,29 @@ describe("getSelectedConversation", () => {
       ],
     })
 
-    const projection = await getSelectedConversationForViewer(ctx, {
-      chat: world.chat,
-      viewer: world.user,
-    })
+    const viewer = { chat: world.chat, viewer: world.user }
+    const path = await getSelectedPathForViewer(ctx, viewer)
+    const runState = await getSelectedRunStateForViewer(ctx, viewer)
 
-    expect(
-      projection.selectedMessages.map((message) => message._id)
-    ).toEqual(["message_user_1", "message_assistant_1"])
-    expect(projection.selectedRun).toMatchObject({
+    expect(path.selectedMessages.map((message) => message._id)).toEqual([
+      "message_user_1",
+      "message_assistant_1",
+    ])
+    expect(path.selectedMessages[1]?.generationRunId).toBe(world.runId)
+    expect(path.pathVersion).toMatchObject({
+      count: 2,
+      tailMessageId: world.assistantId,
+    })
+    expect(runState).toMatchObject({
       runId: world.runId,
       assistantMessageId: world.assistantId,
       status: "streaming",
       leaseExpiresAt: 46_000,
-      // Experiment 2 §6.1: the projection carries approval presence +
-      // expiry only; the approval UI reads message parts, not this wire.
       pendingApproval: { expiresAt: 90_000 },
     })
   })
 
-  it("returns selectedRun null to a public non-owner viewer (no run metadata leaks)", async () => {
+  it("does not expose run metadata to a public non-owner viewer", async () => {
     const world = createRunWorld({ publicChat: true })
     // The viewer is authenticated but does NOT own the chat.
     world.chat.userId = asId<"users">("user_other")
@@ -506,71 +482,17 @@ describe("getSelectedConversation", () => {
       generationRuns: [world.run],
     })
 
-    const projection = await getSelectedConversationForViewer(ctx, {
-      chat: world.chat,
-      viewer: world.user,
-    })
+    const viewer = { chat: world.chat, viewer: world.user }
+    const path = await getSelectedPathForViewer(ctx, viewer)
+    const runState = await getSelectedRunStateForViewer(ctx, viewer)
 
-    expect(projection.selectedMessages.length).toBeGreaterThan(0)
-    expect(projection.selectedRun).toBeNull()
-    // The message docs carry the run linkage too — nulling `selectedRun`
-    // while returning raw docs would still leak run ids to a public viewer.
-    for (const message of projection.selectedMessages) {
+    expect(path.selectedMessages.length).toBeGreaterThan(0)
+    expect(runState).toBeNull()
+    for (const message of path.selectedMessages) {
       expect(message).not.toHaveProperty("generationRunId")
       expect(message).not.toHaveProperty("requestId")
+      expect(message.status).not.toBe("awaiting_approval")
     }
-  })
-
-  it("keeps run linkage on message docs for the owner", async () => {
-    const world = createRunWorld()
-    const { ctx } = createMutationCtx({
-      users: [world.user],
-      chats: [world.chat],
-      messages: world.messages,
-      generationRuns: [world.run],
-    })
-
-    const projection = await getSelectedConversationForViewer(ctx, {
-      chat: world.chat,
-      viewer: world.user,
-    })
-
-    expect(
-      projection.selectedMessages.some(
-        (message) => message.generationRunId !== undefined
-      )
-    ).toBe(true)
-  })
-
-  it("returns no run when the linked assistant message is off the selected path", async () => {
-    const world = createRunWorld({ assistantSelected: false })
-    // A selected sibling displaces the run's message from the selected path.
-    world.messages.push({
-      ...createMessage({
-        id: "message_assistant_2",
-        orderId: 1,
-        role: "assistant",
-        content: "other branch",
-        parentMessageId: asMessageId("message_user_1"),
-        branchIndex: 1,
-        selected: true,
-      }),
-    })
-    world.messages[1].parentMessageId = asMessageId("message_user_1")
-    world.messages[1].branchIndex = 0
-    const { ctx } = createMutationCtx({
-      users: [world.user],
-      chats: [world.chat],
-      messages: world.messages,
-      generationRuns: [world.run],
-    })
-
-    const projection = await getSelectedConversationForViewer(ctx, {
-      chat: world.chat,
-      viewer: world.user,
-    })
-
-    expect(projection.selectedRun).toBeNull()
   })
 
   it("keeps projecting a terminal current run with its terminal reason (convergence metadata)", async () => {
@@ -582,47 +504,18 @@ describe("getSelectedConversation", () => {
       generationRuns: [world.run],
     })
 
-    const projection = await getSelectedConversationForViewer(ctx, {
+    const runState = await getSelectedRunStateForViewer(ctx, {
       chat: world.chat,
       viewer: world.user,
     })
 
-    expect(projection.selectedRun).toMatchObject({
+    expect(runState).toMatchObject({
       status: "failed",
       terminalReason: "lease_expired",
     })
   })
 
-  // Experiment 2: the split halves must reproduce the atomic projection —
-  // same message derivation code, same run gauntlet minus the on-path half,
-  // which the client provider enforces against the delivered path.
-  it("split halves reproduce the atomic projection for the owner", async () => {
-    const world = createRunWorld()
-    const { ctx } = createMutationCtx({
-      users: [world.user],
-      chats: [world.chat],
-      messages: world.messages,
-      generationRuns: [world.run],
-    })
-    const viewer = { chat: world.chat, viewer: world.user }
-
-    const atomic = await getSelectedConversationForViewer(ctx, viewer)
-    const path = await getSelectedPathForViewer(ctx, viewer)
-    const runState = await getSelectedRunStateForViewer(ctx, viewer)
-
-    expect(path.selectedMessages).toEqual(atomic.selectedMessages)
-    expect(runState).toEqual(atomic.selectedRun)
-    expect(path.pathVersion.count).toBe(path.selectedMessages.length)
-    expect(path.pathVersion.tailMessageId).toBe(
-      path.selectedMessages.at(-1)?._id ?? null
-    )
-  })
-
-  it("split run half keeps points-back server-side and leaves on-path to the client", async () => {
-    // A run whose assistant message exists but is OFF the selected path:
-    // the atomic query nulls it (on-path fails); the split run half still
-    // returns it (points-back holds) — the provider nulls it against the
-    // delivered path. Both are recorded behaviors, not accidents.
+  it("keeps points-back server-side and leaves on-path validation to the client", async () => {
     const world = createRunWorld({ assistantSelected: false })
     world.messages.push(
       createMessage({
@@ -630,9 +523,13 @@ describe("getSelectedConversation", () => {
         orderId: 1,
         role: "assistant",
         content: "the selected sibling",
+        parentMessageId: asMessageId("message_user_1"),
+        branchIndex: 1,
         selected: true,
       })
     )
+    world.messages[1].parentMessageId = asMessageId("message_user_1")
+    world.messages[1].branchIndex = 0
     const { ctx } = createMutationCtx({
       users: [world.user],
       chats: [world.chat],
@@ -641,12 +538,9 @@ describe("getSelectedConversation", () => {
     })
     const viewer = { chat: world.chat, viewer: world.user }
 
-    const atomic = await getSelectedConversationForViewer(ctx, viewer)
     const runState = await getSelectedRunStateForViewer(ctx, viewer)
 
-    expect(atomic.selectedRun).toBeNull()
     expect(runState?.runId).toBe(world.runId)
-    // The client-side check the provider performs:
     const path = await getSelectedPathForViewer(ctx, viewer)
     const onDeliveredPath = path.selectedMessages.some(
       (message) => message._id === runState?.assistantMessageId
@@ -654,13 +548,7 @@ describe("getSelectedConversation", () => {
     expect(onDeliveredPath).toBe(false)
   })
 
-  it("split run half never reads the message doc while the run is live", async () => {
-    // The trim's read-set property (Experiment 2 finding 1): with
-    // `activeStreamId` stamped, points-back is decided from the run doc
-    // alone — so content beats, which write only the message doc, cannot
-    // re-execute the run half. The message read survives only as the
-    // settled-run fallback (covered by the point-back-null test, which
-    // clears `activeStreamId`).
+  it("does not read the message doc while the run is live", async () => {
     const world = createRunWorld()
     const { ctx } = createMutationCtx({
       users: [world.user],
@@ -684,7 +572,7 @@ describe("getSelectedConversation", () => {
     expect(readIds).toEqual([world.runId])
   })
 
-  it("split run half returns null when the linked message does not point back", async () => {
+  it("returns null when the settled linked message does not point back", async () => {
     const world = createRunWorld()
     world.messages[1] = {
       ...world.messages[1],
@@ -703,28 +591,5 @@ describe("getSelectedConversation", () => {
         viewer: world.user,
       })
     ).toBeNull()
-  })
-
-  it("split halves deny non-owner viewers exactly as the atomic query does", async () => {
-    const world = createRunWorld({ publicChat: true })
-    world.chat.userId = asId<"users">("user_other")
-    const { ctx } = createMutationCtx({
-      users: [world.user],
-      chats: [world.chat],
-      messages: world.messages,
-      generationRuns: [world.run],
-    })
-    const viewer = { chat: world.chat, viewer: world.user }
-
-    const atomic = await getSelectedConversationForViewer(ctx, viewer)
-    const path = await getSelectedPathForViewer(ctx, viewer)
-    const runState = await getSelectedRunStateForViewer(ctx, viewer)
-
-    expect(runState).toBeNull()
-    expect(path.selectedMessages).toEqual(atomic.selectedMessages)
-    for (const message of path.selectedMessages) {
-      expect(message.generationRunId).toBeUndefined()
-      expect(message.status === "awaiting_approval").toBe(false)
-    }
   })
 })

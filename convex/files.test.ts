@@ -152,6 +152,8 @@ describe("attachment reads", () => {
       _creationTime: 1,
       userId,
       name: "Deleting",
+      updatedAt: 1,
+      pinned: false,
       deletingAt: 2,
     }
     const chat: Doc<"chats"> = {
