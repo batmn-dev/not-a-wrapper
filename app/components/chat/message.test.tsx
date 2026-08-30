@@ -200,7 +200,7 @@ describe("Message memoization", () => {
   })
 })
 
-describe("Message body memo contract (R3)", () => {
+describe("Message body memo contract", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 

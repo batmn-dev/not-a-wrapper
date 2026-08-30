@@ -233,7 +233,6 @@ function makeFetchMutation() {
       return {
         runId: "run1",
         assistantMessageId: "msg1",
-        assistantOrder: 1,
         messages: [],
       }
     }
@@ -872,7 +871,6 @@ describe("createChatTurnRuntime — prepare()", () => {
         return {
           runId: "run1",
           assistantMessageId: "msg2",
-          assistantOrder: 3,
           messages: [
             {
               _id: "doc1",
@@ -962,7 +960,6 @@ describe("createChatTurnRuntime — generated titles", () => {
         return {
           runId: "run1",
           assistantMessageId: "msg1",
-          assistantOrder: 1,
           messages: [],
           titleGeneration: 1,
         }
@@ -1042,7 +1039,6 @@ describe("createChatTurnRuntime — generated titles", () => {
         return {
           runId: "run1",
           assistantMessageId: "msg1",
-          assistantOrder: 1,
           messages: [],
           titleGeneration: 1,
         }

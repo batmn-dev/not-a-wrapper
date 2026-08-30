@@ -1,5 +1,5 @@
 /**
- * Live-stream adoption-loss reproducer (TODO investigation, 2026-08-28).
+ * Live-stream adoption-loss regression reproducer (fix documented 2026-08-28).
  *
  * Repeats the durable first-send flow N times and classifies each run:
  * adopted (local stream marks fired) vs lost (settlement receipt only — the

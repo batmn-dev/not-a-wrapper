@@ -87,7 +87,7 @@ itself with a real-looking url. It does not error; it returns confidently wrong
 
 ## Tables you'll usually want
 
-`chats`, `messages`, `generationRuns`, `assistantMessageSnapshots`,
-`toolInvocations`, `toolCallLog`, `toolApprovalRequests`, `toolLimitBuckets`,
+`chats`, `messages`, `generationRuns`, `toolInvocations`, `toolCallLog`,
+`toolApprovalRequests`, `toolLimitBuckets`,
 `users`, `userKeys`, `userPreferences`, `projects`, `mcpServers`,
 `mcpToolApprovals`, `chatAttachments`, `anonymousUsage`, `feedback`.

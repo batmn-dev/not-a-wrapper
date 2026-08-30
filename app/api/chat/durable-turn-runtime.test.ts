@@ -80,7 +80,6 @@ function makeStoredUserMessage() {
 type PrepareResult = {
   runId: string
   assistantMessageId: string
-  assistantOrder: number
   messages: unknown[]
 }
 
@@ -97,7 +96,6 @@ function makeRecordingFetchMutation(
   const prepareResult: PrepareResult = overrides.prepareResult ?? {
     runId: "run1",
     assistantMessageId: "msg1",
-    assistantOrder: 2,
     messages: [makeStoredUserMessage()],
   }
   return vi.fn(async (ref: unknown, args: unknown, opts?: unknown) => {

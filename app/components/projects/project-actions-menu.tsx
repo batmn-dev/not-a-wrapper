@@ -31,8 +31,8 @@ type ProjectActionsMenuProps = {
   triggerAriaLabel?: string
   /**
    * Custom trigger element (with its own glyph children); falls back to the
-   * shared sidebar ⋯ chip. Lets the sidebar row and the Projects directory row
-   * share one menu while owning their own trigger styling.
+   * shared sidebar ⋯ chip. Each surface can own its trigger styling while
+   * sharing the same project-action behavior.
    */
   trigger?: ReactElement
   contentAlign?: "start" | "center" | "end"
@@ -41,8 +41,8 @@ type ProjectActionsMenuProps = {
 }
 
 // Project adapter over the Row-actions menu, owning its delete-confirmation
-// dialog. Sidebar and directory surfaces share the shell while supplying only
-// the actions each surface actually exposes.
+// dialog. Sidebar, directory, and project-detail surfaces share the shell while
+// supplying only the actions each surface actually exposes.
 export function ProjectActionsMenu({
   project,
   onStartEditing,
@@ -62,10 +62,7 @@ export function ProjectActionsMenu({
     {
       key: "pin",
       icon: (
-        <Icon
-          icon={isPinned ? RiUnpinFill : RiPushpin2Line}
-          slotSize={20}
-        />
+        <Icon icon={isPinned ? RiUnpinFill : RiPushpin2Line} slotSize={20} />
       ),
       label: isDirectory
         ? `${isPinned ? "Unpin" : "Pin"} project`

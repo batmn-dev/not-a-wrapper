@@ -18,8 +18,8 @@ The bypass was not hypothetical. The contract had already drifted —
 `"Not authorized"`, and `messages.clearForChat` hand-copied the whole ownership
 block. Each new bypass handler was one forgotten ownership comparison away from
 an IDOR. The deletion test confirmed the seam carried no structural weight:
-deleting `lib/auth.ts` left most handlers compiling, because they never imported
-it.
+deleting `convex/lib/auth.ts` left most handlers compiling, because they never
+imported it.
 
 ## Decision
 
@@ -46,7 +46,7 @@ The builder set covers the authorization taxonomy:
   declares its resource id arg and passes it through, so handlers keep using it
   and simply drop their own check.
 
-The builders reuse the `lib/auth.ts` helpers as their injection bodies;
+The builders reuse the `convex/lib/auth.ts` helpers as their injection bodies;
 `requireOwnedMcpServer` was added there with the canonical contract, which fixes
 the `mcpServers` `"Server not found"` drift. `chatRuntime`'s duplicate
 `requireChatOwner` now delegates to `requireOwnedChat`, leaving one owned-chat
@@ -65,7 +65,7 @@ inference; hand-rolling it was the rejected alternative).
 - Auth is structural: a new handler is authenticated and ownership-checked by
   construction, and the lint rule blocks regressions. Forgetting the check stops
   being possible rather than being a review catch.
-- Auth logic concentrates in `lib/auth.ts` (the builder internals) — proven once
+- Auth logic concentrates in `convex/lib/auth.ts` (the builder internals) — proven once
   per helper, inherited by every handler. Per-handler auth tests collapse; the
   helper tests (including the new owned-MCP-server contract) are the coverage.
 - Deliberately out of scope: `internalQuery`/`internalMutation` (no client
@@ -76,8 +76,8 @@ inference; hand-rolling it was the rejected alternative).
 - A latent file-URL IDOR was fixed in the same pass: `files.getUrl` returned a
   storage URL for any id with no auth; it now requires the caller to own a
   chatAttachment backed by that id.
-- `mcpToolCallLog` was found dead (no references; the live module is
-  `toolCallLog`) and is marked for removal.
+- `mcpToolCallLog` was removed after a caller sweep found no references; the
+  live module remains `toolCallLog`.
 
 ## Addendum (2026-07-06): run-scoped builder
 
@@ -86,7 +86,7 @@ pass left hand-rolled: `markGenerationRunCompleted`/`Failed`/`Aborted`,
 `updateAssistantSnapshot`, `createToolApprovalRequest`, and
 `recordToolInvocations` each repeated a `db.get(runId)` → existence-check →
 `requireChatOwner(run.chatId)` prologue. A new `ownedGenerationRunMutation`
-builder (over a new `requireOwnedGenerationRun` helper in `lib/auth.ts`) keys on
+builder (over a new `requireOwnedGenerationRun` helper in `convex/lib/auth.ts`) keys on
 `runId`, resolves ownership **transitively** through `run.chatId`, and injects
 `ctx.run`/`ctx.chat`/`ctx.user`. Handler bodies became auth-free logic cores
 taking the injected `AuthenticatedRunOwner`.

@@ -235,7 +235,7 @@ export const TOOL_PROVIDER_IDENTITY: Record<ToolProvider, ToolProviderIdentity> 
       description:
         "Web scraping and content extraction. Enables structured data extraction from web pages.",
       costEstimate: "~$0.001 per page",
-      available: false, // Not yet integrated — Phase 7
+      available: false,
       envVarName: "FIRECRAWL_API_KEY",
       keySetup: {
         placeholder: "fc-...",

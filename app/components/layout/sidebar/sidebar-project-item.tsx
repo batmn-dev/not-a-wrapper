@@ -1,10 +1,10 @@
 "use client"
 
+import { ProjectActionsMenu } from "@/app/components/projects/project-actions-menu"
 import { useRenameProject } from "@/app/components/projects/use-rename-project"
 import type { Id } from "@/convex/_generated/dataModel"
 import { RiFolderLine, RiFolderOpenFill } from "@remixicon/react"
 import { usePathname } from "next/navigation"
-import { SidebarProjectActionsMenu } from "./sidebar-project-actions-menu"
 import { SidebarRow } from "./sidebar-row"
 import { SidebarRowActions } from "./sidebar-row-actions"
 import { SidebarPinAction } from "./trailing-icon-button"
@@ -54,11 +54,13 @@ export function SidebarProjectItem({
             onTogglePinned={onTogglePinned}
             isPending={isPinPending}
           />
-          <SidebarProjectActionsMenu
+          <ProjectActionsMenu
             project={project}
             onStartEditing={startRename}
             onTogglePinned={onTogglePinned}
+            isPinned={project.pinned}
             isPinPending={isPinPending}
+            triggerAriaLabel={`Open project options for ${displayName}`}
           />
         </SidebarRowActions>
       )}

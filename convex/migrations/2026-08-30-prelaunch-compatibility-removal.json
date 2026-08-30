@@ -1,0 +1,34 @@
+{
+  "kind": "convex-schema-contraction",
+  "id": "2026-08-30-prelaunch-compatibility-removal",
+  "status": "contracted",
+  "description": "Remove schema-only pre-launch compatibility fields after the explicitly disposable production deployment was wiped and aggregate verification returned zero rows.",
+  "fields": [
+    {
+      "table": "generationRuns",
+      "field": "chatVersion",
+      "expectedCount": 0
+    },
+    {
+      "table": "users",
+      "field": "dailyProMessageCount",
+      "expectedCount": 0
+    },
+    {
+      "table": "users",
+      "field": "dailyProReset",
+      "expectedCount": 0
+    }
+  ],
+  "cleanupFunction": "none: production was explicitly marked disposable and cleared with an empty Convex snapshot import before contraction",
+  "verifier": "bun run convex:schema-preflight",
+  "rollback": "Reintroduce the removed fields as optional in convex/schema.ts if an older deployment must be restored.",
+  "notes": {
+    "verifiedAt": "2026-08-30",
+    "productionDeployment": "tidy-clam-680",
+    "postWipeUsersCount": 0,
+    "postWipeGenerationRunsCount": 0,
+    "assistantMessageSnapshotsCount": 0,
+    "documentContentsPolicy": "Only aggregate counts were queried; no production document contents were printed."
+  }
+}

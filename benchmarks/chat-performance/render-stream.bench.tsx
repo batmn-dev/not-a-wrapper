@@ -1,5 +1,5 @@
 /**
- * Streaming-render benchmark (plan PR 0a: Markdown/Shiki direction).
+ * Streaming-render benchmark for Markdown/Shiki scaling (ADR-0016).
  *
  * Reproduces the two supplied client findings against the real production
  * modules:
@@ -97,7 +97,7 @@ console.log(
 
 // Same themes as production; the language actually exercised plus the `text`
 // fallback keeps highlighter startup bounded. Initialization is recorded
-// separately from highlight cost (plan PR 3 step 7 distinguishes them).
+// separately from highlight cost.
 const initStart = performance.now()
 const highlighter = await createHighlighter({
   themes: ["github-dark", "github-light"],
@@ -111,8 +111,8 @@ console.log(
 
 // Tail-growth states: the SAME small terminal paragraph grows by a few
 // characters per update on top of a fixed completed prefix. Under the full
-// splitter, per-update cost tracks total accumulated size; the plan's §6
-// gate is that incremental projection makes it track the tail instead.
+// splitter, per-update cost tracks total accumulated size; the ADR-0016 gate
+// is that incremental projection makes it track the tail instead.
 function sampleTailGrowthStates(base: string, steps = 40): string[] {
   const states: string[] = []
   let tail = ""

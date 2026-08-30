@@ -60,10 +60,6 @@ export default defineSchema({
     dailyMessageCount: v.optional(v.number()),
     dailyReset: v.optional(v.number()), // Unix timestamp
 
-    // Production compatibility only; contract after old rows are gone.
-    dailyProMessageCount: v.optional(v.number()),
-    dailyProReset: v.optional(v.number()), // Unix timestamp
-
     lastActiveAt: v.optional(v.number()), // Unix timestamp
     lastSyncedFromWorkOSAt: v.optional(v.number()), // Unix timestamp
     workosUpdatedAt: v.optional(v.string()), // ISO timestamp from WorkOS
@@ -240,9 +236,6 @@ export default defineSchema({
     requestedGenerationBudget: v.optional(v.number()),
     appliedGenerationBudget: v.optional(v.number()),
     status: generationRunStatus,
-    // Compatibility field: no longer written, but production may still contain
-    // older run docs. Drop only after preflight proves zero legacy documents.
-    chatVersion: v.optional(v.number()),
     startedAt: v.optional(v.number()),
     // Provider-consumption boundary for assistant work timing. Optional for
     // compatibility with runs created before work-duration persistence.
@@ -344,23 +337,6 @@ export default defineSchema({
     cursor: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_name", ["name"]),
-
-  assistantMessageSnapshots: defineTable({
-    runId: v.id("generationRuns"),
-    chatId: v.id("chats"),
-    messageId: v.id("messages"),
-    order: v.number(),
-    stepOrder: v.number(),
-    sequence: v.number(),
-    format: v.union(v.literal("UIMessageChunk"), v.literal("text_snapshot")),
-    delta: v.optional(v.string()),
-    payload: v.optional(v.any()),
-    textSnapshot: v.optional(v.string()),
-    partsSnapshot: v.optional(v.any()),
-    createdAt: v.number(),
-  })
-    .index("by_run_sequence", ["runId", "sequence"])
-    .index("by_chat_order", ["chatId", "order"]),
 
   toolInvocations: defineTable({
     runId: v.id("generationRuns"),

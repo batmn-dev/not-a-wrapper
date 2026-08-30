@@ -1600,7 +1600,6 @@ export function createConvexDurableTurn(args: {
       originalMessages = durableMessages
       const snapshotBase = {
         messageId: generation.assistantMessageId,
-        order: generation.assistantOrder,
       }
       snapshotTracker = createDurableSnapshotTracker({
         persist: (snapshotArgs) => {

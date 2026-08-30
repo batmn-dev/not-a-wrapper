@@ -99,7 +99,7 @@ describe("useReasoningPhase", () => {
     })
   }
 
-  // R1: a same-turn isLast true→false→true bounce (regenerate handoff) must
+  // A same-turn isLast true→false→true bounce (regenerate handoff) must
   // RESUME the timer, never restart it from 0 mid-stream.
   it("resumes (never regresses) across an isLast true→false→true bounce while thinking", () => {
     const thinking = reasoningPart("…", "streaming")
