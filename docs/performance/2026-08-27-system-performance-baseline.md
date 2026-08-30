@@ -1,5 +1,9 @@
 # System performance baseline — 2026-08-27
 
+> Historical baseline. Its B4 consolidation candidate was implemented on
+> 2026-08-30 as one atomic `usage.admit` mutation; the measured numbers and
+> original recommendation below remain unchanged as provenance.
+
 Phase 4 deliverable of the performance benchmarking plan. Contract:
 [`metric-dictionary.md`](./metric-dictionary.md) · harness:
 `benchmarks/chat-performance/browser/` (results file

@@ -2,11 +2,7 @@ import { getWorkosSession } from "@/lib/auth/workos"
 import { getToolDimensionForError } from "@/lib/observability/chat-error-taxonomy"
 import * as Sentry from "@sentry/nextjs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import {
-  checkServerSideUsage,
-  incrementServerSideUsage,
-  validateAndResolveChatCredential,
-} from "./api"
+import { admitServerSideUsage, validateAndResolveChatCredential } from "./api"
 import { createChatTurnRuntime } from "./chat-turn-runtime"
 import { preflightDurableGenerationInput } from "./durable-generation-input"
 import { PublicChatHttpError } from "./public-http-error"
@@ -40,8 +36,7 @@ vi.mock("@/lib/observability/chat-error-taxonomy", async (importActual) => {
 })
 
 vi.mock("./api", () => ({
-  checkServerSideUsage: vi.fn(),
-  incrementServerSideUsage: vi.fn(),
+  admitServerSideUsage: vi.fn(),
   validateAndResolveChatCredential: vi.fn(),
 }))
 
@@ -137,7 +132,7 @@ describe("/api/chat route", () => {
     expect(maxDuration).toBe(CHAT_ROUTE_MAX_DURATION_SECONDS)
   })
 
-  it("preserves check-resolve-increment ordering and passes one credential snapshot to the runtime", async () => {
+  it("admits before credential resolution and passes one credential snapshot to the runtime", async () => {
     const order: string[] = []
     const generationInput = makeGenerationInput()
     const admission = {
@@ -155,8 +150,8 @@ describe("/api/chat route", () => {
         source: "byok",
       },
     } as const
-    vi.mocked(checkServerSideUsage).mockImplementation(async () => {
-      order.push("check")
+    vi.mocked(admitServerSideUsage).mockImplementation(async () => {
+      order.push("admit")
     })
     vi.mocked(preflightDurableGenerationInput).mockImplementation(async () => {
       order.push("preflight")
@@ -165,9 +160,6 @@ describe("/api/chat route", () => {
     vi.mocked(validateAndResolveChatCredential).mockImplementation(async () => {
       order.push("resolve")
       return admission
-    })
-    vi.mocked(incrementServerSideUsage).mockImplementation(async () => {
-      order.push("increment")
     })
     const prepare = vi.fn(async () => {
       order.push("prepare")
@@ -188,10 +180,9 @@ describe("/api/chat route", () => {
 
     expect(await response.text()).toBe("ok")
     expect(order).toEqual([
-      "check",
+      "admit",
       "preflight",
       "resolve",
-      "increment",
       "runtime",
       "prepare",
       "response",
@@ -305,7 +296,7 @@ describe("/api/chat route", () => {
     })
     expect(response.status).toBe(400)
     expect(validateAndResolveChatCredential).not.toHaveBeenCalled()
-    expect(incrementServerSideUsage).not.toHaveBeenCalled()
+    expect(admitServerSideUsage).toHaveBeenCalledOnce()
     expect(createChatTurnRuntime).not.toHaveBeenCalled()
   })
 

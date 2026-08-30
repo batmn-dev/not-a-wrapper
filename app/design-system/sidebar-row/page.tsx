@@ -12,6 +12,7 @@ import { SidebarRowStates, SidebarRowStatuses } from "./demos"
 
 const statesCode = `"use client"
 
+import { ChatActionsMenu } from "@/app/components/layout/chat-actions-menu"
 import { SidebarRow } from "@/app/components/layout/sidebar/sidebar-row"
 import { SidebarRowEndSlot } from "@/app/components/layout/sidebar/sidebar-row-actions"
 import { SidebarPinAction } from "@/app/components/layout/sidebar/trailing-icon-button"
@@ -34,7 +35,7 @@ export function ChatRow({ chat }: { chat: Chat }) {
             itemType="Chat"
             onTogglePinned={togglePinned}
           />
-          {/* production rows continue with SidebarItemMenu(startRename) */}
+          <ChatActionsMenu chat={chat} onRename={startRename} />
         </SidebarRowEndSlot>
       )}
     />

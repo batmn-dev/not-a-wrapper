@@ -73,7 +73,7 @@ harness (local Convex, fixed fixtures) they gate with generous ceilings.
 |---|---|---|---|
 | `request_parse` | body `req.json()` + wire-contract validation | no | existing (Phase 2; rejected requests return without a span) |
 | `auth_session` | WorkOS session resolution | no (network: WorkOS) | existing |
-| `usage_admission` | outer admission block: abuse check ∥ preflight ∥ key-settings prefetch, then credential resolution. Since Experiment 1 the usage increment is started here but awaited after `prepare_total` (still pre-stream) — the span no longer contains it, and `attachment_resolution` includes its concurrent window | yes (several) | existing |
+| `usage_admission` | outer admission block: atomic abuse admission ∥ preflight ∥ key-settings prefetch, then credential resolution. The abuse mutation checks and increments in one round-trip before credential resolution; `attachment_resolution` includes its concurrent window | yes (several) | existing |
 | `attachment_resolution` | `planGenerationInput` + trusted-text preflight | yes | existing |
 | `credential_resolution` | approval-route facts, key settings, route resolution, **platform usage reservation** | yes | existing |
 | `usage_reservation` | `reserveAuthorized` mutation alone | yes | existing (Experiment 1; baseline 56.6 ms p50 — effectively all of post-prefetch `credential_resolution`) |

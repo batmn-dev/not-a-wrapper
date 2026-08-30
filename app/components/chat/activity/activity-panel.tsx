@@ -14,7 +14,7 @@ import type {
   AssistantActivityToolEntry,
 } from "@/lib/chat-messages/assistant-activity"
 import { REASONING_EFFORT_LABELS } from "@/lib/reasoning-effort"
-import { parseSafeExternalUrl } from "@/lib/url-safety"
+import { resolveSourceLinkDestination } from "@/lib/url-safety"
 import { RiCheckLine, RiCodeLine, RiFileCopyLine } from "@remixicon/react"
 import Image from "next/image"
 import { useId, useRef, useState, type RefCallback } from "react"
@@ -144,7 +144,7 @@ function ActivityToolCard({
 }
 
 function sourceDomain(url: string): string {
-  return parseSafeExternalUrl(url)?.hostname ?? url
+  return resolveSourceLinkDestination(url)?.url.hostname ?? url
 }
 
 function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
@@ -163,7 +163,7 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
     >
       <span id={chipGroupId} className="contents">
         {visible.map((source) => {
-          const safeUrl = parseSafeExternalUrl(source.url)
+          const destination = resolveSourceLinkDestination(source.url)
           const domain = sourceDomain(source.url)
           const content = (
             <>
@@ -179,7 +179,7 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           )
           const className =
             "text-muted-foreground inline-flex h-[25px] max-w-full items-center gap-1 overflow-hidden rounded-full px-3 text-xs"
-          if (!safeUrl) {
+          if (!destination) {
             return (
               <span
                 key={`${source.sourceId}:${source.url}`}
@@ -193,9 +193,9 @@ function SearchSourceChips({ entry }: { entry: AssistantActivitySearchEntry }) {
           return (
             <a
               key={`${source.sourceId}:${source.url}`}
-              href={safeUrl.toString()}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={destination.href}
+              target={destination.target}
+              rel={destination.rel}
               className={`${className} hover:bg-interactive-hover! hover:text-foreground active:bg-interactive-pressed! focus-visible:ring-focus-ring outline-none focus-visible:ring-2`}
               style={ACTIVITY_PANEL_RAISED_STYLE}
             >
@@ -386,25 +386,38 @@ function PanelBody({
         <div className="px-3 pt-3 pb-4">
           <PanelSectionHeading title="Images" className="mb-3" />
           <ul className="grid grid-cols-2 gap-2">
-            {activity.imageResults.map((result) => (
-              <li key={`${result.imageUrl}:${result.sourceUrl}`}>
-                <a
-                  href={result.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="focus-visible:ring-focus-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
-                >
-                  <Image
-                    src={result.imageUrl}
-                    alt={result.title}
-                    width={512}
-                    height={512}
-                    unoptimized
-                    className="aspect-square w-full object-cover"
-                  />
-                </a>
-              </li>
-            ))}
+            {activity.imageResults.map((result) => {
+              const destination = resolveSourceLinkDestination(result.sourceUrl)
+              const image = (
+                <Image
+                  src={result.imageUrl}
+                  alt={result.title}
+                  width={512}
+                  height={512}
+                  unoptimized
+                  className="aspect-square w-full object-cover"
+                />
+              )
+              const className =
+                "focus-visible:ring-focus-ring block overflow-hidden rounded-xl outline-none focus-visible:ring-2"
+
+              return (
+                <li key={`${result.imageUrl}:${result.sourceUrl}`}>
+                  {destination ? (
+                    <a
+                      href={destination.href}
+                      target={destination.target}
+                      rel={destination.rel}
+                      className={className}
+                    >
+                      {image}
+                    </a>
+                  ) : (
+                    <div className={className}>{image}</div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </div>
       ) : null}

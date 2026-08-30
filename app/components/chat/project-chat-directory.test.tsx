@@ -182,7 +182,7 @@ describe("ProjectChatDirectory", () => {
     })
   }
 
-  it("renders tab semantics and moves selection with arrow keys", () => {
+  it("renders tab semantics and moves selection with arrow keys", async () => {
     directoryMocks.data = []
     directoryMocks.isLoading = false
     renderDirectory()
@@ -196,10 +196,12 @@ describe("ProjectChatDirectory", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Chats", "Sources"])
     expect(tabs[0].getAttribute("aria-selected")).toBe("true")
 
-    act(() => {
+    await act(async () => {
+      tabs[0].focus()
       tabs[0].dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
       )
+      await Promise.resolve()
     })
 
     expect(tabs[1].getAttribute("aria-selected")).toBe("true")

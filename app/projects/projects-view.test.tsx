@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { ProjectPinningProvider } from "@/app/components/projects/use-project-pinning"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -172,7 +173,13 @@ describe("ProjectsView essential behavior", () => {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
-    await act(async () => root.render(<ProjectsView />))
+    await act(async () =>
+      root.render(
+        <ProjectPinningProvider>
+          <ProjectsView />
+        </ProjectPinningProvider>
+      )
+    )
   }
 
   const click = (element: Element) =>

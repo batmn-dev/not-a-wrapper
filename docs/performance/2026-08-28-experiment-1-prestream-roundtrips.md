@@ -1,5 +1,9 @@
 # Experiment 1 — reduce pre-stream server round-trips
 
+> Historical result. Follow-up on 2026-08-30 replaced the separate abuse
+> check and off-path increment with one atomic `usage.admit` mutation. The
+> measurements below describe the experiment's original checkout.
+
 Date: 2026-08-28 · Before: commit `4b7f31e4`, result
 `2026-08-27T23-45-14-durable.json` / `2026-08-27T20-55-52-standard.json` ·
 After: this change, results `2026-08-28T00-02-51-durable.json` /
