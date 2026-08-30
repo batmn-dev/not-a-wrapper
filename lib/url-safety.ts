@@ -36,14 +36,14 @@ export type SourceLinkDestination = {
   href: string
   target: "_blank"
   rel: "noopener noreferrer"
-  /** Safe, untracked URL for display metadata such as hostname and origin. */
+  /** Safe URL for display metadata such as hostname and origin. */
   url: URL
 }
 
 /**
  * The single destination policy for model- and tool-supplied source links.
- * Only http(s) links can navigate; accepted links receive the same research
- * attribution without changing the URL used for display metadata.
+ * Only http(s) links can navigate. Accepted URLs remain unchanged because
+ * provider- and tool-supplied query parameters may be signature-sensitive.
  */
 export function resolveSourceLinkDestination(
   href: string
@@ -51,12 +51,8 @@ export function resolveSourceLinkDestination(
   const url = parseSafeExternalUrl(href)
   if (!url) return null
 
-  const destination = new URL(url)
-  destination.searchParams.set("utm_source", "not-a-wrapper.com")
-  destination.searchParams.set("utm_medium", "research")
-
   return {
-    href: destination.toString(),
+    href: url.toString(),
     target: "_blank",
     rel: "noopener noreferrer",
     url,

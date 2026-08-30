@@ -6,8 +6,10 @@ import { useProjectPinning } from "@/app/components/projects/use-project-pinning
 import { useRenameProject } from "@/app/components/projects/use-rename-project"
 import { Icon } from "@/components/ui/icon"
 import { InlineRenameInput } from "@/components/ui/inline-rename-input"
+import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { useInlineRename } from "@/hooks/use-inline-rename"
+import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { RiArrowDownSLine, RiFolderLine, RiMoreFill } from "@remixicon/react"
 import { useState } from "react"
@@ -39,7 +41,13 @@ export function ProjectDetailSurface({
   const { preferences } = useUserPreferences()
   const hasSidebar = preferences.layout === "sidebar"
   const { isPinned, isPinPending, togglePinned } = useProjectPinning()
-  const pinnableProject = { _id: project.id, pinned: project.pinned }
+  const { data: liveProject } = usePerUserQuery(api.projects.getById, {
+    projectId: project.id,
+  })
+  const pinnableProject = {
+    _id: project.id,
+    pinned: liveProject?.pinned ?? project.pinned,
+  }
   const pinned = isPinned(pinnableProject)
 
   const saveProjectName = async (nextName: string) => {

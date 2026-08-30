@@ -88,19 +88,14 @@ export function ProjectPinningProvider({ children }: { children: ReactNode }) {
           pinned: nextPinned,
         })
       } catch {
-        updateState((previous) => ({
-          ...previous,
-          pinOverrides: {
-            ...previous.pinOverrides,
-            [project._id]: previousPinned,
-          },
-        }))
         toast({ title: "Failed to update project pin", status: "error" })
       } finally {
         updateState((previous) => {
+          const pinOverrides = { ...previous.pinOverrides }
+          delete pinOverrides[project._id]
           const pendingProjectIds = new Set(previous.pendingProjectIds)
           pendingProjectIds.delete(project._id)
-          return { ...previous, pendingProjectIds }
+          return { pinOverrides, pendingProjectIds }
         })
       }
     },

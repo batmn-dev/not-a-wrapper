@@ -158,12 +158,12 @@ _Avoid_: rebuilding the dropdown scaffold or project adapter per surface, sideba
 _Status_: implemented 2026-07-08.
 
 **Project pinning**:
-The app-shell module (`ProjectPinningProvider` + `useProjectPinning`) that owns optimistic pinned state and in-flight exclusion for Projects. The sidebar, Projects directory, and project-detail header read the same state, so a pin action updates every mounted surface immediately and a second surface cannot submit the same mutation while it is pending. Convex remains the persisted source of truth; a failed mutation restores the exact prior value.
+The app-shell module (`ProjectPinningProvider` + `useProjectPinning`) that owns transient optimistic pinned state and in-flight exclusion for Projects. The sidebar, Projects directory, and project-detail header read the same state, so a pin action updates every mounted surface immediately and a second surface cannot submit the same mutation while it is pending. The provider releases its override after Convex's read-your-writes transition, so the live per-user subscription resumes as the source of truth across tabs; a failed mutation falls back to that same authoritative value.
 _Avoid_: hook-local optimistic maps, process-global project state, duplicate pin writes from separate surfaces
 _Status_: consolidated 2026-08-30.
 
 **Source-link destination**:
-The single policy (`resolveSourceLinkDestination` in `lib/url-safety.ts`) for model- and tool-supplied source navigation. Every citation, source row, source chip, and search-image attribution accepts only normalized HTTP(S), opens with the same external-link protections, and applies the same research attribution. Unsafe values remain displayable but never become destinations; the untracked safe URL remains available for hostname/origin presentation.
+The single policy (`resolveSourceLinkDestination` in `lib/url-safety.ts`) for model- and tool-supplied source navigation. Every citation, source row, source chip, and search-image attribution accepts only normalized HTTP(S), preserves the safe destination because query parameters may be signature-sensitive, and opens with the same external-link protections. Unsafe values remain displayable but never become destinations; the safe URL remains available for hostname/origin presentation.
 _Avoid_: raw model/tool URLs in `href`, unsafe fallbacks from tracking helpers, per-renderer protocol or `rel` checks
 _Status_: consolidated 2026-08-30.
 

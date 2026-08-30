@@ -33,7 +33,13 @@ const project = {
   pinned: false,
 }
 
-function PinProbe({ label }: { label: string }) {
+function PinProbe({
+  label,
+  project,
+}: {
+  label: string
+  project: { _id: Id<"projects">; pinned: boolean }
+}) {
   const { isPinned, isPinPending, togglePinned } = useProjectPinning()
 
   return (
@@ -60,7 +66,7 @@ describe("ProjectPinningProvider", () => {
     container.remove()
   })
 
-  it("shares optimistic and pending state across hook consumers", async () => {
+  it("shares optimistic state, then resumes live Convex updates", async () => {
     let resolveMutation: (() => void) | undefined
     mocks.togglePinned.mockReturnValue(
       new Promise<void>((resolve) => {
@@ -71,8 +77,8 @@ describe("ProjectPinningProvider", () => {
     act(() => {
       root.render(
         <ProjectPinningProvider>
-          <PinProbe label="sidebar" />
-          <PinProbe label="page" />
+          <PinProbe label="sidebar" project={project} />
+          <PinProbe label="page" project={project} />
         </ProjectPinningProvider>
       )
     })
@@ -84,9 +90,30 @@ describe("ProjectPinningProvider", () => {
     expect(container.textContent).toContain("sidebar:pinned:pending")
     expect(container.textContent).toContain("page:pinned:pending")
 
-    await act(async () => resolveMutation?.())
+    const reflectedProject = { ...project, pinned: true }
+    await act(async () => {
+      root.render(
+        <ProjectPinningProvider>
+          <PinProbe label="sidebar" project={reflectedProject} />
+          <PinProbe label="page" project={reflectedProject} />
+        </ProjectPinningProvider>
+      )
+      resolveMutation?.()
+    })
 
     expect(container.textContent).toContain("sidebar:pinned:ready")
     expect(container.textContent).toContain("page:pinned:ready")
+
+    act(() => {
+      root.render(
+        <ProjectPinningProvider>
+          <PinProbe label="sidebar" project={project} />
+          <PinProbe label="page" project={project} />
+        </ProjectPinningProvider>
+      )
+    })
+
+    expect(container.textContent).toContain("sidebar:unpinned:ready")
+    expect(container.textContent).toContain("page:unpinned:ready")
   })
 })

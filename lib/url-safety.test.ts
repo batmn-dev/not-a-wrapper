@@ -19,21 +19,17 @@ describe("toSafeWebHref", () => {
 })
 
 describe("resolveSourceLinkDestination", () => {
-  it("applies one safe, attributed destination policy", () => {
-    const destination = resolveSourceLinkDestination(
-      "https://example.com/research?topic=agents"
-    )
+  it("preserves signature-sensitive source URLs", () => {
+    const signedUrl =
+      "https://example.com/research?X-Amz-Credential=user%2Fscope&X-Amz-Signature=abc123"
+    const destination = resolveSourceLinkDestination(signedUrl)
 
     expect(destination).toMatchObject({
       target: "_blank",
       rel: "noopener noreferrer",
     })
-    expect(destination?.url.toString()).toBe(
-      "https://example.com/research?topic=agents"
-    )
-    expect(destination?.href).toBe(
-      "https://example.com/research?topic=agents&utm_source=not-a-wrapper.com&utm_medium=research"
-    )
+    expect(destination?.url.toString()).toBe(signedUrl)
+    expect(destination?.href).toBe(signedUrl)
     expect(resolveSourceLinkDestination("javascript:alert(1)")).toBeNull()
   })
 })
