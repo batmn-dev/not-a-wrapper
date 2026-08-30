@@ -95,7 +95,7 @@ describe("deriveChatRowStatus", () => {
     expect(deriveChatRowStatus({}, null)).toBe("idle")
   })
 
-  it("never renders a spinner past the freshness ceiling (gameplan §11)", () => {
+  it("never renders a spinner past the freshness ceiling", () => {
     const NOW = 1_000_000
     const live = {
       live_run_status: "streaming" as const,

@@ -364,7 +364,7 @@ describe("message branch selection", () => {
 
 })
 
-describe("getSelectedConversation (gameplan §7, PR 4)", () => {
+describe("getSelectedConversation", () => {
   function createRunWorld({
     runStatus = "streaming" as Doc<"generationRuns">["status"],
     assistantSelected = true,

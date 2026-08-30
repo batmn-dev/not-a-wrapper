@@ -693,8 +693,8 @@ describe("chat turn runtime × real ai@7 streamText", () => {
     const reader = response.body!.getReader()
 
     // Wait for the stream to actually start, then abort the request signal —
-    // the reload/disconnect case (gameplan §12 scenario 9): a durable turn's
-    // provider consumption deliberately excludes req.signal, so the worker
+    // In the reload/disconnect case, a durable turn's provider consumption
+    // deliberately excludes req.signal, so the worker
     // streams on to a normal durable completion. Stop reaches the worker
     // through the heartbeat/grant path, never through client disconnect.
     await reader.read()

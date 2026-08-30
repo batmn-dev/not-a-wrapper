@@ -61,16 +61,4 @@ describe("DisclosureCard", () => {
     expect(details?.open).toBe(false)
     expect(container.querySelector('[data-testid="body"]')).toBe(body)
   })
-
-  it("honors the initial open state", () => {
-    act(() => {
-      root.render(
-        <DisclosureCard defaultOpen header="Tool result">
-          Result
-        </DisclosureCard>
-      )
-    })
-
-    expect(container.querySelector("details")?.open).toBe(true)
-  })
 })

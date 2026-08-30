@@ -10,7 +10,6 @@ type DisclosureCardProps = {
   header: ReactNode
   /** Body, revealed on expand. The card owns the px-3 pt-3 pb-3 padding. */
   children: ReactNode
-  defaultOpen?: boolean
   /** Extra classes on the bordered box. */
   className?: string
 }
@@ -24,12 +23,10 @@ type DisclosureCardProps = {
 export function DisclosureCard({
   header,
   children,
-  defaultOpen = false,
   className,
 }: DisclosureCardProps) {
   return (
     <details
-      open={defaultOpen || undefined}
       data-slot="disclosure-card"
       className={cn(
         "chat-disclosure border-border group/disclosure overflow-hidden rounded-md border",

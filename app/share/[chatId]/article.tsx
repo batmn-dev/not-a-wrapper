@@ -10,7 +10,6 @@ import { RiArrowRightUpLine } from "@remixicon/react"
 import Link from "next/link"
 import { Header } from "./header"
 
-// Message type compatible with Convex schema
 type ConvexMessage = Pick<
   Doc<"messages">,
   "_id" | "_creationTime" | "chatId" | "role" | "content" | "parts"

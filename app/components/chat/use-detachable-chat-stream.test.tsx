@@ -335,7 +335,7 @@ describe("detachable chat stream lifecycle", () => {
     expect(lifecycleMocks.bindings).toHaveLength(1)
     expect(vi.getTimerCount()).toBe(0)
     // Attached AND locally resolved → auto-send arms; an adopted approval
-    // part alone never does (the layer-3 continuation gate, gameplan §10).
+    // part alone never does.
     const approvalMessage = {
       id: "assistant-1",
       role: "assistant",
@@ -361,7 +361,7 @@ describe("detachable chat stream lifecycle", () => {
     // One-shot arm: the resolution authorized exactly one dispatch. A remount
     // that rehydrates the same approval-responded part (still present until
     // the continuation lands) must find the gate closed — reload never
-    // submits another model request (gameplan §19 checklist).
+    // submits another model request.
     expect(
       firstTurnBinding.options.sendAutomaticallyWhen({
         messages: [approvalMessage],

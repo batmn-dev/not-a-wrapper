@@ -3015,8 +3015,8 @@ describe("generation run linkage validation", () => {
   })
 
   it("rejects tool invocations once the run is terminal (post-settlement write)", async () => {
-    // The gameplan §10 guard matrix: a terminal run is read-only to its old
-    // worker. recordToolInvocations was the one worker op missing this guard.
+    // A terminal run is read-only to its old worker. recordToolInvocations was
+    // the one worker op missing this guard.
     const fixture = createGenerationRunLinkageFixture()
     const { ctx, inserts } = createMutationCtx(fixture.tables)
 
@@ -3148,7 +3148,7 @@ describe("execution grant revocation", () => {
   })
 })
 
-describe("lease lifecycle (gameplan §6)", () => {
+describe("lease lifecycle", () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -3298,7 +3298,7 @@ describe("lease lifecycle (gameplan §6)", () => {
   })
 })
 
-describe("reapers (gameplan §6, PR 3)", () => {
+describe("reapers", () => {
   const NOW = 1700000000000
 
   afterEach(() => {
@@ -3656,7 +3656,7 @@ describe("reapers (gameplan §6, PR 3)", () => {
   })
 })
 
-describe("approval-continuation idempotency (gameplan §10, PR 8)", () => {
+describe("approval-continuation idempotency", () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -4101,7 +4101,7 @@ describe("resolved-approvals-without-continuation reaper", () => {
   })
 })
 
-describe("pending-only approval resolution (gameplan §10, PR 8)", () => {
+describe("pending-only approval resolution", () => {
   const EXPIRY = 1700000000000
 
   afterEach(() => {
@@ -4398,7 +4398,7 @@ describe("assistant work-duration lifecycle", () => {
   })
 })
 
-describe("stopGenerationRun (gameplan §9, PR 6)", () => {
+describe("stopGenerationRun", () => {
   const NOW = 1700000000000
 
   afterEach(() => {
@@ -4603,9 +4603,8 @@ describe("updateAssistantSnapshotForChat", () => {
   })
 
   it("rejects late lower-sequence snapshots BEFORE insertion", async () => {
-    // PR 2 (gameplan §10 "Snapshot sequencing"): the run's
-    // lastSnapshotSequence is the authority, checked pre-insert — a stale
-    // write leaves neither a snapshot row nor a doc patch behind.
+    // The run's lastSnapshotSequence is the authority, checked pre-insert — a
+    // stale write leaves neither a snapshot row nor a doc patch behind.
     const fixture = createGenerationRunLinkageFixture()
     fixture.message.content = "newer"
     fixture.message.parts = [{ type: "text", text: "newer" }]
@@ -4716,8 +4715,8 @@ describe("updateAssistantSnapshotForChat", () => {
   })
 
   it("lands content on an awaiting_approval pause WITHOUT repainting it streaming", async () => {
-    // The pause is lease-free (gameplan §6): the same worker's post-pause
-    // final flush must land the content tail, but flipping the run back to
+    // The pause is lease-free: the same worker's post-pause final flush must
+    // land the content tail, but flipping the run back to
     // "streaming" without a lease would strand it outside both liveness
     // regimes — no lease for the run reaper, no pending status for the
     // approval reaper — a permanent zombie if the completion downgrade never
@@ -4825,7 +4824,7 @@ describe("applyApprovalResponses", () => {
           updatedAt: 1700000000000,
           activeStreamId: undefined,
           // Absorbing outcome: the grant revokes and the lease sheds in the
-          // same transaction (gameplan §0 amendment 2 / §6 step 6).
+          // same transaction.
           grantDigest: undefined,
           grantExpiresAt: undefined,
           heartbeatAt: undefined,

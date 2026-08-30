@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 
-// CodeBlockCode streaming rendering (chat-responsiveness plan PR 3 +
-// ADR-0016 "Lazy Shiki").
+// CodeBlockCode streaming rendering (ADR-0016 "Lazy Shiki").
 //
 // The lazy highlighter SERVICE (lib/markdown/shiki-client.ts) is mocked at
 // the module seam so highlight CALL COUNTS and inputs are exact and module
@@ -59,7 +58,7 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: themeMock.resolvedTheme }),
 }))
 
-describe("CodeBlockCode streaming rendering (plan PR 3 / PR C)", () => {
+describe("CodeBlockCode streaming rendering", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 

@@ -86,19 +86,6 @@ demonstrated threat gap.
 
 ## Correctness and maintenance
 
-- **Stopped turns are billed the full reserved estimate:** a user Stop before
-any step usage is captured settles with
-`settlementBasis: "estimated_after_unknown_usage"`, charging the entire
-reservation — measured ~18.6k credits for a ~5-second stopped turn (this is
-how the perf-harness user exhausted a 1M-credit allowance mid-suite; see
-`docs/performance/2026-08-28-experiment-2-reactive-read-split.md`, finding 2).
-Investigate fully and resolve: trace where the abort path loses (or never
-receives) provider usage for the partial stream, decide the product policy for
-usage-unknown aborts (charge actuals when recoverable; otherwise a bounded
-floor or time/output-proportional estimate rather than the full reservation),
-and implement it within ADR-0011's settle-never-rejects and ADR-0021's
-reserve-then-settle contracts. Add a regression test that a first-beat Stop
-settles for far less than the full estimate.
 - **Document nuanced motion-performance exceptions:** update the front-end
 guidance to distinguish the default prohibition on continuously repainting
 animations from narrowly approved, behavior-critical exceptions. Require a
@@ -120,7 +107,6 @@ focused upgrades with migration-specific lint, animation, and visual checks.
 - **Assistant responsiveness:** investigate and improve time to first token and
 text-streaming feel end to end. Known suspects are catalogued in
 `docs/streaming-regression-suspects-2026-08-20.md`: the platform generation
-budget (OpenAI/Google reasoning shares the 8,192-token allowance), route
-flapping incl. first-turn local chat ids skipping the platform tier,
-and settle waiting on title usage. Measure TTFT via the chat-perf spans and
+budget (OpenAI/Google reasoning shares the 8,192-token allowance) and settle
+waiting on title usage. Measure TTFT via the chat-perf spans and
 re-verify perceived streaming smoothness in the browser.

@@ -40,7 +40,7 @@ describe("lease math", () => {
   it("keeps the timing policy ordering: heartbeat < reaper tick < lease", () => {
     expect(HEARTBEAT_INTERVAL_MS).toBeLessThan(REAPER_INTERVAL_MS)
     expect(REAPER_INTERVAL_MS).toBeLessThan(LEASE_DURATION_MS)
-    // 4.5 heartbeat intervals of slack (gameplan §6).
+    // 4.5 heartbeat intervals of slack.
     expect(LEASE_DURATION_MS / HEARTBEAT_INTERVAL_MS).toBe(4.5)
   })
 
@@ -49,8 +49,7 @@ describe("lease math", () => {
     expect(isLeaseExpired(computeLeaseExpiresAt(now), now)).toBe(false)
     expect(isLeaseExpired(now - 1, now)).toBe(true)
     expect(isLeaseExpired(now, now)).toBe(false)
-    // The undefined exclusion (gameplan §18 #6): missing lease fields are a
-    // pre-heartbeat row, never an expired one.
+    // Missing lease fields are a pre-heartbeat row, never an expired one.
     expect(isLeaseExpired(undefined, now)).toBe(false)
   })
 })

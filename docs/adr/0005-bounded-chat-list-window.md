@@ -27,9 +27,9 @@ view**, and **per-chat access** (`getChatById`), so it could not simply be
 trimmed — bounding it would silently shrink those surfaces to whatever happened to
 be in the window.
 
-A Tier-1 measurement (`docs/measurements/chat-list-invalidations.md`) confirmed
-the write fix halved invalidation _frequency_ but left the O(all-chats)
-_per-invalidation_ re-read intact — the dominant term for users with history.
+A Tier-1 measurement confirmed the write fix halved invalidation _frequency_
+but left the O(all-chats) _per-invalidation_ re-read intact — the dominant term
+for users with history.
 
 ## Decision
 
@@ -79,12 +79,8 @@ The paginated reads go through a new `usePerUserPaginatedQuery` seam gated on
 `isConvexAuthenticated` (ADR-0004 applied to pagination), and the eslint ban on
 raw `useQuery` was extended to `usePaginatedQuery`.
 
-The sidebar swap is default-on behind **`ENABLE_PAGINATED_SIDEBAR`** with an
-explicit `"false"` rollback value. With the flag disabled, the app reads the
-full list exactly as before; the other surfaces' dedicated reads are harmless
-because they already cover the full history. A compile-time reference asserts
-`chats.searchByTitle` exists wherever the flag can bound the sidebar, so the
-list can never be bounded without full-history search present.
+The bounded sidebar is the sole path. Full-history surfaces use their dedicated
+reads, and rollback is a code revert as recorded in the status note above.
 
 ### Rejected alternatives (do not relitigate)
 
@@ -119,7 +115,3 @@ list can never be bounded without full-history search present.
   consumers use `useChat`, which carries its own fallback `isLoading`.
 - Full-history surfaces (search, browse, project, deep-link) each own a read and
   no longer depend on the sidebar list; bounding the sidebar cannot shrink them.
-- `ENABLE_PAGINATED_SIDEBAR` is a temporary default-on rollback lever, not
-  permanent config — remove it after the soak (follow-up ticket).
-- The before/after Convex dashboard numbers are recorded in
-  `docs/measurements/chat-list-invalidations.md`.

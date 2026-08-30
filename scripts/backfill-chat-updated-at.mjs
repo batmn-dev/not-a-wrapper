@@ -7,7 +7,7 @@
  * `updatedAt = _creationTime` for any chat missing it so the `by_user_updated`
  * index has no null keys. Idempotent — safe to run repeatedly.
  *
- * Because `chats.create` has always set `updatedAt`, no live row should lack it
+ * Because every chat creation path sets `updatedAt`, no live row should lack it
  * and the required-schema push succeeds directly; this script is the fallback.
  * If a deployment DOES hold legacy rows, the required-schema push will be
  * rejected — in that case run this WHILE `updatedAt` is still optional (i.e.
