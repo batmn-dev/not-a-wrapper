@@ -1,30 +1,9 @@
 /**
- * Provider identity (CONTEXT.md): the single server-safe module owning what
- * is identically true about a key-bearing provider everywhere it appears —
- * the id unions, company display names, the provider→vendor link, key-setup
- * facts, and the known-vendor registry.
- *
- * Two vocabularies live here, deliberately distinct:
- *
- *   - **Provider** / **ToolProvider** — the closed, key-bearing API surfaces.
- *     Model providers each have a Provider strategy; both kinds share the
- *     encrypted `userKeys` storage (`KeyedProvider`).
- *   - **Vendor** — the open-set presentation identity of a model's maker
- *     (icon + display name). The catalog's `icon`/`baseProviderId` fields
- *     point into vendor space; wrapped OpenRouter models may carry vendor ids
- *     with no registry entry and fall back to the OpenRouter icon.
- *
- * Key-settings tiles use the provider's COMPANY identity (Anthropic, Google,
- * xAI) — never the product brand; model rows keep vendor identity.
- *
- * Deliberately excluded: the Provider strategy's static SDK facts — the
- * model-provider env-var name stays on the strategy (provider-strategy.ts);
- * identity is what the UI and key storage agree on, not how an SDK is built.
- * Icons are React components and live in the client-only sibling registry
- * (`lib/provider-icons.tsx`), keyed by the same vendor ids.
+ * Providers are closed, key-bearing API surfaces; vendors are open-set model
+ * maker identities. Key settings use company identity while model rows use
+ * vendor identity. SDK construction stays in provider strategies and icons in
+ * the client-only provider-icons registry.
  */
-
-// Key-bearing provider ids
 
 /** Order is the key-settings tile order. */
 export const MODEL_PROVIDER_IDS = [
@@ -39,14 +18,12 @@ export const MODEL_PROVIDER_IDS = [
 
 export type Provider = (typeof MODEL_PROVIDER_IDS)[number]
 
-export const TOOL_PROVIDER_IDS = ["exa", "firecrawl"] as const
+export const TOOL_PROVIDER_IDS = ["exa"] as const
 
 export type ToolProvider = (typeof TOOL_PROVIDER_IDS)[number]
 
 /** Every id that may own a row in the encrypted `userKeys` storage. */
 export type KeyedProvider = Provider | ToolProvider
-
-// Vendor registry
 
 export type KnownVendorId =
   | "openrouter"
@@ -100,25 +77,19 @@ export function isKnownVendorId(id: string): id is KnownVendorId {
   return id in VENDORS
 }
 
-/** Vendor identity for an open-set vendor id; undefined when unregistered. */
 export function getVendor(id: string): VendorIdentity | undefined {
   return isKnownVendorId(id) ? VENDORS[id] : undefined
 }
 
-// Model-provider identity
-
 export type ProviderKeySetup = {
   placeholder: string
   getKeyUrl: string
-  /** Shown in the password field when a key is stored. */
   maskHint: string
 }
 
 export type ModelProviderIdentity = {
   id: Provider
-  /** Company display name — what key settings show. */
   name: string
-  /** The company's own vendor identity (its icon), not its product brand. */
   vendorId: KnownVendorId
   keySetup: ProviderKeySetup
 }
@@ -197,15 +168,11 @@ export const MODEL_PROVIDER_IDENTITY: Record<Provider, ModelProviderIdentity> =
     },
   }
 
-// Tool-provider identity
-
 export type ToolProviderIdentity = {
   id: ToolProvider
   name: string
   description: string
   costEstimate: string
-  /** false → not selectable in key settings ("coming soon"). */
-  available: boolean
   /**
    * Platform env var for the fallback key. Tool providers have no Provider
    * strategy, so — unlike model providers — the env-var name lives here.
@@ -222,24 +189,10 @@ export const TOOL_PROVIDER_IDENTITY: Record<ToolProvider, ToolProviderIdentity> 
       description:
         "AI-native web search. Powers search for models without built-in search, such as Mistral.",
       costEstimate: "~$0.005 per search",
-      available: true,
       envVarName: "EXA_API_KEY",
       keySetup: {
         placeholder: "exa-...",
         getKeyUrl: "https://dashboard.exa.ai/api-keys",
-      },
-    },
-    firecrawl: {
-      id: "firecrawl",
-      name: "Firecrawl",
-      description:
-        "Web scraping and content extraction. Enables structured data extraction from web pages.",
-      costEstimate: "~$0.001 per page",
-      available: false, // Not yet integrated — Phase 7
-      envVarName: "FIRECRAWL_API_KEY",
-      keySetup: {
-        placeholder: "fc-...",
-        getKeyUrl: "https://www.firecrawl.dev/app/api-keys",
       },
     },
   }

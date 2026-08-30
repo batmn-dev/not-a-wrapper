@@ -11,16 +11,11 @@ const BROWSE_PAGE_SIZE = 25
 const LOAD_MORE_THRESHOLD_PX = 240
 
 export type HistoryView = {
-  /** Live search term bound to the input. */
   query: string
   setQuery: (query: string) => void
-  /** Grouped/derived list for rendering — search results OR browse groups. */
   view: ChatHistoryView
-  /** True while the active mode's read is in flight. */
   isLoading: boolean
-  /** Load the next browse page (no-op while searching or exhausted). */
   loadMore: () => void
-  /** True when more browse pages can be loaded. */
   canLoadMore: boolean
 }
 

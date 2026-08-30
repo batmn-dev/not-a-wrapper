@@ -107,10 +107,7 @@ export type AssistantTurnView = {
 
 type MessageLike = { parts?: UIMessage["parts"]; metadata?: unknown }
 
-/**
- * Derive the reasoning phase from parts + chat status. Ported verbatim from
- * the pure half of use-reasoning-phase; the live timer stays in that hook.
- */
+/** The live timer stays in use-reasoning-phase; this view remains pure. */
 export function deriveReasoningView(
   parts: UIMessage["parts"] | undefined,
   status: ChatStatus,
@@ -238,7 +235,7 @@ export function hasPreservedResponseContent(view: AssistantTurnView): boolean {
  *  - `serverMessageId` — the trigger's panel-turn identity
  * Deliberately excluded: `text` (compared via the row's `children` prop) and
  * `reasoning.text` / `sources` — reasoning and source deltas are panel-owned
- * and must not churn the streaming row body (the R3 memo contract). The row's
+ * and must not churn the streaming row body. The row's
  * sources presentations (the trigger's source count, the footer sources
  * badge) render from `sources` but ONLY on settled turns, and every path into
  * settled re-renders the row through compared fields — the client status
@@ -265,7 +262,7 @@ export function assistantTurnViewsEqual(
  * turn doing right now?", derived once per row render. Every loading/progress
  * affordance on the row (activity trigger, loaders, tool chips, panel timer)
  * is a PRESENTATION of this value; none re-derives its own gate from raw
- * parts/status, which is how two indicators used to be true at once.
+ * parts/status, so only one indicator can be active.
  *
  * Discriminated union, not booleans: the kinds are mutually exclusive by
  * construction (a first-match ladder), so a new capability adds a kind or a

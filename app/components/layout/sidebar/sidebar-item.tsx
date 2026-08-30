@@ -1,14 +1,14 @@
 "use client"
 
+import { ChatActionsMenu } from "@/app/components/layout/chat-actions-menu"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
 import { RiChat3Line, RiChatSmile2Fill } from "@remixicon/react"
-import { SidebarChatPinButton } from "./sidebar-chat-pin-button"
-import { SidebarItemMenu } from "./sidebar-item-menu"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
 import { SidebarRow } from "./sidebar-row"
 import { SidebarRowEndSlot } from "./sidebar-row-actions"
+import { SidebarPinAction } from "./trailing-icon-button"
 
 type SidebarItemProps = {
   chat: Chat
@@ -26,7 +26,7 @@ export function SidebarItem({
   currentChatId,
   presentation = { kind: "history" },
 }: SidebarItemProps) {
-  const { updateTitle } = useChats()
+  const { togglePinned, updateTitle } = useChats()
   const status = useSidebarChatStatus(chat)
   const displayTitle = chat.title || "Untitled Chat"
   const isProjectPresentation =
@@ -69,10 +69,15 @@ export function SidebarItem({
             )
           }
         >
-          <SidebarChatPinButton chat={chat} title={displayTitle} />
-          <SidebarItemMenu
+          <SidebarPinAction
+            pinned={chat.pinned}
+            title={displayTitle}
+            itemType="Chat"
+            onTogglePinned={() => togglePinned(chat.id, !chat.pinned)}
+          />
+          <ChatActionsMenu
             chat={chat}
-            onStartEditing={startRename}
+            onRename={startRename}
             triggerAriaLabel={`Open chat actions for ${displayTitle}`}
           />
         </SidebarRowEndSlot>

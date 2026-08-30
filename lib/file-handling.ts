@@ -21,14 +21,6 @@ export type UploadFileOptions = {
   uploadBinary?: typeof uploadBinaryWithProgress
 }
 
-// Convex File Operations
-
-/**
- * Upload a file to Convex storage
- * 1. Generate an upload URL
- * 2. Upload the file directly to Convex storage
- * 3. Save attachment metadata in the database
- */
 export function uploadBinaryWithProgress(
   uploadUrl: string,
   file: File,
@@ -85,23 +77,21 @@ export async function uploadStagedFile(
   file: File,
   options: UploadFileOptions = {}
 ): Promise<{ fileUrl: string; attachmentId: string }> {
-  // Import dynamically to avoid circular imports
+  // Dynamic import avoids the file/Convex API cycle.
   const { api } = await import("@/convex/_generated/api")
 
-  // 1. Generate upload URL
   const uploadUrl = await convex.mutation(api.files.generateUploadUrl, {})
   if (!uploadUrl) {
     throw new FileUploadLimitError("Daily file upload limit reached.")
   }
 
-  // 2. Upload file to Convex storage
   const storageId = await (options.uploadBinary ?? uploadBinaryWithProgress)(
     uploadUrl,
     file,
     options
   )
 
-  // 3. Save user-owned staged metadata. A chat is intentionally not required.
+  // Staging is owner-bound but deliberately independent of a chat.
   const attachmentId = await convex.mutation(api.files.saveStagedAttachment, {
     storageId:
       storageId as unknown as typeof api.files.saveStagedAttachment._args.storageId,
@@ -154,9 +144,6 @@ export class FileUploadLimitError extends Error {
   }
 }
 
-/**
- * Check file upload limit using Convex
- */
 export async function checkFileUploadLimit(
   convex: ConvexReactClient
 ): Promise<{ count: number; limit: number | null; canUpload: boolean }> {

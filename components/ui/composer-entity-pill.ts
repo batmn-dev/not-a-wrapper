@@ -2,8 +2,8 @@ import { RI_GLOBAL_LINE_PATH } from "@/lib/icons/composer"
 import type { DOMOutputSpec, Node as ProseMirrorNode } from "prosemirror-model"
 
 /**
- * ChatGPT's mention-pill DOM contract, isolated from the rest of the schema so
- * pill growth (connector detail pages, previewable files) does not churn the
+ * The mention-pill DOM contract is isolated from the rest of the schema so pill
+ * growth (connector detail pages, previewable files) does not churn the
  * document model. `composerEntityPillToDOM` is the schema's `toDOM` for the
  * `composerEntity` node; `parseComposerEntityPill` is its `parseDOM` reader.
  */
@@ -26,7 +26,7 @@ function parseComposerEntityPill(node: HTMLElement | string) {
   }
 }
 
-// ChatGPT's mention pill contract (captured + measured live 2026-08-24):
+// Mention pill rendering contract:
 // connector-style mentions render an <img> icon in a 5×5 rounded-sm
 // wrapper with the raw id as data-system-hint-type, and their icon+label
 // sit inside an inner anchor whose RENDERED color is primary text — the
@@ -71,8 +71,8 @@ function composerEntityPillToDOM(node: ProseMirrorNode): DOMOutputSpec {
           "span",
           {
             "aria-hidden": "true",
-            // ChatGPT's icon wrapper computes to 4px; our rounded-sm
-            // token is 6px, so the literal is pinned deliberately.
+            // The icon wrapper uses 4px; rounded-sm is 6px, so the literal is
+            // pinned deliberately.
             class:
               "relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-[4px]",
           },

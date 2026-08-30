@@ -1,7 +1,6 @@
 import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ToolPolicyError } from "../policy"
-// Imports after mocks
 
 import {
   prepareToolRuntime,
@@ -11,9 +10,7 @@ import {
 } from "../runtime"
 import type { ToolMetadata } from "../types"
 
-// Module mocks — must be declared before importing the runtime. The loader
-// seams are mocked; the policy module keeps its real degradation logic with
-// only the Convex-backed limit store swapped for a controllable fake.
+// Keep the real policy degradation logic; replace only its external seams.
 
 const mocks = vi.hoisted(() => ({
   getProviderTools: vi.fn(),
@@ -21,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   getContentExtractionTools: vi.fn(),
   loadUserMcpTools: vi.fn(),
   getEffectiveToolKeyWithMode: vi.fn(),
-  // Swapped per test; the real policy guard/probe/soft-cap run against it.
   store: null as unknown as {
     state?: { available: boolean }
     checkAndConsume: (input: {
@@ -32,8 +28,7 @@ const mocks = vi.hoisted(() => ({
       remaining: number
     }>
   },
-  // When true, the (otherwise real) tracing wrapper throws — simulating a
-  // failure after MCP clients have opened.
+  // Simulates a failure after MCP clients open.
   failTracing: false,
 }))
 
@@ -84,8 +79,6 @@ vi.mock("@/lib/tools/utils", async () => {
     },
   }
 })
-
-// Fixtures
 
 function meta(overrides: Partial<ToolMetadata> = {}): ToolMetadata {
   return {
@@ -189,8 +182,6 @@ beforeEach(() => {
     keyMode: "platform",
   })
 })
-
-// Tests
 
 describe("prepareToolRuntime — Tool layer loading & gating", () => {
   it("anonymous user: search tools load, MCP never loads", async () => {

@@ -1,6 +1,4 @@
 import type { UIMessage } from "ai"
-import { compileReplay } from "../replay/compilers"
-import { normalizeReplayMessages } from "../replay/normalize"
 import { anthropicAdapter } from "./anthropic"
 import { defaultAdapter } from "./default"
 import { googleAdapter } from "./google"
@@ -75,93 +73,28 @@ for (const vendor of OPENAI_COMPATIBLE_VENDORS) {
   registry.set(vendor, openaiCompatibleAdapter)
 }
 
-type AdaptHistoryOptions = {
-  useReplayCompiler?: boolean
-}
-
 export function resolveAdapter(
   providerId: string,
   context: AdaptationContext
-): { adapter: ProviderHistoryAdapter; effectiveProviderId: string } {
+): ProviderHistoryAdapter {
   if (providerId === "openrouter") {
     const underlyingProvider = extractUnderlyingProvider(
       context.targetRouteId ?? context.targetModelId
     )
-    const effectiveProviderId = underlyingProvider ?? "default"
-    return {
-      adapter:
-        (underlyingProvider ? registry.get(underlyingProvider) : null) ??
-        defaultAdapter,
-      effectiveProviderId,
-    }
+    return (
+      (underlyingProvider ? registry.get(underlyingProvider) : null) ??
+      defaultAdapter
+    )
   }
 
-  return {
-    adapter: registry.get(providerId) ?? defaultAdapter,
-    effectiveProviderId: registry.has(providerId) ? providerId : "default",
-  }
-}
-
-function formatReplayError(error: unknown): string {
-  if (error instanceof Error && error.message.length > 0) return error.message
-  return "Unknown replay compile error"
+  return registry.get(providerId) ?? defaultAdapter
 }
 
 export async function adaptHistoryForProvider(
   messages: readonly UIMessage[],
   providerId: string,
-  context: AdaptationContext,
-  options: AdaptHistoryOptions = {}
+  context: AdaptationContext
 ): Promise<AdaptationResult> {
-  const { adapter, effectiveProviderId } = resolveAdapter(providerId, context)
-
-  if (!options.useReplayCompiler) {
-    return adapter.adaptMessages(messages, context)
-  }
-
-  try {
-    const normalization = normalizeReplayMessages(messages)
-    const compiled = await compileReplay(
-      normalization.messages,
-      effectiveProviderId,
-      context
-    )
-    const adapted = await adapter.adaptMessages(compiled.messages, context)
-
-    return {
-      ...adapted,
-      warnings: [
-        ...adapted.warnings,
-        ...normalization.warnings.map((warning) => ({
-          code: "replay_normalization_warning" as const,
-          messageIndex: warning.messageIndex,
-          detail: `${warning.code}: ${warning.detail}`,
-        })),
-        ...compiled.warnings.map((warning) => ({
-          code: "replay_compile_warning" as const,
-          messageIndex: warning.messageIndex,
-          detail: `${warning.code}: ${warning.detail}`,
-        })),
-      ],
-    }
-  } catch (error) {
-    const fallbackResult = await adapter.adaptMessages(messages, context)
-    const detail = formatReplayError(error)
-
-    console.warn(
-      `[history-replay] compiler fallback -> legacy adapter (${effectiveProviderId}): ${detail}`
-    )
-
-    return {
-      ...fallbackResult,
-      warnings: [
-        ...fallbackResult.warnings,
-        {
-          code: "replay_compile_fallback",
-          messageIndex: 0,
-          detail: `Replay compile failed and legacy adapter path was used: ${detail}`,
-        },
-      ],
-    }
-  }
+  const adapter = resolveAdapter(providerId, context)
+  return adapter.adaptMessages(messages, context)
 }

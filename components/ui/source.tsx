@@ -10,7 +10,10 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
-import { parseSafeExternalUrl } from "@/lib/url-safety"
+import {
+  resolveSourceLinkDestination,
+  type SourceLinkDestination,
+} from "@/lib/url-safety"
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
@@ -18,7 +21,7 @@ import { createContext, useContext } from "react"
 
 const SourceContext = createContext<{
   href: string
-  safeHref: string | undefined
+  destination: SourceLinkDestination | null
   domain: string
 } | null>(null)
 
@@ -38,12 +41,11 @@ export type SourceProps = {
 }
 
 export function Source({ href, children }: SourceProps) {
-  const safeUrl = parseSafeExternalUrl(href)
-  const safeHref = safeUrl?.toString()
-  const domain = safeUrl?.hostname ?? getFallbackSourceLabel(href)
+  const destination = resolveSourceLinkDestination(href)
+  const domain = destination?.url.hostname ?? getFallbackSourceLabel(href)
 
   return (
-    <SourceContext.Provider value={{ href, safeHref, domain }}>
+    <SourceContext.Provider value={{ href, destination, domain }}>
       <HoverCard>{children}</HoverCard>
     </SourceContext.Provider>
   )
@@ -62,16 +64,16 @@ export function SourceTrigger({
   className,
   render,
 }: SourceTriggerProps) {
-  const { href, safeHref, domain } = useSourceContext()
+  const { href, destination, domain } = useSourceContext()
   const labelToShow = label ?? domain.replace("www.", "")
   const trigger = useRender({
     defaultTagName: "a",
     render,
     props: mergeProps<"a">(
       {
-        href: safeHref,
-        target: safeHref ? "_blank" : undefined,
-        rel: safeHref ? "noopener noreferrer" : undefined,
+        href: destination?.href,
+        target: destination?.target,
+        rel: destination?.rel,
         className: cn(
           "bg-muted text-muted-foreground hover:bg-muted-foreground/30 hover:text-primary inline-flex h-5 max-w-32 items-center gap-1 overflow-hidden rounded-full py-0 text-xs no-underline",
           showFavicon ? "pr-2 pl-1" : "px-1",
@@ -111,14 +113,14 @@ export function SourceContent({
   description,
   className,
 }: SourceContentProps) {
-  const { href, safeHref, domain } = useSourceContext()
+  const { href, destination, domain } = useSourceContext()
 
   return (
     <HoverCardContent className={cn("w-80 p-0", className)}>
       <a
-        href={safeHref}
-        target={safeHref ? "_blank" : undefined}
-        rel={safeHref ? "noopener noreferrer" : undefined}
+        href={destination?.href}
+        target={destination?.target}
+        rel={destination?.rel}
         className="flex flex-col gap-2 p-3"
       >
         <div className="flex items-center gap-1.5">
@@ -137,25 +139,14 @@ export function SourceContent({
 }
 
 export type SourcesGalleryItemProps = {
-  /** Anchor href; opened in a new tab. */
   href: string
-  /** Primary, two-line-clamped title. */
   title: string
-  /** Row-1 site text; falls back to `new URL(href).hostname`. */
   siteName?: string
-  /** Two-line-clamped snippet; the slot is rendered even when empty. */
   description?: string
-  /** Favicon ORIGIN; falls back to `new URL(href).origin`. */
   faviconDomain?: string
 }
 
-/**
- * SourcesGalleryItem — a single full-bleed source row for the Activity panel
- * sources gallery. Unlike `Source`/`SourceTrigger`/`SourceContent` (a HoverCard
- * citation pill), this is a plain anchor with an internal favicon, site name,
- * semibold title, and a reserved description slot. Favicon is rendered in a
- * fixed 16px box to avoid layout shift across a large gallery.
- */
+/** Activity sources are plain anchors; inline citations remain HoverCards. */
 export function SourcesGalleryItem({
   href,
   title,
@@ -163,17 +154,16 @@ export function SourcesGalleryItem({
   description,
   faviconDomain,
 }: SourcesGalleryItemProps) {
-  const safeUrl = parseSafeExternalUrl(href)
-  const safeHref = safeUrl?.toString()
-  const hostname = safeUrl?.hostname ?? getFallbackSourceLabel(href)
+  const destination = resolveSourceLinkDestination(href)
+  const hostname = destination?.url.hostname ?? getFallbackSourceLabel(href)
 
-  const faviconUrl = faviconDomain ?? safeUrl?.origin ?? href
+  const faviconUrl = faviconDomain ?? destination?.url.origin ?? href
 
   return (
     <a
-      href={safeHref}
-      target={safeHref ? "_blank" : undefined}
-      rel={safeHref ? "noopener noreferrer" : undefined}
+      href={destination?.href}
+      target={destination?.target}
+      rel={destination?.rel}
       className="hover:bg-interactive-hover active:bg-interactive-pressed focus-visible:ring-focus-ring flex flex-col gap-0.5 rounded-[12px] px-3 py-2.5 outline-none focus-visible:ring-2"
     >
       <div className="flex h-6 items-center gap-2 text-xs">

@@ -1,6 +1,5 @@
 /**
- * B1/B2 rendering-bottleneck attribution (measurement plan Phase 5): drives
- * one deterministic guest turn per case under Chrome tracing and attributes
+ * Drives one deterministic guest turn per case under Chrome tracing and attributes
  * every >50 ms main-thread task to JS / style / layout / paint / GC via
  * trace-event self-times, joined with the app's own `chat-perf:*` User Timing
  * marks (projection advances and Shiki measures fire INSIDE the tasks that
@@ -43,7 +42,7 @@ type TraceCase = {
   cpuThrottle: number
 }
 
-/** The two §6 rendering bottlenecks, exactly as the baseline measured them. */
+/** The two rendering bottlenecks identified by the baseline. */
 const CASES: TraceCase[] = [
   {
     id: "b1-long-markdown-100-fixed",

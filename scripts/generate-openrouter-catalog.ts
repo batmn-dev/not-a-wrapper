@@ -16,8 +16,7 @@
  *   bun run catalog:openrouter:check    — (--check) offline + deterministic:
  *                                         regenerate and fail on any diff
  *
- * Generation fails loudly when an allowlisted id is absent from the snapshot
- * (the 2026-07-04 delisting incident class) and prints a ready-to-paste
+ * Generation fails when an allowlisted id is absent and prints a ready-to-paste
  * succession stub for lib/models/model-id-migration.ts.
  */
 import { readFileSync, writeFileSync } from "node:fs"

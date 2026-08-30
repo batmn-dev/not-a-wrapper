@@ -14,12 +14,10 @@ export function useFavoriteModels() {
   const { favoriteModels: initialFavoriteModels, refreshFavoriteModelsSilent } =
     useModel()
 
-  // Ensure we always have an array
   const safeInitialData = Array.isArray(initialFavoriteModels)
     ? initialFavoriteModels
     : []
 
-  // Query to fetch favorite models
   const {
     data: favoriteModels = safeInitialData,
     isLoading,
@@ -38,12 +36,11 @@ export function useFavoriteModels() {
       const data: FavoriteModelsResponse = await response.json()
       return data.favorite_models || []
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
     retry: 1,
     initialData: safeInitialData,
   })
 
-  // Mutation to update favorite models
   const updateFavoriteModelsMutation = useMutation({
     mutationFn: async (favoriteModels: string[]) => {
       const response = await fetchClient(
@@ -106,29 +103,22 @@ export function useFavoriteModels() {
         description: error.message || "Please try again.",
       })
 
-      // Refresh ModelProvider on error to sync back with server state
       refreshFavoriteModelsSilent()
     },
     onSuccess: () => {
-      // Invalidate the cache to trigger a refetch
       queryClient.invalidateQueries({ queryKey: ["favorite-models"] })
-
-      // Also refresh the ModelProvider's favorite models (silently)
       refreshFavoriteModelsSilent()
     },
   })
 
-  // Debounced version of the mutation for reordering
   const debouncedUpdateFavoriteModels = useRef(
     debounce((favoriteModels: string[]) => {
       updateFavoriteModelsMutation.mutate(favoriteModels)
     }, 500)
   ).current
 
-  // Wrapper function that decides whether to debounce or not
   const updateFavoriteModels = useCallback(
     (favoriteModels: string[], shouldDebounce = false) => {
-      // Always update the cache immediately for optimistic updates
       queryClient.setQueryData(["favorite-models"], favoriteModels)
 
       if (shouldDebounce) {

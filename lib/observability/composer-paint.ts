@@ -48,8 +48,9 @@ const MEASURED_INPUT_TYPES = new Set([
 
 /**
  * Measures the browser-sensitive editor → React Composer paint handoff without
- * recording draft content. The controller mirrors ChatGPT's keydown/beforeinput
- * classification, one-frame editor mark, two-frame settled mark, and stale cap.
+ * recording draft content. The controller uses keydown/beforeinput
+ * classification, a one-frame editor mark, a two-frame settled mark, and a
+ * stale cap.
  */
 export function createComposerPaintController(
   editor: HTMLElement

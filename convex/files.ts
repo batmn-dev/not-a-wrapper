@@ -281,7 +281,6 @@ export async function saveStagedAttachmentHandler(
   return attachmentId
 }
 
-/** Save an uploaded file as a user-owned staged attachment. */
 export const saveStagedAttachment = authenticatedMutation({
   args: {
     storageId: v.id("_storage"),

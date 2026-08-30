@@ -40,12 +40,10 @@ function warnStaleCiphertextOnce(provider: string) {
  * Get user's decrypted API key for a provider via Convex
  * Returns the decrypted key if found, null otherwise
  *
- * Accepts `string` (not just `Provider`) to support both AI providers
- * and tool providers (e.g., "exa", "firecrawl"). The Convex schema
- * already uses `v.string()` for the provider field.
+ * Accepts `string` because model and tool providers share this storage.
  */
 export async function getUserKeyFromConvex(
-  provider: string, // Widened from Provider — supports AI providers and tool providers
+  provider: string,
   token?: string
 ): Promise<string | null> {
   if (!token) return null
@@ -90,7 +88,6 @@ export async function getEffectiveProviderApiKey(
   provider: Provider,
   token?: string
 ): Promise<ProviderCredentialResolution> {
-  // Try user key first if token is provided
   if (token) {
     const userKey = await getUserKeyFromConvex(provider, token)
     if (userKey) {
@@ -98,40 +95,26 @@ export async function getEffectiveProviderApiKey(
     }
   }
 
-  // Fall back to the provider's platform env key. The env-var NAME is a static
-  // provider-SDK fact owned by the provider strategy (the same fact the model
-  // factory and the 401 preflight used to each restate); resolution stays here.
+  // Provider strategies own env-var names; key resolution stays centralized.
   const platformKey = process.env[getProviderStrategy(provider).envVarName]
   return platformKey
     ? { provider, apiKey: platformKey, source: "platform" }
     : { provider, apiKey: undefined, source: undefined }
 }
 
-// Tool Provider Key Management
-//
-// Tool providers (Exa, Firecrawl) use the same encrypted key storage as
-// AI providers (userKeys table in Convex). The `provider` field is
-// already `v.string()` in the schema, so tool provider IDs are stored
-// alongside AI provider IDs without schema changes. Their ids and static
-// facts (including the platform env-var name) live in the Provider
-// identity module; resolution stays here.
+// Tool and model providers share encrypted userKeys storage. Provider identity
+// owns static facts; this module owns resolution.
 export type { ToolProvider } from "./provider-identity"
 
-/**
- * Resolve a tool provider key and where it came from.
- * Used by tool budget policy to apply platform-vs-BYOK limits.
- */
 export async function getEffectiveToolKeyWithMode(
   provider: ToolProvider,
   convexToken?: string
 ): Promise<{ key?: string; keyMode?: ToolKeyMode }> {
-  // 1. Try user BYOK key first (getUserKeyFromConvex accepts string)
   if (convexToken) {
     const userKey = await getUserKeyFromConvex(provider, convexToken)
     if (userKey) return { key: userKey, keyMode: "byok" }
   }
 
-  // 2. Fall back to platform env var
   const platformKey =
     process.env[TOOL_PROVIDER_IDENTITY[provider].envVarName] || undefined
   if (platformKey) {

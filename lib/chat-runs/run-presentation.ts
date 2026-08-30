@@ -33,33 +33,26 @@ export type GenerationPresentationState =
 
 export type GenerationPresentation = {
   state: GenerationPresentationState
-  /** Which execution evidence drives visuals. */
   source: "local" | "background" | "none"
-  /** Any live phase (drives loaders, action suppression, scroll pinning). */
   active: boolean
   /** The composer's primary action should be Stop (resolver output — never a
    * projection field). */
   stoppable: boolean
   /** The exact run a durable Stop must target; null before the run exists. */
   stopTargetRunId: string | null
-  /** Caret may render (fresh local/background responding with content). */
   caretEligible: boolean
-  /** Edit/regenerate/branch/footer actions are suppressed. */
   actionsSuppressed: boolean
   /**
    * Resolver-mandated side effect: the durable truth settled (or a Stop is
    * pending) while this client's transport still streams — cut it via local
-   * `stop()`. Convergence must not wait for the worker to notice (§18/§8).
+   * `stop()`. Convergence must not wait for the worker to notice.
    */
   shouldStopLocalStream: boolean
-  /** Terminal vocabulary for banners; undefined while live. */
   terminalReason?: SelectedRunProjection["terminalReason"]
 }
 
 export type RunPresentationInputs = {
-  /** AI SDK transport status of this client's stream. */
   localStatus: LocalTransportStatus
-  /** Composer submit in flight (pre-transport). */
   isSubmitting: boolean
   /**
    * The assistant message id this client's live stream writes into (durable

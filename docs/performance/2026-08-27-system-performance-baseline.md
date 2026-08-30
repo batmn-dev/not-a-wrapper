@@ -1,5 +1,9 @@
 # System performance baseline — 2026-08-27
 
+> Historical baseline. Its B4 consolidation candidate was implemented on
+> 2026-08-30 as one atomic `usage.admit` mutation; the measured numbers and
+> original recommendation below remain unchanged as provenance.
+
 Phase 4 deliverable of the performance benchmarking plan. Contract:
 [`metric-dictionary.md`](./metric-dictionary.md) · harness:
 `benchmarks/chat-performance/browser/` (results file
@@ -191,7 +195,7 @@ section is reviewed.
 - **User impact:** ~70 ms added to time-to-first-token on every turn (and the
   authenticated path stacks credential resolution + reservation + durable
   prepare on top — unmeasured, see the gap below).
-- **Proposed experiment:** plan Experiment 1 — overlap the increment with
+- **Proposed experiment:** overlap the increment with
   prepare (it is not an admission decision), or collapse check+increment into
   one mutation; measure the authenticated path first so the experiment
   optimizes the real shape.
@@ -256,7 +260,7 @@ usage, so allowance burn is negligible).
 **B4 restated with the real numbers: the authenticated pre-stream pipeline is
 ~405 ms — 6× the guest path — all of it sequential Convex/WorkOS round-trips**
 (abuse check, key settings, approval facts, allowance reservation, increment,
-grant + run creation). This is Experiment 1's before-picture. Perceived send →
+grant + run creation). This is the pre-optimization before-picture. Perceived send →
 first visible text on a durable chat is ~830 ms before any provider latency
 would even apply.
 
@@ -294,7 +298,7 @@ rendered correctly — but only via the 750 ms snapshot plane
 while the transport tap and settlement receipt did). Users would see a
 correct but visibly chunky answer with no error. The harness now counts this
 per scenario (`liveStreamNotAdoptedRuns`); worth a dedicated investigation
-alongside (not inside) Experiment 1. Related: the hard navigation itself is
+alongside the pre-stream work. Related: the hard navigation itself is
 why durable `send → optimistic paint` (~122 ms) and the guest→durable
 dispatch gap are elevated — and it also flushes Chromium's network buffer,
 which is why durable correctness uses settlement-based rules when the SSE

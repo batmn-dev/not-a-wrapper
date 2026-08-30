@@ -99,12 +99,8 @@ function getMessageAttachments(
  * pending-assistant placeholder. Pending and real assistant content reconcile
  * through this same DOM node; only its data identity and contents update.
  *
- * One DOM shape: the reference's wrapper-free eager turn (`Fkn` section) —
- * the section itself carries `data-turn-id-container` and hosts the center
- * (table-of-contents) observation. The reference's virtualized arm (wrapper
- * div, `data-is-intersecting`, placeholder heights) was removed 2026-08-28:
- * its gate was compile-time false and its reflow correction killed touch
- * momentum (see thread-scroll.tsx).
+ * The section itself carries the turn identity and center observation; extra
+ * virtualization wrappers would disturb touch momentum.
  */
 function TurnRow({
   className,
@@ -188,7 +184,7 @@ function TurnRow({
         dir="auto"
       >
         <h4 className="sr-only select-none">
-          {dataTurn === "user" ? "You said:" : "ChatGPT said:"}
+          {dataTurn === "user" ? "You said:" : "Assistant said:"}
         </h4>
         <div
           className={cn(
@@ -502,8 +498,7 @@ export function Conversation({
             index === renderedMessages.length - 1 &&
             !hasPendingAssistantTurn &&
             status !== "submitted"
-          // The reference reserves the 32px turn tail on the LAST turn only; settled
-          // older turns end at their action row (verified live 2026-07-11).
+          // Only the last turn reserves the 32px tail.
           const isLastTurnRow =
             index === renderedMessages.length - 1 && !hasPendingAssistantTurn
           const isAssistant = message.role === "assistant"

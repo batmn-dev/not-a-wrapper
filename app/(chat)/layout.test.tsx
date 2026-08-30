@@ -87,9 +87,7 @@ describe("chat route layout ownership", () => {
   })
 
   it("owns the Chat surface so route-segment swaps cannot remount it", () => {
-    // Adoption-loss fix (2026-08-28): the surface must be the LAYOUT's child,
-    // not the pages' — a segment commit mid-first-turn tore down a page-owned
-    // Chat and orphaned the live stream binding.
+    // A page-owned Chat would remount and orphan the live stream on segment commit.
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)

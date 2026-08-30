@@ -158,13 +158,9 @@ export const generationRunWriteArgs = {
   },
   updateAssistantSnapshot: {
     messageId: v.id("messages"),
-    order: v.number(),
-    stepOrder: v.optional(v.number()),
     sequence: v.number(),
     textSnapshot: v.string(),
     partsSnapshot: v.any(),
-    delta: v.optional(v.string()),
-    payload: v.optional(v.any()),
   },
   recordToolInvocations: {
     messageId: v.id("messages"),
@@ -566,16 +562,9 @@ async function gatherAssistantMessageFacts(
   // Projected-output invariant: `lastSnapshotSequence` is patched in the same
   // mutation as every accepted checkpoint (both branches of
   // updateAssistantSnapshotForChat) and sequences start at 1, so `> 0` is
-  // equivalent to "at least one accepted checkpoint for this run". Legacy runs
-  // written before the field existed fall back to the row probe; that fallback
-  // (and the rows it reads) may be removed only after the legacy purge.
+  // equivalent to "at least one accepted checkpoint for this run".
   const hasSnapshotForRun = isReusedForRegeneration
-    ? run.lastSnapshotSequence !== undefined
-      ? run.lastSnapshotSequence > 0
-      : (await ctx.db
-          .query("assistantMessageSnapshots")
-          .withIndex("by_run_sequence", (q) => q.eq("runId", run._id))
-          .first()) !== null
+    ? (run.lastSnapshotSequence ?? 0) > 0
     : false
 
   const hasSemanticParts = hasSemanticAssistantParts(message)
@@ -1073,11 +1062,9 @@ export async function applyRegenerationIntentForGeneration(
     replaces: regenerationPlan.targetMessage._id,
   })
   const assistantMessageId = assistantMessage._id
-  const assistantOrder = assistantMessage.orderId
 
   return {
     assistantMessageId,
-    assistantOrder,
     messages: regenerationPlan.messages,
   }
 }
@@ -2037,7 +2024,6 @@ export async function prepareGenerationForChat(
   }
 
   let assistantMessageId: Id<"messages">
-  let assistantOrder: number
   let includeAssistantInModelHistory = false
   let preparedModelHistory: Doc<"messages">[] | null = null
   let resumedOutputTokensBaseline: number | undefined
@@ -2057,7 +2043,6 @@ export async function prepareGenerationForChat(
       now
     )
     assistantMessageId = preparedRegeneration.assistantMessageId
-    assistantOrder = preparedRegeneration.assistantOrder
     preparedModelHistory = preparedRegeneration.messages
   } else if (continuationMessage) {
     // Approval-continuation idempotency, layer 1 of 3:
@@ -2137,7 +2122,6 @@ export async function prepareGenerationForChat(
       }
     }
     assistantMessageId = continuationMessage._id
-    assistantOrder = continuationMessage.orderId
     includeAssistantInModelHistory = true
     // The reused message's existing parts were billed to the PAUSED run's
     // settled reservation. Freeze their partial-output estimate as this run's
@@ -2163,7 +2147,6 @@ export async function prepareGenerationForChat(
       provider: args.provider,
     })
     assistantMessageId = assistantMessage._id
-    assistantOrder = assistantMessage.orderId
   }
 
   await ctx.db.patch(runId, {
@@ -2206,7 +2189,6 @@ export async function prepareGenerationForChat(
   return {
     runId,
     assistantMessageId,
-    assistantOrder,
     messages: modelHistory,
     titleGeneration,
   }
@@ -2438,13 +2420,9 @@ export async function updateAssistantSnapshotForChat(
   owner: AuthenticatedRunOwner,
   args: {
     messageId: Id<"messages">
-    order: number
-    stepOrder?: number
     sequence: number
     textSnapshot: string
     partsSnapshot: unknown
-    delta?: string
-    payload?: unknown
   }
 ) {
   const { run } = owner
@@ -2480,9 +2458,7 @@ export async function updateAssistantSnapshotForChat(
   }
 
   // Stale snapshots are rejected before persistence: a late lower-or-equal
-  // sequence write inserts nothing. The
-  // old post-insert latest-snapshot check only prevented adoption, leaving a
-  // dead row and a write conflict surface behind.
+  // sequence write cannot overwrite newer projected content.
   const lastSequence = run.lastSnapshotSequence ?? 0
   if (args.sequence <= lastSequence) {
     logSnapshotOutcome("stale")
@@ -2499,26 +2475,6 @@ export async function updateAssistantSnapshotForChat(
     JSON.stringify(message.parts) === JSON.stringify(args.partsSnapshot)
 
   const now = nowMs()
-  // Rollback seam (delete after one green production cycle): setting
-  // RETAIN_ROUTINE_SNAPSHOT_ROWS=1 in the Convex deployment env restores
-  // historical row retention without any other behavior change.
-  if (process.env.RETAIN_ROUTINE_SNAPSHOT_ROWS === "1") {
-    await ctx.db.insert("assistantMessageSnapshots", {
-      runId: run._id,
-      chatId: run.chatId,
-      messageId: args.messageId,
-      order: args.order,
-      stepOrder: args.stepOrder ?? 0,
-      sequence: args.sequence,
-      format: args.payload ? "UIMessageChunk" : "text_snapshot",
-      delta: args.delta,
-      payload: args.payload,
-      textSnapshot: args.textSnapshot,
-      partsSnapshot: args.partsSnapshot,
-      createdAt: now,
-    })
-  }
-
   if (!isTerminalMessageStatus(message.status)) {
     // Status advances to "streaming" only while the worker still owns
     // execution. An awaiting_approval pause is lease-free, and

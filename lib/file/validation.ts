@@ -16,8 +16,7 @@ const TEXT_FILE_TYPES = new Set([
 ])
 
 /**
- * MIME type -> file extensions mapping for the HTML file picker accept attribute.
- * Browsers need both MIME types and extensions for reliable filtering.
+ * Browsers need MIME types and extensions for reliable picker filtering.
  */
 export const MIME_TO_EXTENSIONS: Record<string, string[]> = {
   "image/jpeg": [".jpg", ".jpeg"],
@@ -35,10 +34,7 @@ export const MIME_TO_EXTENSIONS: Record<string, string[]> = {
   ],
 }
 
-/**
- * Comma-separated accept string for HTML `<input type="file" accept="...">`.
- * Derived from ALLOWED_FILE_TYPES so the file picker stays in sync with validation.
- */
+/** Derived from validation policy so picker filtering cannot drift. */
 export const ACCEPTED_FILE_PICKER_TYPES = ALLOWED_FILE_TYPES.flatMap((mime) => [
   mime,
   ...(MIME_TO_EXTENSIONS[mime] ?? []),

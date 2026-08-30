@@ -11,27 +11,15 @@ export type ChatGroup = {
 }
 
 export type ChatHistoryView = {
-  /** True when a (trimmed, non-empty) query is active. */
   isSearching: boolean
-  /** Title-matched chats across the full set (only when searching). */
   results: Chats[]
-  /** Pinned, non-project chats, newest pin first (only when browsing). */
   pinned: Chats[]
-  /** Date-bucketed chats, project + pinned excluded (only when browsing). */
   groups: ChatGroup[]
 }
 
 /**
- * Single home for the chat-history list rule shared by every history surface:
- *
- * - **Browsing** (no query): hide project chats and pinned chats from the date
- *   groups, surface pinned (non-project) chats separately newest-first.
- * - **Searching** (query present): match titles across the *full* set, so
- *   project chats are reachable by search even though they're hidden from
- *   browsing.
- *
- * Surfaces render their own chrome (drawer rows, keyboard-nav listbox) over
- * this one derivation instead of each re-deriving it.
+ * Shared history projection: browsing separates pins and hides project chats;
+ * search spans the full set so project chats remain discoverable.
  */
 export function buildChatHistoryView(
   chats: Chats[],
@@ -56,18 +44,16 @@ export function buildChatHistoryView(
       return bt - at
     })
 
-  // groupChatsByDate already excludes project + pinned chats internally.
   const groups = groupChatsByDate(chats, "") ?? []
 
   return { isSearching: false, results: [], pinned, groups }
 }
 
-// Group chats by time periods
 export function groupChatsByDate(
   chats: Chats[],
   searchQuery: string
 ): TimeGroup[] | null {
-  if (searchQuery) return null // Don't group when searching
+  if (searchQuery) return null
 
   const now = new Date()
   const today = new Date(
@@ -140,7 +126,6 @@ export function groupChatsByDate(
   return result
 }
 
-// Format date in a human-readable way
 export function formatDate(dateString?: string | null): string {
   if (!dateString) return "No date"
 
@@ -151,28 +136,23 @@ export function formatDate(dateString?: string | null): string {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  // Less than 1 hour: show minutes
   if (diffMinutes < 60) {
     if (diffMinutes < 1) return "Just now"
     return `${diffMinutes} ${diffMinutes === 1 ? "minute" : "minutes"} ago`
   }
 
-  // Less than 24 hours: show hours
   if (diffHours < 24) {
     return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`
   }
 
-  // Less than 7 days: show days
   if (diffDays < 7) {
     return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`
   }
 
-  // Same year: show month and day
   if (date.getFullYear() === now.getFullYear()) {
     return date.toLocaleDateString("en-US", { month: "long", day: "numeric" })
   }
 
-  // Different year: show month, day and year
   return date.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",

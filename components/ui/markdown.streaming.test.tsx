@@ -489,9 +489,8 @@ describe("Markdown terminal-block stability", () => {
     }
   )
 
-  // Render-boundary tail mending (ADR-0016 amendment 2026-08-11), pinned at
-  // the component seam: these fail if markdown.tsx stops routing the growing
-  // terminal block through mendGrowingBlockTail — the pure-function tests in
+  // Pins tail mending at the component seam. These fail if markdown.tsx stops
+  // routing the growing terminal block through mendGrowingBlockTail; the tests in
   // growing-block-tail.test.ts cannot see that wiring.
   it("mends the growing terminal block and restores canonical bytes at settlement", async () => {
     const view = mount("Prose intro.\n\nselecting the right **Apache Fl", true)

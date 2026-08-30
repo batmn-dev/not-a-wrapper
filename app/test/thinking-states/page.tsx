@@ -56,8 +56,6 @@ import {
   type ThreadSurfaceFixtureKey,
 } from "./fixtures/thread-bottom.fixture"
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const STREAMING_INDICATOR_VARIANT: StreamingIndicatorVariant = "caret"
 
 const PROSE_CLASSES = "markdown prose relative w-full bg-transparent p-0"
@@ -174,8 +172,6 @@ The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$.
 
 That covers all the major markdown formatting elements!`
 
-// ─── Mock data for tool & source components ──────────────────────────────────
-
 const MOCK_SOURCES: SourceUrlUIPart[] = [
   {
     type: "source-url",
@@ -225,8 +221,6 @@ const LOADER_VARIANTS = [
   { variant: "text-blink" as const, label: "text-blink" },
   { variant: "chat" as const, label: "chat" },
 ]
-
-// ─── Small helpers ───────────────────────────────────────────────────────────
 
 function useLiveTimer() {
   const [seconds, setSeconds] = useState(0)
@@ -390,8 +384,6 @@ function CopyRegenActions() {
     </MessageActions>
   )
 }
-
-// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ThinkingStatesTestPage() {
   const liveSeconds = useLiveTimer()

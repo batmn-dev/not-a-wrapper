@@ -14,7 +14,7 @@
  *
  * The active announcement is held for 500ms (`EMe`), then the queue advances.
  * `priority: "normal"` renders into the polite region, `"high"` into the
- * assertive one. A 200-entry ring log mirrors the reference's `xMe`.
+ * assertive one.
  */
 
 export type AriaNotifyPriority = "normal" | "high"
@@ -46,14 +46,12 @@ export type AriaNotifyOptions = {
 /** Reference `fMe("document")`. */
 const DOCUMENT_SCOPE_ID = "aria-notify-scope-document"
 const DEFAULT_SOURCE_ID = "document"
-const LOG_CAPACITY = 200
 /** Reference `EMe` — how long the active announcement is held. */
 const ANNOUNCEMENT_HOLD_MS = 500
 
 const EMPTY_QUEUE: QueueState = { active: null, pending: [] }
 
 let queues: Record<string, QueueState> = {}
-let announcementLog: AriaAnnouncement[] = []
 const renderVersions = new Map<string, number>()
 const renderCounters = new Map<string, number>()
 let announcementCounter = 0
@@ -148,15 +146,6 @@ function advanceQueue(scopeId: string, priority: AriaNotifyPriority) {
   renderActive(scopeId, priority)
 }
 
-function appendLog(announcement: AriaAnnouncement) {
-  announcementLog = [...announcementLog, announcement]
-  if (announcementLog.length > LOG_CAPACITY) {
-    announcementLog = announcementLog.slice(
-      announcementLog.length - LOG_CAPACITY
-    )
-  }
-}
-
 /** Reference `CMe`: interrupt handling and queue insertion. */
 function enqueue(announcement: AriaAnnouncement) {
   const { scopeId, priority } = announcement
@@ -205,7 +194,6 @@ export function announce(
   const startEpoch = epoch
   void Promise.resolve().then(() => {
     if (startEpoch !== epoch) return
-    appendLog(announcement)
     enqueue(announcement)
   })
   return announcement.announcementId
@@ -224,15 +212,10 @@ export function activeAnnouncement(
   return queueFor(scopeId, priority).active
 }
 
-export function getAnnouncementLog(): readonly AriaAnnouncement[] {
-  return announcementLog
-}
-
-/** Test-only: drop all queues, timers-in-flight, and the log. */
+/** Test-only: drop all queues and timers-in-flight. */
 export function resetAriaNotify() {
   epoch += 1
   queues = {}
-  announcementLog = []
   renderVersions.clear()
   renderCounters.clear()
   emit()

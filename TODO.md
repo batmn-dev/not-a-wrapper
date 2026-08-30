@@ -18,7 +18,10 @@ should expose an **Always** option that lets users force `web_search`, alongside
 the existing Off and Auto behavior where the model decides whether to search.
 Research and implement the multiple search-quantity controls exposed by
 t3.chat, including their interaction model and request-level mapping.
-- **Update Activity UX:** Make activity appear more progressive like ChatGPT, Claude and other modern AI chat platforms. Currently all activity get's logged into the right panel. However, modern AI chat apps show thinking activity, some text below it, more activty, etc... We should still be able to see the right panel, we just need to update our UX in the chat thread view itself.
+- **Update Activity UX:** Make activity feel progressive in the chat thread.
+Currently all activity is logged in the right panel. Show thinking activity and
+intermediate text in the thread while keeping the full right-panel history
+available.
 - **Chat composer text editing:** Add chat composer text / markdown editing (link, bold, italic, headings, etc...)
 - **Dictation:** Add chat-composer dictation
 - **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
@@ -41,8 +44,8 @@ authenticated and guest chats, model switches, attachments, and multi-step
 tool turns with cross-provider tests and token/compaction telemetry.
 - **Project-scoped agent context:** let each project define shared instructions,
 knowledge and files, tool or connector permissions, and optional durable
-memory that are automatically available to every chat in that project,
-similar to ChatGPT Projects and Claude Projects. Make context precedence,
+memory that are automatically available to every chat in that project, similar
+to project-scoped contexts in modern AI chat products. Make context precedence,
 token budgeting, provenance, access control, versioning, and user-visible
 reset or opt-out behavior explicit so project chats remain reproducible and
 do not leak context across project boundaries.

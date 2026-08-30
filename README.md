@@ -2,131 +2,88 @@
 
 **Not A Wrapper** is an open-source, multi-AI chat platform with a unified interface across major providers. Bring your own API keys, connect MCP tools, upload files, and organize conversations into projects.
 
-Forked from [Zola](https://github.com/ibelick/zola) and rebuilt with Convex, WorkOS AuthKit, and the Vercel AI SDK.
-
 ## Features
 
-### Core Chat
-
-- **Multi-provider AI chat** — Stream responses from OpenAI, Anthropic, Google, Mistral, xAI, Perplexity, and OpenRouter-hosted models
-- **Streaming with reasoning** — See model thinking in real-time (Claude, o3, DeepSeek R1, etc.)
-- **File uploads** — Share documents, images, and code for AI analysis (Convex-backed storage)
-- **Guest access** — Try the app without signing up (5 messages/day, limited model selection)
-
-### Tools & Integrations
-
-- **Web search** — Native provider search (OpenAI, Anthropic, Google, xAI) with Exa fallback for providers without built-in search
-- **MCP support** — Connect external tool servers via the Model Context Protocol; per-tool approval, circuit breaker, and audit logging
-- **BYOK (Bring Your Own Key)** — Securely use your own API keys with AES-256-GCM encryption at rest
-
-### Organization & Sharing
-
-- **Projects** — Group related chats into folders
-- **Public sharing** — Publish chats with a shareable link and OG metadata
-- **Pinned chats** — Pin important conversations for quick access
-- **Chat history** — Full conversation history with search
-
-### Personalization
-
-- **Light / Dark / System themes** — Automatic or manual theme switching
-- **Layout options** — Sidebar or fullscreen modes
-- **Pinned & hidden models** — Curate your model list
-- **Custom system prompts** — Set default instructions for AI behavior
+- **Multi-provider chat** — Stream responses through one interface across the configured model catalog
+- **Reasoning and activity** — Stream model-provided reasoning or activity when supported
+- **Web search** — Use native search with OpenAI, Anthropic, Google, and xAI, plus an optional Exa fallback when configured
+- **File attachments** — Upload supported images, PDFs, text, Markdown, JSON, CSV, and spreadsheet files up to 10 MB
+- **MCP tools** — Connect external Model Context Protocol servers with per-tool controls, circuit breaking, and durable audit logs
+- **BYOK** — Store your own provider keys with AES-256-GCM encryption at rest
+- **Guest access** — Try the app without signing up, with five messages per day and a limited model selection
+- **Organization** — Group chats into projects and pin important chats or models
+- **Sharing** — Publish chats with shareable links and Open Graph metadata
+- **History search** — Search your full chat history by conversation title
+- **Personalization** — Choose light, dark, or system themes and sidebar or fullscreen layouts
 
 ## Supported AI Providers
 
 The configured catalog includes OpenAI, Anthropic, Google, Mistral, xAI,
 Perplexity, and OpenRouter-hosted models. Because model availability changes
-frequently, `lib/models/` is the source of truth.
+frequently, [`lib/models/`](./lib/models/) is the source of truth.
 
-## Quick Start
+## Local Setup
+
+Requires Bun 1.3.1 or later, Node.js 22.13.0 or later, WorkOS, Convex, and at least one supported AI provider key.
 
 ```bash
 git clone https://github.com/darknightdesigner/not-a-wrapper.git
 cd not-a-wrapper
 bun install
-cp .env.example .env.local   # Edit with your keys
-bun run env:check
-bun dev                       # Starts Next.js + Convex dev servers
+cp .env.example .env.local
 ```
 
-The app runs at [http://localhost:3000](http://localhost:3000). You need at least one AI provider key to chat.
+Complete the WorkOS, Convex, and environment setup in [INSTALL.md](./INSTALL.md), then run:
 
-For full setup (WorkOS AuthKit, Convex database, BYOK encryption), see [INSTALL.md](./INSTALL.md) and [docs/environment.md](./docs/environment.md).
-The current Convex setup uses the official WorkOS AuthKit component for webhook-backed app user sync on `user.created`, `user.updated`, and `user.deleted`.
+```bash
+bun run env:check
+bun run dev
+```
+
+The app runs at [http://localhost:3000](http://localhost:3000). See
+[docs/environment.md](./docs/environment.md) for environment-variable ownership
+across local development, Convex, Vercel previews, and production.
 
 ## Tech Stack
 
-| Layer         | Technology                                                                                                                                                                           |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Framework     | [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript                                                                                                                 |
-| Database      | [Convex](https://convex.dev) — Real-time reactive database with file storage and WorkOS webhook-backed user sync                                                                     |
-| Auth          | [WorkOS AuthKit](https://workos.com/authkit) — Hosted authentication with guest access preserved                                                                                     |
-| AI            | [Vercel AI SDK v7](https://ai-sdk.dev/) — Multi-provider streaming, tool calling                                                                                                     |
-| State         | Zustand + TanStack Query                                                                                                                                                             |
-| UI            | [Base UI](https://base-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/)                                                                                                         |
-| Observability | [Sentry](https://sentry.io/) for app/error tracing, [PostHog](https://posthog.com/) for product and LLM analytics, [Braintrust](https://www.braintrust.dev/) for AI traces and evals |
-| Testing       | [Vitest](https://vitest.dev/)                                                                                                                                                        |
+| Layer         | Technology                       |
+| ------------- | -------------------------------- |
+| App           | Next.js 16, React 19, TypeScript |
+| Backend       | Convex and WorkOS AuthKit        |
+| AI            | Vercel AI SDK v7                 |
+| State         | Zustand and TanStack Query       |
+| UI            | Base UI and Tailwind CSS 4       |
+| Observability | Sentry, PostHog, and Braintrust  |
+| Testing       | Vitest                           |
 
 ## Architecture
 
-```
-app/                        # Next.js App Router
-├── api/                    # API routes (chat streaming, models, keys, MCP, projects)
-├── c/[chatId]/             # Chat pages
-├── p/[projectId]/          # Project pages
-├── share/[chatId]/         # Public share pages
-└── components/
-    ├── chat/               # Chat UI, message rendering, tool invocations
-    ├── layout/             # Sidebar, settings, dialogs
-    └── history/            # Chat history
+- `app/` — Next.js pages, API routes, and application UI
+- `convex/` — Schema, queries, mutations, jobs, and file storage
+- `lib/` — Model routing, tools, MCP, state, encryption, and shared logic
+- `components/` — Shared UI primitives
 
-lib/                        # Shared logic
-├── models/                 # AI model definitions per provider
-├── openproviders/          # Provider factory & SDK mapping
-├── tools/                  # Web search (provider + Exa), tool types
-├── mcp/                    # MCP server loading, circuit breaker
-├── chat-store/             # Chat & message state (Zustand)
-├── ai/                     # Message conversion, context management
-├── encryption.ts           # AES-256-GCM for BYOK keys
-└── config.ts               # Rate limits, free models, defaults
-
-components/                 # Shared UI components (Base UI primitives)
-convex/                     # Database schema, queries, mutations, file storage
-```
-
-## Roadmap
-
-| Feature                                       | Status  |
-| --------------------------------------------- | ------- |
-| Multi-provider chat                           | Shipped |
-| BYOK with AES-256-GCM encryption              | Shipped |
-| File uploads with Convex storage              | Shipped |
-| Projects & chat organization                  | Shipped |
-| Public chat sharing                           | Shipped |
-| Web search (native + Exa fallback)            | Shipped |
-| MCP tool integration                          | Shipped |
-| Light/dark themes, layout options             | Shipped |
-| Sentry, PostHog, and Braintrust observability | Shipped |
-| Guest access with rate limiting               | Shipped |
-| Code execution tools                          | Planned |
+See [CONTEXT.md](./CONTEXT.md) for the domain model and
+[`docs/adr/`](./docs/adr/) for architectural decisions.
 
 ## Development
 
 ```bash
-bun run dev          # Dev server (Next.js + Convex)
-bun run dev:clean    # Dev with fresh .next cache
+bun run dev          # Next.js and Convex development servers
+bun run dev:clean    # Dev with a fresh .next cache
 bun run env:check    # Validate local environment variables
 bun run lint         # ESLint
 bun run typecheck    # TypeScript checks
 bun run test         # Vitest
 bun run build:next   # Local Next.js production build
-bun run build        # Deploy Convex production, then build Next.js
+bun run build        # Deploy Convex, then build Next.js
 ```
+
+`bun run build` is a deployment command. Use `bun run build:next` for local verification without deploying Convex.
 
 ## Contributing
 
-Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+Contributions are welcome. Please open an issue first to discuss what you would like to change.
 
 For UI work, see [DESIGN.md](./DESIGN.md). Its visual direction is provisional;
 prioritize functionality, accessibility, reusable primitives, and consistent
@@ -134,7 +91,7 @@ interaction patterns while the formal design rules evolve.
 
 ## Based On
 
-This project is a fork of [Zola](https://github.com/ibelick/zola), the open-source AI chat interface. Special thanks to the Zola team for creating an excellent foundation.
+Not A Wrapper is a fork of [Zola](https://github.com/ibelick/zola). Special thanks to the Zola team for creating an excellent open-source AI chat foundation.
 
 ## License
 

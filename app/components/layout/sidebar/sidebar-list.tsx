@@ -29,21 +29,16 @@ import { SidebarItem } from "./sidebar-item"
 type SidebarListProps = {
   title: string
   items: Chat[]
-  /** Rows inserted before chats, used for the mixed global Pinned section. */
   beforeItems?: ReactNode
   presentation?:
     | { kind: "history"; projectNames?: ReadonlyMap<string, string> }
     | { kind: "pinned"; projectNames: ReadonlyMap<string, string> }
   currentChatId?: string
-  /** Initial expanded state (default: true) */
   defaultOpen?: boolean
-  /** localStorage key for persistence */
   storageKey?: string
-  /** Shows the organizer and new-chat action in the header. */
   showHeaderActions?: boolean
   organization?: ChatOrganization
   onOrganizationChange?: (organization: ChatOrganization) => void
-  /** Closes the mobile drawer after starting a new chat */
   onNewChat?: () => void
 }
 

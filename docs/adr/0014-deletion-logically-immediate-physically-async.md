@@ -28,10 +28,8 @@ Deletion is a two-stage operation:
    every child range is empty, and Project roots are deleted only after every
    linked Chat is gone.
 
-Routine assistant snapshot rows are disabled by default. Run-level
-`lastSnapshotSequence` preserves the accepted-checkpoint invariant without
-retaining cumulative copies; a temporary deployment setting,
-`RETAIN_ROUTINE_SNAPSHOT_ROWS=1`, restores row retention for rollback.
+Run-level `lastSnapshotSequence` preserves the accepted-checkpoint invariant
+without retaining cumulative snapshot rows.
 
 Jobs are idempotent, keep content-free document/byte counters, and schedule
 their next batch atomically. Unexpected invariant or storage failures convert a
@@ -58,9 +56,6 @@ Chats.
 - Existing tombstones must remain hidden through rollback. Reverting the async
   writer stops new tombstones, but partially cleaned roots must never be
   un-tombstoned; their jobs resume after the implementation is re-deployed.
-- Historical snapshot rows remain until the bounded manual purge completes.
-  Schema contraction is deferred until production preflight proves legacy data
-  is gone.
 
 ## Blocked-job runbook
 

@@ -1100,7 +1100,7 @@ describe("removeChatForOwner", () => {
       targetKind: "chat",
       chatId: chat._id,
       state: "pending",
-      phase: "assistantMessageSnapshots",
+      phase: "toolInvocations",
     })
     expect(scheduled).toEqual([
       { delay: 0, args: { jobId: "job-1" } },

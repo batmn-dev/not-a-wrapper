@@ -1,5 +1,5 @@
 /**
- * Live-stream adoption-loss reproducer (TODO investigation, 2026-08-28).
+ * Live-stream adoption-loss regression reproducer.
  *
  * Repeats the durable first-send flow N times and classifies each run:
  * adopted (local stream marks fired) vs lost (settlement receipt only — the
@@ -183,7 +183,6 @@ async function main() {
 
   let sendUrl = baseUrl
   if (MODE === "project") {
-    // Create one project through the real dialog; every run reuses it.
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
     await page.locator('[aria-label="New project"]').first().click()
     await page

@@ -21,16 +21,12 @@ export type CodeBlockProps = {
 } & React.HTMLProps<HTMLDivElement>
 
 function CodeBlock({ children, className, ...props }: CodeBlockProps) {
-  // Captured code-block box (2026-07-11): 24px-radius bordered surface with
-  // 1rem top / 0.25rem bottom flow margins (their pre mt-2 collapsed with the
-  // inner wrapper's mt-4/mb-1). Their --code-block-surface equals the page
-  // background in dark mode; our card token is the same mapping.
+  // Source-fidelity box: 24px radius and asymmetric flow margins. The derived
+  // 3xl token is 22px, so the literal radius is intentional.
   return (
     <div
       className={cn(
         "not-prose relative mt-4 mb-1 flex w-full flex-col overflow-clip border",
-        // rounded-[24px] literal: the reference radius resolves to 24px;
-        // our --radius-derived 3xl token is 22px, so the byte value is pinned.
         "border-border bg-card text-card-foreground rounded-[24px]",
         className
       )}
@@ -89,8 +85,7 @@ function CodeBlockCode({
         // Lazy service (ADR-0016 "Lazy Shiki"): Shiki core, themes, and the
         // grammar for this language load on first demand; unknown/plain ids
         // resolve to the grammar-less `text` language inside the service.
-        // Highlight duration (measurement plan Phase 2): includes any lazy
-        // grammar/theme module load on first use. Duration only, never code.
+        // Includes first-use grammar/theme loading; records duration only.
         const highlightStartedAt = isChatPerfClientEnabled()
           ? performance.now()
           : null

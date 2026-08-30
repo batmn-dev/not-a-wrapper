@@ -1,14 +1,11 @@
-import type { UIMessage } from "ai"
-import { fetchQuery } from "convex/nextjs"
-import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   resolveModelRoute,
   type RouteResolutionFailure,
 } from "@/lib/model-route-resolver"
-import {
-  checkServerSideUsage,
-  validateAndResolveChatCredential,
-} from "./api"
+import type { UIMessage } from "ai"
+import { fetchMutation, fetchQuery } from "convex/nextjs"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { admitServerSideUsage, validateAndResolveChatCredential } from "./api"
 import { createErrorResponse } from "./utils"
 
 vi.mock("convex/nextjs", () => ({
@@ -20,13 +17,13 @@ vi.mock("@/lib/model-route-resolver", () => ({
   resolveModelRoute: vi.fn(),
 }))
 
-describe("checkServerSideUsage", () => {
+describe("admitServerSideUsage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it("maps missing anonymous usage IDs to INVALID_REQUEST", async () => {
-    vi.mocked(fetchQuery).mockResolvedValue({
+    vi.mocked(fetchMutation).mockResolvedValue({
       canSend: false,
       remaining: 0,
       limit: 5,
@@ -35,7 +32,7 @@ describe("checkServerSideUsage", () => {
       errorCode: "ANONYMOUS_ID_REQUIRED",
     })
 
-    const error = await checkServerSideUsage(undefined).then(
+    const error = await admitServerSideUsage(undefined).then(
       () => null,
       (err) => err
     )
@@ -49,7 +46,7 @@ describe("checkServerSideUsage", () => {
   })
 
   it("maps missing synced users to USER_NOT_FOUND server errors", async () => {
-    vi.mocked(fetchQuery).mockResolvedValue({
+    vi.mocked(fetchMutation).mockResolvedValue({
       canSend: false,
       remaining: 0,
       limit: 0,
@@ -57,7 +54,7 @@ describe("checkServerSideUsage", () => {
       errorCode: "USER_NOT_FOUND",
     })
 
-    const error = await checkServerSideUsage("convex-token").then(
+    const error = await admitServerSideUsage("convex-token").then(
       () => null,
       (err) => err
     )
@@ -74,16 +71,14 @@ describe("checkServerSideUsage", () => {
   })
 
   it("keeps the missing-user mapping for older string-only usage responses", async () => {
-    vi.mocked(fetchQuery).mockResolvedValue({
+    vi.mocked(fetchMutation).mockResolvedValue({
       canSend: false,
       remaining: 0,
       limit: 0,
       error: "User not found",
     })
 
-    await expect(
-      checkServerSideUsage("convex-token")
-    ).rejects.toMatchObject({
+    await expect(admitServerSideUsage("convex-token")).rejects.toMatchObject({
       message: "Internal server error",
       statusCode: 500,
       code: "USER_NOT_FOUND",
@@ -91,14 +86,14 @@ describe("checkServerSideUsage", () => {
   })
 
   it("does not expose raw backend usage errors in 500 responses", async () => {
-    vi.mocked(fetchQuery).mockResolvedValue({
+    vi.mocked(fetchMutation).mockResolvedValue({
       canSend: false,
       remaining: 0,
       limit: 0,
       error: "Convex internal diagnostics: shard=usage-primary",
     })
 
-    const error = await checkServerSideUsage("convex-token").then(
+    const error = await admitServerSideUsage("convex-token").then(
       () => null,
       (err) => err
     )
@@ -123,14 +118,14 @@ describe("checkServerSideUsage", () => {
   })
 
   it("preserves the branded DAILY_LIMIT_REACHED public contract", async () => {
-    vi.mocked(fetchQuery).mockResolvedValue({
+    vi.mocked(fetchMutation).mockResolvedValue({
       canSend: false,
       remaining: 0,
       limit: 5,
       isAnonymous: true,
     })
 
-    const error = await checkServerSideUsage(undefined, "guest-id").then(
+    const error = await admitServerSideUsage(undefined, "guest-id").then(
       () => null,
       (caught) => caught
     )
@@ -197,13 +192,16 @@ describe("validateAndResolveChatCredential", () => {
       },
     })
 
-    expect(resolveModelRoute).toHaveBeenCalledWith({
-      modelId: "openrouter:anthropic/claude-sonnet-5",
-      isAuthenticated: true,
-      token: "convex-token",
-      requiredCapabilities: { webSearch: false },
-      pinnedProviderId: undefined,
-    }, expect.any(Object))
+    expect(resolveModelRoute).toHaveBeenCalledWith(
+      {
+        modelId: "openrouter:anthropic/claude-sonnet-5",
+        isAuthenticated: true,
+        token: "convex-token",
+        requiredCapabilities: { webSearch: false },
+        pinnedProviderId: undefined,
+      },
+      expect.any(Object)
+    )
   })
 
   it("maps resolver failures to the public admission contract", async () => {
@@ -345,8 +343,9 @@ describe("validateAndResolveChatCredential", () => {
           systemPrompt: "be brief",
           toolsLikely: true,
         },
-      })
-    , expect.any(Object))
+      }),
+      expect.any(Object)
+    )
     expect(admitted.reservationId).toBe("res-1")
   })
 
@@ -381,8 +380,9 @@ describe("validateAndResolveChatCredential", () => {
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({
         requiredCapabilities: { vision: true, webSearch: false },
-      })
-    , expect.any(Object))
+      }),
+      expect.any(Object)
+    )
   })
 
   it("requires web-search routes when search is enabled", async () => {
@@ -404,8 +404,9 @@ describe("validateAndResolveChatCredential", () => {
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({
         requiredCapabilities: { webSearch: true },
-      })
-    , expect.any(Object))
+      }),
+      expect.any(Object)
+    )
   })
 
   it("requires both capabilities for image search turns", async () => {
@@ -440,8 +441,9 @@ describe("validateAndResolveChatCredential", () => {
     expect(resolveModelRoute).toHaveBeenCalledWith(
       expect.objectContaining({
         requiredCapabilities: { vision: true, webSearch: true },
-      })
-    , expect.any(Object))
+      }),
+      expect.any(Object)
+    )
   })
 
   it("does not require vision for earlier images and forces Sonar search on", async () => {
@@ -483,8 +485,9 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     expect(resolveModelRoute).toHaveBeenCalledWith(
-      expect.objectContaining({ requiredCapabilities: { webSearch: true } })
-    , expect.any(Object))
+      expect.objectContaining({ requiredCapabilities: { webSearch: true } }),
+      expect.any(Object)
+    )
   })
 
   it("pins an approval continuation to the paused run's provider", async () => {
@@ -528,8 +531,9 @@ describe("validateAndResolveChatCredential", () => {
       { token: "convex-token" }
     )
     expect(resolveModelRoute).toHaveBeenCalledWith(
-      expect.objectContaining({ pinnedProviderId: "anthropic" })
-    , expect.any(Object))
+      expect.objectContaining({ pinnedProviderId: "anthropic" }),
+      expect.any(Object)
+    )
   })
 
   it("continues without a provider pin when the approval lookup fails", async () => {
@@ -575,8 +579,9 @@ describe("validateAndResolveChatCredential", () => {
     })
 
     expect(resolveModelRoute).toHaveBeenCalledWith(
-      expect.objectContaining({ pinnedProviderId: undefined })
-    , expect.any(Object))
+      expect.objectContaining({ pinnedProviderId: undefined }),
+      expect.any(Object)
+    )
     expect(warn).toHaveBeenCalledWith(
       JSON.stringify({
         _tag: "approval_route_facts_lookup_failed",

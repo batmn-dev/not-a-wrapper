@@ -516,7 +516,7 @@ describe("deriveAssistantTurnView", () => {
   })
 })
 
-describe("assistantTurnViewsEqual (the R3 memo contract)", () => {
+describe("assistantTurnViewsEqual memo contract", () => {
   const base = () =>
     deriveAssistantTurnView(
       {
@@ -619,8 +619,6 @@ describe("closed activity entry algebra (compile-time)", () => {
     expect(probes.length + model.entries.length).toBeGreaterThan(0)
   })
 })
-
-// --- The canonical turn phase + its single indicator ---
 
 const liveCtx = { status: "streaming" as const, isLast: true }
 
@@ -758,7 +756,6 @@ describe("deriveAssistantTurnPhase", () => {
   })
 
   it("is responding once the turn has substance and nothing is in flight", () => {
-    // Text streaming
     expect(
       deriveAssistantTurnPhase(viewOf([{ type: "text", text: "Hi" }]), liveCtx)
         .kind

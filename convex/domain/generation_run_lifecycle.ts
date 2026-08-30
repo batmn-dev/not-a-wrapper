@@ -71,8 +71,8 @@ export type AssistantMessageFacts = {
   // message.createdAt < run.startedAt — a regeneration streaming into an older,
   // reused message rather than a fresh sibling.
   isReusedForRegeneration: boolean
-  // any assistantMessageSnapshots row exists for this run (only meaningful, and
-  // only worth querying, when isReusedForRegeneration).
+  // this run accepted at least one projected-output checkpoint (only meaningful
+  // when isReusedForRegeneration).
   hasSnapshotForRun: boolean
   // the semantic sibling to revert to, precomputed — preferring the branch a
   // regeneration forked from (regenerationSourceMessageId), else the latest.

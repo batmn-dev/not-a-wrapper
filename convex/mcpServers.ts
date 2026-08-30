@@ -8,12 +8,8 @@ import {
 
 const MAX_MCP_SERVERS_PER_USER = 10
 
-// SSRF Validation
+// Convex cannot import lib/mcp/url-validation.ts; keep this mirror in sync.
 
-// These helpers mirror lib/mcp/url-validation.ts — keep both in sync.
-// Convex runtime cannot import from lib/, so the logic is duplicated here.
-
-/** Check whether an IPv4 address falls in a private/reserved range. */
 function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split(".").map(Number)
   if (parts.length !== 4 || parts.some((n) => isNaN(n) || n < 0 || n > 255)) {
@@ -32,11 +28,8 @@ function isPrivateIPv4(ip: string): boolean {
 }
 
 /**
- * Check whether an IPv6 address falls in a private/reserved range.
- * Covers: loopback (::1), unspecified (::), IPv4-mapped (::ffff:*),
+ * Covers loopback (::1), unspecified (::), IPv4-mapped (::ffff:*),
  * link-local (fe80::/10), unique local (fc00::/7).
- *
- * @param rawIpv6 - The raw IPv6 address WITHOUT surrounding brackets
  */
 function isPrivateIPv6(rawIpv6: string): boolean {
   const addr = rawIpv6.toLowerCase().replace(/%.*$/, "")
@@ -69,15 +62,8 @@ function isPrivateIPv6(rawIpv6: string): boolean {
 }
 
 /**
- * Validate a URL against SSRF rules.
- * Checks hostname patterns only — no DNS resolution in Convex runtime.
- * Defense-in-depth: the API route also validates before connecting.
- *
- * Mirrors lib/mcp/url-validation.ts validateServerUrl — keep in sync.
- *
- * Rejects: private IPs (10.x, 172.16-31.x, 192.168.x, 169.254.x, 127.x),
- * localhost, 0.0.0.0, .local hostnames, and private/reserved IPv6 addresses
- * (::1, ::, fe80::/10, fc00::/7, ::ffff:private-ip).
+ * Hostname-only SSRF gate for stored configuration. The connection path adds
+ * DNS validation before transport opens.
  */
 function validateServerUrl(url: string): string | null {
   let parsed: URL
@@ -112,14 +98,9 @@ function validateServerUrl(url: string): string | null {
     return "Only HTTP and HTTPS URLs are supported"
   }
 
-  return null // valid
+  return null
 }
 
-// Queries
-
-/**
- * List all MCP servers for the authenticated user.
- */
 export const list = maybeAuthQuery({
   args: {},
   handler: async (ctx) => {
@@ -133,10 +114,6 @@ export const list = maybeAuthQuery({
   },
 })
 
-/**
- * Get a single MCP server by ID. Returns it only when the caller owns it;
- * otherwise null.
- */
 export const get = maybeAuthQuery({
   args: { serverId: v.id("mcpServers") },
   handler: async (ctx, { serverId }) => {
@@ -149,15 +126,6 @@ export const get = maybeAuthQuery({
   },
 })
 
-// Mutations
-
-/**
- * Create a new MCP server configuration.
- *
- * - Validates URL against SSRF rules
- * - Enforces MAX_MCP_SERVERS_PER_USER limit
- * - Stores pre-encrypted auth values (caller encrypts via lib/encryption.ts)
- */
 export const create = authenticatedMutation({
   args: {
     name: v.string(),
@@ -215,13 +183,6 @@ export const create = authenticatedMutation({
   },
 })
 
-/**
- * Update an existing MCP server configuration.
- *
- * - Verifies ownership
- * - Re-validates URL if changed
- * - Accepts partial updates (only provided fields are changed)
- */
 export const update = ownedMcpServerMutation({
   args: {
     name: v.optional(v.string()),
@@ -282,10 +243,7 @@ export const update = ownedMcpServerMutation({
   },
 })
 
-/**
- * Delete an MCP server and cascade delete its tool approvals.
- * Tool call logs are preserved as audit trail (serverId becomes a dangling ref).
- */
+/** Deletes approvals but preserves tool-call audit rows. */
 export const remove = ownedMcpServerMutation({
   args: {},
   handler: async (ctx) => {
@@ -304,9 +262,6 @@ export const remove = ownedMcpServerMutation({
   },
 })
 
-/**
- * Quick enable/disable toggle for an MCP server.
- */
 export const toggleEnabled = ownedMcpServerMutation({
   args: {},
   handler: async (ctx) => {
@@ -314,10 +269,6 @@ export const toggleEnabled = ownedMcpServerMutation({
   },
 })
 
-/**
- * Update connection status (lastConnectedAt, lastError).
- * Called from the API route after attempting to connect to a server.
- */
 export const updateConnectionStatus = ownedMcpServerMutation({
   args: {
     lastConnectedAt: v.optional(v.number()),
@@ -336,12 +287,7 @@ export const updateConnectionStatus = ownedMcpServerMutation({
   },
 })
 
-// Internal Mutations (for server-side use from Convex actions/scheduled jobs)
-
-/**
- * Internal: update connection status without auth check.
- * For use from Convex actions that have already verified the user.
- */
+/** Authless internal path; callers must establish user authority. */
 export const internalUpdateConnectionStatus = internalMutation({
   args: {
     serverId: v.id("mcpServers"),

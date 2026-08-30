@@ -571,11 +571,8 @@ function morphDots(v: MorphVariant): MorphDot[] {
 
 export type OrbProps = {
   variant?: OrbVariant
-  /** Rendered edge length in px. The 28px geometry scales to fit. */
   size?: number
-  /** Accessible label, and the status text when `pill` is set. */
   label?: string
-  /** Wraps the orb and its label in a status pill. */
   pill?: boolean
   className?: string
   style?: CSSProperties

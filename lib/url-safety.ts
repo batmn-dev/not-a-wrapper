@@ -31,3 +31,30 @@ export function parseSafeExternalUrl(href: string): URL | null {
     return null
   }
 }
+
+export type SourceLinkDestination = {
+  href: string
+  target: "_blank"
+  rel: "noopener noreferrer"
+  /** Safe URL for display metadata such as hostname and origin. */
+  url: URL
+}
+
+/**
+ * The single destination policy for model- and tool-supplied source links.
+ * Only http(s) links can navigate. Accepted URLs remain unchanged because
+ * provider- and tool-supplied query parameters may be signature-sensitive.
+ */
+export function resolveSourceLinkDestination(
+  href: string
+): SourceLinkDestination | null {
+  const url = parseSafeExternalUrl(href)
+  if (!url) return null
+
+  return {
+    href: url.toString(),
+    target: "_blank",
+    rel: "noopener noreferrer",
+    url,
+  }
+}

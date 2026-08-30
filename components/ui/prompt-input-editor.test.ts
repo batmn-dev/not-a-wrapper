@@ -84,7 +84,7 @@ describe("PromptInput structured document", () => {
     expect(readPromptInputActionQuery(withSelectionAtEnd("@ "))).toBeNull()
     expect(readPromptInputActionQuery(withSelectionAtEnd("@ web"))).toBeNull()
 
-    // "+" is a mention trigger with identical boundary rules (ChatGPT hI).
+    // "+" is a mention trigger with identical boundary rules.
     expect(readPromptInputActionQuery(withSelectionAtEnd("+web s"))).toEqual({
       from: 1,
       query: "web s",
@@ -106,8 +106,7 @@ describe("PromptInput structured document", () => {
     const attrs = spec[1] as Record<string, string>
     expect(attrs["data-symbol"]).toBe("skillMention")
     expect(attrs["data-system-hint-type"]).toBe("connector:abc")
-    // Icon'd pills wrap icon + label in an inner primary-text container
-    // (ChatGPT renders connector labels in primary, not the pill accent).
+    // Icon pills wrap icon + label in an inner primary-text container.
     const inner = spec[2] as unknown[]
     expect(inner[0]).toBe("span")
     expect((inner[1] as Record<string, string>).class).toContain(
@@ -145,7 +144,7 @@ describe("PromptInput structured document", () => {
     // Space ends the slash query entirely — unlike "@" it never spans words.
     expect(readPromptInputActionQuery(withSelectionAtEnd("/web s"))).toBeNull()
     // A later "/" that starts a word owns the tail: while its query is
-    // stale, the earlier "@" mention must NOT reactivate (ChatGPT rule).
+    // stale, the earlier "@" mention must not reactivate.
     expect(readPromptInputActionQuery(withSelectionAtEnd("@add /web"))).toEqual(
       {
         from: 6,
@@ -232,7 +231,7 @@ describe("PromptInput structured document", () => {
     expect(opened.active).toBe(true)
 
     // Refining the query in place is the SAME session (Escape dismissal must
-    // survive it — ChatGPT's dismissedMatch is keyed by position + symbol).
+    // survive it because session identity is keyed by position and symbol).
     dispatch(state.tr.insertText("w"))
     const refined = readPromptInputActionQuerySession(state)
     expect(refined).toMatchObject({ active: true, query: "w", id: opened.id })

@@ -60,7 +60,7 @@ describe("cross-provider replay matrix", () => {
     const provider = "anthropic"
     const context = { targetModelId: "claude-4-opus", hasTools: true }
 
-    it("regression: handles OpenAI action/sources web_search replay without compile fallback", async () => {
+    it("handles OpenAI action/sources web_search replay as text", async () => {
       const regressionHistory: UIMessage[] = [
         userMessage(
           "reg-openai-anthropic-user-1",
@@ -112,10 +112,7 @@ describe("cross-provider replay matrix", () => {
       const result = await adaptHistoryForProvider(
         regressionHistory,
         provider,
-        context,
-        {
-          useReplayCompiler: true,
-        }
+        context
       )
       const assistant = result.messages.find(
         (message) => message.role === "assistant"
@@ -131,20 +128,7 @@ describe("cross-provider replay matrix", () => {
             (part as { text: string }).text.includes("Amazon links")
         )
       )
-      const replayProjectionWarning = result.warnings.some(
-        (warning) =>
-          warning.code === "replay_compile_warning" &&
-          warning.detail.includes("tool_lowered_to_text") &&
-          warning.detail.includes("never fabricates Anthropic hosted-tool")
-      )
-
-      expect(
-        result.warnings.some(
-          (warning) => warning.code === "replay_compile_fallback"
-        )
-      ).toBe(false)
       expect(hasCompiledWebSearch).toBe(false)
-      expect(replayProjectionWarning).toBe(true)
       expect(continuityTextKept).toBe(true)
       expect(
         assistant?.parts.some(

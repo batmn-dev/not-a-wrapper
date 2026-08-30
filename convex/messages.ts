@@ -155,7 +155,7 @@ export type PendingApprovalProjection = {
  * UI receives the linked terminal status/reason during convergence. NO
  * time-derived fields cross this wire (freshness, controllable, stoppable):
  * Convex queries re-execute on data changes, never on wall-clock time — a
- * server-classified freshness could never expire between writes (§18 #3). The
+ * server-classified freshness could never expire between writes. The
  * client resolver owns all clock classification.
  */
 export type SelectedRunProjection = {

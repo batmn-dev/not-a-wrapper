@@ -173,8 +173,7 @@ export function isValidTerminalUsageEvidence(
 }
 
 /**
- * The ONE cancellation-settlement decision (ADR-0021 amendment §9): maps a
- * reservation's pinned facts plus normalized terminal evidence to a settle or
+ * Maps pinned reservation facts plus normalized terminal evidence to a settle or
  * release. Deterministic evidence order — authoritative usage beats
  * estimates, estimates are never added on top of the observed component they
  * approximate, and locally estimated fallbacks are capped by the reservation
@@ -521,12 +520,11 @@ export function reservationPayloadFingerprint(
   ])
 }
 
-/** Validate an integer credit amount crossing a trust boundary. */
+// Reject unsafe numeric facts at the worker trust boundary.
 export function isValidCreditAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
 }
 
-/** Validate a non-negative integer token estimate crossing a trust boundary. */
 export function isValidTokenEstimate(
   value: unknown
 ): value is number | undefined {
@@ -536,7 +534,6 @@ export function isValidTokenEstimate(
   )
 }
 
-/** Validate a pricing snapshot crossing a trust boundary (shape + integers). */
 export function isValidPricingSnapshot(snapshot: PricingSnapshot): boolean {
   const rateValid = (rate: RoutePricingRate) =>
     isValidCreditAmount(rate.inputCreditsPerMTok) &&
@@ -553,7 +550,6 @@ export function isValidPricingSnapshot(snapshot: PricingSnapshot): boolean {
   )
 }
 
-/** Validate every numeric reservation fact before hashing or persistence. */
 export function isValidUsageReservationArgs(
   args: Infer<typeof vUsageReservationArgs>
 ): boolean {

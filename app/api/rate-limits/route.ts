@@ -10,7 +10,6 @@ export async function GET(req: Request) {
     const authSession = await getWorkosSession()
     const isAuthenticated = !!authSession.user
 
-    // Validate: must have either authenticated user or anonymousId for tracking
     if (!isAuthenticated && !anonymousId) {
       return new Response(
         JSON.stringify({

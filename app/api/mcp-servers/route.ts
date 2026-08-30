@@ -13,9 +13,6 @@ import { NextResponse } from "next/server"
  * `authenticatedRoute` seam.
  */
 
-/**
- * POST /api/mcp-servers — Create a new MCP server
- */
 export const POST = authenticatedRoute(async (request, { session, convex }) => {
   try {
     const body = await request.json()
@@ -66,9 +63,6 @@ export const POST = authenticatedRoute(async (request, { session, convex }) => {
   }
 })
 
-/**
- * PATCH /api/mcp-servers — Update an existing MCP server
- */
 export const PATCH = authenticatedRoute(
   async (request, { session, convex }) => {
     try {

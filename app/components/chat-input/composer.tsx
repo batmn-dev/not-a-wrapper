@@ -114,8 +114,6 @@ type ComposerProps = {
   bottomSpacing?: "default" | "none"
 }
 
-const DEFAULT_COMPOSER_ARIA_LABEL = "Chat with ChatGPT"
-
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
 type ComposerDraftIdentity = {
@@ -210,7 +208,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onLockedGuestModelSelect,
       draftScopeId,
       placeholder = "Ask anything",
-      ariaLabel = DEFAULT_COMPOSER_ARIA_LABEL,
+      ariaLabel = placeholder,
       bottomSpacing = "default",
     },
     ref
@@ -426,11 +424,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // is already pending. The status fallback preserves standalone/local
       // callers that do not participate in durable presentation.
       const canStop = stoppable ?? status === "streaming"
-      // The pre-acceptance dispatch window also presents Stop. The orchestrated
-      // stop() cancels a pre-transport dispatch locally and otherwise
-      // arms a deferred Stop that only ever targets the run this dispatch
-      // creates (§4.1.4). A resolver-declined Stop (e.g. one already pending)
-      // is NOT overridden: isSubmitting has settled false by then.
+      // Pre-acceptance Stop cancels locally or defers to this dispatch's run.
+      // A resolver-declined Stop is not overridden after submission settles.
       // Never present an enabled Stop without an actionable handler.
       const presentStop = Boolean(stop) && (canStop || Boolean(isSubmitting))
       const attachmentsReady = attachments.every(
@@ -442,10 +437,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         isOnlyWhitespace(localValue) &&
         attachments.length === 0
       return resolveComposerPrimaryActionState({
-        // Stop presents for a live LOCAL stream or any resolver-stoppable
-        // run (background, awaiting-approval, possibly-stale — §8/§11):
-        // durable Stop is a mutation, not a transport abort, so the local
-        // status alone must not gate the affordance.
+        // Durable Stop is a mutation, so local transport cannot gate it.
         isStreaming: presentStop,
         isAbortable: presentStop,
         canSend:

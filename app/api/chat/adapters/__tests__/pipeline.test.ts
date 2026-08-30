@@ -26,7 +26,6 @@ const modelByProvider: Record<(typeof providers)[number], string> = {
   perplexity: "sonar-pro",
 }
 
-// Phase 4B references this fixture name. Current fixtures export it as heavyToolUseConversation.
 const multiStepToolConversation = heavyToolUseConversation
 
 type ModelContentPart = Record<string, unknown> & {

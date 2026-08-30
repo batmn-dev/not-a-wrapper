@@ -11,10 +11,9 @@ import { useCallback, useMemo, type RefObject } from "react"
 import type { ComposerMenuConnector } from "./composer-menu-items"
 
 /**
- * MCP connectors surface in the @ menu the way ChatGPT surfaces its
- * connectors; activation toggles the server the runtime already consults
- * per turn. `undefined` while the per-user query resolves drives the
- * menu's skeleton rows.
+ * MCP connectors surface in the @ menu; activation toggles the server the
+ * runtime already consults per turn. `undefined` while the per-user query
+ * resolves drives the menu's skeleton rows.
  */
 function useComposerConnectors({
   isUserAuthenticated,

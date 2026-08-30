@@ -20,8 +20,8 @@ function createIntentPreloader<T>(load: () => Promise<T>) {
 }
 
 /**
- * Warms a lazy interaction surface from the same intent signals ChatGPT uses:
- * keyboard focus, pointer hover, touch start, and coarse-pointer visibility.
+ * Warms a lazy interaction surface from keyboard focus, pointer hover, touch
+ * start, and coarse-pointer visibility.
  * The callback ref owns every listener and observer for the target element.
  */
 function useIntentPrefetch<ElementType extends HTMLElement>(

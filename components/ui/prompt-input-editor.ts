@@ -36,7 +36,7 @@ import { Decoration, DecorationSet } from "prosemirror-view"
  * three subsystems it composes —
  *   - prompt-input-schema: the document model and plain-text boundary
  *   - composer-entity-plugin (+ composer-entity-pill): mention-pill mechanics
- *   - action-query-plugin: ChatGPT's systemHintPlugin session machine
+ *   - action-query-plugin: discovery-session state machine
  * Consumers import from here; the split keeps each subsystem independently
  * reviewable without changing this module's API.
  */

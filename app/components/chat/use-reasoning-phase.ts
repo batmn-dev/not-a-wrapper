@@ -29,8 +29,8 @@ type UseAssistantWorkDurationParams = {
   /**
    * Identity of the turn `reasoning` derives from. The panel's single hook
    * instance re-targets across turns (default-follow, explicit selection); a
-   * key change is a turn HANDOFF and always restarts the timer from 0. The R1
-   * resume applies only within one turn's isLast bounce.
+   * key change is a turn HANDOFF and always restarts the timer from 0. Resume
+   * behavior applies only within one turn's isLast bounce.
    */
   turnKey: string | undefined
 }
@@ -68,7 +68,7 @@ export function useAssistantWorkDuration({
   // React 19 render-sync: restart the timer on a turn handoff. The phase
   // transition below cannot catch every handoff — the swap may render before
   // `isLast` settles, or never transition phase at all (thinking→thinking) —
-  // and either way the R1 anchor would inherit the previous turn's ticks
+  // and either way the same-turn anchor would inherit the previous turn's ticks
   // (e.g. a panel header resuming a settled turn's 9s under a new turn).
   if (turnKey !== timerState.turnKey) {
     setTimerState({

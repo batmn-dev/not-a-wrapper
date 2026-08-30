@@ -17,11 +17,7 @@ import {
 import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import * as Sentry from "@sentry/nextjs"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
-import {
-  checkServerSideUsage,
-  incrementServerSideUsage,
-  validateAndResolveChatCredential,
-} from "./api"
+import { admitServerSideUsage, validateAndResolveChatCredential } from "./api"
 import {
   createChatTurnRuntime,
   type ChatTurnRuntime,
@@ -53,10 +49,7 @@ function setChatConversationCorrelation(chatId: string): void {
 // the durable-persistence timeline.
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID()
-  // Receipt anchor for the receipt-anchored perf spans
-  // (`provider_request_started`, `server_first_stream_write`,
-  // `response_stream_closed`). Distinct from the runtime's turn clock, which
-  // deliberately starts at construction (see chat-turn-runtime.ts).
+  // Receipt spans start before the runtime's construction clock.
   const requestReceivedAtMs = Date.now()
   // Sampled chat-performance session: off unless CHAT_PERF_SAMPLE_RATE
   // is set. The client's x-chat-perf-id is validated here and carried only
@@ -212,12 +205,11 @@ export async function POST(req: Request) {
       },
       () =>
         perf.span("usage_admission", async () => {
-          // Experiment 1 overlap: the abuse check, the attachment preflight,
-          // and the key-settings read are independent READS — run them
-          // concurrently. The ordering that carries authorization weight is
-          // unchanged: the allowance reservation (inside credential
-          // resolution below) still starts only after the abuse gate passed,
-          // and abuse-check failure keeps precedence over preflight failure.
+          // The atomic abuse admission, attachment preflight,
+          // and the key-settings read are independent operations — run them
+          // concurrently. The allowance reservation (inside credential
+          // resolution below) still starts only after the abuse gate passes,
+          // and abuse-admission failure keeps precedence over preflight failure.
           // The no-op catches keep an early rejection from surfacing as
           // unhandled while its sibling is still being awaited.
           const keySettingsPromise =
@@ -229,8 +221,8 @@ export async function POST(req: Request) {
                 )
               : undefined
           keySettingsPromise?.catch(() => {})
-          const abuseCheck = checkServerSideUsage(convexToken, anonymousId)
-          abuseCheck.catch(() => {})
+          const abuseAdmission = admitServerSideUsage(convexToken, anonymousId)
+          abuseAdmission.catch(() => {})
           const preflight = isDurableConvexChat({
             isAuthenticated,
             convexToken,
@@ -249,7 +241,7 @@ export async function POST(req: Request) {
               )
             : undefined
           preflight?.catch(() => {})
-          await abuseCheck
+          await abuseAdmission
           const generationInput = preflight ? await preflight : undefined
           const plannedPinnedProvider = generationInput?.pinnedProvider
           const pinnedProviderId =
@@ -279,10 +271,8 @@ export async function POST(req: Request) {
                 perf,
               })
           )
-          // Arm the release hook the moment a reservation exists — BEFORE
-          // anything else (the abuse increment below included) can throw, so
-          // no pre-runtime failure window leaves the reservation stranded
-          // until the reconciler.
+          // Arm the release hook the moment a reservation exists so no
+          // pre-runtime failure window leaves it stranded until the reconciler.
           if (resolvedAdmission.reservationId && convexToken) {
             const token = convexToken
             reservationRelease.current = () =>
@@ -292,16 +282,7 @@ export async function POST(req: Request) {
                 { token }
               )
           }
-          // Off the critical path (Experiment 1): started in its historical
-          // order — after reservation arming, so a failure still finds the
-          // release hook armed — but awaited only after prepare, before any
-          // streaming begins.
-          const incrementPromise = incrementServerSideUsage(
-            convexToken,
-            anonymousId
-          )
-          incrementPromise.catch(() => {})
-          return { ...resolvedAdmission, generationInput, incrementPromise }
+          return { ...resolvedAdmission, generationInput }
         })
     )
     Sentry.setTag("chat_route_id", admission.route.routeId)
@@ -335,10 +316,6 @@ export async function POST(req: Request) {
     })
 
     await perf.span("prepare_total", () => turn!.prepare())
-    // The abuse-counter increment overlapped prepare; a failure still lands
-    // strictly pre-stream (the outer catch fails the prepared turn cleanly,
-    // and the reservation settles through its run's lifecycle).
-    await admission.incrementPromise
     return await turn.toResponse(req.signal)
   } catch (err: unknown) {
     console.error(

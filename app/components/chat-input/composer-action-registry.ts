@@ -9,8 +9,8 @@ export type ComposerActionId = "add-files" | "web-search"
 export type ComposerActionDefinition = Readonly<{
   id: ComposerActionId
   label: string
-  /** ChatGPT's shouldShowShortLabel: the touch-optimized menu renders a short
-   * label ("Files") where the pointer menus use the full one. */
+  /** The touch-optimized menu uses a short label where pointer menus use the
+   * full one. */
   touchLabel?: string
   description: string
   keywords: readonly string[]
@@ -55,8 +55,8 @@ export function getComposerAction(actionId: ComposerActionId) {
 }
 
 export function getComposerActionQueryMatches(query: string) {
-  // ChatGPT parity: one case-insensitive substring check against the item's
-  // concatenated searchable text, with no query trimming — multi-word queries
+  // Run one case-insensitive substring check against the item's concatenated
+  // searchable text, with no query trimming. Multi-word queries
   // match across field boundaries in order ("files upload"), never reordered.
   const normalizedQuery = query.toLocaleLowerCase()
   if (!normalizedQuery) return composerActionRegistry

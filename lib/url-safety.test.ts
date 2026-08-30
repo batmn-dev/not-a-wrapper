@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { toSafeWebHref } from "./url-safety"
+import { resolveSourceLinkDestination, toSafeWebHref } from "./url-safety"
 
 describe("toSafeWebHref", () => {
   it("returns normalized http and https URLs", () => {
@@ -15,5 +15,21 @@ describe("toSafeWebHref", () => {
     expect(toSafeWebHref("data:text/html,hello")).toBeNull()
     expect(toSafeWebHref("mailto:support@example.com")).toBeNull()
     expect(toSafeWebHref("/internal")).toBeNull()
+  })
+})
+
+describe("resolveSourceLinkDestination", () => {
+  it("preserves signature-sensitive source URLs", () => {
+    const signedUrl =
+      "https://example.com/research?X-Amz-Credential=user%2Fscope&X-Amz-Signature=abc123"
+    const destination = resolveSourceLinkDestination(signedUrl)
+
+    expect(destination).toMatchObject({
+      target: "_blank",
+      rel: "noopener noreferrer",
+    })
+    expect(destination?.url.toString()).toBe(signedUrl)
+    expect(destination?.href).toBe(signedUrl)
+    expect(resolveSourceLinkDestination("javascript:alert(1)")).toBeNull()
   })
 })

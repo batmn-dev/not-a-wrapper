@@ -13,8 +13,8 @@
 
 The 50 ms AI SDK message throttle (`lib/chat-performance/message-throttle.ts`)
 ended the tab-freezing renderer saturation, but it makes streamed prose arrive
-in visible multi-word lumps. The product bar chosen for fixing this is ChatGPT
-word-fade parity: text appears word-by-word with a brief fade, at ≤ 1 word per
+in visible multi-word lumps. The product bar is a paced word fade: text appears
+word-by-word with a brief fade, at ≤ 1 word per
 visual update at typical token rates. That requires visual updates _more_
 frequent than every 50 ms — which reads as a contradiction of the throttle the
 codebase just fought to keep.

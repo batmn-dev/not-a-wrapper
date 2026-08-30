@@ -493,7 +493,6 @@ export async function getPublicByIdHandler(
   const chat = await ctx.db.get(chatId)
   if (!chat) return null
 
-  // Only return if chat is public
   if (!chat.public) return null
   if (!(await isChatActive(ctx, chat))) return null
 
@@ -508,8 +507,7 @@ export const getPublicById = query({
 
 /**
  * Stamp `user`'s read cursor on a chat they own; no-op for a missing or
- * not-owned chat. The testable core of markChatRead (owner no-op is review #4's
- * requirement: opening a public chat you don't own must not throw).
+ * not-owned chat. Opening a public chat you do not own must not throw.
  */
 export async function markChatReadForOwner(
   ctx: Pick<MutationCtx, "db">,

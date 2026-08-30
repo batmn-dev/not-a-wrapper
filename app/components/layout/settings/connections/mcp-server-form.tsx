@@ -74,7 +74,6 @@ function connectionFingerprint(details: McpConnectionDetails): string {
 type McpServerFormProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** null = create mode, defined = edit mode */
   server: McpServerData | null
 }
 
@@ -220,7 +219,6 @@ export function McpServerForm({
         throw new Error(data.error || "Failed to save server")
       }
 
-      // Auto-approve discovered tools after successful save
       const servIdForApproval = isEditMode ? server?._id : data.serverId
       if (
         testResult?.success &&

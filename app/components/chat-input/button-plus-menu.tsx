@@ -58,11 +58,8 @@ const composerPlusTooltip = (
   </TooltipShortcut>
 )
 
-/* ChatGPT's touch-optimized + menu treatment: mobile-OS user agents get large
- * icon-chip rows in a content-sized,
- * rounded-28 superellipse popover — 6px row inline margin/padding, 12px gap,
- * 36px full-round chips on the tertiary surface with 20px glyphs, row
- * highlight on the same tertiary token, and no group separators. */
+/* Mobile-OS user agents get large icon-chip rows in a content-sized,
+ * touch-optimized popover. */
 const touchMenuRowClassName =
   "mx-1.5 h-auto min-h-(--floating-menu-item-height) cursor-auto scroll-m-1.5 gap-3 rounded-[28px] border-y-0! [corner-shape:superellipse(1.1)] px-1.5 py-1.5 text-sm hover:bg-(--floating-menu-touch-tertiary) focus:bg-(--floating-menu-touch-tertiary) data-highlighted:bg-(--floating-menu-touch-tertiary)"
 const touchMenuChipClassName =
@@ -201,8 +198,8 @@ export function ButtonPlusMenu({
 }: ButtonPlusMenuProps) {
   const { openFilePicker, addFiles } = useFileUpload()
   const isMobile = useBreakpoint(768)
-  // ChatGPT parity: the touch treatment keys on the user-agent OS (iOS /
-  // Android / iPadOS-as-Mac), NOT pointer coarseness or width — a narrow
+  // The touch treatment keys on the user-agent OS (iOS, Android, or
+  // iPadOS-as-Mac), not pointer coarseness or width. A narrow
   // desktop window keeps the compact plain-glyph popover.
   const isTouchMenu = useIsMobileDeviceOs()
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
@@ -211,7 +208,7 @@ export function ButtonPlusMenu({
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = event.currentTarget.files
       if (files?.length) addFiles(Array.from(files))
-      // ChatGPT parity: reset so re-picking the same file fires change again.
+      // Reset so re-picking the same file fires change again.
       event.currentTarget.value = ""
     },
     [addFiles]
@@ -458,12 +455,8 @@ export function ButtonPlusMenu({
             </TooltipContent>
           </Tooltip>
           {isTouchMenu ? (
-            /* ChatGPT's touch-optimized + menu (decompiled 2026-08-24): a
-               content-sized rounded-28 superellipse popover, min-w 240px,
-               height-capped by --floating-menu-item-height rows, with
-               Camera / Photos / Files icon-chip rows in place of the single
-               add-files row. data-content-appearance marks THIS treatment —
-               the fine-pointer popover below deliberately lacks it. */
+            /* The touch menu splits file sources into Camera, Photos, and
+               Files. data-content-appearance scopes this treatment. */
             <DropdownMenuContent
               side="top"
               sideOffset={-45}
@@ -581,13 +574,8 @@ export function ButtonPlusMenu({
               ))}
             </DropdownMenuContent>
           ) : (
-            /* ChatGPT's fine-pointer narrow-width + menu (captured
-               2026-08-24): a compact content-sized popover on the main
-               surface — rounded-[20px], py-2.5, 36px text-sm rows with plain
-               20px currentColor glyphs — NOT the old dark icon-circle panel.
-               `w-max` overrides the shared dropdown base's anchor-width
-               sizing: the popover is sized by its rows (capped at max-w-xs),
-               never by the 36px + button. */
+            /* `w-max` overrides the shared dropdown's anchor-width sizing so
+               rows, not the 36px trigger, determine the popover width. */
             <DropdownMenuContent
               side="top"
               sideOffset={0}
@@ -610,8 +598,8 @@ export function ButtonPlusMenu({
                     onClick={() => activateItem(item.itemId)}
                   >
                     <span className="flex min-w-0 items-center gap-1.5">
-                      {/* Mobile rows keep ChatGPT's plain currentColor glyphs —
-                          no per-action icon tint (that belongs to the @ menu). */}
+                      {/* Mobile rows use currentColor glyphs; per-action icon
+                          tint belongs to the @ menu. */}
                       <Icon
                         icon={item.action.icon}
                         glyphInset={0}
@@ -665,9 +653,8 @@ export function ButtonPlusMenu({
           )}
         </DropdownMenu>
         {isTouchMenu && isFileUploadAvailable && (
-          /* ChatGPT parity: the camera / photo-library sources are hidden
-             file inputs the touch rows click — mounted OUTSIDE the menu so
-             they survive the menu closing on row activation. */
+          /* Camera and photo-library sources are hidden file inputs mounted
+             outside the menu so they survive row activation closing it. */
           <>
             <input
               ref={photosInputRef}
@@ -706,9 +693,9 @@ export function ButtonPlusMenu({
     )
   }
 
-  // Desktop: the + button and typed "@"/"/" drive ONE editor-owned query
-  // session (ChatGPT's synthetic session) — clicking + opens the same menu
-  // that typing "@" does, and typing filters it.
+  // Desktop: the + button and typed "@"/"/" drive one editor-owned query
+  // session. Clicking + opens the same menu that typing "@" does, and typing
+  // filters it.
   return (
     <Popover open={isActionQueryOpen} onOpenChange={handleActionQueryOpenChange}>
       <Tooltip

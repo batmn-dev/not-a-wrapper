@@ -26,7 +26,6 @@
 /* prettier-ignore */
 @custom-variant not-keyboard-focused (&:not(:is(html[data-focus-mode="keyboard"] :focus-visible)));
 
-/* Viewport height variants for conditional sticky behavior */
 @custom-variant tall (@media (min-height: 40rem));
 @custom-variant not-tall (@media (max-height: 39.99rem));
 
@@ -91,8 +90,8 @@
 }
 
 @theme static {
-  /* ChatGPT's main-column container tiers. Keep the semantic names used by
-     the fixed-header contract instead of coupling it to Tailwind's size scale. */
+  /* Keep the main-column container tiers named for the fixed-header contract
+     instead of coupling them to Tailwind's size scale. */
   --container-w-sm: 40rem;
   --container-w-xl: 80rem;
   --container-w-2xl: 96rem;
@@ -576,12 +575,9 @@
   --floating-menu-touch-edge-shadow: var(--floating-select-edge-shadow);
   --floating-menu-item-active: rgba(0, 0, 0, 0.04);
   --floating-menu-divider: var(--border-default);
-  /* ChatGPT's --bg-tertiary (measured 2026-08-24): the touch-optimized menu's
-   * icon-chip surface and touch highlight. */
   --floating-menu-touch-tertiary: #f3f3f3;
   --floating-menu-radius: 1.25rem;
   --floating-menu-item-radius: 0.75rem;
-  /* Shared pointer-modality row density; action menus consume this token. */
   --floating-menu-item-height: calc(var(--spacing) * 9);
   --floating-menu-max-height: calc(
     var(--spacing) * 4 + var(--floating-menu-item-height) * 10
@@ -593,7 +589,6 @@
     display-p3 0.909804 0.952941 0.996078
   );
   --composer-selection-background: oklch(0.684 0.157 256.21 / 0.35);
-  /* Two-tone Web search glyph shared by the action row and editor entity. */
   --web-search-icon-surface: oklch(0.941 0.043 218.859);
   --web-search-icon-foreground: oklch(0.795 0.131 222.887);
   --modal-centered-surface: #ffffff;
@@ -622,7 +617,6 @@
   --text-primary: var(--foreground);
   --text-secondary: oklch(0.478 0 0);
   --text-tertiary: oklch(0.65 0 0);
-  /* Placeholder copy tracks tertiary text through a dedicated semantic seam. */
   --text-placeholder: var(--text-tertiary);
   --text-quaternary: rgba(0, 0, 0, 0.188);
   --text-disabled: oklch(0.65 0 0);
@@ -655,11 +649,9 @@
   --status-success-foreground: oklch(0.38 0.085 146.171);
   --success: var(--status-success-foreground);
 
-  /* Provider brand colors */
   /* Claude logo color (--cds-clay in their web browser) */
   --claude-logo: oklch(0.6724 0.1308 38.76);
   --deepseek-logo: oklch(0.5703 0.2334 266.6);
-  /* NVIDIA logo color */
   --nvidia-logo: oklch(0.713 0.1942 130.8);
   /* Perplexity logo color (--fg-primary on perplexity.ai) */
   --perplexity-logo: #27251e;
@@ -785,9 +777,8 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.222 0 0);
   --popover-foreground: var(--foreground);
-  /* ChatGPT's canonical dark menu surface (#353535, measured 2026-08-24) —
-   * their dark base surface is #000 and every floating menu overrides to
-   * this value, so the shared token carries it instead of per-menu hexes. */
+  /* Every dark floating menu uses this shared surface token instead of
+   * repeating per-menu colors. */
   --floating-surface: oklch(0.329 0 0);
   --floating-surface-foreground: #ffffff;
   --floating-surface-edge-shadow: inset 0 0 1px rgba(255, 255, 255, 0.2);
@@ -857,7 +848,6 @@
   --status-success-foreground: oklch(0.975 0.015 158.255);
   --success: var(--status-success-foreground);
 
-  /* Provider brand colors */
   /* Claude logo color (--cds-clay in their web browser) */
   --claude-logo: oklch(0.6724 0.1308 38.76);
   --deepseek-logo: oklch(0.6473 0.1858 265.19);
@@ -934,7 +924,6 @@
     rgba(0, 0, 0, 0.16) 0px 32px 45.25px -2.5px,
     rgba(0, 0, 0, 0.12) 0px 52px 73.54px -3px;
 
-  /* Composer surface */
   --composer-surface-primary: oklch(0.248 0 0);
   --composer-bg: var(--composer-surface-primary);
   --sharp-edge-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -1228,8 +1217,8 @@
   animation-timing-function: ease;
 }
 
-/* Reserved for the pinned-widget surface: ChatGPT activates both stable
-   identities only for that transition, not for ordinary chat sends. */
+/* The pinned-widget surface activates both stable identities only for that
+   transition, not for ordinary chat sends. */
 .pinned-widget-transition {
   --vt-composer: composer;
   --vt-disclaimer: disclaimer;
@@ -1584,19 +1573,11 @@
     }
   }
 
-  /* The thread footer's gradient backdrop (ChatGPT threadFooterContentFade
-   * ::after, verified live 2026-08-24): a full-width, 80%-opaque surface
-   * behind the sticky footer whose top fades in over 32px, so thread content
-   * scrolling under the composer dims instead of hitting a hard edge. The
-   * footer must be `isolate` so z-index -1 stays inside its stacking context.
-   * ChatGPT also ships a >=720px container-query variant that clamps the
-   * backdrop to the thread column and adds a horizontal edge fade, but it is
-   * DEAD CODE live: the rule targets a container name their DOM never sets,
-   * so the shipped behavior everywhere is this full-width backdrop. */
+  /* The full-width thread-footer backdrop fades over 32px so content scrolling
+   * under the composer dims instead of hitting a hard edge. The footer must be
+   * `isolate` so z-index -1 stays inside its stacking context. */
   .content-fade {
-    /* Declared where it is consumed: the fade height is a parameterization
-     * hook read by the ::after mask below. Nothing overrides it today —
-     * 32px matches ChatGPT's live behavior. */
+    /* Declared where the ::after mask consumes it; nothing overrides it today. */
     --thread-footer-content-fade-height: 32px;
   }
 
@@ -1739,8 +1720,8 @@
     white-space: nowrap;
   }
 
-  /* ChatGPT swaps to an absolute ::before placeholder in Firefox. A feature
-     query keeps that browser contract without UA-derived render state. */
+  /* Firefox uses an absolute ::before placeholder. A feature query keeps that
+     browser contract without UA-derived render state. */
   @supports (-moz-appearance: none) {
     .wcDTda_prosemirror-parent.default-browser .placeholder::after {
       content: none;
@@ -1825,8 +1806,8 @@ code {
   font-variation-settings: var(--default-mono-font-variation-settings);
 }
 
-/* Match ChatGPT's UI-copy policy: prose authored as interface copy receives
-   balanced/pretty wrapping, while chat Markdown and editing surfaces preserve
+/* Prose authored as interface copy receives balanced/pretty wrapping, while
+   chat Markdown and editing surfaces preserve
    ordinary browser wrapping and explicit truncation utilities stay in charge. */
 :is(h1, h2, h3, h4, h5, h6, [role="heading"]):where(
   :not(
@@ -1868,8 +1849,8 @@ code {
   text-wrap: wrap;
 }
 
-/* ChatGPT's native disclosure utility contract. Unsupported browsers retain
-   fully functional <details> behavior and simply omit the height transition. */
+/* Unsupported browsers retain functional <details> behavior and omit only the
+   height transition. */
 .chat-disclosure::details-content {
   display: grid;
   grid-template-rows: 0fr;
@@ -2242,7 +2223,6 @@ code {
   );
 }
 
-/* sonner toast */
 [data-sonner-toaster] > li {
   width: 100%;
 }

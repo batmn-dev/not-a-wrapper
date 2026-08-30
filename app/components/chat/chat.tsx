@@ -64,7 +64,7 @@ export type ChatProjectContext = {
  * With `project` set this is the project surface: the same first-turn pipeline
  * as home (chat committed atomically WITH its first user message by
  * `ensureChatExists` inside an ACCEPTED turn, then a shallow route handoff) —
- * never chat-creation before turn acceptance, which is what used to strand
+ * never chat creation before turn acceptance, so rejected turns cannot leave
  * empty project chats.
  */
 export function Chat({ project }: { project?: ChatProjectContext }) {
@@ -192,11 +192,8 @@ function ChatInner({
   // status is projected onto the chat doc and derived per-row.
   usePublishActiveChatStatus(chatId, status)
 
-  // The EFFECTIVE transport status every liveness-consuming surface renders:
-  // a client-classified FRESH background run (another tab / re-entry — §8)
-  // reads as streaming so conversation rows, the Activity panel, and the
-  // announcer follow durable progress; a stale or terminal run never does —
-  // the resolver's freshness bound is what keeps zombie loaders impossible.
+  // A fresh background run reads as streaming so every surface follows durable
+  // progress; a stale or terminal run never does.
   const effectiveStatus: typeof status =
     presentation.state === "background-streaming" ? "streaming" : status
   // Clear this chat's unread/error on open, and again when its backend terminal
@@ -340,8 +337,7 @@ function ChatInner({
 
   const hasRedirectedRef = useRef(false)
 
-  // Handle redirect for invalid chatId - only redirect if we're certain the chat doesn't exist
-  // and we're not in a transient state during chat creation
+  // Redirect only after authoritative reads rule out transient chat creation.
   useEffect(() => {
     if (
       chatId &&

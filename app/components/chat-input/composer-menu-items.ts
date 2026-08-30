@@ -103,7 +103,7 @@ function resolveComposerMenuSections({
       )
     : []
 
-  // ChatGPT parity: "/" is the command menu (actions only); "@"/"+" typed
+  // "/" is the command menu (actions only); "@"/"+" typed
   // triggers and the synthetic + session also search connectors.
   const isConnectorSectionVisible =
     actionQuery !== null && actionQuery.trigger !== "/"

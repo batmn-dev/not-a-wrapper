@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { ProjectPinningProvider } from "@/app/components/projects/use-project-pinning"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -44,6 +45,19 @@ vi.mock("convex/react", async () => {
         mocks.mutationCalls.push({ name, args })
         if (mocks.rejectedMutations.has(name)) {
           throw new Error(`${name} failed`)
+        }
+        if (name === "projects:togglePinned") {
+          const { projectId, pinned } = args as {
+            projectId: string
+            pinned: boolean
+          }
+          mocks.perUserQuery = {
+            ...mocks.perUserQuery,
+            data: (mocks.perUserQuery.data as typeof ownedProjects).map(
+              (project) =>
+                project._id === projectId ? { ...project, pinned } : project
+            ),
+          }
         }
         return "new-project-id"
       }
@@ -172,7 +186,13 @@ describe("ProjectsView essential behavior", () => {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
-    await act(async () => root.render(<ProjectsView />))
+    await act(async () =>
+      root.render(
+        <ProjectPinningProvider>
+          <ProjectsView />
+        </ProjectPinningProvider>
+      )
+    )
   }
 
   const click = (element: Element) =>
@@ -367,6 +387,23 @@ describe("ProjectsView essential behavior", () => {
       name: "projects:togglePinned",
       args: { projectId: "p1", pinned: true },
     })
+
+    mocks.perUserQuery = {
+      ...mocks.perUserQuery,
+      data: (mocks.perUserQuery.data as typeof ownedProjects).map((project) =>
+        project._id === "p1" ? { ...project, pinned: false } : project
+      ),
+    }
+    await act(async () =>
+      root.render(
+        <ProjectPinningProvider>
+          <ProjectsView />
+        </ProjectPinningProvider>
+      )
+    )
+    expect(
+      container.querySelector('[data-project-id="p1"] [title="Pinned"]')
+    ).toBeNull()
 
     mocks.rejectedMutations.add("projects:togglePinned")
     await act(async () => {

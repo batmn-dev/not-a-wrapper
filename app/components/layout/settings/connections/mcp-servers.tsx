@@ -51,15 +51,12 @@ function maskUrl(url: string): string {
   }
 }
 
-// Component
-
 export function McpServers() {
   const { data, isLoading } = usePerUserQuery(api.mcpServers.list)
   const servers = data ?? []
   const toggleEnabled = useMutation(api.mcpServers.toggleEnabled)
   const removeServer = useMutation(api.mcpServers.remove)
 
-  // UI state
   const [formOpen, setFormOpen] = useState(false)
   const [editingServer, setEditingServer] = useState<
     (typeof servers)[number] | null
@@ -70,7 +67,6 @@ export function McpServers() {
   >(null)
   const [expandedServer, setExpandedServer] = useState<string | null>(null)
 
-  // Handlers
   const handleAdd = () => {
     setEditingServer(null)
     setFormOpen(true)

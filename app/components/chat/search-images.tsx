@@ -1,7 +1,7 @@
 import { Favicon } from "@/components/ui/favicon"
+import { resolveSourceLinkDestination } from "@/lib/url-safety"
 import Image from "next/image"
 import { useState } from "react"
-import { addUTM, getSiteName } from "./utils"
 
 type ImageResult = {
   title: string
@@ -21,14 +21,11 @@ export function SearchImages({ results }: { results: ImageResult[] }) {
   return (
     <div className="my-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
       {results.map((img, i) => {
-        return hiddenIndexes.has(i) ? null : (
-          <a
-            key={i}
-            href={addUTM(img.sourceUrl)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group/image relative block overflow-hidden rounded-xl"
-          >
+        if (hiddenIndexes.has(i)) return null
+
+        const destination = resolveSourceLinkDestination(img.sourceUrl)
+        const content = (
+          <>
             <Image
               src={img.imageUrl}
               alt={img.title}
@@ -45,14 +42,34 @@ export function SearchImages({ results }: { results: ImageResult[] }) {
                   decoding="async"
                 />
                 <span className="text-secondary line-clamp-1 text-xs">
-                  {getSiteName(img.sourceUrl)}
+                  {destination?.url.hostname.replace(/^www\./, "") ??
+                    img.sourceUrl}
                 </span>
               </div>
               <span className="text-secondary line-clamp-1 text-xs">
                 {img.title}
               </span>
             </div>
+          </>
+        )
+
+        const className =
+          "group/image relative block overflow-hidden rounded-xl"
+
+        return destination ? (
+          <a
+            key={i}
+            href={destination.href}
+            target={destination.target}
+            rel={destination.rel}
+            className={className}
+          >
+            {content}
           </a>
+        ) : (
+          <div key={i} className={className}>
+            {content}
+          </div>
         )
       })}
     </div>

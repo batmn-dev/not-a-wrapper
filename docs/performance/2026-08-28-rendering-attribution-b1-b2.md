@@ -143,7 +143,7 @@ Shipped anyway as hygiene (the invalidation surface, not a rescue):
 
 - the two `:has([data-writing-block])` pointer-events rules on every turn
   section were DEAD — nothing in this app renders `data-writing-block`
-  (reference parity residue from ChatGPT's canvas feature);
+  (reference residue from an unimplemented canvas feature);
 - the live (last, generation-active) turn no longer gets
   `content-visibility: auto` — it is on-screen by definition and mutates
   every commit, so c-v there pays relevancy + intrinsic-size bookkeeping
