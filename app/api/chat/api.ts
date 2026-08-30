@@ -8,12 +8,12 @@ import {
   type RouteResolutionFailure,
   type RouteResolverDeps,
 } from "@/lib/model-route-resolver"
-import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import {
   resolveLogicalModelEffortLevels,
   resolveLogicalModelSearchMode,
 } from "@/lib/models/catalog"
 import type { ModelReasoningEffort } from "@/lib/models/types"
+import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import { type ProviderCredentialResolution } from "@/lib/user-keys"
 import type { UIMessage } from "ai"
@@ -84,20 +84,17 @@ function createUsageCheckApiError(
 }
 
 /**
- * Enforce the daily-message ABUSE limit before model execution (ADR-0021).
+ * Atomically admit against the daily-message ABUSE limit before model
+ * execution (ADR-0021).
  * This is not economic admission — platform spend is admitted by the atomic
  * allowance reservation inside the route resolver, and BYOK messages never
  * touch allowance while still counting here as ordinary requests.
  */
-export async function checkServerSideUsage(
+export async function admitServerSideUsage(
   token: string | undefined,
   anonymousId?: string
 ): Promise<void> {
-  const usage = await fetchQuery(
-    api.usage.checkUsage,
-    { anonymousId },
-    { token }
-  )
+  const usage = await fetchMutation(api.usage.admit, { anonymousId }, { token })
 
   if (!usage.canSend) {
     // Surface specific usage-check failures before falling back to the generic
@@ -115,14 +112,6 @@ export async function checkServerSideUsage(
       code: "DAILY_LIMIT_REACHED",
     })
   }
-}
-
-/** Record an admitted request against the abuse counter. */
-export async function incrementServerSideUsage(
-  token: string | undefined,
-  anonymousId?: string
-): Promise<void> {
-  await fetchMutation(api.usage.incrementUsage, { anonymousId }, { token })
 }
 
 type ChatCredentialAdmissionParams = {

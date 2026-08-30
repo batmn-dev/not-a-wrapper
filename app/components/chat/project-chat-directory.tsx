@@ -2,6 +2,7 @@
 
 import { ChatActionsMenu } from "@/app/components/layout/chat-actions-menu"
 import { Icon } from "@/components/ui/icon"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { convexChatToChat, type Chat } from "@/lib/chat-store/types"
@@ -12,12 +13,9 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Component,
-  useId,
   useMemo,
-  useRef,
   useState,
   type ErrorInfo,
-  type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from "react"
@@ -259,88 +257,43 @@ export function ProjectChatDirectory({
   projectId: Id<"projects">
 }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>("chats")
-  const tabsId = useId()
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
-
-  const selectTabFromKeyboard = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    currentIndex: number
-  ) => {
-    let nextIndex: number | null = null
-    if (event.key === "ArrowRight") {
-      nextIndex = (currentIndex + 1) % PROJECT_TABS.length
-    } else if (event.key === "ArrowLeft") {
-      nextIndex = (currentIndex - 1 + PROJECT_TABS.length) % PROJECT_TABS.length
-    } else if (event.key === "Home") {
-      nextIndex = 0
-    } else if (event.key === "End") {
-      nextIndex = PROJECT_TABS.length - 1
-    }
-
-    if (nextIndex === null) return
-    event.preventDefault()
-    const nextTab = PROJECT_TABS[nextIndex]
-    setActiveTab(nextTab.id)
-    tabRefs.current[nextIndex]?.focus()
-  }
 
   return (
     <section className="mx-auto w-full max-w-(--project-detail-outer-width) px-4 pt-6 md:px-6 md:pt-8 md:max-lg:px-4">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <div
-          role="tablist"
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as ProjectDetailTab)}
+        className="mx-auto w-full max-w-3xl gap-4"
+      >
+        <TabsList
+          variant="pill"
           aria-label="Project sections"
-          aria-orientation="horizontal"
-          className="flex w-fit items-center gap-1 text-sm/5 font-medium"
+          activateOnFocus
         >
-          {PROJECT_TABS.map((tab, index) => {
-            const isActive = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                ref={(node) => {
-                  tabRefs.current[index] = node
-                }}
-                type="button"
-                role="tab"
-                id={`${tabsId}-${tab.id}-tab`}
-                aria-selected={isActive}
-                aria-controls={`${tabsId}-${tab.id}-panel`}
-                tabIndex={isActive ? 0 : -1}
-                onClick={() => setActiveTab(tab.id)}
-                onKeyDown={(event) => selectTabFromKeyboard(event, index)}
-                className={cn(
-                  "focus-visible:ring-border-strong h-[38px] rounded-full px-4 py-[9px] text-sm/5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-offset-1",
-                  isActive
-                    ? "bg-interactive-selected ring-border-strong text-[var(--text-primary)] ring-1"
-                    : "hover:bg-interactive-hover text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-                )}
-              >
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
+          {PROJECT_TABS.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="focus-visible:ring-border-strong focus-visible:ring-2 focus-visible:ring-offset-1"
+            >
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-        <div
-          role="tabpanel"
-          id={`${tabsId}-chats-panel`}
-          aria-labelledby={`${tabsId}-chats-tab`}
+        <TabsContent
+          value="chats"
           tabIndex={0}
-          hidden={activeTab !== "chats"}
           className="focus-visible:ring-border-strong outline-none focus-visible:ring-2"
         >
           <ProjectConversationErrorBoundary>
             <ProjectConversationList projectId={projectId} />
           </ProjectConversationErrorBoundary>
-        </div>
+        </TabsContent>
 
-        <div
-          role="tabpanel"
-          id={`${tabsId}-sources-panel`}
-          aria-labelledby={`${tabsId}-sources-tab`}
+        <TabsContent
+          value="sources"
           tabIndex={0}
-          hidden={activeTab !== "sources"}
           className="focus-visible:ring-border-strong outline-none focus-visible:ring-2"
         >
           <div className="flex min-h-40 flex-col items-center justify-center px-4 text-center text-sm/5 text-[var(--text-secondary)]">
@@ -351,8 +304,8 @@ export function ProjectChatDirectory({
               Project-level source aggregation isn&apos;t available yet.
             </p>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </section>
   )
 }

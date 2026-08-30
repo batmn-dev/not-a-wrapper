@@ -1,5 +1,4 @@
-import { getAllModels, getVisibleLogicalModelViews } from "@/lib/models"
-import { NextResponse } from "next/server"
+import { getVisibleLogicalModelViews } from "@/lib/models"
 
 export async function GET() {
   try {
@@ -22,27 +21,5 @@ export async function GET() {
         "Content-Type": "application/json",
       },
     })
-  }
-}
-
-export async function POST() {
-  try {
-    const now = new Date()
-    const models = getVisibleLogicalModelViews(now)
-    const allModels = await getAllModels()
-
-    return NextResponse.json({
-      message: "Models refreshed",
-      models,
-      timestamp: now.toISOString(),
-      count: models.length,
-      routableCount: allModels.length,
-    })
-  } catch (error) {
-    console.error("Failed to refresh models:", error)
-    return NextResponse.json(
-      { error: "Failed to refresh models" },
-      { status: 500 }
-    )
   }
 }

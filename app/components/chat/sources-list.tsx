@@ -3,10 +3,10 @@
 import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
 import type { AssistantSourceResult } from "@/lib/chat-messages/sources"
+import { resolveSourceLinkDestination } from "@/lib/url-safety"
 import { cn } from "@/lib/utils"
 import { RiLink } from "@remixicon/react"
 import { DisclosureCard } from "./disclosure-card"
-import { addUTM, formatUrl } from "./utils"
 
 type SourcesListProps = {
   sources: readonly AssistantSourceResult[]
@@ -40,34 +40,44 @@ export function SourcesList({ sources, className }: SourcesListProps) {
         }
       >
         <ul className="space-y-2">
-          {sources.map((source) => (
-            <li key={source.sourceId} className="flex items-center text-sm">
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <a
-                  href={addUTM(source.url)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary group line-clamp-1 flex items-center gap-1 hover:underline"
-                >
-                  <Favicon
-                    url={source.faviconDomain ?? source.url}
-                    alt={`Favicon for ${source.title}`}
-                    shape="rounded"
-                    className="size-4 flex-shrink-0"
-                  />
-                  <span className="truncate">{source.title}</span>
-                  <Icon
-                    icon={RiLink}
-                    slotSize={12}
-                    className="flex-shrink-0 opacity-70 transition-opacity group-hover:opacity-100"
-                  />
-                </a>
-                <div className="text-muted-foreground line-clamp-1 text-xs">
-                  {formatUrl(source.url)}
+          {sources.map((source) => {
+            const destination = resolveSourceLinkDestination(source.url)
+            const displayUrl = destination
+              ? destination.url
+                  .toString()
+                  .replace(/^https?:\/\/(www\.)?/, "")
+                  .replace(/\/$/, "")
+              : source.url
+
+            return (
+              <li key={source.sourceId} className="flex items-center text-sm">
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <a
+                    href={destination?.href}
+                    target={destination?.target}
+                    rel={destination?.rel}
+                    className="text-primary group line-clamp-1 flex items-center gap-1 hover:underline"
+                  >
+                    <Favicon
+                      url={source.faviconDomain ?? source.url}
+                      alt={`Favicon for ${source.title}`}
+                      shape="rounded"
+                      className="size-4 flex-shrink-0"
+                    />
+                    <span className="truncate">{source.title}</span>
+                    <Icon
+                      icon={RiLink}
+                      slotSize={12}
+                      className="flex-shrink-0 opacity-70 transition-opacity group-hover:opacity-100"
+                    />
+                  </a>
+                  <div className="text-muted-foreground line-clamp-1 text-xs">
+                    {displayUrl}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       </DisclosureCard>
     </div>

@@ -23,7 +23,7 @@ import { useState } from "react"
  * Client-side demos with a stub persistence adapter: rename commits to local
  * state instead of a chat-store mutation, everything else is the production
  * row. The trailing cluster uses the real SidebarPinAction plus a rename
- * button in the SidebarItemMenu position (the real menu needs the chat store).
+ * button in the ChatActionsMenu position (the real menu needs the chat store).
  */
 
 function RenameAction({ onStartRename }: { onStartRename: () => void }) {

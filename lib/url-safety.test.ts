@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { toSafeWebHref } from "./url-safety"
+import { resolveSourceLinkDestination, toSafeWebHref } from "./url-safety"
 
 describe("toSafeWebHref", () => {
   it("returns normalized http and https URLs", () => {
@@ -15,5 +15,25 @@ describe("toSafeWebHref", () => {
     expect(toSafeWebHref("data:text/html,hello")).toBeNull()
     expect(toSafeWebHref("mailto:support@example.com")).toBeNull()
     expect(toSafeWebHref("/internal")).toBeNull()
+  })
+})
+
+describe("resolveSourceLinkDestination", () => {
+  it("applies one safe, attributed destination policy", () => {
+    const destination = resolveSourceLinkDestination(
+      "https://example.com/research?topic=agents"
+    )
+
+    expect(destination).toMatchObject({
+      target: "_blank",
+      rel: "noopener noreferrer",
+    })
+    expect(destination?.url.toString()).toBe(
+      "https://example.com/research?topic=agents"
+    )
+    expect(destination?.href).toBe(
+      "https://example.com/research?topic=agents&utm_source=not-a-wrapper.com&utm_medium=research"
+    )
+    expect(resolveSourceLinkDestination("javascript:alert(1)")).toBeNull()
   })
 })

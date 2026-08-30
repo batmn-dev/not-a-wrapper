@@ -78,10 +78,10 @@ const apiRows = [
   },
   {
     prop: "TabsList variant",
-    type: '"default" | "line" | "ghost"',
+    type: '"default" | "line" | "ghost" | "pill"',
     defaultValue: '"default"',
     description:
-      "Segmented pill list, transparent list whose active trigger draws an underline, or transparent list whose active trigger carries a muted pill.",
+      "Segmented list, underline list, muted-pill list, or bordered selected pill row.",
   },
   {
     prop: "TabsTrigger value",
@@ -106,7 +106,7 @@ const apiRows = [
 export const metadata: Metadata = {
   title: "Tabs | Design System",
   description:
-    "Base UI tabs with segmented and underline variants, as used across the app and this registry.",
+    "Base UI tabs with segmented, underline, and pill variants used across the app and this registry.",
 }
 
 export default function TabsPage() {
@@ -117,7 +117,7 @@ export default function TabsPage() {
       <DsPageHeader
         slug="tabs"
         title="Tabs"
-        description="Base UI tabs behind every tab switcher in the app, with segmented, underline, and ghost pill variants."
+        description="Base UI tabs behind every tab switcher in the app, with segmented, underline, muted-pill, and bordered-pill variants."
       />
 
       <DsSection

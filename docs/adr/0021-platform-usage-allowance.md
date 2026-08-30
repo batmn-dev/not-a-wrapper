@@ -366,9 +366,12 @@ balance negative. Estimation is admission control, not the final charge.
 `users.dailyMessageCount` (and the anonymous counter) remain **abuse rate
 limits** only. The retired pro-model fields remain optional in the schema only
 until production preflight proves older user rows can be contracted safely.
-The abuse increment still happens at admission — before the credential source
-is known — which is now correct because it is not an economic counter; the
-economic admission is the reservation itself.
+The chat route calls one `usage.admit` mutation that checks and increments the
+counter in the same transaction, before the credential source is known. This
+prevents concurrent requests from both passing a read-only check at the final
+slot. Once admitted, the attempt counts even if later credential or preparation
+work fails; this is abuse control, not economic settlement. The economic
+admission remains the reservation itself.
 
 ## Alternatives considered
 
