@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs"
+import posthog from "posthog-js"
 import {
   sentryBeforeBreadcrumb,
   sentryBeforeSend,
@@ -25,5 +26,15 @@ Sentry.init({
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1,
 })
+
+const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
+
+if (posthogKey && !posthog.__loaded) {
+  posthog.init(posthogKey, {
+    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+    person_profiles: "identified_only",
+    capture_pageview: false,
+  })
+}
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart

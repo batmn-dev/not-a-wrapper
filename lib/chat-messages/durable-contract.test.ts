@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   DURABLE_MESSAGE_STATUSES,
   GENERATION_STATUSES,
-  isDurableMessageRole,
   isDurableMessageStatus,
   isGenerationStatus,
 } from "./durable-contract"
@@ -39,11 +38,6 @@ describe("durable message contract", () => {
     ])
     expect(isGenerationStatus("queued")).toBe(true)
     expect(isGenerationStatus("pending")).toBe(false)
-  })
-
-  it("keeps data as a legacy stored role, not a UI render role", () => {
-    expect(isDurableMessageRole("data")).toBe(true)
-    expect(isDurableMessageRole("tool")).toBe(false)
   })
 
   it("classifies lifecycle statuses without accepting unknown values", () => {

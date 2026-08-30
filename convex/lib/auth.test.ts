@@ -57,6 +57,8 @@ function createProject(id: string, userId: Id<"users">): Doc<"projects"> {
     _creationTime: 1,
     userId,
     name: `Project ${id}`,
+    updatedAt: 1,
+    pinned: false,
   }
 }
 

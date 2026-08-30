@@ -135,8 +135,20 @@ vi.mock("@/app/components/layout/row-actions-menu", () => ({
 }))
 
 const ownedProjects = [
-  { _id: "p1", name: "Alpha", _creationTime: 1_000 },
-  { _id: "p2", name: "Beta", _creationTime: 2_000 },
+  {
+    _id: "p1",
+    name: "Alpha",
+    _creationTime: 1_000,
+    updatedAt: 1_000,
+    pinned: false,
+  },
+  {
+    _id: "p2",
+    name: "Beta",
+    _creationTime: 2_000,
+    updatedAt: 2_000,
+    pinned: false,
+  },
 ]
 
 beforeAll(() => {

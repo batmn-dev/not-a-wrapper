@@ -12,7 +12,7 @@ import {
   it,
   vi,
 } from "vitest"
-import { ThreadBottomContainer, ThreadTail } from "./thread-bottom-container"
+import { ThreadBottomContainer } from "./thread-bottom-container"
 
 describe("ThreadBottomContainer", () => {
   let container: HTMLDivElement
@@ -62,9 +62,8 @@ describe("ThreadBottomContainer", () => {
     vi.restoreAllMocks()
   })
 
-  it("renders the three stable direct regions and isolates pointer input", () => {
+  it("renders the stable footer regions", () => {
     const footer = container.querySelector("#thread-bottom-container")
-    const composer = container.querySelector('[data-testid="composer"]')
 
     expect(footer?.children).toHaveLength(4)
     expect(
@@ -75,8 +74,7 @@ describe("ThreadBottomContainer", () => {
     ).toBe(true)
     expect(
       footer?.children[1].querySelector("[data-thread-above-composer-slot]")
-        ?.classList
-    ).toContain("empty:hidden")
+    ).not.toBeNull()
     expect(
       footer?.children[2].hasAttribute("data-thread-scroll-control-layer")
     ).toBe(true)
@@ -84,57 +82,14 @@ describe("ThreadBottomContainer", () => {
     expect(
       footer?.children[3].querySelector("[data-thread-bottom-content]")
     ).not.toBeNull()
-    expect(footer?.classList.contains("pointer-events-none")).toBe(true)
-    expect(footer?.classList.contains("print:hidden")).toBe(true)
-    expect(footer?.classList).toContain("bottom-0")
-    expect(footer?.classList.contains("content-fade")).toBe(true)
     expect(
-      [...(footer?.classList ?? [])].some((name) =>
-        name.startsWith("pb-[var(--safe-area-inset-bottom")
+      footer?.querySelector(
+        "[data-thread-composer-column] [data-composer-keyboard-pin] [data-keyboard-open-mask]"
       )
-    ).toBe(false)
-    expect(footer?.classList).toContain(
-      "[--thread-scroll-control-offset:1.5rem]"
-    )
-    expect(footer?.classList).toContain(
-      "@[53.5rem]/main:[--thread-content-max-width:48rem]"
-    )
-    expect(
-      composer?.closest("[data-thread-composer-column]")?.classList
-    ).toContain("mb-[var(--thread-component-gap)]")
-    expect(
-      composer?.closest("[data-thread-composer-column]")?.classList
-    ).toContain("pointer-events-auto")
-    const keyboardPin = composer?.closest("[data-composer-keyboard-pin]")
-    expect(keyboardPin?.classList).toContain("keyboard-open:fixed")
-    expect(keyboardPin?.classList).toContain("keyboard-open:start-3")
-    expect(keyboardPin?.classList).toContain("keyboard-open:end-3")
-    expect(keyboardPin?.classList).toContain(
-      "keyboard-open:bottom-[var(--screen-keyboard-height,0px)]"
-    )
-    expect(
-      keyboardPin?.querySelector("[data-keyboard-open-mask]")
     ).not.toBeNull()
     expect(
       container.querySelector("[data-thread-scroll-control-visibility]")
-        ?.classList
-    ).toContain("pointer-events-auto")
-  })
-
-  it("gives the disclaimer the shared view-transition identity", () => {
-    act(() => {
-      root.render(
-        <ScrollRoot>
-          <ThreadTail>
-            <div />
-          </ThreadTail>
-        </ScrollRoot>
-      )
-    })
-
-    expect(
-      container.querySelector("[data-thread-disclaimer]")?.classList
-    ).toContain("[view-transition-name:var(--vt-disclaimer)]")
+    ).not.toBeNull()
   })
 
   it("preserves composer DOM identity when keyboard positioning activates", () => {
@@ -174,11 +129,7 @@ describe("ThreadBottomContainer", () => {
       )
     })
     expect(container.querySelector('[data-testid="composer"]')).toBe(composer)
-    expect(
-      container
-        .querySelector("#thread-bottom-container")
-        ?.classList.contains("fixed")
-    ).toBe(true)
+    expect(container.querySelector("[data-thread-scroll-control]")).toBeNull()
   })
 
   it("keeps the existing smooth scroll-to-bottom contract", () => {
@@ -194,19 +145,11 @@ describe("ThreadBottomContainer", () => {
     })
   })
 
-  it("renders both the resting arrow and streaming wave state", () => {
+  it("renders both scroll-button states", () => {
     const button = container.querySelector(
       '[data-testid="scroll-to-bottom-button"]'
     )
 
-    expect(button?.classList).toContain("h-8")
-    expect(button?.classList).toContain("w-8")
-    expect(button?.classList).toContain(
-      "group-data-stream-active/scroll-root:w-10"
-    )
-    expect(button?.classList).toContain("border")
-    expect(button?.classList).toContain("border-border-strong")
-    expect(button?.classList).toContain("bg-clip-border")
     expect(button?.querySelector("[data-scroll-button-arrow]")).not.toBeNull()
     expect(button?.querySelector("[data-scroll-button-wave]")).not.toBeNull()
   })

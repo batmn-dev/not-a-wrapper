@@ -108,10 +108,6 @@ export function useChatOperations({
         })
       }
 
-      // The pro-model query tier is retired (ADR-0021): platform spend is
-      // governed by the included allowance; exhaustion surfaces as the typed
-      // ALLOWANCE_EXHAUSTED chat error and the settings usage meter.
-
       return true
     } catch (err) {
       console.error("Rate limit check failed:", err)

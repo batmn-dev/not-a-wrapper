@@ -73,6 +73,7 @@ function project(id: string): Doc<"projects"> {
     userId: asId<"users">("user-1"),
     name: id,
     updatedAt: 10,
+    pinned: false,
     deletingAt: 20,
   }
 }

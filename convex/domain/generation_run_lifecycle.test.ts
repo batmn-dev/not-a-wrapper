@@ -334,7 +334,7 @@ describe("resolveTerminalAssistantMessageResolution — first match wins", () =>
   })
 })
 
-describe("durable control signals (gameplan §10)", () => {
+describe("durable control signals", () => {
   it("stop reaches every active status — including the approval pause — and stamps user_stop", () => {
     for (const status of [
       "queued",

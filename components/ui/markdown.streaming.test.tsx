@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-// Terminal-block stability through the full Markdown pipeline (plan PR 3).
+// Terminal-block stability through the full Markdown pipeline.
 //
 // The stability rule under test — a code block is `growing` iff it is the
 // TERMINAL parsed block AND the message is live (`streaming` prop) — is
@@ -42,7 +42,7 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
 }))
 
-describe("Markdown terminal-block stability (plan PR 3)", () => {
+describe("Markdown terminal-block stability", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
   const writeText = vi.fn()

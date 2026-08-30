@@ -12,7 +12,7 @@ import { SidebarPinAction } from "./trailing-icon-button"
 type Project = {
   _id: Id<"projects">
   name: string
-  pinned?: boolean
+  pinned: boolean
 }
 
 type SidebarProjectItemProps = {
@@ -48,7 +48,7 @@ export function SidebarProjectItem({
       trailing={({ startRename }) => (
         <SidebarRowActions key={project._id}>
           <SidebarPinAction
-            pinned={project.pinned ?? false}
+            pinned={project.pinned}
             title={displayName}
             itemType="Project"
             onTogglePinned={onTogglePinned}

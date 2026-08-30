@@ -6,9 +6,8 @@ import {
   type RunPresentationInputs,
 } from "./run-presentation"
 
-// Table tests over the precedence ladder (gameplan §8) and the lease/skew
-// boundaries — the one place clock classification lives. Injected `now`
-// throughout; no timers.
+// Table tests over the precedence ladder and lease/skew boundaries — the one
+// place clock classification lives. Injected `now` throughout; no timers.
 
 const NOW = 1_000_000
 const GRACE = 5_000
@@ -78,8 +77,8 @@ describe("precedence ladder", () => {
   })
 
   it("a PREVIOUS turn's terminal is masked behind a new local stream (projection gap)", () => {
-    // Gameplan §8: local submission renders immediately. The prior turn's
-    // completed run must neither present (rule 1) nor cut the new stream.
+    // Local submission renders immediately. The prior turn's completed run
+    // must neither present nor cut the new stream.
     const presentation = resolve({
       localStatus: "streaming",
       localAssistantMessageId: "msg_other",

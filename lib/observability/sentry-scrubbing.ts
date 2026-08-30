@@ -28,7 +28,6 @@ const SAFE_EXCEPTION_NAMES = new Set([
   "ToolExecutionError",
   "ToolPolicyError",
   "ToolTimeoutError",
-  "UsageLimitError",
   "WorkerWriteTimeoutError",
 
   // Error types exposed by the currently installed AI SDK packages.

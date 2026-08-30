@@ -39,7 +39,7 @@ describe("project conversation previews", () => {
     const longContent = `Newest   preview\n${"x".repeat(400)}`
     const preview = selectProjectChatPreview([
       { role: "assistant", content: "abandoned branch", selected: false },
-      { role: "data", content: "internal data", selected: true },
+      { role: "system", content: "internal data", selected: true },
       { role: "user", content: longContent, selected: true },
       { role: "assistant", content: "older visible", selected: true },
     ])
@@ -55,6 +55,8 @@ describe("project conversation previews", () => {
       _creationTime: 1,
       userId: user._id,
       name: "Investing",
+      updatedAt: 1,
+      pinned: false,
     }
     const older = createChat({
       _id: asId<"chats">("older"),
@@ -201,6 +203,8 @@ function createProject(
     _creationTime: 1,
     userId,
     name: id,
+    updatedAt: 1,
+    pinned: false,
     ...overrides,
   }
 }

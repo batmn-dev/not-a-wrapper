@@ -5,9 +5,9 @@ import {
   deriveChatTurnExecutionBudget,
 } from "./execution-budget"
 
-// The budget is one derivation with one load-bearing property: the deadline
-// ordering (gameplan §0). Test the ordering and the decided top-line, not one
-// assertion per field.
+// The budget is one derivation with one load-bearing property: deadline
+// ordering. Test the ordering and the decided top-line, not one assertion per
+// field.
 
 describe("chat-turn execution budget", () => {
   it("derives the enforced ordering from the 300 s top-line", () => {

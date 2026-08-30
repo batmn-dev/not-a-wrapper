@@ -118,16 +118,10 @@ hydration can now run mid-stream, so the entry-time selected-path pass
 defers a *divergent* (wholesale branch-swap) projection to settle — the
 monotonic identity-matched reconcile remains safe mid-stream.
 
-## Deferred (not rejected)
+## Follow-up outcomes
 
-- **Durable run-scoped Stop**: re-entering a chat whose run streams in the
-  background shows the projected status but offers no Stop (the same gap
-  the link-nav remount has always had). A client-initiated abort would
-  apply the lifecycle abort verdict directly (first-terminal-wins absorbs
-  the racing stream writes). Belongs with ADR-0011's lease/reaper phase.
-  The 2026-07-28 amendment narrows this: same-tab return now re-adopts the
-  live binding, so local Stop works again there; the gap remains for
-  re-entry after a remount or from another tab.
-- **Lease/heartbeat + cron reaper** (ADR-0011): the backstop for a stale
-  `live_run_status` after worker death or platform cutoff; the client
-  watchdog narrows but does not close that window.
+- Durable run-scoped Stop now targets the selected run through
+  `chatRuntime.stopGenerationRun`, including after a remount or from another
+  tab. Same-tab return still prefers re-adopting the local binding.
+- Heartbeats, lease expiry, and the cron reaper now clear stale projected run
+  state after worker death or platform cutoff.

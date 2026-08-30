@@ -1,17 +1,15 @@
 # ADR-0027: Split the selected-conversation subscription
 
-**Status:** Accepted 2026-08-28 — default ON; building with
-`NEXT_PUBLIC_SPLIT_SELECTED_QUERY=false` restores the atomic query (the
-rollback path, kept registered)
+**Status:** Accepted 2026-08-28; rollback removed 2026-08-30 after production
+verification
 **Date:** 2026-08-28
 
 ## Context
 
-`messages.getSelectedConversation` is the owner's primary chat subscription:
-the selected visible path AND the linked run's state in one query, introduced
-atomic because "content and run state can never tear." Its cost profile,
-measured in Experiment 2 of the performance plan
-(`docs/performance/2026-08-28-experiment-2-reactive-read-split.md`):
+The former `messages.getSelectedConversation` subscription returned the
+selected visible path and linked run state in one query. It was introduced as
+atomic because "content and run state can never tear," but its measured cost
+profile was excessive:
 
 - Convex invalidation is read-set based. The atomic query reads every message
   in the chat, so EVERY write in the chat invalidates it — including writes
@@ -37,9 +35,9 @@ remain the branch-context collect.
 Split the subscription into two queries on the same `readableChatQuery`
 builder, both keyed by `chatId` alone:
 
-1. **`getSelectedPath`** — the selected visible path, derived by the SAME
-   collect + `createBranchContext` code as the atomic query (byte-identical
-   branch semantics), plus a derived `pathVersion` fingerprint. Read set:
+1. **`getSelectedPath`** — the selected visible path, derived by the shared
+   collect + `createBranchContext` code, plus a derived `pathVersion`
+   fingerprint. Read set:
    chats/projects/users/messages only — run-doc writes no longer touch it.
 2. **`getSelectedRunState`** — the tiny per-beat run facts
    (`SelectedRunProjection`, ~177 B measured). Owner-only. Its read set
@@ -97,14 +95,14 @@ classification stays client-side.
   path query — per-execution read cost is untouched by this ADR (that is
   Experiment 2b, range-bounded settled-history pagination, gated on
   prefix-derivability property tests).
-- Parity is pinned by tests: split halves reproduce the atomic projection
-  for owners; non-owner denial identical; points-back nulling server-side;
-  on-path nulling client-side; and the run half's live-run read set excludes
-  the message doc (spy test).
-- Flipping the flag default requires the pause-heavy scenario measurement
-  (durable suite `durable-text-30-paused`) showing the event-class win with
-  no client regressions. Measured 2026-08-28 (report addendum): pause-window
-  delivery −98.6% (24 × 12.7 KB re-collects → 24 × 177 B), zero pause-caused
-  path executions, live run-state reads 13 KB → 2 KB, full durable
-  regression suite within noise. The atomic `getSelectedConversation` stays
-  registered as the rollback until a green production cycle.
+- Tests pin owner and non-owner projection rules, server-side points-back
+  validation, client-side on-path validation, and the live run query's narrow
+  read set.
+- The pause-heavy benchmark measured 98.6% less pause-window delivery
+  (24 × 12.7 KB path re-collects became 24 × 177 B run-state deliveries),
+  zero pause-caused path executions, live run-state reads shrinking from
+  13 KB to 2 KB, and no meaningful durable-suite regression.
+- On 2026-08-30, production verification found multiple Ready deployments
+  after adoption and no `NEXT_PUBLIC_SPLIT_SELECTED_QUERY` production
+  override. The deployed frontend already used the split pair, so the flag,
+  atomic query, helper, and rollback-only tests were removed.

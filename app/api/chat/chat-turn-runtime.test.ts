@@ -2025,8 +2025,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     const controller = new AbortController()
     await runtime.toResponse(controller.signal)
 
-    // Reload/disconnect durability (gameplan §12 scenario 9, §14 "Reload
-    // mid-text → same run ID"): the request abort is telemetry only; Stop and
+    // Reload/disconnect durability: the request abort is telemetry only; Stop and
     // supersession reach the worker via heartbeat `lost`/grant rejection.
     const executionSignal = harness.captured.streamOpts
       .abortSignal as AbortSignal

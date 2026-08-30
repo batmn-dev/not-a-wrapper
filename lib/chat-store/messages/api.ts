@@ -180,42 +180,8 @@ export async function cacheMessages(
   await writeToIndexedDB("messages", { id: chatId, messages })
 }
 
-// Convex-backed Operations (via provider)
-// Note: With Convex, real-time queries handle most data fetching.
-// These functions primarily manage the local IndexedDB cache.
-
-export async function getMessagesFromDb(
-  chatId: string
-): Promise<ExtendedUIMessage[]> {
-  // With Convex, messages are fetched via the provider using useQuery
-  return await getCachedMessages(chatId)
-}
-
-export async function addMessage(
-  chatId: string,
-  message: ExtendedUIMessage
-): Promise<void> {
-  // With Convex, the provider handles database operations
-  const current = await getCachedMessages(chatId)
-  const updated = [...current, message]
-  await cacheMessages(chatId, updated)
-}
-
-export async function setMessages(
-  chatId: string,
-  messages: ExtendedUIMessage[]
-): Promise<void> {
-  // With Convex, the provider handles database operations
-  await cacheMessages(chatId, messages)
-}
-
 export async function clearMessagesCache(chatId: string): Promise<void> {
   await cacheMessages(chatId, [])
-}
-
-export async function clearMessagesForChat(chatId: string): Promise<void> {
-  // With Convex, the provider handles database operations
-  await clearMessagesCache(chatId)
 }
 
 export function resetCachedMessagesSnapshot(chatId?: string): void {

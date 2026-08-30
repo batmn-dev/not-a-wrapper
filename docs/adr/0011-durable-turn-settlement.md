@@ -3,8 +3,7 @@
 - Status: accepted
 - Date: 2026-07-18
 - Context: Architecture deepening — Candidate 2 of the 2026-07-18 review;
-  direct remediation of
-  `docs/chat-turn-token-expiry-orphaned-run-incident-2026-07-14.md`
+  direct remediation of the 2026-07-14 token-expiry incident
 - Related: ADR-0006 (Chat turn runtime — intact), ADR-0009 (Durable turn
   runtime — **three decisions superseded below, the rest intact**), ADR-0008
   (no stream-resume read surface — intact)
@@ -154,19 +153,15 @@ adapter (now returning the `guest` receipt), the `ToolFacts` port, the
 loud-miss contract, await discipline in return types, no client-side
 double-terminal dedup, and both onEnd layers in one closure.
 
-## Deferred (not rejected)
+## Follow-up outcomes
 
-- **Heartbeat lease + cron reaper**: `settle()`'s contract does not depend
-  on lease infrastructure; time-based reaping of runs on abandoned chats is
-  the next phase. It must route through `applyLifecycleVerdict` and the
-  status projection (run-id guard intact) so the sidebar clears correctly.
-- **Shared run-presentation resolver** ("no failure recorded" must never
-  render `Finished`): a separate deep module per the accepted review; the
-  receipt and the preserved content are its inputs.
-- **Grant revocation on terminal transition**: expiry + status guards bound
-  the exposure today; explicit digest clearing would touch the lifecycle
-  verdict machinery for marginal gain.
-- A generalized write journal or adapter framework: nothing needs it yet.
+- Heartbeats, lease expiry, and the bounded cron reaper now converge abandoned
+  runs through the shared lifecycle verdict and guarded chat projection.
+- `lib/chat-runs/run-presentation.ts` now provides the shared presentation
+  resolver, including stale and failed states.
+- Absorbing aborted and failed transitions clear the execution grant eagerly;
+  all other writes remain bounded by status guards and grant expiry.
+- A generalized write journal or adapter framework remains unnecessary.
 
 ## Consequences
 
@@ -178,5 +173,5 @@ double-terminal dedup, and both onEnd layers in one closure.
   minting on the admission call, guest receipt, `fail()` at each phase
   (`durable-turn-runtime.test.ts`); grant verification vectors
   (`convex/chatRuntimeWorker.test.ts`).
-- `maxDuration`, deadline ordering, and tool-budget hardening from the
-  incident doc are out of scope here and remain open.
+- The route duration, ordered execution deadlines, and tool-budget policy are
+  now centralized and tested in their owning modules.

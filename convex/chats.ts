@@ -3,7 +3,6 @@ import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
-  internalMutation,
   query,
   type MutationCtx,
   type QueryCtx,
@@ -303,9 +302,8 @@ type NewChatArgs = {
 
 /**
  * The one place a new chat row is authorized and constructed: project
- * ownership check, then the insert with the row's defaults. Shared by `create`
- * and `createWithFirstTurn` so a future chat field or default cannot silently
- * diverge between the compatibility path and the first-turn path.
+ * ownership check, then the insert with the row's defaults for atomic
+ * first-turn creation.
  */
 async function insertChatForUser(
   ctx: MutationCtx,
@@ -332,35 +330,6 @@ async function insertChatForUser(
   return { chatId, project }
 }
 
-/**
- * Create a new chat.
- *
- * NOT the first-turn path: the app's first turn creates its chat through
- * `createWithFirstTurn` below. Kept for API compatibility (clients running
- * pre-atomic bundles during a deploy still call it) — which is also why "no
- * chat without its first message" is an invariant of the first-turn path, not
- * of the schema.
- */
-export const create = authenticatedMutation({
-  args: {
-    title: v.optional(v.string()),
-    model: v.optional(v.string()),
-    systemPrompt: v.optional(v.string()),
-    projectId: v.optional(v.id("projects")),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const { chatId, project } = await insertChatForUser(
-      ctx,
-      ctx.user,
-      args,
-      now
-    )
-    await recordKnownProjectActivity(ctx, project, now)
-    return chatId
-  },
-})
-
 type CreateWithFirstTurnArgs = NewChatArgs & {
   message: { clientMessageId: string; text: string }
   attachmentIds: Id<"chatAttachments">[]
@@ -370,11 +339,9 @@ type CreateWithFirstTurnArgs = NewChatArgs & {
  * Atomic first-turn creation: create the chat (optionally inside an owned
  * project), bind the complete staged-attachment set, and persist the initial
  * user message — one Convex transaction. Any failure (attachment validation,
- * project ownership) rolls the chat row back too, so THIS path can never
- * strand a chat without its first user message (a path invariant, not a
- * schema one, while the compatibility `create` above remains callable). The
- * generation run still starts via
- * POST /api/chat afterwards: prepareGeneration's idempotent writeUserMessage
+ * project ownership) rolls the chat row back too, so a durable chat can never
+ * be created without its first user message. The generation run still starts
+ * via POST /api/chat afterwards: prepareGeneration's idempotent writeUserMessage
  * finds this row by clientMessageId, adopts the run's provenance stamp, and
  * selects it instead of inserting a duplicate.
  *
@@ -576,36 +543,6 @@ export const markChatRead = authenticatedMutation({
   args: { chatId: v.id("chats"), readThroughAt: v.number() },
   handler: async (ctx, { chatId, readThroughAt }) =>
     markChatReadForOwner(ctx, ctx.user, chatId, readThroughAt),
-})
-
-/**
- * Defensive backfill for the `updatedAt` optional→required narrowing
- * (docs/adr/0005-bounded-chat-list-window.md). Sets
- * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
- * no null keys. Idempotent.
- *
- * Chat creation (`insertChatForUser`) has always set `updatedAt`, so in practice no live row lacks it
- * and the required-schema push succeeds directly. This exists only as a fallback
- * if a deployment somehow holds legacy rows: run it (via
- * `scripts/backfill-chat-updated-at.mjs`) while `updatedAt` is still optional,
- * before pushing the required schema. The localized cast reads the possibly-
- * undefined runtime value the narrowed type otherwise hides.
- */
-export const backfillUpdatedAt = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const chats = await ctx.db.query("chats").collect()
-    let patched = 0
-    for (const chat of chats) {
-      const current = (chat as { updatedAt?: number }).updatedAt
-      if (current === undefined) {
-        if (!(await isChatActive(ctx, chat))) continue
-        await ctx.db.patch(chat._id, { updatedAt: chat._creationTime })
-        patched++
-      }
-    }
-    return { total: chats.length, patched }
-  },
 })
 
 export async function removeChatForOwner(

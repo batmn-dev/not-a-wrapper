@@ -3,7 +3,6 @@ import type { Doc, Id } from "../_generated/dataModel"
 import type { MutationCtx } from "../_generated/server"
 import { CHAT_PROJECT_LINK_OWNER_ERROR } from "./chat_project_link"
 import {
-  getProjectModifiedAt,
   patchChatActivity,
   patchProjectActivity,
   recordKnownProjectActivity,
@@ -21,6 +20,8 @@ function project(overrides: Partial<Doc<"projects">> = {}): Doc<"projects"> {
     _creationTime: 10,
     userId: asId<"users">("user-1"),
     name: "Project",
+    updatedAt: 10,
+    pinned: false,
     ...overrides,
   }
 }
@@ -68,11 +69,6 @@ function createMutationCtx(documents: Array<Doc<"projects"> | Doc<"chats">>) {
 }
 
 describe("project activity", () => {
-  it("uses creation time only as the legacy fallback", () => {
-    expect(getProjectModifiedAt(project())).toBe(10)
-    expect(getProjectModifiedAt(project({ updatedAt: 25 }))).toBe(25)
-  })
-
   it("patches metadata without allowing the activity clock to regress", async () => {
     const storedProject = project({ updatedAt: 30 })
     const { ctx, patches } = createMutationCtx([storedProject])

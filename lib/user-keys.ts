@@ -115,29 +115,7 @@ export async function getEffectiveProviderApiKey(
 // alongside AI provider IDs without schema changes. Their ids and static
 // facts (including the platform env-var name) live in the Provider
 // identity module; resolution stays here.
-export { TOOL_PROVIDER_IDS as TOOL_PROVIDERS } from "./provider-identity"
 export type { ToolProvider } from "./provider-identity"
-
-/**
- * Get the effective API key for a tool provider.
- * Uses the widened getUserKeyFromConvex (accepts string) for BYOK lookup,
- * then falls back to platform env vars.
- *
- * Resolution order:
- *   1. User BYOK key from Convex userKeys (encrypted, decrypted here)
- *   2. Platform env var (e.g., EXA_API_KEY)
- *   3. undefined (no key available → tool will be skipped)
- *
- * @param provider - The tool provider to get key for
- * @param convexToken - Optional Convex auth token for fetching user keys
- */
-export async function getEffectiveToolKey(
-  provider: ToolProvider,
-  convexToken?: string
-): Promise<string | undefined> {
-  const resolved = await getEffectiveToolKeyWithMode(provider, convexToken)
-  return resolved.key
-}
 
 /**
  * Resolve a tool provider key and where it came from.

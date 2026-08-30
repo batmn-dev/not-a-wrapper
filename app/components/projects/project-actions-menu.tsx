@@ -18,7 +18,7 @@ import { useState, type ReactElement } from "react"
 type Project = {
   _id: Id<"projects">
   name: string
-  pinned?: boolean
+  pinned: boolean
 }
 
 type ProjectActionsMenuProps = {

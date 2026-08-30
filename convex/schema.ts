@@ -96,10 +96,8 @@ export default defineSchema({
     public: v.boolean(),
     pinned: v.boolean(),
     pinnedAt: v.optional(v.number()), // Unix timestamp
-    // Required so recency indexes never sort null keys to the tail (which would
-    // hide chats from paginated history/sidebar windows). Chat creation
-    // (insertChatForUser) has always set this; backfill:
-    // scripts/backfill-chat-updated-at.mjs.
+    // Required so recency indexes never sort null keys to the tail, which would
+    // hide chats from paginated history/sidebar windows.
     updatedAt: v.number(), // Unix timestamp — last activity (turn start)
     // --- Sidebar status projection (CONTEXT.md "Sidebar status projection")
     // A few run-lifecycle fields mirrored onto the chat doc so each sidebar row
@@ -172,12 +170,10 @@ export default defineSchema({
     role: v.union(
       v.literal("user"),
       v.literal("assistant"),
-      v.literal("system"),
-      v.literal("data")
+      v.literal("system")
     ),
     content: v.string(),
     parts: v.any(), // AI SDK parts format
-    attachments: v.optional(v.array(v.any())), // Deprecated; canonical runtime stores files in `parts`
     parentMessageId: v.optional(v.id("messages")),
     branchIndex: v.optional(v.number()),
     selected: v.optional(v.boolean()),
@@ -416,10 +412,7 @@ export default defineSchema({
     resolvedAt: v.optional(v.number()),
     resolvedByUserId: v.optional(v.id("users")),
     // Approval pauses are lease-free with their own expiry.
-    // Backfill pending rows before enabling the approval reaper — the
-    // undefined-first index ordering would otherwise expire them instantly;
-    // the reaper range excludes undefined regardless.
-    expiresAt: v.optional(v.number()),
+    expiresAt: v.number(),
   })
     .index("by_user_status", ["userId", "status"])
     .index("by_chat_status", ["chatId", "status"])
@@ -431,12 +424,8 @@ export default defineSchema({
     userId: v.id("users"),
     name: v.string(),
     // Last durable user-visible change to the project or one of its chats.
-    // Optional during the initial production backfill; readers fall back to
-    // `_creationTime` until a legacy row is touched.
-    updatedAt: v.optional(v.number()),
-    // Optional while this first reaches production so existing smoke-test rows
-    // remain valid; false/undefined are intentionally equivalent.
-    pinned: v.optional(v.boolean()),
+    updatedAt: v.number(),
+    pinned: v.boolean(),
     // Deletion tombstone (logical deletion is immediate; physical cleanup is a
     // scheduled drain — see deletionJobs). A set value makes the project
     // invisible and write-dead on every surface. Never cleared once set.
@@ -472,7 +461,6 @@ export default defineSchema({
   userPreferences: defineTable({
     userId: v.id("users"),
     layout: v.optional(v.string()),
-    promptSuggestions: v.optional(v.boolean()), // Legacy production compatibility.
     showToolInvocations: v.optional(v.boolean()),
     showConversationPreviews: v.optional(v.boolean()),
     webSearchEnabled: v.optional(v.boolean()),

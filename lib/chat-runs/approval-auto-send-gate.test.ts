@@ -5,8 +5,8 @@ import {
   messageHasLocallyResolvedApproval,
 } from "./approval-auto-send-gate"
 
-// Layer 3 of the continuation idempotency (gameplan §10): whatever the SDK
-// does with its predicate on hydration, ADOPTED approval-responded parts can
+// Whatever the SDK does with its predicate on hydration, ADOPTED
+// approval-responded parts can
 // never arm auto-send — only a part this tab resolved can.
 
 function approvalRespondedMessage(approvalId: string) {

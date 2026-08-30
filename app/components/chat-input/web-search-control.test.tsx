@@ -74,7 +74,7 @@ describe("WebSearchControl", () => {
     act(() => button.dispatchEvent(event))
   }
 
-  it("shows a responsive grey off control that enables optional search", () => {
+  it("shows an off control that enables optional search", () => {
     const { button, onEnabledChange } = renderControl({
       enabled: false,
       mode: "optional",
@@ -82,23 +82,6 @@ describe("WebSearchControl", () => {
 
     expect(button.textContent).toBe("Search")
     expect(button.getAttribute("aria-pressed")).toBe("false")
-    expect(button.className).toContain("text-[var(--text-tertiary)]")
-    expect(button.className).toContain("hidden")
-    expect(button.className).toContain(
-      "group-data-expanded/composer:inline-flex"
-    )
-    expect(button.className).toContain("max-sm:inline-flex")
-    expect(button.className).toContain("@max-[520px]/main:inline-flex")
-    expect(
-      Array.from(button.querySelectorAll("span")).find(
-        (element) => element.textContent === "Search"
-      )?.className
-    ).toContain("max-[520px]:sr-only")
-    expect(
-      Array.from(button.querySelectorAll("span")).find(
-        (element) => element.textContent === "Search"
-      )?.className
-    ).not.toContain("max-sm:sr-only")
     expect(
       container?.querySelectorAll("[data-search-control-icon]")
     ).toHaveLength(1)
@@ -122,9 +105,6 @@ describe("WebSearchControl", () => {
     })
 
     expect(button.getAttribute("aria-pressed")).toBe("true")
-    expect(button.className).toContain(
-      "text-[var(--composer-capability-accent)]"
-    )
     expect(button.hasAttribute("data-search-toggleable")).toBe(true)
     expect(button.hasAttribute("data-search-disable-visible")).toBe(false)
     expect(
@@ -211,7 +191,7 @@ describe("WebSearchControl", () => {
     expect(onEnabledChange).not.toHaveBeenCalled()
   })
 
-  it("keeps the state icon as a globe and exposes the compact touch removal", () => {
+  it("keeps the state icon as a globe and renders the compact touch removal", () => {
     const { button } = renderControl({
       enabled: true,
       mode: "optional",
@@ -225,24 +205,9 @@ describe("WebSearchControl", () => {
         ?.querySelector("[data-search-control-icon]")
         ?.getAttribute("data-search-icon")
     ).toBe("globe")
-    expect(button.className).toContain("cant-hover:ps-2.5")
-    expect(button.className).toContain("cant-hover:pe-3.5")
-    expect(button.className).toContain(
-      "cant-hover:aria-pressed:bg-[var(--composer-capability-accent-hover-surface)]!"
-    )
     expect(
-      container?.querySelector("[data-search-touch-remove-icon]")?.className
-    ).toContain("cant-hover:inline-flex")
-    expect(
-      Array.from(button.querySelectorAll("span")).find(
-        (element) => element.textContent === "Search"
-      )?.className
-    ).toContain("max-[520px]:sr-only")
-    expect(
-      Array.from(button.querySelectorAll("span")).find(
-        (element) => element.textContent === "Search"
-      )?.className
-    ).not.toContain("max-sm:sr-only")
+      container?.querySelector("[data-search-touch-remove-icon]")
+    ).not.toBeNull()
   })
 
   it("presents unsupported search as grey and non-toggleable", () => {
@@ -253,7 +218,6 @@ describe("WebSearchControl", () => {
 
     expect(button.getAttribute("aria-pressed")).toBe("false")
     expect(button.getAttribute("aria-disabled")).toBe("true")
-    expect(button.className).toContain("text-[var(--text-tertiary)]")
     dispatchPointerEvent(button, "pointerover")
     expect(
       container

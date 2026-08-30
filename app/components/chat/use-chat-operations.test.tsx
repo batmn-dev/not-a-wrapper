@@ -105,7 +105,6 @@ describe("useChatOperations", () => {
     vi.clearAllMocks()
     mockCheckRateLimits.mockResolvedValue({
       remaining: 10,
-      remainingPro: 10,
     })
   })
 

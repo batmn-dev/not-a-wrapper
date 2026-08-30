@@ -4,7 +4,6 @@ import type { QueryCtx } from "../_generated/server"
 import {
   CHAT_PROJECT_LINK_OWNER_ERROR,
   collectLinkedChats,
-  newestLinkedChat,
   requireLinkedProject,
   takeLinkedChats,
 } from "./chat_project_link"
@@ -21,6 +20,8 @@ function project(overrides: Partial<Doc<"projects">> = {}): Doc<"projects"> {
     _creationTime: 1,
     userId: asId<"users">("user-1"),
     name: "Project",
+    updatedAt: 1,
+    pinned: false,
     ...overrides,
   }
 }
@@ -98,10 +99,6 @@ function createCtx(documents: {
             },
             collect: async () => results,
             take: async (limit: number) => results.slice(0, limit),
-            order: () => resultApi,
-            first: async () =>
-              [...results].sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
-              null,
           }
           return resultApi
         },
@@ -163,25 +160,5 @@ describe("Chat-Project link", () => {
     await expect(takeLinkedChats(ctx, storedProject, 1)).resolves.toEqual([
       first,
     ])
-  })
-
-  it("returns the newest linked chat and rejects a cross-owner newest", async () => {
-    const storedProject = project()
-    const newest = chat("chat-2", { updatedAt: 30 })
-    const healthyCtx = createCtx({
-      projects: [storedProject],
-      chats: [chat("chat-1"), newest],
-    })
-    expect(await newestLinkedChat(healthyCtx, storedProject)).toBe(newest)
-
-    const corruptCtx = createCtx({
-      projects: [storedProject],
-      chats: [
-        chat("chat-3", { updatedAt: 40, userId: asId<"users">("user-2") }),
-      ],
-    })
-    await expect(newestLinkedChat(corruptCtx, storedProject)).rejects.toThrow(
-      CHAT_PROJECT_LINK_OWNER_ERROR
-    )
   })
 })

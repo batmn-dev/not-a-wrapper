@@ -63,8 +63,7 @@ function textLengthOfParts(parts: unknown): number {
  * structural comparison per message suffices; without this memo every
  * projection pass re-serializes the full content of every settled assistant
  * turn — O(chat content) per durable snapshot, the reconcile component of the
- * section-6 freeze (docs/measurements/2026-07-23-section6-freeze-rootcause.md
- * §5). Keyed by parts-array identity: adoption installs the server array
+ * historical large-code freeze. Keyed by parts-array identity: adoption installs the server array
  * itself, an equal local array is marked directly, and the local reference
  * stays stable across later passes (the server side is re-materialized fresh
  * per snapshot, which is exactly why the memo lives on the local array).

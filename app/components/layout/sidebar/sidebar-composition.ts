@@ -4,7 +4,7 @@ import { sortByRecency } from "@/lib/chat-store/chats/sidebar-window"
 import type { Chat } from "@/lib/chat-store/types"
 import type { ChatOrganization } from "./chat-organization"
 
-export type SidebarProjectModel = Doc<"projects"> & { pinned: boolean }
+export type SidebarProjectModel = Doc<"projects">
 
 export type SidebarComposition = {
   pinnedChats: Chat[]

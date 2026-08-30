@@ -532,7 +532,6 @@ export function buildDurablePrepareIntent(input: {
 
 export function toDurableUiMessage(message: Doc<"messages">): DurableUiMessage {
   const uiMessage = durableStoredMessageToUiMessage(message, {
-    partsMode: "stored",
     metadataMode: "runtime",
   })
 
@@ -725,19 +724,6 @@ type DurableSnapshotTrackerOptions = {
    * writer, so the tracker never sees a credential or a transport.
    */
   persist: (args: SnapshotPersistArgs) => Promise<unknown>
-}
-
-/**
- * Snapshot cadence, env-tunable for the cadence experiment (measurement plan
- * Experiment 3): `CHAT_SNAPSHOT_THROTTLE_MS` overrides the 750 ms default,
- * clamped to [100, 5000] — the historical write storm ran at ~59 ms, and the
- * clamp keeps a typo from recreating it. Read per turn so a perf server can
- * be relaunched at a new cadence without a rebuild.
- */
-export function snapshotThrottleMs(): number {
-  const raw = Number(process.env.CHAT_SNAPSHOT_THROTTLE_MS)
-  if (!Number.isFinite(raw) || raw <= 0) return 750
-  return Math.min(5000, Math.max(100, Math.round(raw)))
 }
 
 export function createDurableSnapshotTracker(
@@ -1617,7 +1603,6 @@ export function createConvexDurableTurn(args: {
         order: generation.assistantOrder,
       }
       snapshotTracker = createDurableSnapshotTracker({
-        throttleMs: snapshotThrottleMs(),
         persist: (snapshotArgs) => {
           // Checkpoint counters: attempts/accepted/lost/failed
           // plus cumulative payload bytes. Sizes and enums only — the

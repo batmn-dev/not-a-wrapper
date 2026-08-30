@@ -21,8 +21,7 @@ import type { ChatTurnMessage } from "./turn-plans"
 // keeps NO second copy for durable chats — the Convex subscription is the one
 // source of truth the durable read path consults (messages/provider.tsx reads
 // IndexedDB only for localOnly chats). Do not "fix" a durable persistence gap
-// here by caching; that recreates the split-brain the 2026-07-14 incident doc
-// warns about.
+// here by caching; that recreates the split-brain ADR-0011 removed.
 
 export type SetChatTurnMessages = (
   updater: (messages: ChatTurnMessage[]) => ChatTurnMessage[]

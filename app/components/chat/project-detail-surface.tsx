@@ -16,7 +16,7 @@ type ProjectDetailSurfaceProps = {
   project: {
     id: Id<"projects">
     name: string
-    pinned?: boolean
+    pinned: boolean
   }
   onStartChat: () => void
 }

@@ -8,7 +8,7 @@ import { useCallback, useState } from "react"
 
 export type PinnableProject = {
   _id: Id<"projects">
-  pinned?: boolean
+  pinned: boolean
 }
 
 /**
@@ -24,8 +24,7 @@ export function useProjectPinning() {
   )
 
   const isPinned = useCallback(
-    (project: PinnableProject) =>
-      pinOverrides[project._id] ?? Boolean(project.pinned),
+    (project: PinnableProject) => pinOverrides[project._id] ?? project.pinned,
     [pinOverrides]
   )
 
@@ -38,8 +37,7 @@ export function useProjectPinning() {
     async (project: PinnableProject) => {
       if (pendingProjectIds.has(project._id)) return
 
-      const previousPinned =
-        pinOverrides[project._id] ?? Boolean(project.pinned)
+      const previousPinned = pinOverrides[project._id] ?? project.pinned
       const nextPinned = !previousPinned
 
       setPinOverrides((previous) => ({

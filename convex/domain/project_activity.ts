@@ -15,17 +15,6 @@ type ChatActivityPatch = Partial<
   >
 >
 
-/**
- * The project directory's canonical modification timestamp. Legacy rows use
- * their creation time until the production-safe optional field is backfilled
- * or the project receives new activity.
- */
-export function getProjectModifiedAt(
-  project: Pick<Doc<"projects">, "_creationTime" | "updatedAt">
-): number {
-  return project.updatedAt ?? project._creationTime
-}
-
 /** Record activity when the caller already resolved the parent project. */
 export async function recordKnownProjectActivity(
   ctx: ActivityMutationCtx,
@@ -33,7 +22,7 @@ export async function recordKnownProjectActivity(
   occurredAt: number
 ): Promise<void> {
   if (!project) return
-  if (occurredAt <= getProjectModifiedAt(project)) return
+  if (occurredAt <= project.updatedAt) return
 
   await ctx.db.patch(project._id, { updatedAt: occurredAt })
 }
@@ -50,7 +39,7 @@ export async function patchProjectActivity(
 ): Promise<void> {
   await ctx.db.patch(project._id, {
     ...patch,
-    updatedAt: Math.max(getProjectModifiedAt(project), occurredAt),
+    updatedAt: Math.max(project.updatedAt, occurredAt),
   })
 }
 

@@ -85,18 +85,3 @@ export async function takeLinkedChats(
   }
   return chats
 }
-
-/** The project's most recently active linked chat, if any. */
-export async function newestLinkedChat(
-  ctx: ChatProjectLinkCtx,
-  project: Doc<"projects">
-): Promise<Doc<"chats"> | null> {
-  const chat = await ctx.db
-    .query("chats")
-    .withIndex("by_project_updated", (q) => q.eq("projectId", project._id))
-    .filter((q) => q.eq(q.field("deletingAt"), undefined))
-    .order("desc")
-    .first()
-  if (chat) assertLinkedOwners(chat, project)
-  return chat
-}

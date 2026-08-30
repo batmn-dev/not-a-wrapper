@@ -833,7 +833,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
     }
   })
 
-  it("absorbs a grant-unauthorized rejection as settled-elsewhere instead of degrading OR claiming this outcome (revocation, gameplan §0)", async () => {
+  it("absorbs a grant-unauthorized rejection as settled-elsewhere instead of degrading or claiming this outcome", async () => {
     // An absorbing outcome (stream onAbort's write, a landed failure) revokes
     // the grant, so the envelope's benign double-terminal write now rejects at
     // the grant gate. That rejection must read as idempotent settlement — not
@@ -1095,7 +1095,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
   })
 })
 
-describe("durable turn runtime — heartbeat loop (gameplan §6)", () => {
+describe("durable turn runtime — heartbeat loop", () => {
   function heartbeatCalls(wire: RecordingWire) {
     return wireCalls(wire, "heartbeatGenerationRun")
   }

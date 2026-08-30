@@ -165,7 +165,7 @@ status/error publications are exempt (they bypass the coalescer by design).
 | Metric | Definition | Layer | Status |
 |---|---|---|---|
 | `selected_conversation_client` (`selectedCount`, `mappingDurationMs`) | client-side mapping cost + row count per subscription update | browser | existing (note: re-runs mapping to time it; flag-gated) |
-| `subscription_updates_per_turn` | count of `getSelectedConversation` results delivered during one turn | browser | proposed |
+| `subscription_updates_per_turn` | count of `getSelectedPath` and `getSelectedRunState` results delivered during one turn | browser | proposed |
 | `reactive_result_bytes_bucket` | serialized result size bucket per update | browser | proposed |
 | `messages_read_bucket` / `selected_count_bucket` / `parts_bytes_bucket` | per-invocation read cost, sampled, Convex side | convex | existing (Phase 2: `_tag:"chat_perf_convex"` `selected_conversation_read`, gated by `CHAT_PERF_CONVEX_SAMPLE_RATE`; line frequency doubles as the re-execution counter) |
 | `query_reexecutions` / `documents_read` / `db_bandwidth` | deployment metrics via Convex dashboard/MCP, recorded per benchmark run | convex | proposed (result-file only, not app logs) |

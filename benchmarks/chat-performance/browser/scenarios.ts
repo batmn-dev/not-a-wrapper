@@ -65,7 +65,7 @@ export const DURABLE_SUITE: BrowserScenarioConfig[] = [
   { ...base, id: "durable-text-30-second-tab", scenario: "text-only", chunksPerSecond: 30, shape: "fixed", auth: true, action: "second-tab" },
   { ...base, id: "durable-text-30-reload", scenario: "text-only", chunksPerSecond: 30, shape: "fixed", auth: true, action: "reload" },
   { ...base, id: "durable-stop-10-fixed", scenario: "stop-during-text", chunksPerSecond: 10, shape: "fixed", auth: true, action: "stop", expectedOutcome: "abort" },
-  // Pause-heavy delivery (Experiment 2 follow-up): three 20 s zero-delta gaps
+  // Pause-heavy delivery: three 20 s zero-delta gaps
   // while the run stays live — heartbeat/run-doc writes are the only durable
   // traffic in a gap, which is the read-amplification event class the split
   // subscription exists for. ~70 s of wall clock per run; trim RUNS via env

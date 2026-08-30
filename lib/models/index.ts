@@ -70,21 +70,6 @@ export function getLogicalModelInfo(
   return model ? toLogicalModelView(model, asOf) : undefined
 }
 
-export async function getModelsForProvider(
-  provider: string
-): Promise<ModelConfig[]> {
-  const models = STATIC_MODELS
-
-  const providerModels = models
-    .filter((model) => model.providerId === provider)
-    .map((model) => ({
-      ...model,
-      accessible: true,
-    }))
-
-  return providerModels
-}
-
 // Synchronous route-record lookup. Accepts any historical id: aliases and
 // successions resolve first, and every logical id doubles as its canonical
 // route id, so logical selections resolve here too.
@@ -92,6 +77,3 @@ export function getModelInfo(modelId: string): ModelConfig | undefined {
   const resolvedModelId = resolveModelId(modelId)
   return STATIC_MODELS.find((model) => model.id === resolvedModelId)
 }
-
-// For backward compatibility - static models only
-export const MODELS: ModelConfig[] = STATIC_MODELS

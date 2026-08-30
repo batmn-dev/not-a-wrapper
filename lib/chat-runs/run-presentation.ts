@@ -68,7 +68,7 @@ export type RunPresentationInputs = {
    * id — never "last run in chat".
    */
   localAssistantMessageId: string | null
-  /** Raw durable facts from the atomic projection; null for guests/non-owners. */
+  /** Raw durable facts from the run-state query; null for guests/non-owners. */
   selectedRun: SelectedRunProjection | null
   /** Run id of a durable Stop mutation currently in flight, if any. */
   pendingStopRunId: string | null
@@ -179,9 +179,7 @@ export function resolveGenerationPresentation(
   if (selectedRun && selectedRun.status === "awaiting_approval") {
     const approval = selectedRun.pendingApproval
     const unexpired =
-      approval !== null &&
-      (approval.expiresAt === undefined ||
-        now < approval.expiresAt + skewGraceMs)
+      approval !== null && now < approval.expiresAt + skewGraceMs
     if (unexpired) {
       return {
         state: "awaiting-approval",

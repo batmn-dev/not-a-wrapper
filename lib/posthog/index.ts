@@ -94,7 +94,6 @@ export function captureGeneration({
 }): void {
   if (!posthogClient) return
 
-  // Calculate total tokens if both input and output tokens are available
   const totalTokens =
     inputTokens !== undefined && outputTokens !== undefined
       ? inputTokens + outputTokens

@@ -5,18 +5,7 @@ import {
 } from "./chat-store/identity"
 import { fetchClient } from "./fetch"
 
-export class UsageLimitError extends Error {
-  code: string
-  constructor(message: string) {
-    super(message)
-    this.code = "DAILY_LIMIT_REACHED"
-  }
-}
-
-/**
- * Checks the user's daily usage and increments both overall and daily counters.
- * Note: With Convex, this should be done via the usage.checkUsage query
- */
+/** Read the user's current daily rate-limit state. */
 export async function checkRateLimits(
   userId: string,
   isAuthenticated: boolean

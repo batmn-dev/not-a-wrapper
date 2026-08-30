@@ -159,10 +159,7 @@ function useProjectsDirectory(
       const pinOrder = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
       if (pinOrder !== 0) return pinOrder
 
-      return (
-        (b.updatedAt ?? b._creationTime) -
-        (a.updatedAt ?? a._creationTime)
-      )
+      return b.updatedAt - a.updatedAt
     })
   }, [isPinned, normalizedQuery, tabSource])
 
