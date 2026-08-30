@@ -4,7 +4,7 @@
  * Compares the per-call adapters with the production single-context path.
  *
  * Run with: bun run bench:chat
- * Record results per docs/measurements/2026-07-22-chat-performance-baseline.md.
+ * Compare results with docs/performance/2026-08-27-system-performance-baseline.md.
  */
 import { bench, describe } from "vitest"
 import {

@@ -823,8 +823,7 @@ describe("prepareToolRuntime — Tool outcome recording", () => {
   })
 })
 
-// PR 7b — conditional Exa resolution (unconditional since the 2026-07-23 flag
-// collapse): the key is read only when the Layer 2 search-fallback or content-
+// The Exa key is read only when the Layer 2 search-fallback or content-
 // extraction door can open.
 
 describe("prepareToolRuntime — conditional Exa resolution", () => {

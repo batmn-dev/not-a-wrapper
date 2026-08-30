@@ -1,6 +1,6 @@
 /**
- * Shared deterministic fixtures for the chat-performance benchmarks
- * (docs/measurements/2026-07-22-chat-performance-baseline.md).
+ * Shared deterministic fixtures for the chat-performance benchmarks. Fixture
+ * hashes are pinned in docs/performance/2026-08-27-system-performance-baseline.md.
  *
  * Everything here is seeded and pure: the same seed always produces the same
  * branch trees, payloads, and stream scripts, so benchmark output hashes are

@@ -3,7 +3,6 @@ import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import {
-  internalMutation,
   query,
   type MutationCtx,
   type QueryCtx,
@@ -544,36 +543,6 @@ export const markChatRead = authenticatedMutation({
   args: { chatId: v.id("chats"), readThroughAt: v.number() },
   handler: async (ctx, { chatId, readThroughAt }) =>
     markChatReadForOwner(ctx, ctx.user, chatId, readThroughAt),
-})
-
-/**
- * Defensive backfill for the `updatedAt` optional→required narrowing
- * (docs/adr/0005-bounded-chat-list-window.md). Sets
- * `updatedAt = _creationTime` for any chat missing it, so recency indexes have
- * no null keys. Idempotent.
- *
- * Chat creation (`insertChatForUser`) has always set `updatedAt`, so in practice no live row lacks it
- * and the required-schema push succeeds directly. This exists only as a fallback
- * if a deployment somehow holds legacy rows: run it (via
- * `scripts/backfill-chat-updated-at.mjs`) while `updatedAt` is still optional,
- * before pushing the required schema. The localized cast reads the possibly-
- * undefined runtime value the narrowed type otherwise hides.
- */
-export const backfillUpdatedAt = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const chats = await ctx.db.query("chats").collect()
-    let patched = 0
-    for (const chat of chats) {
-      const current = (chat as { updatedAt?: number }).updatedAt
-      if (current === undefined) {
-        if (!(await isChatActive(ctx, chat))) continue
-        await ctx.db.patch(chat._id, { updatedAt: chat._creationTime })
-        patched++
-      }
-    }
-    return { total: chats.length, patched }
-  },
 })
 
 export async function removeChatForOwner(

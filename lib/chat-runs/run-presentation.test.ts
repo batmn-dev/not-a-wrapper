@@ -77,8 +77,8 @@ describe("precedence ladder", () => {
   })
 
   it("a PREVIOUS turn's terminal is masked behind a new local stream (projection gap)", () => {
-    // Gameplan §8: local submission renders immediately. The prior turn's
-    // completed run must neither present (rule 1) nor cut the new stream.
+    // Local submission renders immediately. The prior turn's completed run
+    // must neither present nor cut the new stream.
     const presentation = resolve({
       localStatus: "streaming",
       localAssistantMessageId: "msg_other",

@@ -31,7 +31,6 @@ import React, { useEffect, useRef, useState } from "react"
 import { MessageActionButton } from "./message-action-button"
 import { MessageBranchControls } from "./message-branch-controls"
 
-// Attachment type for backward compatibility with v4 format
 type MessageAttachment = {
   name: string
   contentType: string

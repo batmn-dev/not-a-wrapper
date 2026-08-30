@@ -10,7 +10,7 @@ exactly the capabilities documented here.
 > `NEXT_PUBLIC_STREAMING_CODE_RENDER_MODE`) no longer exist: after
 > verification and the §6 freeze root-cause, the throttle became the constant
 > `CHAT_MESSAGE_THROTTLE_MS` and throttled highlighting became the sole code
-> render path (see `docs/measurements/2026-07-23-flag-collapse.md`). This
+> render path. ADR-0016 records the current replacement architecture. This
 > seam remains the standard for the diagnostic switches that still exist
 > (`NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION`, `CHAT_PERF_SAMPLE_RATE`) and for
 > future phases that explicitly justify a maintained flag.

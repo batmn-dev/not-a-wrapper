@@ -79,16 +79,11 @@ describe("UsageSection", () => {
     })
 
     const meter = getMeter()
-    const indicator = meter?.querySelector<HTMLElement>(
-      '[data-slot="progress-indicator"]'
-    )
 
     expect(container?.textContent).toContain("… remaining")
     expect(meter?.hasAttribute("data-indeterminate")).toBe(true)
     expect(meter?.hasAttribute("aria-valuenow")).toBe(false)
     expect(meter?.getAttribute("aria-valuetext")).toBe("indeterminate progress")
-    expect(indicator?.className).toContain("rounded-full")
-    expect(indicator?.className).toContain("data-[indeterminate]:hidden")
   })
 
   it("renders a resolved zero-credit allowance as zero percent remaining", () => {

@@ -7,9 +7,7 @@
 - Date: 2026-07-27
 - Related: ADR-0009 (durable turn runtime — 750 ms snapshot cadence, unchanged),
   ADR-0011 (settlement — terminal writes the reveal must flush on, unchanged),
-  ADR-0016 (the replacement architecture);
-  `docs/measurements/2026-07-23-pr2-throttle-selection.md` (the 50 ms throttle
-  this deliberately rendered more often than).
+  ADR-0016 (the replacement architecture and historical 50 ms throttle).
 
 ## Context
 

@@ -19,7 +19,7 @@ import type {
   DurableWorkerWire,
 } from "./durable-turn-runtime"
 
-// AI SDK seam tests (PR #97 regression class): run the REAL `ai` package —
+// AI SDK seam tests: run the REAL `ai` package —
 // streamText, its v7 callback names (onStepEnd/onEnd/prepareStep), tool
 // execution, and the UI-message Response — against the real Chat turn runtime
 // and the real Tool runtime. The unit suite (chat-turn-runtime.test.ts) fakes

@@ -7,7 +7,6 @@
     "node": ">=22.13.0"
   },
   "overrides": {
-    "dompurify": "^3.4.14",
     "postcss": "^8.5.26"
   },
   "scripts": {
@@ -64,7 +63,6 @@
     "cmdk": "^1.1.1",
     "convex": "^1.44.0",
     "convex-helpers": "0.1.123",
-    "dompurify": "^3.4.14",
     "embla-carousel-react": "^8.6.0",
     "exa-js": "^2.16.0",
     "file-type": "^22.0.1",

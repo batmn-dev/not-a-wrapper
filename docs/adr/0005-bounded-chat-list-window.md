@@ -7,8 +7,7 @@
 
 > **Status note (2026-07-23).** The default-on rollback lever was removed after
 > its soak. The bounded window is now the sole sidebar path, and the legacy
-> full-list query was deleted. Rollback is `git revert`; see
-> `docs/measurements/2026-07-23-flag-collapse.md`.
+> full-list query was deleted. Rollback is `git revert`.
 
 ## Context
 
