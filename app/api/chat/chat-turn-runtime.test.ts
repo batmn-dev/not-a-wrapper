@@ -604,8 +604,7 @@ describe("createChatTurnRuntime — prepare()", () => {
       expect.objectContaining({
         targetModelId: "gpt-4.1",
         targetRouteId: routeId,
-      }),
-      expect.any(Object)
+      })
     )
   })
 
@@ -819,11 +818,8 @@ describe("createChatTurnRuntime — prepare()", () => {
   })
 
   it("lowers foreign hosted web_search history instead of failing validation (cross-provider regression)", async () => {
-    // The production incident: an Anthropic native web-search result in
-    // durable history, replayed on a turn whose registry holds the OpenAI
-    // `web_search` tool. Boundary 1 runs the REAL validateUIMessages here —
-    // pre-fix, it threw AI_TypeValidationError (Anthropic array output vs
-    // OpenAI object schema) before the request ever reached the provider.
+    // Anthropic's array output cannot be validated against OpenAI's object
+    // schema before provider-specific history lowering.
     const actualAi = await vi.importActual<typeof import("ai")>("ai")
     vi.mocked(validateUIMessages).mockImplementationOnce(
       actualAi.validateUIMessages as never

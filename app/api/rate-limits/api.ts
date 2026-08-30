@@ -34,8 +34,6 @@ export async function getMessageUsage(
       token ? { token } : undefined
     )
 
-    // Use the limit from Convex to keep dailyLimit consistent with the enforced limit
-    // (handles edge cases like anonymous authenticated users or user not found)
     return {
       dailyCount: regularUsage.count ?? 0,
       dailyLimit: regularUsage.limit,
@@ -43,7 +41,7 @@ export async function getMessageUsage(
     }
   } catch (error) {
     console.error("Error fetching usage from Convex:", error)
-    // Return default values on error to avoid blocking users
+    // Usage lookup failures must not block messaging.
     return {
       dailyCount: 0,
       dailyLimit: defaultLimit,

@@ -72,7 +72,7 @@ describe("keyboard viewport controller (VirtualKeyboard branch)", () => {
     )
     expect(root.hasAttribute("data-keyboard-open")).toBe(true)
 
-    // ChatGPT parity: geometry collapsing to zero mid-focus does NOT remove
+    // Geometry collapsing to zero mid-focus does not remove
     // the keyboard-open state — only losing focus does.
     keyboard.setHeight(0)
     expect(document.documentElement.classList.contains("keyboard-open")).toBe(
@@ -216,7 +216,7 @@ describe("keyboard viewport controller (visualViewport fallback)", () => {
     vi.useRealTimers()
   })
 
-  it("keeps fallback geometry out of ChatGPT keyboard signals", () => {
+  it("keeps fallback geometry out of keyboard signals", () => {
     const listener = vi.fn()
     const unsubscribe = subscribeVirtualKeyboard(listener)
 

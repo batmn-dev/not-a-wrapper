@@ -9,59 +9,57 @@ describe("OpenRouter underlying-vendor adapter routing", () => {
   const cases: Array<{
     targetModelId: string
     expectedAdapter: unknown
-    expectedProviderId: string
+    adapterLabel: string
   }> = [
     {
       targetModelId: "openrouter:anthropic/claude-sonnet-5",
       expectedAdapter: anthropicAdapter,
-      expectedProviderId: "anthropic",
+      adapterLabel: "anthropic",
     },
     {
       targetModelId: "openrouter:deepseek/deepseek-v4-pro",
       expectedAdapter: openaiCompatibleAdapter,
-      expectedProviderId: "deepseek",
+      adapterLabel: "OpenAI-compatible",
     },
     {
       targetModelId: "openrouter:x-ai/grok-4.3",
       expectedAdapter: openaiCompatibleAdapter,
-      expectedProviderId: "x-ai",
+      adapterLabel: "OpenAI-compatible",
     },
     {
       targetModelId: "openrouter:meta-llama/llama-3.3-70b-instruct:free",
       expectedAdapter: openaiCompatibleAdapter,
-      expectedProviderId: "meta-llama",
+      adapterLabel: "OpenAI-compatible",
     },
     {
       targetModelId: "openrouter:stealth/ox-alpha",
       expectedAdapter: openaiCompatibleAdapter,
-      expectedProviderId: "stealth",
+      adapterLabel: "OpenAI-compatible",
     },
     {
       targetModelId: "openrouter:unknown-org/mystery-model",
       expectedAdapter: defaultAdapter,
-      expectedProviderId: "default",
+      adapterLabel: "default",
     },
   ]
 
-  for (const { targetModelId, expectedAdapter, expectedProviderId } of cases) {
-    it(`routes ${targetModelId} to the ${expectedProviderId} adapter`, () => {
-      const { adapter, effectiveProviderId } = resolveAdapter("openrouter", {
+  for (const { targetModelId, expectedAdapter, adapterLabel } of cases) {
+    it(`routes ${targetModelId} to the ${adapterLabel} adapter`, () => {
+      const adapter = resolveAdapter("openrouter", {
         targetModelId,
         hasTools: true,
       })
       expect(adapter).toBe(expectedAdapter)
-      expect(effectiveProviderId).toBe(expectedProviderId)
     })
   }
 
   it("uses the resolved route when the target model is a merged logical id", () => {
-    const { adapter, effectiveProviderId } = resolveAdapter("openrouter", {
+    const adapter = resolveAdapter("openrouter", {
       targetModelId: "gpt-4.1",
       targetRouteId: "openrouter:openai/gpt-4.1",
       hasTools: true,
     })
 
     expect(adapter).toBe(openaiAdapter)
-    expect(effectiveProviderId).toBe("openai")
   })
 })

@@ -264,8 +264,6 @@ export function extendListBlockEnd(args: {
   return committedEnd
 }
 
-// --- Partial-tail partition equivalence ------------------------------------
-
 export type BlockView = {
   text: string
   nodeType: string

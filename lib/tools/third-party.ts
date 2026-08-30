@@ -162,7 +162,6 @@ export async function getThirdPartyTools(
               upstreamSignal: upstreamAbortSignal,
             })
 
-            // ── Cache check ──────────────────────────────
             const cached = getCachedSearch(query)
             if (cached) {
               console.log(
@@ -331,7 +330,6 @@ export async function getContentExtractionTools(options: {
             upstreamSignal: upstreamAbortSignal,
           })
 
-          // ── Cache check ────────────────────────────────
           const cached = new Map<string, CachedExtraction>()
           const uncachedUrls: string[] = []
           for (const url of urls) {
@@ -343,7 +341,6 @@ export async function getContentExtractionTools(options: {
             }
           }
 
-          // If all URLs are cached, return immediately
           if (uncachedUrls.length === 0) {
             const mapped = urls.map(
               (url) => cached.get(url) ?? { url, error: "CACHE_MISS" }
@@ -370,8 +367,7 @@ export async function getContentExtractionTools(options: {
             upstreamSignal: upstreamAbortSignal,
           })
 
-          // ── Persistent per-domain limit (uncached only) ─
-          // Cache hits intentionally do NOT consume domain quota.
+          // Cache hits do not consume domain quota.
           if (policyGuard) {
             const uncachedDomainCounts = new Map<string, number>()
             for (const url of uncachedUrls) {
@@ -392,7 +388,6 @@ export async function getContentExtractionTools(options: {
             upstreamSignal: upstreamAbortSignal,
           })
 
-          // ── Fetch uncached URLs from Exa ───────────────
           // Exa SDK does not accept AbortSignal yet. Race to avoid blocking
           // response teardown on cancellation while the HTTP request continues.
           const response = await runWithToolAbortAndTimeout({
@@ -431,7 +426,6 @@ export async function getContentExtractionTools(options: {
             resultMap.set(r.url, r)
           }
 
-          // Process fresh results and cache successes
           const freshResults = new Map<string, CachedExtraction>()
           const freshErrors = new Map<
             string,
@@ -463,7 +457,6 @@ export async function getContentExtractionTools(options: {
             }
           }
 
-          // ── Merge cached + fresh in original URL order ─
           let successCount = 0
           let failedCount = 0
 

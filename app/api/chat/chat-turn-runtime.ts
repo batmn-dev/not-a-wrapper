@@ -21,7 +21,6 @@ import { CHAT_TURN_EXECUTION_BUDGET } from "@/lib/chat-turn/execution-budget"
 import {
   ANONYMOUS_MAX_STEP_COUNT,
   DEFAULT_MAX_STEP_COUNT,
-  HISTORY_REPLAY_COMPILER_V1,
   MCP_MAX_STEP_COUNT,
   SYSTEM_PROMPT_DEFAULT,
 } from "@/lib/config"
@@ -396,19 +395,6 @@ function countWarningsByCode(
   return counts
 }
 
-function summarizeReplayWarningDetails(
-  warnings: AdaptationWarning[],
-  code: "replay_normalization_warning" | "replay_compile_warning"
-): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const warning of warnings) {
-    if (warning.code !== code) continue
-    const subcode = warning.detail.split(":")[0]?.trim() || "unknown"
-    counts[subcode] = (counts[subcode] ?? 0) + 1
-  }
-  return counts
-}
-
 export type ChatTurnRuntime = {
   /**
    * Resolve the execution plan: model/key, Tool runtime, durable-prepare,
@@ -685,8 +671,7 @@ export function createChatTurnRuntime(args: {
       })
     }
 
-    // Deterministic perf provider (measurement plan Phase 3 §3.1): active
-    // only when the SERVER environment sets CHAT_PERF_DETERMINISTIC_PROVIDER
+    // Active only when the server sets CHAT_PERF_DETERMINISTIC_PROVIDER
     // and the trailing user message carries a well-formed [[perf:...]]
     // directive — the parse returns null otherwise, and everything below the
     // model call (transforms, durable writes, settlement) runs unchanged.
@@ -920,10 +905,7 @@ export function createChatTurnRuntime(args: {
     const adapterResult = await adaptHistoryForProvider(
       hostedLowering.messages,
       resolvedProvider,
-      adaptationContext,
-      {
-        useReplayCompiler: HISTORY_REPLAY_COMPILER_V1,
-      }
+      adaptationContext
     )
     const adaptedMessagesWithTail = [
       ...adapterResult.messages,
@@ -933,70 +915,9 @@ export function createChatTurnRuntime(args: {
     perf.record("history_adaptation", adaptationTimeMs)
     const warningCount = adapterResult.warnings.length
     const warningCountsByCode = countWarningsByCode(adapterResult.warnings)
-    const replayNormalizeWarningCount =
-      warningCountsByCode.replay_normalization_warning ?? 0
-    const replayCompileWarningCount =
-      warningCountsByCode.replay_compile_warning ?? 0
-    const replayCompileFallbackCount =
-      warningCountsByCode.replay_compile_fallback ?? 0
-    const replayCompileFallbackActivated = replayCompileFallbackCount > 0
     const partsDroppedTotal = Object.values(
       adapterResult.stats.partsDropped
     ).reduce((sum, count) => sum + count, 0)
-
-    if (HISTORY_REPLAY_COMPILER_V1) {
-      console.log(
-        JSON.stringify({
-          _tag: "replay_normalize_stage",
-          chatId,
-          provider: resolvedProvider,
-          model,
-          compilerEnabled: true,
-          warningCount: replayNormalizeWarningCount,
-          warningCodes: summarizeReplayWarningDetails(
-            adapterResult.warnings,
-            "replay_normalization_warning"
-          ),
-          originalMessageCount: adapterResult.stats.originalMessageCount,
-          adaptedMessageCount: adapterResult.stats.adaptedMessageCount,
-          totalPartsOriginal: adapterResult.stats.totalPartsOriginal,
-          totalPartsAdapted: adapterResult.stats.totalPartsAdapted,
-        })
-      )
-
-      console.log(
-        JSON.stringify({
-          _tag: "replay_compile_stage",
-          chatId,
-          provider: resolvedProvider,
-          model,
-          compilerEnabled: true,
-          warningCount: replayCompileWarningCount,
-          warningCodes: summarizeReplayWarningDetails(
-            adapterResult.warnings,
-            "replay_compile_warning"
-          ),
-          fallbackActivated: replayCompileFallbackActivated,
-          fallbackCount: replayCompileFallbackCount,
-          adaptationTimeMs,
-        })
-      )
-    }
-
-    if (replayCompileFallbackActivated) {
-      console.warn(
-        JSON.stringify({
-          _tag: "replay_compile_fallback_activated",
-          chatId,
-          provider: resolvedProvider,
-          model,
-          compilerEnabled: HISTORY_REPLAY_COMPILER_V1,
-          fallbackCount: replayCompileFallbackCount,
-          originalMessageCount: adapterResult.stats.originalMessageCount,
-          adaptedMessageCount: adapterResult.stats.adaptedMessageCount,
-        })
-      )
-    }
 
     console.log(
       JSON.stringify({
@@ -1004,7 +925,6 @@ export function createChatTurnRuntime(args: {
         chatId,
         provider: resolvedProvider,
         model,
-        replayCompilerEnabled: HISTORY_REPLAY_COMPILER_V1,
         ...adapterResult.stats,
         warningCount,
         warningCodes: warningCountsByCode,
@@ -1052,7 +972,6 @@ export function createChatTurnRuntime(args: {
           chatId,
           provider: resolvedProvider,
           model,
-          compilerEnabled: HISTORY_REPLAY_COMPILER_V1,
           errorName: validationError.name,
         })
       )
@@ -1496,11 +1415,8 @@ export function createChatTurnRuntime(args: {
     providerStreamStarted = true
 
     const runGeneration = (braintrustSpan: BraintrustTraceSpan) => {
-      // Two anchors, deliberately both emitted (no-ops unless sampled):
-      // `stream_start` keeps its historical clock — runtime construction →
-      // streamText (turnStartedAtMs is set AFTER auth/parse/admission);
-      // `provider_request_started` is the receipt-anchored span the
-      // measurement plan's lifecycle timeline sums against.
+      // Two anchors: `stream_start` begins at runtime construction;
+      // `provider_request_started` begins at HTTP receipt.
       perf.record("stream_start", streamStartMs - turnStartedAtMs)
       perf.record(
         "provider_request_started",
@@ -1952,10 +1868,8 @@ export function createChatTurnRuntime(args: {
                   finishReason,
                 },
               })
-              // Per-tool-call PostHog `tool_call` events are emitted at step
-              // finish by the Tool runtime's analytics outcome sink.
             } catch (captureErr) {
-              // Analytics failure should never break the response
+              // Analytics is best-effort.
               console.error(
                 JSON.stringify({
                   _tag: "posthog_generation_capture_failed",
@@ -1965,9 +1879,6 @@ export function createChatTurnRuntime(args: {
               )
             }
           }
-
-          // Tool call audit logging happens at step finish via the Tool
-          // runtime's audit outcome sink — all sources, one unified path.
         },
       })
     }

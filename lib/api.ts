@@ -5,7 +5,6 @@ import {
 } from "./chat-store/identity"
 import { fetchClient } from "./fetch"
 
-/** Read the user's current daily rate-limit state. */
 export async function checkRateLimits(
   userId: string,
   isAuthenticated: boolean
@@ -32,23 +31,16 @@ export async function checkRateLimits(
   }
 }
 
-/**
- * Get or create a guest user ID
- * Note: guests can use the app without authentication or sign in with WorkOS.
- */
 export const getOrCreateGuestUserId = async (
   user: UserProfile | null
 ): Promise<string | null> => {
   if (user?.id) return user.id
 
-  // Generate a local guest ID if no user is authenticated.
-  // This is stored in localStorage and used for local state only
   const existingGuestId = localStorage.getItem(GUEST_USER_STORAGE_KEY)
   if (existingGuestId) {
     return existingGuestId
   }
 
-  // Generate a new guest ID
   const newGuestId = createGuestUserId()
   localStorage.setItem(GUEST_USER_STORAGE_KEY, newGuestId)
 

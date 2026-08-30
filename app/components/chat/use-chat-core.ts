@@ -361,8 +361,7 @@ export function useChatCore({
     visibleAssistantTextLength: chatPerfTurnFacts.visibleAssistantTextLength,
     lastUserMessageId: chatPerfTurnFacts.lastUserMessageId,
   })
-  // Long-task + rAF-gap marks (measurement plan Phase 2). This hook is the
-  // chat surface's single mount — a second mount would double-count.
+  // This is the only long-task/rAF-gap observer; another mount would double-count.
   useChatResponsivenessMarks(status === "streaming")
 
   const { selectedRun } = useMessages()
@@ -751,8 +750,7 @@ export function useChatCore({
     }
   }, [chatId, initialMessages, status])
 
-  // Handle search params — hydrate the Composer's display from ?prompt= on
-  // mount or navigation (the non-auto-submit form of a shared prompt link).
+  // Shared prompt links hydrate without auto-submitting.
   useEffect(() => {
     if (prompt && !shouldAutoSubmitPrompt && typeof window !== "undefined") {
       requestAnimationFrame(() => setComposerText?.(prompt))
@@ -882,14 +880,11 @@ export function useChatCore({
   )
 
   return {
-    // Chat state
     messages,
     status,
     error,
-    // The orchestrated local-plus-durable Stop (§9/§11) — local transport cut
-    // promptly, then the exact run settled durably so all tabs converge.
+    // Stop local transport first, then settle the exact run so all tabs converge.
     stop: handleStop,
-    /** The resolved local/background/stale generation presentation (§8). */
     presentation,
     setMessages,
     isAuthenticated,

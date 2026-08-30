@@ -25,8 +25,6 @@
  */
 import { containsSecret } from "./secret-patterns"
 
-// Enablement and sampling
-
 export function isChatPerfClientEnabled(): boolean {
   return process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"
 }
@@ -92,11 +90,9 @@ export const CHAT_PERF_SPAN_NAMES = [
   "history_adaptation",
   "stream_start",
   "prepare_total",
-  // The platform allowance reservation alone (`reserveAuthorized`), split
-  // out of `credential_resolution` (Experiment 1).
+  // The platform allowance reservation alone (`reserveAuthorized`).
   "usage_reservation",
-  // Receipt-anchored lifecycle spans (measurement plan Phase 2): all measured
-  // from HTTP request receipt, unlike `stream_start` (see its note below).
+  // Receipt-anchored lifecycle spans, unlike `stream_start`.
   "provider_request_started",
   "server_first_stream_write",
   "response_stream_closed",
@@ -162,7 +158,6 @@ export const DURABLE_WORKER_WRITE_OPS = [
  * allow-listed enum or the correlation id cannot exist.
  */
 const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
-  // Client turn marks
   chat_send_intent: { correlationId: CORRELATION },
   "composer.keystroke_to_next_paint": { durationMs: REQUIRED_NUMBER },
   "composer.keystroke_to_settled_paint": { durationMs: REQUIRED_NUMBER },
@@ -174,12 +169,9 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     correlationId: CORRELATION,
     outcome: oneOf(...TERMINAL_OUTCOMES),
   },
-  // First parsed stream chunk / first text-delta chunk observed by the client
-  // transport tap (measurement plan Phase 2). "Bytes" per the plan's naming:
-  // the tap sits on the parsed-chunk stream, one sync hop after byte arrival.
+  // The transport tap sees parsed chunks one sync hop after byte arrival.
   client_first_stream_bytes: { correlationId: CORRELATION },
   client_first_text_delta_received: { correlationId: CORRELATION },
-  // Stop instrumentation: the user's stop click, before any async work.
   stop_intent: { correlationId: CORRELATION },
   // One summary per streaming session from the rAF coalescer: SDK message
   // callbacks observed, publications actually delivered to React, and the
@@ -189,7 +181,6 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     publicationCount: REQUIRED_NUMBER,
     coalescedCount: REQUIRED_NUMBER,
   },
-  // Rendering-cost marks (durations only, never content).
   markdown_projection_advance: { durationMs: REQUIRED_NUMBER },
   shiki_highlight: { durationMs: REQUIRED_NUMBER },
   long_task: { durationMs: REQUIRED_NUMBER },
@@ -218,13 +209,11 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     ),
   },
   markdown_projection_settle_mismatch: {},
-  // Client navigation marks
   chat_navigation_intent: {},
   chat_route_state_committed: {},
   first_thread_content_painted: { messageCount: NUMBER },
   authoritative_thread_content_received: { messageCount: NUMBER },
   navigation_cache_hit_or_miss: { cache: oneOf("hit", "miss") },
-  // --- client derivation counters ---
   selected_conversation_client: {
     selectedCount: NUMBER,
     mappingDurationMs: NUMBER,
@@ -235,7 +224,6 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     detachedCount: NUMBER,
     bindingClass: oneOf("durable", "guest", "unowned"),
   },
-  // Server spans and counters
   server_span: {
     span: oneOf(...CHAT_PERF_SPAN_NAMES),
     durationMs: NUMBER,

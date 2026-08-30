@@ -243,10 +243,9 @@ type ConvexToolLimitStoreOptions = {
  * execution-grant worker wire — budget accounting is an admission-control
  * concern, not durable run state. If the token expires in the tail of a long
  * run, `checkAndConsume` rejects and the runtime degrades into the tested
- * bounded local cap (see the degraded-mode handling in lib/tools/runtime.ts) —
- * exactly the degradation the 2026-07-14 incident exercised. The cost is
- * degraded budget accounting for that tail; do not migrate this to the worker
- * wire without revisiting the decision.
+ * bounded local cap (see the degraded-mode handling in lib/tools/runtime.ts).
+ * The cost is degraded budget accounting for that tail; do not migrate this
+ * to the worker wire without revisiting the decision.
  */
 export function createConvexToolLimitStore(
   options: ConvexToolLimitStoreOptions

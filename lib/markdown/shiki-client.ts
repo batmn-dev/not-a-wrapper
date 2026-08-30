@@ -18,8 +18,7 @@
  *
  * Consumers must not import `shiki` directly: `components/ui/code-block.tsx`
  * carries no runtime Shiki import (type-only imports here are erased at
- * build time), so no-code conversations ship zero Shiki bytes (§7 gate,
- * verified against the production build in the PR C report).
+ * build time), so no-code conversations ship zero Shiki bytes.
  */
 import type { HighlighterCore } from "shiki/core"
 
@@ -35,11 +34,8 @@ export type ShikiClientTheme = "github-dark" | "github-light"
 const LANGUAGE_LOADERS = {
   c: () => import("@shikijs/langs/c"),
   cpp: () => import("@shikijs/langs/cpp"),
-  // Embedded grammars of the historical eager set: the old highlighter
-  // registered these transitively (cpp → cpp-macro/glsl, ruby → haml,
-  // javascript → regexp), so fences using them highlighted. Kept as
-  // first-class loadable ids so that surface does not silently regress
-  // (2026-07-27 review P2).
+  // Embedded grammars previously loaded transitively remain first-class so
+  // their fences do not silently fall back to plain text.
   "cpp-macro": () => import("@shikijs/langs/cpp-macro"),
   glsl: () => import("@shikijs/langs/glsl"),
   haml: () => import("@shikijs/langs/haml"),

@@ -149,11 +149,8 @@ export type FirstTurnChat =
 type ChatsContextType = {
   chats: Chats[]
   isLoading: boolean
-  /** True only while the bounded sidebar appends another window page. */
   isLoadingMore: boolean
-  /** Load the next page of the bounded sidebar window (no-op when the flag is off). */
   loadMore: () => void
-  /** True when more sidebar window pages can be loaded. */
   canLoadMore: boolean
   updateTitle: (id: string, title: string) => Promise<void>
   applyGeneratedTitle: (
@@ -207,9 +204,7 @@ export function ChatsProvider({
 
   // Sidebar reads: a bounded recency window (including project membership) +
   // a small live pinned read, so a chat write never re-reads the whole
-  // collection and both sidebar grouping modes share one source (ADR-0005;
-  // the legacy full-list subscription was removed in the 2026-07-23 flag
-  // collapse).
+  // collection and both sidebar grouping modes share one source (ADR-0005).
   const recentWindow = usePerUserPaginatedQuery(
     api.chats.getRecentWindowForCurrentUser,
     {},

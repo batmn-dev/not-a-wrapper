@@ -17,11 +17,6 @@ type TestMCPServerRequestBody = {
 }
 
 /**
- * POST /api/mcp-servers/test
- *
- * Tests connectivity to an MCP server and discovers available tools.
- * Used by the Settings UI "Test Connection" button.
- *
  * Accepts raw auth values (not encrypted) since this is a transient test,
  * not persistent storage. The auth value is used only for the connection
  * attempt and then discarded. Auth + CSRF are enforced by the seam, the call is
@@ -105,7 +100,6 @@ export const POST = authenticatedRoute(
         headers = buildStoredMcpAuthHeaders(storedServer, session.userId)
       }
 
-      // Attempt connection with timeout
       const result = await Promise.race([
         loadMCPToolsFromURL({
           url: url.trim(),
@@ -122,7 +116,6 @@ export const POST = authenticatedRoute(
 
       const toolNames = Object.keys(result.tools)
 
-      // Clean up the connection
       await result.close()
 
       return NextResponse.json({

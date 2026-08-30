@@ -192,7 +192,7 @@ control containing none of those constructs recorded zero. Windows lasted
 100–500 ms and roughly doubled under load even though GPT-5 Mini delivery
 remained fine-grained (11–37 ms median inter-chunk gaps across runs, 62–233
 average bytes per chunk). An
-emphasis-heavy ChatGPT control recorded 686 samples across 2,368 characters
+emphasis-heavy reference control recorded 686 samples across 2,368 characters
 and at least 45 inline emphasis constructs with zero raw inline-delimiter
 hits. The gap was therefore a render property, not a transport property.
 
@@ -237,7 +237,7 @@ without revisiting the rejected reveal scheduler below.
 
 The remaining aesthetic gap after tail mending was the reveal feel: paints
 track provider commits, so a burst appears instantly instead of flowing in
-like ChatGPT's paced reveal or Claude's word fade. The accepted mechanism is
+with a paced word fade. The accepted mechanism is
 `lib/markdown/streaming-decay-overlay.ts`: newly appended rendered text is
 painted at reduced foreground alpha through the CSS Custom Highlight API
 (`CSS.highlights` + `::highlight(naw-stream-decay-N)` rules, 12 buckets ×

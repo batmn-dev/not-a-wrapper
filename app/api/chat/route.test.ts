@@ -40,8 +40,8 @@ vi.mock("./api", () => ({
   validateAndResolveChatCredential: vi.fn(),
 }))
 
-// The route prefetches key settings (Experiment 1) and releases stranded
-// reservations through convex/nextjs; unit tests must never hit the network.
+// Key-settings prefetch and stranded-reservation release use convex/nextjs;
+// unit tests must never hit the network.
 vi.mock("convex/nextjs", () => ({
   fetchQuery: vi.fn(async () => []),
   fetchMutation: vi.fn(async () => undefined),
@@ -197,8 +197,6 @@ describe("/api/chat route", () => {
       chatId: "chat-1",
       systemPrompt: undefined,
       enableSearch: false,
-      // Experiment 1: the prefetched key-settings read and the perf session
-      // ride into credential resolution.
       keySettingsPromise: expect.any(Promise),
       perf: expect.anything(),
     })

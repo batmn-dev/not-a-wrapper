@@ -135,9 +135,8 @@ type ChatCredentialAdmissionParams = {
   /** Server-planned approval continuation pin, when this is one. */
   pinnedProviderId?: Provider
   /**
-   * Key-settings read started earlier in admission (Experiment 1): a pure
-   * read of the caller's own settings, safe to overlap with the abuse check.
-   * The resolver awaits it in place of its own round-trip.
+   * Key-settings read started earlier in admission. This pure read is safe to
+   * overlap with the abuse check and avoids another resolver round-trip.
    */
   keySettingsPromise?: ReturnType<RouteResolverDeps["getKeySettings"]>
   /** Sampled perf session; adds the `usage_reservation` sub-span. */

@@ -195,9 +195,7 @@ export function useGenerationPresentationController({
   )
 
   const stop = useCallback(async () => {
-    // Earliest synchronous point of the user's Stop (measurement plan Phase
-    // 2): before the persistence-mode branch, the durable mutation, and the
-    // deferred-stop arming. No-op unless instrumented.
+    // Record Stop before persistence branching or deferred-stop work.
     noteChatPerfStopIntent()
     localStopIntentRef.current = true
     if (!chatId || getMessagePersistenceMode(chatId) !== "server") {

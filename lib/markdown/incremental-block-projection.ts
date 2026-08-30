@@ -154,7 +154,6 @@ export type MarkdownProjectionResult = {
    * inequivalent to the authoritative parse (authoritative output is used).
    */
   settleMismatch: boolean
-  /** Characters handed to the parser by this transition (the §6 work gate). */
   parsedCharacters: number
   /** Blocks that kept their identity from the previous state. */
   reusedBlockCount: number
@@ -424,7 +423,6 @@ export function advanceMarkdownProjection(args: {
 }): MarkdownProjectionResult {
   const { previous, source, streaming, identity } = args
 
-  // --- Reset classification -------------------------------------------------
   if (previous === null) {
     return fullParseResult({
       source,
@@ -476,7 +474,6 @@ export function advanceMarkdownProjection(args: {
     })
   }
 
-  // --- Settlement -----------------------------------------------------------
   if (!streaming) {
     if (previous.settled && previous.source === source) {
       // Already settled on this exact source: nothing to do.
@@ -516,7 +513,6 @@ export function advanceMarkdownProjection(args: {
     return { ...settled, settleMismatch }
   }
 
-  // --- Streaming, same source: no work --------------------------------------
   if (previous.source === source && !previous.settled) {
     return {
       state: previous,
@@ -546,19 +542,19 @@ export function advanceMarkdownProjection(args: {
     })
   }
 
-  // --- Terminal-block line-extension fast path ------------------------------
+  // Terminal-block line extension.
   // A growing single-block shape (a list without blank-line separators, an
   // open code fence) pins the safe restart boundary at the block's start, so
   // the tail parse below would re-parse the WHOLE block on every append —
-  // per-update cost growing with response length (investigation 2026-07-28,
-  // issue 1). When appended lines provably continue the terminal block, the
+  // per-update cost growing with response length. When appended lines provably
+  // continue the terminal block, the
   // block record extends by a line scan with NO parse at all; any line the
   // scan cannot prove falls through to the authoritative paths below, and
   // settlement's full-parse equivalence check remains the safety net.
   const extended = tryExtendTerminalBlock(previous, source)
   if (extended) return extended
 
-  // --- Append-only fast path (context-verified tail parse) ------------------
+  // Append-only tail parse.
   const stablePrefix = previous.blocks.filter(
     (block) => block.endOffset <= previous.mutableStartOffset
   )

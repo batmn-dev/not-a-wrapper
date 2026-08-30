@@ -134,7 +134,7 @@ const claudeModels: ModelConfig[] = [
     description:
       "Previous Opus generation. Excels at coding, agents, and complex reasoning.",
     tags: ["flagship", "reasoning", "agents", "coding", "advanced"],
-    // 1M per the Anthropic legacy-models table (was wrongly 200k here).
+    // 1M per the Anthropic legacy-models table.
     contextWindow: 1000000,
     maxOutput: 128000,
     inputCost: 5.0,
@@ -177,7 +177,7 @@ const claudeModels: ModelConfig[] = [
     baseProviderId: "anthropic",
     description: "Previous Sonnet generation with adaptive thinking support.",
     tags: ["balanced", "fast", "reasoning", "coding"],
-    // 1M ctx / 128k out per the Anthropic legacy-models table (was 200k/64k).
+    // 1M context / 128k output per the Anthropic legacy-models table.
     contextWindow: 1000000,
     maxOutput: 128000,
     inputCost: 3.0,

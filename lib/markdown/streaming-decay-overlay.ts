@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Streaming color-decay overlay (ADR-0016 amendment, 2026-08-11).
+ * Streaming color-decay overlay (ADR-0016).
  *
  * Newly arrived words paint near-transparent and materialize to full foreground
  * color without owning any DOM: cohorts of appended rendered text are painted
@@ -247,17 +247,9 @@ class StreamingDecayManager {
   private bucketHighlights: Highlight[] | null = null
 
   /**
-   * Persistent per-bucket Highlight objects, registered in `CSS.highlights`
-   * ONCE and mutated in place thereafter. Registering/deleting registry
-   * entries per paint tick invalidates `::highlight()` rule matching
-   * DOCUMENT-WIDE in Chromium: every paint recalced style for every element
-   * and reattached layout, which made the browser re-walk the entire layout
-   * tree (~5.8 µs/object) on every streamed commit — measured at 10.4 s of
-   * layout (78% of all main-thread blocking) across one 100 KB stream, and
-   * confirmed by the reduced-motion probe collapsing TBT 4,021 ms → 10 ms
-   * (docs/performance/2026-08-28-rendering-attribution-b1-b2.md). In-place
-   * range mutation keeps the registry keys stable so the overlay stays what
-   * it was designed to be: paint-only.
+   * Register bucket Highlights once and mutate their ranges. Replacing registry
+   * entries each tick invalidates `::highlight()` matching document-wide in
+   * Chromium and turns this paint-only overlay into repeated layout work.
    */
   private ensureBucketHighlights(): Highlight[] {
     if (this.bucketHighlights) return this.bucketHighlights

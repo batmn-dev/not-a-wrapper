@@ -661,9 +661,8 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
   })
 
   it("re-adopts the still-live origin stream on return, resuming the word-granular local array", async () => {
-    // The nav-return fix (investigation §Issue 2): A → B → A mid-stream must
-    // hand the mounted surface back the ORIGINAL binding — live status, full
-    // canonical array, deltas continuing — instead of a fresh binding fed by
+    // A → B → A mid-stream must restore the original live binding instead of
+    // a fresh binding fed by
     // 750 ms durable snapshots. The finish then routes through the ATTACHED
     // path with the origin identity, not the detached guest-cache path.
     const originChatId = "local-readopt-origin"

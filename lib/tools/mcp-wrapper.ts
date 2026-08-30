@@ -168,7 +168,6 @@ export function wrapMcpTools(
             })
           retryCount = retries
 
-          // ── Measure result size (for trace, before truncation) ──
           try {
             const serialized = JSON.stringify(rawResult)
             resultSizeBytes = new TextEncoder().encode(serialized).length
@@ -176,7 +175,6 @@ export function wrapMcpTools(
             // Non-serializable result — skip measurement, not critical
           }
 
-          // ── Truncation ─────────────────────────────────
           const truncatedResult = truncateToolResult(rawResult, {
             maxBytes: maxResultBytes,
             toolName: name,
@@ -214,7 +212,6 @@ export function wrapMcpTools(
           )
           throw enrichToolError(err, displayName)
         } finally {
-          // ── Trace (always — success or failure) ────────
           traceCollector.record({
             toolName: name,
             toolCallId: options.toolCallId,

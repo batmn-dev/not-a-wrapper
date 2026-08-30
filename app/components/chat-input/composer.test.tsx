@@ -547,7 +547,7 @@ describe("Composer primary action", () => {
       "Ask anything"
     )
     expect(defaultComposer.querySelector("textarea")?.ariaLabel).toBe(
-      "Chat with ChatGPT"
+      "Ask anything"
     )
     act(() => {
       root?.render(

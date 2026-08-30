@@ -1,14 +1,6 @@
-/**
- * Source extraction from message parts — one half of the Assistant turn view
- * derivation (see ./assistant-turn.ts and CONTEXT.md "Assistant turn view").
- * Moved from app/components/chat/get-sources.ts so the view module (and any
- * server-adjacent consumer, e.g. the share page) can derive sources without
- * importing from the component tree.
- */
 import type { SourceUrlUIPart, UIMessage } from "ai"
 import { isToolUIPart } from "ai"
 
-// Source type for validation
 type SourceLike = {
   url: string
   title?: string
@@ -106,7 +98,6 @@ export function getPartSources(
   return dedupeSources(sourceCandidates(part.output).map(normalizeSource))
 }
 
-// Type guard to check if an object is a valid source
 function isValidSource(source: unknown): source is SourceLike {
   return (
     source !== null &&

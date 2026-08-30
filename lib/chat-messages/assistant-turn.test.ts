@@ -620,8 +620,6 @@ describe("closed activity entry algebra (compile-time)", () => {
   })
 })
 
-// --- The canonical turn phase + its single indicator ---
-
 const liveCtx = { status: "streaming" as const, isLast: true }
 
 function viewOf(
@@ -758,7 +756,6 @@ describe("deriveAssistantTurnPhase", () => {
   })
 
   it("is responding once the turn has substance and nothing is in flight", () => {
-    // Text streaming
     expect(
       deriveAssistantTurnPhase(viewOf([{ type: "text", text: "Hi" }]), liveCtx)
         .kind

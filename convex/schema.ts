@@ -58,13 +58,13 @@ export default defineSchema({
 
     messageCount: v.optional(v.number()),
     dailyMessageCount: v.optional(v.number()),
-    dailyReset: v.optional(v.number()), // Unix timestamp
+    dailyReset: v.optional(v.number()),
 
-    lastActiveAt: v.optional(v.number()), // Unix timestamp
-    lastSyncedFromWorkOSAt: v.optional(v.number()), // Unix timestamp
-    workosUpdatedAt: v.optional(v.string()), // ISO timestamp from WorkOS
-    deletedAt: v.optional(v.number()), // Unix timestamp
-    disabledAt: v.optional(v.number()), // Unix timestamp
+    lastActiveAt: v.optional(v.number()),
+    lastSyncedFromWorkOSAt: v.optional(v.number()),
+    workosUpdatedAt: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
+    disabledAt: v.optional(v.number()),
 
     favoriteModels: v.optional(v.array(v.string())),
     systemPrompt: v.optional(v.string()),
@@ -91,30 +91,24 @@ export default defineSchema({
     projectId: v.optional(v.id("projects")),
     public: v.boolean(),
     pinned: v.boolean(),
-    pinnedAt: v.optional(v.number()), // Unix timestamp
+    pinnedAt: v.optional(v.number()),
     // Required so recency indexes never sort null keys to the tail, which would
     // hide chats from paginated history/sidebar windows.
-    updatedAt: v.number(), // Unix timestamp — last activity (turn start)
-    // --- Sidebar status projection (CONTEXT.md "Sidebar status projection")
-    // A few run-lifecycle fields mirrored onto the chat doc so each sidebar row
-    // derives its indicator from the chat it already subscribes to — no separate
-    // query/store/hydrator. All five are OWNER-ONLY: they ride a doc public reads
-    // return, so chats.getById/getPublicById strip them for non-owners.
-    // Live phase of the current run; cleared at its terminal transition.
+    updatedAt: v.number(),
+    // Owner-only run projection mirrored for the sidebar; public reads must
+    // strip every field in this group.
     liveRunStatus: v.optional(
       v.union(v.literal("streaming"), v.literal("awaiting"))
     ),
     // Guards the projection so a late terminal event cannot clobber a newer run.
     statusRunId: v.optional(v.id("generationRuns")),
-    // Only completed and failed runs signal unread/error to the owner.
     lastRunEndedAt: v.optional(v.number()),
     lastRunStatus: v.optional(
       v.union(v.literal("completed"), v.literal("failed"))
     ),
     lastReadAt: v.optional(v.number()),
-    // Freshness ceiling for the live projection, written ONCE (at prepare:
-    // startedAt + route budget + slack; at approval pause: the approval's
-    // expiresAt) and cleared at terminal transitions — never per heartbeat
+    // Written at prepare or approval pause and cleared at terminal transition,
+    // never refreshed by heartbeats.
     // An expired deadline must never render a spinner.
     liveRunFreshUntil: v.optional(v.number()),
     // Deletion tombstone (logical deletion is immediate; physical cleanup is a
@@ -160,16 +154,16 @@ export default defineSchema({
 
   messages: defineTable({
     chatId: v.id("chats"),
-    orderId: v.number(), // For ordering within a chat
-    clientMessageId: v.optional(v.string()), // AI SDK/browser message id for reconciliation
-    userId: v.optional(v.id("users")), // For user messages
+    orderId: v.number(),
+    clientMessageId: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
     role: v.union(
       v.literal("user"),
       v.literal("assistant"),
       v.literal("system")
     ),
     content: v.string(),
-    parts: v.any(), // AI SDK parts format
+    parts: v.any(),
     parentMessageId: v.optional(v.id("messages")),
     branchIndex: v.optional(v.number()),
     selected: v.optional(v.boolean()),
@@ -237,8 +231,7 @@ export default defineSchema({
     appliedGenerationBudget: v.optional(v.number()),
     status: generationRunStatus,
     startedAt: v.optional(v.number()),
-    // Provider-consumption boundary for assistant work timing. Optional for
-    // compatibility with runs created before work-duration persistence.
+    // Optional only for runs created before work-duration persistence.
     workStartedAt: v.optional(v.number()),
     // Accumulated active work. While streaming this is the pre-segment base;
     // once terminal it is the frozen total for this run/message lifecycle.
@@ -298,10 +291,10 @@ export default defineSchema({
     // `undefined` in by_status_lease_expires, so every reaper range MUST
     // exclude undefined (`.gt("leaseExpiresAt", undefined)`) or lease-less
     // rows are falsely reaped.
-    heartbeatAt: v.optional(v.number()), // last server-timestamped heartbeat
-    leaseExpiresAt: v.optional(v.number()), // stored expiry: reaping + client classification
-    lastSnapshotSequence: v.optional(v.number()), // reject stale snapshots pre-insert
-    lastProgressAt: v.optional(v.number()), // latest accepted content/tool progress; NOT liveness
+    heartbeatAt: v.optional(v.number()),
+    leaseExpiresAt: v.optional(v.number()),
+    lastSnapshotSequence: v.optional(v.number()),
+    lastProgressAt: v.optional(v.number()),
     terminalReason: v.optional(
       v.union(
         v.literal("completed"),
@@ -410,22 +403,22 @@ export default defineSchema({
 
   deletionJobs: defineTable({
     targetKind: v.union(v.literal("chat"), v.literal("project")),
-    chatId: v.optional(v.id("chats")), // chat target, or project job's current chat
+    chatId: v.optional(v.id("chats")),
     projectId: v.optional(v.id("projects")),
-    userId: v.id("users"), // owner at initiation; internal consistency only
+    userId: v.id("users"),
     state: v.union(
       v.literal("pending"),
       v.literal("running"),
       v.literal("blocked"),
       v.literal("complete")
     ),
-    phase: v.string(), // one of DELETION_PHASES / PROJECT_PHASES
-    version: v.number(), // job format version, start at 1
+    phase: v.string(),
+    version: v.number(),
     batchesProcessed: v.number(),
     documentsDeleted: v.number(),
-    bytesObserved: v.number(), // getConvexSize of deleted rows, content-free
+    bytesObserved: v.number(),
     retryCount: v.number(),
-    failureCode: v.optional(v.string()), // stable enum string, never content
+    failureCode: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -464,14 +457,13 @@ export default defineSchema({
     message: v.string(),
   }).index("by_user", ["userId"]),
 
-  // File attachments tracking
   chatAttachments: defineTable({
     // Files are staged against the authenticated user before a chat exists,
     // then atomically bound to a chat at turn dispatch.
     chatId: v.optional(v.id("chats")),
     userId: v.id("users"),
-    storageId: v.optional(v.id("_storage")), // Convex storage reference
-    fileUrl: v.string(), // Public URL
+    storageId: v.optional(v.id("_storage")),
+    fileUrl: v.string(),
     fileName: v.optional(v.string()),
     fileType: v.optional(v.string()),
     fileSize: v.optional(v.number()),
@@ -496,7 +488,7 @@ export default defineSchema({
   usageBuckets: defineTable({
     userId: v.id("users"),
     bucketKind: v.literal("included"),
-    periodKey: v.string(), // e.g. "2026-08"
+    periodKey: v.string(),
     periodStart: v.number(),
     periodEnd: v.number(),
     planId: v.string(),
@@ -537,15 +529,13 @@ export default defineSchema({
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
     titleCredits: v.optional(v.number()),
-    /** Title component of the estimate — the conservative fallback charge
-     * when a title call may have run but its usage never arrived. */
+    /** Conservative title fallback when usage never arrives. */
     titleEstimatedCredits: v.optional(v.number()),
     /** Input-only title floor pinned at reservation time (ADR-0021
      * cancellation amendment): what a started-but-unfinished title costs.
      * Optional only so historical reservation documents remain readable. */
     titleEstimatedInputTokens: v.optional(v.number()),
-    /** How the settled title component was derived (actual / input_floor /
-     * not_run), persisted separately from the primary basis. */
+    /** Title settlement basis, independent of the primary generation basis. */
     titleSettlementBasis: v.optional(vTitleSettlementBasis),
     // --- Deferred cancellation settlement (ADR-0021 cancellation amendment).
     // A user Stop / supersession keeps status "reserved" (the amount stays in
@@ -561,14 +551,10 @@ export default defineSchema({
      * settlement-only terminal usage receipt — never for run writes. */
     settlementGrantDigest: v.optional(v.string()),
     settlementGrantExpiresAt: v.optional(v.number()),
-    /** Durable fallback discriminator copied from the run before cleanup. */
     providerMayHaveStarted: v.optional(v.boolean()),
-    /** Protocol marker copied from the run at attach. */
     cancellationSettlementVersion: v.optional(v.literal(1)),
-    /** Per-step evidence mirrored from the run for missing-run recovery. */
     observedInputTokens: v.optional(v.number()),
     observedOutputTokens: v.optional(v.number()),
-    /** Durable title evidence for deadline/deletion recovery. */
     titleUsageEvidence: v.optional(vTitleTerminalUsageEvidence),
     pricingSnapshot: vPricingSnapshot,
     payloadFingerprint: v.string(),
@@ -602,7 +588,6 @@ export default defineSchema({
     deltaAvailableCredits: v.number(),
     deltaReservedCredits: v.number(),
     deltaSpentCredits: v.number(),
-    /** Plan or pricing revision relevant to the event, when applicable. */
     revision: v.optional(v.string()),
     reason: v.optional(v.string()),
     createdAt: v.number(),
@@ -611,22 +596,18 @@ export default defineSchema({
     .index("by_bucket", ["bucketId"])
     .index("by_user_created", ["userId", "createdAt"]),
 
-  // Anonymous usage tracking (for rate limiting unauthenticated users)
   anonymousUsage: defineTable({
-    anonymousId: v.string(), // Client-generated persistent ID
+    anonymousId: v.string(),
     dailyMessageCount: v.number(),
-    dailyReset: v.number(), // Unix timestamp (start of day)
+    dailyReset: v.number(),
   }).index("by_anonymous_id", ["anonymousId"]),
 
-  // Persistent tool limit buckets for sliding-window enforcement.
-  // Shared by:
-  // - extract_content per-domain abuse control
-  // - centralized per-tool budgets (platform/BYOK policies)
+  // Persistent sliding-window buckets for domain and tool-budget limits.
   toolLimitBuckets: defineTable({
-    actorKey: v.string(), // "user:<workosUserId>" or "guest:<anonymousId>"
+    actorKey: v.string(),
     limitType: v.union(v.literal("domain"), v.literal("budget")),
     toolName: v.string(),
-    scopeKey: v.string(), // domain for domain limits, "*" for per-tool budgets
+    scopeKey: v.string(),
     keyMode: v.union(v.literal("platform"), v.literal("byok")),
     bucketStartMs: v.number(),
     count: v.number(),
@@ -644,13 +625,11 @@ export default defineSchema({
   // "test connection" endpoint, which opens an outbound connection per call).
   // Keyed by the authenticated user; see convex/rateLimits.ts.
   apiRateLimits: defineTable({
-    actorKey: v.string(), // "user:<users._id>"
-    bucket: v.string(), // logical limit name, e.g. "mcp_test"
+    actorKey: v.string(),
+    bucket: v.string(),
     windowStartMs: v.number(),
     count: v.number(),
   }).index("by_actor_bucket_window", ["actorKey", "bucket", "windowStartMs"]),
-
-  // MCP (Model Context Protocol) Integration
 
   mcpServers: defineTable({
     userId: v.id("users"),
@@ -691,7 +670,7 @@ export default defineSchema({
   toolCallLog: defineTable({
     userId: v.id("users"),
     chatId: v.optional(v.id("chats")),
-    serverId: v.optional(v.id("mcpServers")), // Optional — only present for MCP tools
+    serverId: v.optional(v.id("mcpServers")),
     toolName: v.string(),
     toolCallId: v.string(),
     inputPreview: v.optional(v.string()),
@@ -710,17 +689,14 @@ export default defineSchema({
     ),
     serviceName: v.optional(v.string()),
 
-    // One-indexed for chronological ordering within a generation.
     stepNumber: v.optional(v.number()),
 
-    // Step-level usage, not usage attributable to an individual tool.
+    // Step-level usage, not per-tool attribution.
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
 
-    // Original size before result truncation.
     resultSizeBytes: v.optional(v.number()),
 
-    // Correlates tool logs with request analytics and diagnostics.
     requestId: v.optional(v.string()),
     // Policy denial enrichment (optional). Present when a wrapper denies a call
     // due to budget controls before execution.

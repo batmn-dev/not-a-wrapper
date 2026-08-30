@@ -5,9 +5,8 @@
  * Exercises the REAL production construction path — catalog entry →
  * `createLanguageModel(config, apiKey)` → Provider strategy →
  * `@openrouter/ai-sdk-provider` `.chat(id, { reasoning })` → real streamText —
- * against the live OpenRouter API, and checks the live catalog for drift
- * (the 2026-07-04 delisting incident class: `:free` ids vanish and pools
- * saturate; see lib/models/data/openrouter.ts header).
+ * against the live OpenRouter API, and checks for free-model delisting and
+ * pool saturation (see lib/models/data/openrouter.ts).
  *
  * Run:  bun run smoke:openrouter                       (keyless: catalog checks)
  *       bun run smoke:openrouter -- --model <id>       (target one entry)

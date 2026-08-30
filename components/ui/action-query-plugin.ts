@@ -13,9 +13,9 @@ import {
 } from "prosemirror-state"
 
 /**
- * The action-query session plugin, ported from ChatGPT's systemHintPlugin.
- * This module owns everything about "@"/"+"/"/" discovery sessions: the typed
- * trigger grammar, the session state machine, and range-validated activation.
+ * The action-query session plugin owns everything about "@"/"+"/"/"
+ * discovery sessions: typed-trigger grammar, the session state machine, and
+ * range-validated activation.
  */
 
 export type PromptInputActionQueryTrigger = "@" | "+" | "/"
@@ -33,11 +33,11 @@ export type PromptInputActionQuery = Readonly<{
 
 type PromptInputActionQueryRange = Omit<PromptInputActionQuery, "id">
 
-/** Slash commands keep ChatGPT's space-terminated grammar: the query ends at
+/** Slash commands use space-terminated grammar: the query ends at
  * the first whitespace, unlike "@" mentions whose query is the raw tail. */
 const slashQueryPattern = /(?:^|\s)\/([\p{L}\p{N}\p{M}.:_-]*)$/u
 
-/** ChatGPT parity: the mention trigger is the LAST "@" or "+" that starts a
+/** The mention trigger is the last "@" or "+" that starts a
  * word (start of the text run or after whitespace) and is not immediately
  * followed by whitespace unless the caret sits right after it. The query is
  * the raw tail after that trigger, so it may contain spaces. */
@@ -101,7 +101,7 @@ function readTypedActionQuery(
       }
     : null
 
-  // ChatGPT parity: a "/" that starts a word later than the "@" trigger owns
+  // A "/" that starts a word later than the "@" trigger owns
   // the tail — when its space-terminated query no longer matches, NOTHING
   // matches (the stale slash blocks the earlier mention).
   const mentionIndex = mention?.index ?? -1
@@ -139,9 +139,9 @@ function readPromptInputActionQuery(
 }
 
 /**
- * The action-query session state machine, ported from ChatGPT's
- * systemHintPlugin. Typed sessions re-evaluate only on document changes at an
- * empty selection; synthetic sessions (opened by the + button) track a mapped
+ * The action-query session state machine. Typed sessions re-evaluate only on
+ * document changes at an empty selection; synthetic sessions (opened by the +
+ * button) track a mapped
  * anchor on every transaction, adopt a typed trigger that appears at or after
  * the anchor, and close on newline, a caret before the anchor, or a changed
  * range selection.
@@ -152,11 +152,10 @@ type PromptInputActionQuerySessionState = Readonly<{
   query: string
   range: { from: number; to: number } | null
   isSynthetic: boolean
-  /** Session identity. A new id marks a new session — it increments whenever
-   * a session opens at a new trigger position or with a new trigger symbol,
-   * matching ChatGPT's dismissedMatch key — so menu-side Escape dismissal
-   * clears exactly when a new session starts. Closed states keep the last id
-   * so reopening at the same position still counts as a new session. */
+  /** Session identity. A new id marks a new trigger position or symbol, so
+   * menu-side Escape dismissal clears exactly when a new session starts.
+   * Closed states keep the last id so reopening at the same position still
+   * counts as a new session. */
   id: number
 }>
 
@@ -294,9 +293,9 @@ function readPromptInputActionQuerySession(state: EditorState) {
 }
 
 /**
- * Diff-publishes the plugin's session state to a callback. The plugin owns
- * ChatGPT's re-evaluation rules (typed sessions on doc changes, synthetic
- * sessions every transaction) and session identity; publishing only suppresses
+ * Diff-publishes the plugin's session state to a callback. The plugin owns its
+ * re-evaluation rules (typed sessions on document changes, synthetic sessions
+ * every transaction) and session identity. Publishing suppresses only
  * consecutive equal queries, so consumers see each session change exactly once.
  */
 function createActionQueryPublisher(
@@ -352,7 +351,7 @@ function replacePromptInputActionQuery(
   actionQuery: PromptInputActionQuery,
   entity?: PromptInputEntity
 ) {
-  // ChatGPT parity: activation consumes the published trigger range even when
+  // Activation consumes the published trigger range even when
   // the caret has since moved. Doc edits republish the query, so the range is
   // validated against the document text instead of the current selection.
   // Synthetic sessions carry no trigger character in the document.

@@ -76,7 +76,7 @@ harness (local Convex, fixed fixtures) they gate with generous ceilings.
 | `usage_admission` | outer admission block: atomic abuse admission ∥ preflight ∥ key-settings prefetch, then credential resolution. The abuse mutation checks and increments in one round-trip before credential resolution; `attachment_resolution` includes its concurrent window | yes (several) | existing |
 | `attachment_resolution` | `planGenerationInput` + trusted-text preflight | yes | existing |
 | `credential_resolution` | approval-route facts, key settings, route resolution, **platform usage reservation** | yes | existing |
-| `usage_reservation` | `reserveAuthorized` mutation alone | yes | existing (Experiment 1; baseline 56.6 ms p50 — effectively all of post-prefetch `credential_resolution`) |
+| `usage_reservation` | `reserveAuthorized` mutation alone | yes | existing (baseline 56.6 ms p50 — effectively all of post-prefetch `credential_resolution`) |
 | `model_config` | logical model resolution (pure) | no | existing (Phase 2) |
 | `tool_preparation` | 3-layer tool setup + MCP connect | network: MCP | existing |
 | `durable_prepare` | execution grant + run creation + history load (`prepareGeneration`) | yes | existing |

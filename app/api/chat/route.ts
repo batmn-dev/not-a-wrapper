@@ -49,10 +49,7 @@ function setChatConversationCorrelation(chatId: string): void {
 // the durable-persistence timeline.
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID()
-  // Receipt anchor for the receipt-anchored perf spans
-  // (`provider_request_started`, `server_first_stream_write`,
-  // `response_stream_closed`). Distinct from the runtime's turn clock, which
-  // deliberately starts at construction (see chat-turn-runtime.ts).
+  // Receipt spans start before the runtime's construction clock.
   const requestReceivedAtMs = Date.now()
   // Sampled chat-performance session: off unless CHAT_PERF_SAMPLE_RATE
   // is set. The client's x-chat-perf-id is validated here and carried only

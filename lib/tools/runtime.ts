@@ -157,11 +157,7 @@ export type PrepareToolRuntimeOptions = {
   outcomeSinks?: ReadonlyArray<ToolOutcomeSink>
 }
 
-/**
- * Read-only view of the Capability policy outcome for the telemetry block
- * (braintrust metadata ~1690–1708) and `enableSearch: shouldInjectSearch`.
- * Mirrors the phase-2 `toolPolicy` result.
- */
+/** Read-only capability policy outcome for telemetry and search injection. */
 export type ToolRuntimePolicySummary = {
   capabilities: Required<ToolCapabilities>
   capabilityReasons: Record<CapabilityAxis, CapabilityReasonCode>
@@ -298,17 +294,14 @@ async function buildToolRuntime(
   } = options
   const { requestId, chatId, userId, model } = logContext
 
-  // ── MCP state owned by the runtime (closed via dispose()) ────────────────
   // `mcpClients` aliases `opened`: the load step pushes into it so the wrapper's
   // failure path and the returned dispose() see the same client list.
   const mcpClients = opened
   let mcpToolServerMap: LoadToolsResult["toolServerMap"] = new Map()
 
-  // ── Tool layers ──────────────────────────────────────────────────────────
   let builtInTools: ToolSet = {} as ToolSet
   let builtInToolMetadata = new Map<string, ToolMetadata>()
 
-  // Capability policy — phase 1 (search injection gating)
   const effectiveModelTools = {
     ...resolveToolCapabilities(modelTools),
     search: modelSearchMode === "optional",
@@ -522,11 +515,9 @@ async function buildToolRuntime(
         },
       })
     }
-    // NOTE: MCP cleanup is NOT registered here. The runtime owns the clients
-    // and exposes dispose(); the route registers `after(() => runtime.dispose())`.
+    // The runtime owns MCP cleanup; the route registers dispose() with after().
   }
 
-  // Capability policy — phase 2 (per-tool decisions on the pre-filter maps)
   const toolPolicyInputs: ToolPolicyInput[] = [
     ...Object.keys(builtInTools).map((toolName) => {
       const meta = builtInToolMetadata.get(toolName)
@@ -645,7 +636,6 @@ async function buildToolRuntime(
   )
   mcpToolServerMap = filterMetadataMapByPolicy(mcpToolServerMap, toolPolicy)
 
-  // Tracing + MCP wrapping
   const traceCollector = new ToolTraceCollector()
 
   if (Object.keys(mcpTools).length > 0) {
@@ -685,7 +675,6 @@ async function buildToolRuntime(
     )
   }
 
-  // Tool naming governance
   const toolLayers: ToolLayerMap = {
     "built-in": builtInTools,
     "third-party-search": thirdPartyTools,
@@ -851,11 +840,7 @@ async function buildToolRuntime(
     }
   }
 
-  // Final merge:
-  //   - Search: Layer 1 (built-in) XOR Layer 2 (Exa fallback) — never both
-  //   - Content: Layer 2 content extraction — independent of search gating
-  //   - MCP: Layer 3 (user-configured servers)
-  // Spread order = conflict resolution priority (last wins).
+  // Later layers win naming conflicts; search fallback excludes built-ins.
   const searchTools = { ...builtInTools, ...thirdPartyTools }
   const mergedTools = {
     ...searchTools,
@@ -863,8 +848,7 @@ async function buildToolRuntime(
     ...mcpTools,
   } as ToolSet
 
-  // Metadata resolver — built from the runtime's own post-filter maps. The
-  // four maps never escape; downstream call sites read this one shape.
+  // Expose one metadata shape backed only by the post-filter tool set.
   const metadata = createToolMetadataResolver({
     builtIn: builtInToolMetadata,
     thirdParty: thirdPartyToolMetadata,

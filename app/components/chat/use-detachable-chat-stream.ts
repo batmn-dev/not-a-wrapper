@@ -139,8 +139,7 @@ type TransportStream = Awaited<
 >
 
 /**
- * Identity tap for the accepted response stream (measurement plan Phase 2):
- * marks the first parsed chunk and the first text-delta chunk. Reads only the
+ * Marks the first parsed chunk and first text delta. Reads only the
  * chunk's `type` discriminant, retains nothing, and is skipped entirely when
  * instrumentation is off — the SDK then consumes the original stream.
  */
@@ -201,8 +200,7 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
       ? { ...options, body: { ...sdkBody, ...(callBody ?? {}) } }
       : options
     try {
-      // The true fetch-dispatch mark (measurement plan Phase 2): the next
-      // statement performs the HTTP request. No-op unless instrumented.
+      // The next statement performs the HTTP request.
       markChatPerfRequestDispatched()
       // HttpChatTransport resolves here only after fetch returned an OK
       // response with a body. The route performs durable prepareGeneration —
@@ -279,8 +277,7 @@ function createDetachableChatStreamOwner(
   const lifecycles = new WeakMap<StreamBinding, BindingLifecycle>()
   // Still-live detached bindings by origin chat id, so a mounted transition
   // BACK to a generating chat can re-adopt the word-granular stream instead
-  // of rendering the 750 ms durable snapshots (the nav-return chunking of
-  // docs/adr/0013-back-navigation-detaches-the-stream.md, 2026-07-28 amendment).
+  // of rendering durable snapshots (ADR-0013).
   // At most one entry per chat id can exist: a chat's next binding is only
   // created when no live detached binding was available to re-adopt. Entries
   // are removed on re-adoption or by routeFinish — the SDK invokes onFinish
@@ -537,17 +534,9 @@ function createDetachableChatStreamOwner(
 }
 
 /**
- * The owner is MODULE-scoped, not instance-scoped (adoption-loss fix,
- * project variant, 2026-08-28): a per-instance owner meant any Chat REMOUNT
- * — the /p/[projectId] → (chat) layout crossing on a project first send, a
- * router segment commit, `key={projectId}` project switches — created a
- * fresh owner whose `detachedByOrigin` map could not see the previous
- * instance's live binding, so a mid-stream remount silently orphaned the
- * stream. With one shared owner, the unmount cleanup detaches the binding
- * into the shared registry and the next mounted instance re-adopts it —
- * ADR-0013's nav-return re-adoption generalized to every remount. Handlers
- * and the fallback-body provider stay last-mounted-instance-wins, which is
- * the same routing the per-instance design had for detached finishes.
+ * Module scope lets a remounted Chat re-adopt the previous instance's live
+ * binding across project/layout transitions. Handlers and fallback-body
+ * providers remain last-mounted-instance-wins (ADR-0013).
  */
 const sharedOwners = new Map<string, DetachableChatStreamOwner>()
 

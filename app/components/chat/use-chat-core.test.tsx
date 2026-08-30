@@ -1066,10 +1066,8 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
   })
 
   it("waits through the PREVIOUS turn's terminal run instead of disarming on it (chat with history)", async () => {
-    // Round-3 review G2: at arm time, a chat with history holds the previous
-    // completed run in selectedRun. Disarming on that terminal made every
-    // projection-gap Stop after the first turn a silent no-op — the worker
-    // kept streaming. The intent must wait for a NEW run id.
+    // A prior terminal run may still be selected while a new run is pending.
+    // The intent must wait for a new run id.
     const previousTerminalRun = {
       runId: "run_previous",
       assistantMessageId: "msg_previous",

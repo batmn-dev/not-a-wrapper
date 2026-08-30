@@ -249,14 +249,10 @@ const headingAfterParagraphNoBlank = `Paragraph immediately followed by
 
 const shortProse = `Short prose answer that stays a single growing paragraph, with *light* emphasis and a trailing clause that arrives token by token.`
 
-// --- Cross-blank-line parser-state carriers (2026-07-27 review defect) ------
 // An indented code block leaves "may continue" state that flips how the NEXT
 // block parses: after it, `2. two` + a setext underline parse as heading +
 // paragraph, while the identical text parses as ONE list standalone. The
-// original tab-indented `=`-tail case below is the review's live-DOM
-// reproduction; the variants pin the space-indented form, the `1.` control
-// (which stays a list), and deeper documents where the carrier block is
-// already stable.
+// variants cover tab/space indentation, the `1.` control, and deeper documents.
 
 const indentedCodeOrderedSetextTab = "\tindented\n\n2. two\n===\n=="
 

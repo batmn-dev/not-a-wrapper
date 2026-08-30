@@ -123,7 +123,6 @@ export function validateServerUrl(url: string): string | null {
 
   const hostname = parsed.hostname.toLowerCase()
 
-  // Block localhost and special hostnames
   if (
     hostname === "localhost" ||
     hostname === "0.0.0.0" ||
@@ -133,12 +132,10 @@ export function validateServerUrl(url: string): string | null {
     return "Localhost and local network URLs are not allowed"
   }
 
-  // Block private IPv4 ranges
   if (isPrivateIP(hostname)) {
     return "Private IP addresses are not allowed"
   }
 
-  // Block private IPv6 ranges (IPv4-mapped, link-local, unique local)
   // URL parser wraps IPv6 in brackets: [fe80::1], [::ffff:7f00:1], etc.
   if (hostname.startsWith("[") && hostname.endsWith("]")) {
     const ipv6 = hostname.slice(1, -1)
@@ -147,12 +144,11 @@ export function validateServerUrl(url: string): string | null {
     }
   }
 
-  // Must be http or https
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return "Only HTTP and HTTPS URLs are supported"
   }
 
-  return null // valid
+  return null
 }
 
 /**

@@ -3,7 +3,7 @@ import { resolveModelSelections } from "@/lib/models/catalog"
 export type LayoutType = "sidebar" | "fullscreen"
 
 /**
- * Streaming presentation (ADR-0016 amendments, 2026-08-11): "smooth" keeps
+ * Streaming presentation (ADR-0016): "smooth" keeps
  * the paint-only decay overlay; "quick" disables it — new words paint at
  * full foreground color the moment they arrive. CLIENT-ONLY by design: text
  * still streams word by word either way (the evidence-gated server
@@ -22,7 +22,6 @@ export type UserPreferences = {
   hiddenModels: string[]
 }
 
-// API format uses snake_case
 export type UserPreferencesApiFormat = {
   layout?: LayoutType
   show_tool_invocations?: boolean

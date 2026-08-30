@@ -1,8 +1,7 @@
 /** @vitest-environment jsdom */
 
-// Rendered-DOM equivalence for the ADR-0016 incremental-projection corpus
-// steps 6–7; added for the 2026-07-27 review, which showed block-record
-// equality alone let a live DOM divergence ship).
+// Rendered-DOM equivalence for the ADR-0016 corpus. Block-record equality
+// alone cannot prove rendered parity.
 //
 // For EVERY equivalence-corpus fixture, the same source is rendered two
 // ways: STREAMED (one mount fed growing prefixes through the incremental

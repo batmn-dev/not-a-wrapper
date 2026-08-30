@@ -6,8 +6,8 @@ type ComposerControlProps = Omit<ButtonProps, "variant">
 /**
  * The shared secondary action inside the Composer.
  *
- * This Module owns the complete ChatGPT-derived interaction contract: token
- * colors, input-modality states, open-state styling, tap target, and the
+ * This module owns the complete interaction contract: token colors,
+ * input-modality states, open-state styling, tap target, and the
  * Button primitive's scale animation. Callers own only their local geometry.
  */
 function ComposerControl({ className, ...props }: ComposerControlProps) {

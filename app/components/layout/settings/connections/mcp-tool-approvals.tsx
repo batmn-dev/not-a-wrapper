@@ -14,12 +14,8 @@ type McpToolApprovalsProps = {
   serverId: Id<"mcpServers">
 }
 
-// Component
-
 /**
  * Per-server expandable list of tool approvals.
- * Each tool shows its name and an approved/rejected toggle.
- *
  * Tools are populated via `mcpToolApprovals.bulkApprove` after a test
  * connection or the first chat request that discovers tools.
  */

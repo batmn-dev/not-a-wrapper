@@ -41,7 +41,6 @@ export type OpenAIModel =
   | "gpt-3.5-turbo-0125"
   | "gpt-3.5-turbo"
   | "gpt-3.5-turbo-1106"
-  | "chatgpt-4o-latest"
   | "gpt-3.5-turbo-instruct"
   | "gpt-5.2"
   | "gpt-5.2-2025-12-11"

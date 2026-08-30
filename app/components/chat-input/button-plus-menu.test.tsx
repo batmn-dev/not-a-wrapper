@@ -281,7 +281,7 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
       trigger: "@",
     } as const
 
-    // Loading: ChatGPT's single shimmer row while connector suggestions resolve.
+    // Loading uses one shimmer row while connector suggestions resolve.
     renderMenu(syntheticQuery, undefined)
     const skeleton = container.querySelector(
       "[data-composer-menu-skeleton]"

@@ -159,7 +159,6 @@ export function MessageUser({
     setEditError(null)
   }
 
-  // Auto-resize textarea on content change
   useEffect(() => {
     if (!isEditing) return
     const editTextarea = textareaRef.current

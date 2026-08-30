@@ -2,11 +2,7 @@ import * as dns from "node:dns/promises"
 import { decryptSecret } from "@/lib/encryption"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { recordFailure, resetAllCircuits } from "../circuit-breaker"
-// Import after mocks
-
 import { describeMcpConnectionError, loadUserMcpTools } from "../load-tools"
-
-// Module mocks — must be before imports that use them
 
 const mockCreateMCPClient = vi.fn()
 const mockFetchQuery = vi.fn()
@@ -61,9 +57,6 @@ vi.mock("@/lib/config", () => ({
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST: mockTrustedRetryAllowlist,
 }))
 
-// Test Helpers
-
-/** Create a mock MCP server config (matches Convex document shape) */
 function mockServer(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     _id: "server_1",
@@ -78,7 +71,6 @@ function mockServer(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-/** Create a mock MCP client with tools */
 function mockClient(tools: Record<string, unknown> = {}, closeError?: Error) {
   return {
     tools: vi.fn().mockResolvedValue(tools),
@@ -101,7 +93,6 @@ function mockClientsByUrl(clients: Record<string, unknown>) {
   )
 }
 
-/** Create a mock tool object */
 function mockTool(name: string) {
   return {
     description: `Tool: ${name}`,
@@ -109,8 +100,6 @@ function mockTool(name: string) {
     execute: vi.fn(),
   }
 }
-
-// Tests
 
 describe("describeMcpConnectionError", () => {
   it("rewrites redirect rejections into an actionable message", () => {
@@ -149,21 +138,16 @@ describe("loadUserMcpTools", () => {
     mockResolve6.mockRejectedValue(new Error("ENOTFOUND"))
     // fetchMutation is fire-and-forget with .catch() — must return a promise
     mockFetchMutation.mockResolvedValue(undefined)
-    // The parallel load fires three fetchQuery calls: mcpServers.list,
-    // mcpToolApprovals.listByUser, then users.getCurrent. Tests queue the first
-    // two via mockResolvedValueOnce; this fallback answers getCurrent (and any
-    // otherwise-unqueued call) so the owner id needed to decrypt auth resolves.
+    // Queued server/approval reads fall through to the owner read needed for
+    // credential decryption.
     mockFetchQuery.mockImplementation((ref: unknown) =>
       Promise.resolve(
         ref === "users:getCurrent" ? { workosUserId: "test-user" } : []
       )
     )
-    // Suppress console output in tests
     vi.spyOn(console, "error").mockImplementation(() => {})
     vi.spyOn(console, "warn").mockImplementation(() => {})
   })
-
-  // Empty / no servers
 
   describe("empty results", () => {
     it("returns empty result when no servers exist", async () => {
@@ -190,8 +174,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // Single server tool loading
-
   describe("single server", () => {
     it("loads and namespaces tools from a single server", async () => {
       const server = mockServer({ name: "GitHub" })
@@ -206,7 +188,6 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Tools should be namespaced: github_create_issue, github_list_repos
       expect(result.tools).toHaveProperty("github_create_issue")
       expect(result.tools).toHaveProperty("github_list_repos")
       expect(result.clients).toHaveLength(1)
@@ -220,7 +201,6 @@ describe("loadUserMcpTools", () => {
         })
       )
 
-      // Tool server map should have entries
       const issueInfo = result.toolServerMap.get("github_create_issue")
       expect(issueInfo).toMatchObject({
         displayName: "create_issue",
@@ -315,7 +295,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // Auth headers
 
   describe("auth headers", () => {
     it("passes decrypted bearer auth headers to the MCP transport", async () => {
@@ -409,7 +388,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // Multi-server tool merging
 
   describe("multi-server merging", () => {
     it("merges tools from multiple servers with different namespaces", async () => {
@@ -465,7 +443,6 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Both should exist under different namespaces
       expect(result.tools).toHaveProperty("server_a_search")
       expect(result.tools).toHaveProperty("server_b_search")
     })
@@ -525,7 +502,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // Approval filtering
 
   describe("approval filtering", () => {
     it("excludes tools that are explicitly not approved", async () => {
@@ -572,16 +548,13 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Tool should be included by default
       expect(result.tools).toHaveProperty("github_new_tool")
     })
   })
 
-  // Tool limit enforcement
 
   describe("tool limit", () => {
     it("stops adding tools after reaching MCP_MAX_TOOLS_PER_REQUEST", async () => {
-      // Create a server with many tools
       const tools: Record<string, unknown> = {}
       for (let i = 0; i < 60; i++) {
         tools[`tool_${i}`] = mockTool(`tool_${i}`)
@@ -596,12 +569,10 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Should cap at MCP_MAX_TOOLS_PER_REQUEST (50)
       expect(Object.keys(result.tools).length).toBeLessThanOrEqual(50)
     })
   })
 
-  // Error handling / graceful degradation
 
   describe("error handling", () => {
     it("skips failed server connections gracefully", async () => {
@@ -631,7 +602,6 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Should have tools from the healthy server only
       expect(result.tools).toHaveProperty("healthy_working_tool")
       expect(result.clients).toHaveLength(1)
     })
@@ -676,14 +646,11 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Should have tools from stable server, flaky server's tools() failed
       expect(result.tools).toHaveProperty("stable_good_tool")
-      // Both clients are in the list (connection succeeded for both)
       expect(result.clients).toHaveLength(2)
     })
   })
 
-  // Circuit breaker integration
 
   describe("circuit breaker", () => {
     it("skips servers with open circuits", async () => {
@@ -696,7 +663,6 @@ describe("loadUserMcpTools", () => {
         }),
       ]
 
-      // Open circuit for s2 (3 consecutive failures)
       recordFailure("s2")
       recordFailure("s2")
       recordFailure("s2")
@@ -711,7 +677,6 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token")
 
-      // Only one client should be created (s2 skipped)
       expect(mockCreateMCPClient).toHaveBeenCalledTimes(1)
       expect(result.tools).toHaveProperty("healthy_tool")
     })
@@ -726,7 +691,6 @@ describe("loadUserMcpTools", () => {
         }),
       ]
 
-      // Open circuits for both
       for (let i = 0; i < 3; i++) {
         recordFailure("s1")
         recordFailure("s2")
@@ -741,7 +705,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-  // Timeout orphan cleanup (resource leak prevention)
 
   describe("timeout orphan cleanup", () => {
     it("closes orphaned client when timeout wins the race", async () => {
@@ -750,7 +713,7 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
-      // Use a deferred promise so the client never resolves during loadUserMcpTools
+      // The client resolves only after the load timeout.
       let resolveClient!: (value: typeof orphanedClient) => void
       mockCreateMCPClient.mockReturnValue(
         new Promise((resolve) => {
@@ -760,16 +723,13 @@ describe("loadUserMcpTools", () => {
 
       const result = await loadUserMcpTools("test-token", { timeout: 10 })
 
-      // Timeout should have won — no clients in the result
       expect(result.clients).toHaveLength(0)
       expect(result.failedServerCount).toBe(1)
 
-      // Now resolve the orphaned client — simulates a slow server eventually connecting
+      // Late resolution must close the orphaned connection.
       resolveClient(orphanedClient)
-      // Flush microtasks so the .then() cleanup handler runs
       await Promise.resolve()
 
-      // The orphaned client should have been closed
       expect(orphanedClient.close).toHaveBeenCalledTimes(1)
     })
 
@@ -778,7 +738,6 @@ describe("loadUserMcpTools", () => {
 
       mockFetchQuery.mockResolvedValueOnce([server]).mockResolvedValueOnce([])
 
-      // Client promise will also reject (after the timeout)
       let rejectClient!: (reason: Error) => void
       mockCreateMCPClient.mockReturnValue(
         new Promise((_, reject) => {
@@ -791,11 +750,10 @@ describe("loadUserMcpTools", () => {
       expect(result.clients).toHaveLength(0)
       expect(result.failedServerCount).toBe(1)
 
-      // Client also fails — the empty rejection handler should absorb it
+      // A post-timeout rejection must be absorbed.
       rejectClient(new Error("Connection also failed"))
       await Promise.resolve()
 
-      // No unhandled rejection — test passes if it reaches here
     })
   })
 })

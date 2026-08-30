@@ -33,17 +33,11 @@ type ProviderKeyPanelProps<P extends ProviderKeyConfig> = {
   providers: P[]
   defaultProvider: string
   keyStatus: Record<string, boolean>
-  /** Toast noun + delete-dialog title, e.g. "API key" / "Tool key". */
   noun: string
-  /** Section title + description block, rendered above the tiles. */
   header: ReactNode
-  /** Container className for the tile list (e.g. a grid vs a vertical stack). */
   tilesClassName?: string
-  /** Optional trailing tile(s) after the mapped providers (e.g. a "soon" tile). */
   tilesExtra?: ReactNode
-  /** How one provider tile renders; the panel feeds it selection state. */
   renderTile: (provider: P, ctx: TileContext) => ReactNode
-  /** Delete-confirmation body copy for the given provider name. */
   deleteDescription: (name: string) => ReactNode
   /**
    * Optional per-provider detail block rendered under the key form (e.g.
@@ -88,7 +82,6 @@ export function ProviderKeyPanel<P extends ProviderKeyConfig>({
   })
 
   const selected = keys.selectedConfig
-  const showForm = selected != null && selected.available !== false
 
   return (
     <div>
@@ -105,7 +98,7 @@ export function ProviderKeyPanel<P extends ProviderKeyConfig>({
         {tilesExtra}
       </div>
 
-      {showForm && (
+      {selected != null && (
         <div className="mt-4">
           <div className="flex flex-col">
             <Label htmlFor={`${keys.selectedProvider}-key`} className="mb-3">

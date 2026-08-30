@@ -1,5 +1,5 @@
 /**
- * Chromium benchmark harness (measurement plan Phase 3 §3.2).
+ * Chromium benchmark harness.
  *
  * Drives the PRODUCTION app (an isolated perf build, never the dev .next)
  * through the deterministic stream provider, extracts the app's own
@@ -934,11 +934,8 @@ async function main() {
     const liveStreamNotAdoptedRuns = runs.filter(
       (run) => run.liveStreamNotAdopted
     ).length
-    // Regression gate (adoption-loss fix, 2026-08-28): the Chat surface now
-    // lives in the persistent (chat)/layout.tsx, so a route-segment commit
-    // can no longer remount it mid-first-turn and orphan the live binding.
-    // Verified 0/90 losses post-fix (vs ~7% before) — any recurrence is a
-    // real regression, not noise.
+    // A layout-owned Chat must never lose its live binding across a route
+    // segment commit.
     if (liveStreamNotAdoptedRuns > 0) {
       correctnessOk = false
       log(

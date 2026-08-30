@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Four ChatGPT-derived browser behaviors crossed existing product seams: View
+Four browser behaviors crossed existing product seams: View
 Transition lifecycle state, native sharing, interaction-intent prefetching, and
 Composer input-to-paint measurement. Keeping their browser branching in each
 product caller would duplicate cleanup rules, create different mobile/desktop

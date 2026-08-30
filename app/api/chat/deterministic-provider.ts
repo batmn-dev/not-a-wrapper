@@ -10,8 +10,7 @@ import type { LanguageModelV4StreamPart } from "@ai-sdk/provider"
 import { MockLanguageModelV4 } from "ai/test"
 
 /**
- * Deterministic stream provider (measurement plan Phase 3 §3.1): replays the
- * chat-performance payload fixtures as a scripted provider stream through the
+ * Replays benchmark payloads as a deterministic provider stream through the
  * REAL turn pipeline — prepare, streamText, word-chunking/lifecycle
  * transforms, UI-message conversion, durable snapshots, rendering, and
  * persistence all run unchanged; only the model call is synthetic.

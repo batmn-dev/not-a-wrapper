@@ -25,7 +25,7 @@ function roundTripEntities(entities: readonly PromptInputEntity[]) {
 }
 
 describe("composer entity pill DOM contract", () => {
-  it("restores the canonical web-search capability id from ChatGPT's DOM id", () => {
+  it("restores the canonical web-search capability id after a DOM round trip", () => {
     const webSearch: PromptInputEntity = {
       id: "web-search",
       kind: "capability",

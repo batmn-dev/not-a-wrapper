@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from "react"
 
 /**
- * ChatGPT-parity mobile-OS detection. The touch-optimized composer menu keys
- * on the user-agent OS, not pointer coarseness: a narrow
+ * Mobile-OS detection for the touch-optimized composer menu. It keys on the
+ * user-agent OS, not pointer coarseness: a narrow
  * desktop window keeps the compact fine-pointer popover, while an iPhone,
  * Android device, or DevTools mobile emulation (which swaps the UA) gets the
- * icon-chip treatment. Includes their iPadOS-as-Mac case.
+ * icon-chip treatment. Includes the iPadOS-as-Mac case.
  */
 function isMobileDeviceOs() {
   if (typeof navigator === "undefined") return false

@@ -22,9 +22,8 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
 ): () => void {
   let scheduled: ScheduledPublication = null
   let pending = false
-  // Per-streaming-session accounting (measurement plan Phase 2): SDK message
-  // callbacks observed vs publications delivered while streaming. Emitted as
-  // ONE summary mark when the session leaves `streaming`; proves the
+  // Per-streaming-session callbacks versus delivered publications. One
+  // summary on exit proves the
   // ≤1-publication-per-frame invariant. markChatPerf is a no-op unless the
   // instrumentation build flag is on.
   let streamingCallbackCount = 0
