@@ -40,7 +40,6 @@ type TableDocuments = {
   generationRuns: Doc<"generationRuns">[]
   reaperCheckpoints: Doc<"reaperCheckpoints">[]
   messages: Doc<"messages">[]
-  assistantMessageSnapshots: Doc<"assistantMessageSnapshots">[]
   toolInvocations: Doc<"toolInvocations">[]
   users: Doc<"users">[]
   chats: Doc<"chats">[]
@@ -102,7 +101,6 @@ function createMutationCtx(
     generationRuns: [],
     reaperCheckpoints: [],
     messages: [],
-    assistantMessageSnapshots: [],
     toolInvocations: [],
     users: [],
     chats: [],
@@ -496,7 +494,6 @@ function createGenerationRunLinkageFixture() {
     generationRuns: [run],
     reaperCheckpoints: [],
     messages: [message, otherMessage],
-    assistantMessageSnapshots: [],
     toolInvocations: [],
     users: [user],
     chats: [chat],
@@ -1587,7 +1584,6 @@ describe("prepareGenerationForChat", () => {
       },
     })
 
-    expect(result.assistantOrder).toBe(4)
     expect(
       inserts.filter((insert) => insert.tableName === "messages")
     ).toContainEqual(expect.objectContaining({ id: result.assistantMessageId }))
@@ -1600,6 +1596,7 @@ describe("prepareGenerationForChat", () => {
     })
     expect(tables.messages[4]).toMatchObject({
       _id: result.assistantMessageId,
+      orderId: 4,
       parentMessageId: "message_user_2",
       branchIndex: 1,
       selected: true,
@@ -2306,18 +2303,11 @@ describe("prepareGenerationForChat", () => {
       content: "partial new answer",
       parts: [{ type: "text", text: "partial new answer" }],
     })
-    await ctx.db.insert("assistantMessageSnapshots", {
-      runId: result.runId,
-      chatId,
-      messageId: result.assistantMessageId,
-      order: result.assistantOrder,
-      stepOrder: 0,
-      sequence: 1,
-      format: "text_snapshot",
-      textSnapshot: "partial new answer",
-      partsSnapshot: [{ type: "text", text: "partial new answer" }],
-      createdAt: 1700000000000,
-    })
+    const regeneratedRun = tables.generationRuns.find(
+      (run) => run._id === result.runId
+    )
+    if (!regeneratedRun) throw new Error("Expected regeneration run")
+    regeneratedRun.lastSnapshotSequence = 1
 
     await markGenerationRunAbortedForChat(
       ctx,
@@ -2367,7 +2357,6 @@ describe("prepareGenerationForChat", () => {
       }
     )
 
-    expect(fixture.tables.assistantMessageSnapshots).toEqual([])
     expect(deletes).toEqual([])
     expect(fixture.message).toMatchObject({
       content: "partial regenerated answer",
@@ -2378,45 +2367,6 @@ describe("prepareGenerationForChat", () => {
     expect(fixture.run.errorRecovery).toBe(
       "retry_with_shorter_generation_budget"
     )
-  })
-
-  it("falls back to a legacy snapshot row for reused regeneration output", async () => {
-    const fixture = createGenerationRunLinkageFixture()
-    fixture.run.startedAt = 2000
-    fixture.run.lastSnapshotSequence = undefined
-    fixture.message.content = "legacy partial answer"
-    fixture.message.parts = [{ type: "text", text: "legacy partial answer" }]
-    fixture.tables.assistantMessageSnapshots.push({
-      _id: asId<"assistantMessageSnapshots">("snapshot_legacy"),
-      _creationTime: 1500,
-      runId: fixture.runId,
-      chatId: fixture.chatId,
-      messageId: fixture.messageId,
-      order: 1,
-      stepOrder: 0,
-      sequence: 1,
-      format: "text_snapshot",
-      textSnapshot: "legacy partial answer",
-      partsSnapshot: [{ type: "text", text: "legacy partial answer" }],
-      createdAt: 1500,
-    })
-    const { ctx, deletes } = createMutationCtx(fixture.tables)
-
-    await markGenerationRunFailedForChat(
-      ctx,
-      await runOwner(ctx, fixture.runId),
-      {
-        messageId: fixture.messageId,
-        error: "provider failed",
-      }
-    )
-
-    expect(deletes).toEqual([])
-    expect(fixture.message).toMatchObject({
-      content: "legacy partial answer",
-      status: "failed",
-      error: "provider failed",
-    })
   })
 
   it("keeps and marks an empty assistant placeholder when a run aborts before the first chunk", async () => {
@@ -4576,7 +4526,6 @@ describe("updateAssistantSnapshotForChat", () => {
       await runOwner(ctx, fixture.runId),
       {
         messageId: fixture.messageId,
-        order: 1,
         sequence: 1,
         textSnapshot: "partial",
         partsSnapshot: [{ type: "text", text: "partial" }],
@@ -4590,9 +4539,9 @@ describe("updateAssistantSnapshotForChat", () => {
     expect(fixture.run.status).toBe("streaming")
   })
 
-  it("rejects late lower-sequence snapshots BEFORE insertion", async () => {
-    // The run's lastSnapshotSequence is the authority, checked pre-insert — a
-    // stale write leaves neither a snapshot row nor a doc patch behind.
+  it("rejects late lower-sequence snapshots before persistence", async () => {
+    // The run's lastSnapshotSequence is the authority, so a stale write leaves
+    // neither a message nor a run patch behind.
     const fixture = createGenerationRunLinkageFixture()
     fixture.message.content = "newer"
     fixture.message.parts = [{ type: "text", text: "newer" }]
@@ -4604,7 +4553,6 @@ describe("updateAssistantSnapshotForChat", () => {
       await runOwner(ctx, fixture.runId),
       {
         messageId: fixture.messageId,
-        order: 1,
         sequence: 1,
         textSnapshot: "stale",
         partsSnapshot: [{ type: "text", text: "stale" }],
@@ -4628,7 +4576,6 @@ describe("updateAssistantSnapshotForChat", () => {
       await runOwner(ctx, fixture.runId),
       {
         messageId: fixture.messageId,
-        order: 1,
         sequence: 3,
         textSnapshot: "dup",
         partsSnapshot: [{ type: "text", text: "dup" }],
@@ -4649,7 +4596,6 @@ describe("updateAssistantSnapshotForChat", () => {
       await runOwner(ctx, fixture.runId),
       {
         messageId: fixture.messageId,
-        order: 1,
         sequence: 5,
         textSnapshot: "partial",
         partsSnapshot: [{ type: "text", text: "partial" }],
@@ -4672,7 +4618,6 @@ describe("updateAssistantSnapshotForChat", () => {
     const { ctx, patches } = createMutationCtx(fixture.tables)
     const checkpoint = {
       messageId: fixture.messageId,
-      order: 1,
       textSnapshot: "same partial",
       partsSnapshot: [{ type: "text", text: "same partial" }],
     }
@@ -4721,7 +4666,6 @@ describe("updateAssistantSnapshotForChat", () => {
       await runOwner(ctx, fixture.runId),
       {
         messageId: fixture.messageId,
-        order: 1,
         sequence: 4,
         textSnapshot: "tail after pause",
         partsSnapshot: [{ type: "text", text: "tail after pause" }],
@@ -4750,7 +4694,6 @@ describe("updateAssistantSnapshotForChat", () => {
       await runOwner(ctx, fixture.runId),
       {
         messageId: fixture.messageId,
-        order: 1,
         sequence: 2,
         textSnapshot: "late write",
         partsSnapshot: [{ type: "text", text: "late write" }],
@@ -5479,7 +5422,6 @@ describe("allowance settlement rides terminal transitions (ADR-0021)", () => {
       generationRuns: [run],
       reaperCheckpoints: [],
       messages: [message],
-      assistantMessageSnapshots: [],
       toolInvocations: [],
       users: [user],
       chats: [chat],

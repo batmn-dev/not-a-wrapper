@@ -6,7 +6,6 @@ import { closeSupersededGenerationsForChat } from "../chatRuntime"
 import { takeLinkedChats } from "./chat_project_link"
 
 export const DELETION_PHASES = [
-  "assistantMessageSnapshots",
   "toolInvocations",
   "toolApprovalRequests",
   "toolCallLog",
@@ -32,7 +31,6 @@ type ChildDeletionPhase = Exclude<
 >
 
 const CHILD_DELETION_PHASES: readonly ChildDeletionPhase[] = [
-  "assistantMessageSnapshots",
   "toolInvocations",
   "toolApprovalRequests",
   "toolCallLog",
@@ -43,7 +41,6 @@ const CHILD_DELETION_PHASES: readonly ChildDeletionPhase[] = [
 type ChatDeletionCtx = MutationCtx
 
 type ChildRow =
-  | Doc<"assistantMessageSnapshots">
   | Doc<"toolInvocations">
   | Doc<"toolApprovalRequests">
   | Doc<"toolCallLog">
@@ -98,11 +95,6 @@ async function paginateChildPhase(
   }
 
   switch (phase) {
-    case "assistantMessageSnapshots":
-      return await ctx.db
-        .query("assistantMessageSnapshots")
-        .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-        .paginate(paginationOptions)
     case "toolInvocations":
       return await ctx.db
         .query("toolInvocations")
@@ -197,14 +189,6 @@ async function firstRemainingPhase(
   ctx: ChatDeletionCtx,
   chatId: Id<"chats">
 ): Promise<Exclude<ChatDeletionPhase, "chatRoot"> | null> {
-  if (
-    await ctx.db
-      .query("assistantMessageSnapshots")
-      .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-      .first()
-  ) {
-    return "assistantMessageSnapshots"
-  }
   if (
     await ctx.db
       .query("toolInvocations")

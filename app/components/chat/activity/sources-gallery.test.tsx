@@ -18,7 +18,7 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-describe("SourcesGallery (R8 favicon perf)", () => {
+describe("SourcesGallery favicon sharing", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 

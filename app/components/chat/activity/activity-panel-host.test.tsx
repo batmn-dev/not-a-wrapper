@@ -23,7 +23,7 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-describe("ActivityPanel host (R6)", () => {
+describe("ActivityPanel host", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 

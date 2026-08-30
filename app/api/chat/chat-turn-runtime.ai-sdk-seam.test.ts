@@ -402,7 +402,6 @@ function makeDurableFetchMutation() {
       return {
         runId: "run1",
         assistantMessageId: "msg1",
-        assistantOrder: 2,
         messages: [makeStoredUserMessage()],
       }
     }

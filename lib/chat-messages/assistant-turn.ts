@@ -238,7 +238,7 @@ export function hasPreservedResponseContent(view: AssistantTurnView): boolean {
  *  - `serverMessageId` — the trigger's panel-turn identity
  * Deliberately excluded: `text` (compared via the row's `children` prop) and
  * `reasoning.text` / `sources` — reasoning and source deltas are panel-owned
- * and must not churn the streaming row body (the R3 memo contract). The row's
+ * and must not churn the streaming row body. The row's
  * sources presentations (the trigger's source count, the footer sources
  * badge) render from `sources` but ONLY on settled turns, and every path into
  * settled re-renders the row through compared fields — the client status

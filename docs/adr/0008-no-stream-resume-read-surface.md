@@ -44,11 +44,8 @@ durable message docs, and any future resume feature must re-justify its
 own read surface against that baseline (it would likely subscribe to the
 message doc, not replay `assistantMessageSnapshots` rows).
 
-`chatVersion` is no longer sent by the Chat turn runtime nor stored on
-generation runs (it was written and never read — the telemetry that uses
-the request's chat version reads the runtime-local value, not the stored
-field). Because the database is pre-launch, the generation-runs schema
-drops the field directly instead of carrying a migration placeholder.
+`chatVersion` remains a request-local input for telemetry and tool-call
+diagnostics, but it is not stored on generation runs.
 
 `app/api/chat/search-tools.ts` (superseded by the Tool runtime's
 `policySummary.searchInjected`) is deleted with its test.
@@ -59,11 +56,8 @@ drops the field directly instead of carrying a migration placeholder.
   exercised in production. Seven Chat-turn-driven mutations route through
   their `*ForChat` handlers; the two client approval mutations
   (`approveToolCall`, `denyToolCall`) are direct client-facing handlers.
-- `assistantMessageSnapshots` remains written (throttled) but its only
-  readers are now internal: the write-path sequence dedupe and the
-  regeneration-reuse probe in `applyTerminalAssistantOutcome`. Whether
-  the append-only rows are still worth their write cost — vs. a
-  `hasStreamedOutput` flag on the run — is a known follow-up, deliberately
-  NOT taken here because it touches the terminal-outcome-stub edge.
+- Durable message docs carry projected output. `lastSnapshotSequence` on the
+  generation run rejects stale checkpoints and records whether a reused
+  regeneration produced output; no append-only snapshot table is retained.
 - A future architecture pass finding "no recovery reads" should treat
   that as this decision, not as a gap.

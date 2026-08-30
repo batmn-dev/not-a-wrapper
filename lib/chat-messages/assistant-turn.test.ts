@@ -516,7 +516,7 @@ describe("deriveAssistantTurnView", () => {
   })
 })
 
-describe("assistantTurnViewsEqual (the R3 memo contract)", () => {
+describe("assistantTurnViewsEqual memo contract", () => {
   const base = () =>
     deriveAssistantTurnView(
       {

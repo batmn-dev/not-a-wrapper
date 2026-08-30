@@ -97,7 +97,7 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true
 })
 
-describe("ActivityPanel coexistence (R6)", () => {
+describe("ActivityPanel coexistence", () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
   let frames: Map<number, FrameCallback>

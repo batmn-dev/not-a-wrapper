@@ -14,7 +14,6 @@ type TableName =
   | "chats"
   | "messages"
   | "generationRuns"
-  | "assistantMessageSnapshots"
   | "toolInvocations"
   | "toolApprovalRequests"
   | "toolCallLog"
@@ -42,7 +41,6 @@ const tableNames: TableName[] = [
   "chats",
   "messages",
   "generationRuns",
-  "assistantMessageSnapshots",
   "toolInvocations",
   "toolApprovalRequests",
   "toolCallLog",
@@ -336,9 +334,6 @@ describe("asynchronous Chat deletion", () => {
         chatDoc as unknown as TestDocument,
         otherChat as unknown as TestDocument,
       ],
-      assistantMessageSnapshots: [
-        row("snapshot-1", { chatId: chatDoc._id }),
-      ],
       toolInvocations: [row("invocation-1", { chatId: chatDoc._id })],
       toolApprovalRequests: [
         row("approval-1", { chatId: chatDoc._id, status: "pending" }),
@@ -373,7 +368,6 @@ describe("asynchronous Chat deletion", () => {
     expect(
       (
         [
-          "assistantMessageSnapshots",
           "toolInvocations",
           "toolApprovalRequests",
           "toolCallLog",
@@ -396,16 +390,16 @@ describe("asynchronous Chat deletion", () => {
     ])
   })
 
-  it("drains an oversized snapshot range from cursor:null across bounded batches", async () => {
+  it("drains an oversized child range from cursor:null across bounded batches", async () => {
     const owner = user()
     const chatDoc = chat("chat-1")
-    const snapshots = Array.from({ length: 1_000 }, (_, index) =>
-      row(`snapshot-${index}`, { chatId: chatDoc._id })
+    const invocations = Array.from({ length: 1_000 }, (_, index) =>
+      row(`invocation-${index}`, { chatId: chatDoc._id })
     )
     const harness = createHarness({
       users: [owner as unknown as TestDocument],
       chats: [chatDoc as unknown as TestDocument],
-      assistantMessageSnapshots: snapshots,
+      toolInvocations: invocations,
     })
     const job = await ensureChatDeletionJob(harness.ctx, chatDoc, owner)
     harness.schedule(job._id)
@@ -420,16 +414,16 @@ describe("asynchronous Chat deletion", () => {
         (count) => count === 1
       )
     ).toBe(true)
-    const snapshotPages = harness.paginatedPages.filter(
-      (page) => page.tableName === "assistantMessageSnapshots"
+    const invocationPages = harness.paginatedPages.filter(
+      (page) => page.tableName === "toolInvocations"
     )
-    expect(snapshotPages.every((page) => page.cursor === null)).toBe(true)
-    expect(snapshotPages.slice(0, 5).map((page) => page.ids[0])).toEqual([
-      "snapshot-0",
-      `snapshot-${DELETION_BATCH.numItems}`,
-      `snapshot-${DELETION_BATCH.numItems * 2}`,
-      `snapshot-${DELETION_BATCH.numItems * 3}`,
-      `snapshot-${DELETION_BATCH.numItems * 4}`,
+    expect(invocationPages.every((page) => page.cursor === null)).toBe(true)
+    expect(invocationPages.slice(0, 5).map((page) => page.ids[0])).toEqual([
+      "invocation-0",
+      `invocation-${DELETION_BATCH.numItems}`,
+      `invocation-${DELETION_BATCH.numItems * 2}`,
+      `invocation-${DELETION_BATCH.numItems * 3}`,
+      `invocation-${DELETION_BATCH.numItems * 4}`,
     ])
   })
 
@@ -439,9 +433,7 @@ describe("asynchronous Chat deletion", () => {
     const harness = createHarness({
       users: [owner as unknown as TestDocument],
       chats: [chatDoc as unknown as TestDocument],
-      assistantMessageSnapshots: [
-        row("snapshot-1", { chatId: chatDoc._id }),
-      ],
+      toolInvocations: [row("invocation-1", { chatId: chatDoc._id })],
     })
     const job = await ensureChatDeletionJob(harness.ctx, chatDoc, owner)
 
@@ -450,7 +442,7 @@ describe("asynchronous Chat deletion", () => {
 
     expect(activeJob(harness).documentsDeleted).toBe(1)
     expect(activeJob(harness).batchesProcessed).toBe(2)
-    expect(harness.tables.assistantMessageSnapshots).toEqual([])
+    expect(harness.tables.toolInvocations).toEqual([])
   })
 
   it("exits silently for a stale invocation after completion", async () => {
@@ -510,14 +502,14 @@ describe("asynchronous Chat deletion", () => {
       chat(id, projectDoc._id)
     )
     for (const chatDoc of chats) delete chatDoc.deletingAt
-    const oversizedSnapshots = Array.from({ length: 450 }, (_, index) =>
-      row(`snapshot-${index}`, { chatId: chats[1]?._id })
+    const oversizedInvocations = Array.from({ length: 450 }, (_, index) =>
+      row(`invocation-${index}`, { chatId: chats[1]?._id })
     )
     const harness = createHarness({
       users: [owner as unknown as TestDocument],
       projects: [projectDoc as unknown as TestDocument],
       chats: chats as unknown as TestDocument[],
-      assistantMessageSnapshots: oversizedSnapshots,
+      toolInvocations: oversizedInvocations,
     })
     const job = await ensureProjectDeletionJob(
       harness.ctx,

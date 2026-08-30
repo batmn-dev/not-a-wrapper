@@ -19,7 +19,7 @@ import {
 
 export type RowActionItem = {
   key: string
-  /** Rendered as-is (an <Icon/> or a lucide glyph); replaced by a spinner while `loading`. */
+  /** Rendered as-is; replaced by the shared spinner while `loading`. */
   icon: ReactNode
   label: string
   ariaLabel?: string
@@ -43,7 +43,7 @@ type RowActionsMenuProps = {
 }
 
 /**
- * The single row-actions dropdown both the chat and project row menus run
+ * The single row-actions dropdown every chat and project actions menu runs
  * through: the shared ⋯ trigger chip, the mobile-safe dropdown shell, and
  * config-driven items. Callers pass their item set and own their own
  * confirmation dialogs (the "Delete" item just fires `onSelect`).
