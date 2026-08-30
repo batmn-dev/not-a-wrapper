@@ -172,12 +172,10 @@ export default defineSchema({
     role: v.union(
       v.literal("user"),
       v.literal("assistant"),
-      v.literal("system"),
-      v.literal("data")
+      v.literal("system")
     ),
     content: v.string(),
     parts: v.any(), // AI SDK parts format
-    attachments: v.optional(v.array(v.any())), // Deprecated; canonical runtime stores files in `parts`
     parentMessageId: v.optional(v.id("messages")),
     branchIndex: v.optional(v.number()),
     selected: v.optional(v.boolean()),

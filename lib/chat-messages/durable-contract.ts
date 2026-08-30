@@ -23,18 +23,8 @@ export const GENERATION_STATUSES = [
 
 export type GenerationStatus = (typeof GENERATION_STATUSES)[number]
 
-export const DURABLE_MESSAGE_ROLES = [
-  "user",
-  "assistant",
-  "system",
-  "data",
-] as const
-
-export type DurableMessageRole = (typeof DURABLE_MESSAGE_ROLES)[number]
-
 const durableMessageStatusSet = new Set<unknown>(DURABLE_MESSAGE_STATUSES)
 const generationStatusSet = new Set<unknown>(GENERATION_STATUSES)
-const durableMessageRoleSet = new Set<unknown>(DURABLE_MESSAGE_ROLES)
 
 export function isDurableMessageStatus(
   value: unknown
@@ -44,10 +34,4 @@ export function isDurableMessageStatus(
 
 export function isGenerationStatus(value: unknown): value is GenerationStatus {
   return generationStatusSet.has(value)
-}
-
-export function isDurableMessageRole(
-  value: unknown
-): value is DurableMessageRole {
-  return durableMessageRoleSet.has(value)
 }

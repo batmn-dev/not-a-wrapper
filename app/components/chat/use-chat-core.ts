@@ -78,7 +78,7 @@ const STREAM_TIMEOUT_MS = CHAT_TURN_EXECUTION_BUDGET.clientStreamWatchdogMs
 
 type UseChatCoreProps = {
   initialMessages: UIMessage[]
-  /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
+  /** Cache a local-only message. Pass overrideChatId for detached guest turns. */
   cacheAndAddMessage: (
     message: UIMessage,
     overrideChatId?: string

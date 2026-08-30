@@ -110,6 +110,21 @@ export const CHAT_PERF_SPAN_NAMES = [
 
 export type ChatPerfSpanName = (typeof CHAT_PERF_SPAN_NAMES)[number]
 
+export const CHAT_PERF_CHECKPOINT_KINDS = [
+  "attempt",
+  "accepted",
+  // A write that landed but changed nothing. This keeps the reconciliation
+  // invariant: attempt = accepted + deduped + authority_lost + failed.
+  "deduped",
+  "authority_lost",
+  "failed",
+  "final_flush",
+  "settlement_receipt_confirmed",
+  "settlement_receipt_degraded",
+] as const
+
+export type ChatPerfCheckpointKind = (typeof CHAT_PERF_CHECKPOINT_KINDS)[number]
+
 export const DETACHED_BINDING_GAUGE_EVENTS = [
   "created",
   "detached",
@@ -228,21 +243,7 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     correlationId: CORRELATION,
   },
   checkpoint: {
-    kind: oneOf(
-      "attempt",
-      "accepted",
-      // A write that landed but changed nothing (content-unchanged dedupe in
-      // updateAssistantSnapshotForChat). Without this kind the reconciliation
-      // invariant `attempt = accepted + deduped + authority_lost + failed`
-      // cannot hold — the emitter at durable-turn-runtime.ts sent it from the
-      // start and the validator silently dropped it.
-      "deduped",
-      "authority_lost",
-      "failed",
-      "final_flush",
-      "settlement_receipt_confirmed",
-      "settlement_receipt_degraded"
-    ),
+    kind: oneOf(...CHAT_PERF_CHECKPOINT_KINDS),
     payloadBytes: NUMBER,
     correlationId: CORRELATION,
   },
@@ -362,7 +363,7 @@ export type ChatPerfServerSession = {
    * the admission spans as if they shared an anchor.
    */
   record(name: ChatPerfSpanName, durationMs: number, ok?: boolean): void
-  counter(kind: string, payloadBytes?: number): void
+  counter(kind: ChatPerfCheckpointKind, payloadBytes?: number): void
   /**
    * Emits one schema-validated event that is neither a span nor a checkpoint
    * counter (e.g. `durable_write`). Same allow-list gate as everything else;

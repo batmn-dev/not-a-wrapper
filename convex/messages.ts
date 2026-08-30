@@ -18,10 +18,6 @@ import {
   getSelectedPathMessagesFromContext,
   type MessageBranchInfo,
 } from "./domain/message_branches"
-import {
-  extractTextFromMessageParts,
-  normalizeMessagePartsForStorage,
-} from "./domain/message_parts"
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { recordChatActivity } from "./domain/project_activity"
 import {
@@ -30,18 +26,7 @@ import {
   isChatActive,
   requireOwnedChat,
 } from "./lib/auth"
-import { ownedChatMutation, readableChatQuery } from "./lib/authedFunctions"
-
-export { normalizeMessagePartsForStorage } from "./domain/message_parts"
-
-async function getNextOrder(ctx: MutationCtx, chatId: Id<"chats">) {
-  const latest = await ctx.db
-    .query("messages")
-    .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
-    .order("desc")
-    .first()
-  return latest ? latest.orderId + 1 : 0
-}
+import { readableChatQuery } from "./lib/authedFunctions"
 
 function withBranchMetadata(
   selectedMessages: Doc<"messages">[],
@@ -547,90 +532,4 @@ export const selectBranch = mutation({
     messageId: v.id("messages"),
   },
   handler: selectBranchForChat,
-})
-
-export const add = ownedChatMutation({
-  args: {
-    role: v.union(
-      v.literal("user"),
-      v.literal("assistant"),
-      v.literal("system"),
-      v.literal("data")
-    ),
-    clientMessageId: v.optional(v.string()),
-    content: v.optional(v.string()),
-    parts: v.optional(v.any()),
-    attachments: v.optional(v.array(v.any())),
-  },
-  handler: async (ctx, args) => {
-    const user = ctx.user
-    const chatId = ctx.chat._id
-
-    const now = Date.now()
-    await recordChatActivity(ctx, ctx.chat, now)
-    const orderId = await getNextOrder(ctx, chatId)
-    const parts = normalizeMessagePartsForStorage(args.parts, args.attachments)
-
-    return await ctx.db.insert("messages", {
-      chatId,
-      orderId,
-      clientMessageId: args.clientMessageId,
-      userId: args.role === "user" ? user._id : undefined,
-      role: args.role,
-      content: args.content ?? extractTextFromMessageParts(parts),
-      parts,
-      status: "completed",
-      createdAt: now,
-      updatedAt: now,
-    })
-  },
-})
-
-export const addBatch = ownedChatMutation({
-  args: {
-    messages: v.array(
-      v.object({
-        role: v.union(
-          v.literal("user"),
-          v.literal("assistant"),
-          v.literal("system"),
-          v.literal("data")
-        ),
-        clientMessageId: v.optional(v.string()),
-        content: v.optional(v.string()),
-        parts: v.optional(v.any()),
-        attachments: v.optional(v.array(v.any())),
-      })
-    ),
-  },
-  handler: async (ctx, { messages }) => {
-    const user = ctx.user
-    const chatId = ctx.chat._id
-
-    const now = Date.now()
-    await recordChatActivity(ctx, ctx.chat, now)
-
-    // Insert all messages
-    const ids = []
-    let nextOrder = await getNextOrder(ctx, chatId)
-    for (const msg of messages) {
-      const parts = normalizeMessagePartsForStorage(msg.parts, msg.attachments)
-      const id = await ctx.db.insert("messages", {
-        chatId,
-        orderId: nextOrder,
-        clientMessageId: msg.clientMessageId,
-        userId: msg.role === "user" ? user._id : undefined,
-        role: msg.role,
-        content: msg.content ?? extractTextFromMessageParts(parts),
-        parts,
-        status: "completed",
-        createdAt: now,
-        updatedAt: now,
-      })
-      ids.push(id)
-      nextOrder += 1
-    }
-
-    return ids
-  },
 })

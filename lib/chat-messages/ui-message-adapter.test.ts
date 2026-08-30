@@ -9,7 +9,7 @@ describe("durableStoredMessageToUiMessage", () => {
         clientMessageId: "client_message_1",
         role: "user",
         content: "hello",
-        parts: [],
+        parts: [{ type: "text", text: "hello" }],
         status: "completed",
         createdAt: 100,
       })
@@ -37,6 +37,7 @@ describe("durableStoredMessageToUiMessage", () => {
         content: "partial output",
         parts,
         status: "streaming",
+        createdAt: 200,
       })
     ).toMatchObject({
       id: "message_2",
@@ -56,24 +57,18 @@ describe("durableStoredMessageToUiMessage", () => {
         {
           _id: "message_runtime",
           role: "assistant",
-          content: "legacy content",
+          content: "stored content",
           parts: [],
-          attachments: [
-            {
-              name: "receipt.pdf",
-              contentType: "application/pdf",
-              url: "https://example.com/receipt.pdf",
-            },
-          ],
           status: "completed",
+          createdAt: 300,
           error: undefined,
           generationRunId: "run_1",
         },
-        { partsMode: "stored", metadataMode: "runtime" }
+        { metadataMode: "runtime" }
       )
     ).toMatchObject({
       id: "message_runtime",
-      content: "legacy content",
+      content: "stored content",
       parts: [],
       metadata: {
         durableStatus: "completed",
@@ -89,6 +84,7 @@ describe("durableStoredMessageToUiMessage", () => {
         content: "done",
         parts: [{ type: "text", text: "done" }],
         status: "failed",
+        createdAt: 400,
         metadata: { custom: "value", durableStatus: "legacy" },
         error: "provider failed",
         generationRunId: "run_1",
@@ -120,6 +116,7 @@ describe("durableStoredMessageToUiMessage", () => {
         content: "answer",
         parts: [{ type: "text", text: "answer" }],
         status: "completed",
+        createdAt: 500,
         metadata: {
           branch: {
             messageId: "message_branch",
@@ -149,41 +146,9 @@ describe("durableStoredMessageToUiMessage", () => {
       content: "answer",
       parts: [{ type: "text", text: "answer" }],
       status: "completed",
+      createdAt: 600,
       metadata: { branch: { messageId: "", total: "two" } },
     }).metadata
     expect(metadata?.branch).toBeUndefined()
-  })
-
-  it("keeps legacy data role renderable as a system UI message", () => {
-    expect(
-      durableStoredMessageToUiMessage({
-        _id: "message_5",
-        role: "data",
-        content: "system data",
-        parts: [],
-        status: "completed",
-      }).role
-    ).toBe("system")
-  })
-
-  it("tolerates malformed or partial legacy rows", () => {
-    expect(
-      durableStoredMessageToUiMessage({
-        _id: "message_6",
-        role: "unexpected",
-        parts: [{ type: "text", text: "from parts" }],
-        status: "unknown",
-        metadata: ["not", "an", "object"],
-      })
-    ).toEqual({
-      id: "message_6",
-      role: "system",
-      content: "from parts",
-      parts: [{ type: "text", text: "from parts" }],
-      metadata: {
-        serverMessageId: "message_6",
-        durableStatus: "unknown",
-      },
-    })
   })
 })

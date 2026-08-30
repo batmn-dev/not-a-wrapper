@@ -1,0 +1,22 @@
+{
+  "kind": "convex-schema-contraction",
+  "id": "2026-08-29-message-attachments-removal",
+  "status": "contracted",
+  "description": "Remove the deprecated messages.attachments field after canonical file parts replaced it and the aggregate production count was verified at zero.",
+  "fields": [
+    {
+      "table": "messages",
+      "field": "attachments",
+      "expectedCount": 0
+    }
+  ],
+  "cleanupFunction": "none: aggregate production verification found zero rows with messages.attachments",
+  "verifier": "bun run convex:schema-preflight",
+  "rollback": "Reintroduce messages.attachments as an optional field in convex/schema.ts, deploy the compatibility schema, then retry the contraction after aggregate verification returns zero.",
+  "notes": {
+    "verifiedAt": "2026-08-29",
+    "legacyDataRoleCount": 0,
+    "stringOnlyMessageCount": 0,
+    "documentContentsPolicy": "Only aggregate counts were queried; no production document contents were printed."
+  }
+}

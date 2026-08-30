@@ -5,7 +5,6 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { SelectedRunProjection } from "@/convex/messages"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
-import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import {
@@ -57,7 +56,7 @@ type MessagesContextType = {
   selectedRun: SelectedRunProjection | null
   isLoading: boolean
   setMessages: React.Dispatch<React.SetStateAction<ExtendedUIMessage[]>>
-  /** Cache message locally and persist to Convex. Pass overrideChatId to handle stale closures during chat creation. */
+  /** Cache a local-only message. Pass overrideChatId for detached guest turns. */
   cacheAndAddMessage: (
     message: ExtendedUIMessage,
     overrideChatId?: string
@@ -146,7 +145,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     return onDeliveredPath ? rawSelectedRun : null
   }, [canSubscribeToMessages, rawSelectedRun, convexMessages])
 
-  const addMessageMutation = useMutation(api.messages.add)
   const selectBranchMutation = useMutation(api.messages.selectBranch)
 
   const serverMessages: ExtendedUIMessage[] = useMemo(() => {
@@ -291,27 +289,8 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         return true
       })
       await cacheMessages(effectiveChatId, updated)
-
-      if (getMessagePersistenceMode(effectiveChatId) === "server") {
-        try {
-          const textContent =
-            extractTextFromMessageParts(messageToCache.parts) ||
-            messageToCache.content ||
-            ""
-
-          await addMessageMutation({
-            chatId: effectiveChatId as Id<"chats">,
-            clientMessageId: messageToCache.id,
-            role: messageToCache.role as "user" | "assistant" | "system",
-            content: textContent,
-            parts: messageToCache.parts,
-          })
-        } catch (error) {
-          console.debug("Message persistence skipped:", error)
-        }
-      }
     },
-    [chatId, updateOptimisticMessages, addMessageMutation]
+    [chatId, updateOptimisticMessages]
   )
 
   const resetMessages = useCallback(async () => {

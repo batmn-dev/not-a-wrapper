@@ -303,9 +303,8 @@ type NewChatArgs = {
 
 /**
  * The one place a new chat row is authorized and constructed: project
- * ownership check, then the insert with the row's defaults. Shared by `create`
- * and `createWithFirstTurn` so a future chat field or default cannot silently
- * diverge between the compatibility path and the first-turn path.
+ * ownership check, then the insert with the row's defaults for atomic
+ * first-turn creation.
  */
 async function insertChatForUser(
   ctx: MutationCtx,
@@ -332,35 +331,6 @@ async function insertChatForUser(
   return { chatId, project }
 }
 
-/**
- * Create a new chat.
- *
- * NOT the first-turn path: the app's first turn creates its chat through
- * `createWithFirstTurn` below. Kept for API compatibility (clients running
- * pre-atomic bundles during a deploy still call it) — which is also why "no
- * chat without its first message" is an invariant of the first-turn path, not
- * of the schema.
- */
-export const create = authenticatedMutation({
-  args: {
-    title: v.optional(v.string()),
-    model: v.optional(v.string()),
-    systemPrompt: v.optional(v.string()),
-    projectId: v.optional(v.id("projects")),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now()
-    const { chatId, project } = await insertChatForUser(
-      ctx,
-      ctx.user,
-      args,
-      now
-    )
-    await recordKnownProjectActivity(ctx, project, now)
-    return chatId
-  },
-})
-
 type CreateWithFirstTurnArgs = NewChatArgs & {
   message: { clientMessageId: string; text: string }
   attachmentIds: Id<"chatAttachments">[]
@@ -370,11 +340,9 @@ type CreateWithFirstTurnArgs = NewChatArgs & {
  * Atomic first-turn creation: create the chat (optionally inside an owned
  * project), bind the complete staged-attachment set, and persist the initial
  * user message — one Convex transaction. Any failure (attachment validation,
- * project ownership) rolls the chat row back too, so THIS path can never
- * strand a chat without its first user message (a path invariant, not a
- * schema one, while the compatibility `create` above remains callable). The
- * generation run still starts via
- * POST /api/chat afterwards: prepareGeneration's idempotent writeUserMessage
+ * project ownership) rolls the chat row back too, so a durable chat can never
+ * be created without its first user message. The generation run still starts
+ * via POST /api/chat afterwards: prepareGeneration's idempotent writeUserMessage
  * finds this row by clientMessageId, adopts the run's provenance stamp, and
  * selects it instead of inserting a duplicate.
  *

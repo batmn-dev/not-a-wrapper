@@ -34,7 +34,7 @@ export type Message = {
   id: string | number
   chat_id: string
   user_id?: string | null
-  role: "user" | "assistant" | "system" | "data"
+  role: "user" | "assistant" | "system"
   content: string
   parts: unknown
   created_at?: string | null

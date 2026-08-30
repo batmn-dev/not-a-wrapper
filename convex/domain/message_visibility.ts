@@ -32,34 +32,9 @@ export function isSemanticMessagePart(part: unknown): boolean {
 }
 
 export function hasSemanticMessageParts(message: DurableMessageLike): boolean {
-  if (
-    Array.isArray(message.parts) &&
-    message.parts.some(isSemanticMessagePart)
-  ) {
-    return true
-  }
-
-  return typeof message.content === "string" && message.content.length > 0
-}
-
-export function normalizeSemanticMessageParts<T extends DurableMessageLike>(
-  message: T
-): T {
-  if (
-    Array.isArray(message.parts) &&
-    message.parts.some(isSemanticMessagePart)
-  ) {
-    return message
-  }
-
-  if (typeof message.content !== "string" || message.content.length === 0) {
-    return message
-  }
-
-  return {
-    ...message,
-    parts: [{ type: "text", text: message.content }],
-  }
+  return (
+    Array.isArray(message.parts) && message.parts.some(isSemanticMessagePart)
+  )
 }
 
 export function hasSemanticAssistantParts(
@@ -93,9 +68,7 @@ export function isVisibleChatMessage(message: DurableMessageLike): boolean {
 export function sanitizeVisibleChatMessages<T extends DurableMessageLike>(
   messages: T[]
 ): T[] {
-  return messages
-    .map(normalizeSemanticMessageParts)
-    .filter(isVisibleChatMessage)
+  return messages.filter(isVisibleChatMessage)
 }
 
 export function isModelHistoryMessage(message: DurableMessageLike): boolean {
@@ -106,9 +79,7 @@ export function isModelHistoryMessage(message: DurableMessageLike): boolean {
 export function sanitizeModelHistoryMessages<T extends DurableMessageLike>(
   messages: T[]
 ): T[] {
-  return messages
-    .map(normalizeSemanticMessageParts)
-    .filter(isModelHistoryMessage)
+  return messages.filter(isModelHistoryMessage)
 }
 
 const FAILED_TURN_HISTORY_MARKER =
@@ -142,7 +113,7 @@ export function projectModelHistoryMessages<T extends DurableMessageLike>(
       continue
     }
     if (!isModelHistoryMessage(message)) continue
-    projected.push(normalizeSemanticMessageParts(message))
+    projected.push(message)
   }
   return projected
 }

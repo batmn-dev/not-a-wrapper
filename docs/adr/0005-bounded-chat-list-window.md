@@ -39,7 +39,7 @@ Two independent fixes, staged so every full-history consumer gets its own read
 **1. Write once per turn.** The redundant run-completion `chats.updatedAt` bump was
 removed; the chat already re-orders at turn start. `chats.updatedAt` now means
 "last activity = turn start time." The turn-start, edit/title, and
-`messages.add`/`addBatch`/`selectBranch` bumps are unchanged.
+`messages.selectBranch` bumps are unchanged.
 
 **2. Bound the read; split full-history access onto dedicated reads.**
 

@@ -190,29 +190,6 @@ describe("event schema allow-list", () => {
     }
   })
 
-  it("pins every checkpoint counter emitted by the durable runtime to the enum", async () => {
-    // Regression pin for the silently-dropped "deduped" defect: extract every
-    // string literal passed to `counter(...)` in the durable runtime source
-    // and require the schema to accept it.
-    const { readFile } = await import("node:fs/promises")
-    const source = await readFile(
-      new URL(
-        "../../app/api/chat/durable-turn-runtime.ts",
-        import.meta.url
-      ),
-      "utf8"
-    )
-    const kinds = [...source.matchAll(/\.counter\(([^)]*)\)/g)].flatMap(
-      (call) => [...call[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1])
-    )
-    expect(kinds.length).toBeGreaterThan(0)
-    for (const kind of kinds) {
-      expect(validateChatPerfEvent("checkpoint", { kind })).toEqual({
-        ok: true,
-      })
-    }
-  })
-
   it("accepts the documented shapes", () => {
     const correlationId = createChatPerfCorrelationId()
     expect(

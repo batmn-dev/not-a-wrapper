@@ -35,7 +35,7 @@ A new authenticated Convex mutation (`convex/chats.ts`,
 transaction — performs:
 
 1. project ownership check (`requireOwnedProject`) when `projectId` is given;
-2. the chat insert (same row shape as `chats.create`);
+2. the chat insert through `insertChatForUser`;
 3. binding of the COMPLETE staged-attachment set through the shared
    validate-all-before-any-patch core (`files.bindStagedAttachmentsToChat`,
    extracted from `attachStagedFiles`, which now delegates to it);
@@ -46,9 +46,8 @@ transaction — performs:
 
 Any throw rolls back everything including the chat row (Convex mutation
 transactionality — a platform guarantee, not something this repo's fakes can
-exercise): THIS path can no longer strand a chat without its first user
-message. That is a path invariant, not a schema invariant — see Compatibility
-below. The mutation returns `{ chatId, userMessageId, attachments }`.
+exercise): a durable chat can no longer be created without its first user
+message. The mutation returns `{ chatId, userMessageId, attachments }`.
 
 ### 2. The generation still starts via `POST /api/chat` (ADR-0009/0011 intact)
 
@@ -90,16 +89,6 @@ Two seam adjustments make that claim exact:
   and overrides the token as above. The edit runner drops its
   `ensureChatExists` call entirely — its durable-chat guard already proves
   the chat exists, so edits never allocate.
-
-### Compatibility
-
-`chats.create` is retained for rolling-deploy compatibility (clients running
-pre-atomic bundles) but is no longer the app's first-turn path. While it
-remains deployed, old bundles and direct API callers can still create bare
-chat rows — so "no chat without its first message" holds for the app's
-first-turn path, not globally. Both mutations construct the chat row through
-one shared core (`insertChatForUser`), so a future chat field or default
-cannot silently diverge between them.
 
 ## Alternatives rejected
 

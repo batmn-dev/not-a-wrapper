@@ -103,13 +103,6 @@ const MAX_PREVIEW_LENGTH = 500
 // without bound by inventing step numbers.
 const MAX_DURABLE_USAGE_STEPS = 64
 
-const vMessageRole = v.union(
-  v.literal("user"),
-  v.literal("assistant"),
-  v.literal("system"),
-  v.literal("data")
-)
-
 const vToolSource = v.union(
   v.literal("builtin"),
   v.literal("third-party"),
@@ -261,7 +254,7 @@ export const generationRunWriteArgs = {
 
 const vStoredMessage = v.object({
   id: v.string(),
-  role: vMessageRole,
+  role: v.literal("user"),
   content: v.optional(v.string()),
   parts: v.any(),
 })
@@ -1641,7 +1634,7 @@ type GenerationInputPlanArgs = {
   tailMessageId?: string
   latestUserMessage?: {
     id: string
-    role: "user" | "assistant" | "system" | "data"
+    role: "user"
     content?: string
     parts: unknown
   }
@@ -1881,7 +1874,7 @@ type PrepareGenerationForChatArgs = {
   tailMessageId?: string
   latestUserMessage?: {
     id: string
-    role: "user" | "assistant" | "system" | "data"
+    role: "user"
     content?: string
     parts: unknown
   }

@@ -20,7 +20,7 @@ against the measured per-query split) found the cost was **not** one mechanism:
 - **`chats.getForCurrentUser` — read-set breadth.** It `.collect()`s the whole
   `chats.by_user` range, and the chat-turn lifecycle bumps `chats.updatedAt`
   inside that range several times per turn (`chatRuntime.ts` startGenerationRun /
-  markGenerationRunCompleted, `messages.ts` add/addBatch/selectBranch). Each bump
+  markGenerationRunCompleted, `messages.ts` selectBranch). Each bump
   re-collects and re-sorts every chat. A textbook hot write inside a read-set
   range; the model reproduces the ~225K.
 

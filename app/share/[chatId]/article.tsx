@@ -2,6 +2,7 @@ import { SourcesList } from "@/app/components/chat/sources-list"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { Message, MessageContent } from "@/components/ui/message"
+import type { Doc } from "@/convex/_generated/dataModel"
 import { getSources } from "@/lib/chat-messages/sources"
 import { cn } from "@/lib/utils"
 import type { UIMessage as MessageAISDK } from "@ai-sdk/react"
@@ -10,15 +11,10 @@ import Link from "next/link"
 import { Header } from "./header"
 
 // Message type compatible with Convex schema
-type ConvexMessage = {
-  _id: string
-  _creationTime: number
-  chatId: string
-  role: "user" | "assistant" | "system" | "data"
-  content?: string | null
-  parts?: MessageAISDK["parts"] | null
-  attachments?: unknown[] | null
-}
+type ConvexMessage = Pick<
+  Doc<"messages">,
+  "_id" | "_creationTime" | "chatId" | "role" | "content" | "parts"
+>
 
 type ArticleProps = {
   date: string
@@ -97,7 +93,7 @@ export default function Article({
                         "w-full min-w-full bg-transparent"
                     )}
                   >
-                    {message.content!}
+                    {message.content}
                   </MessageContent>
                 </Message>
                 {sources && sources.length > 0 && (

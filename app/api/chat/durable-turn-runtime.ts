@@ -532,7 +532,6 @@ export function buildDurablePrepareIntent(input: {
 
 export function toDurableUiMessage(message: Doc<"messages">): DurableUiMessage {
   const uiMessage = durableStoredMessageToUiMessage(message, {
-    partsMode: "stored",
     metadataMode: "runtime",
   })
 
