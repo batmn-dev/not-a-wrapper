@@ -26,37 +26,30 @@ export function ModelsSettings() {
   const { models } = useModel()
   const { isModelHidden } = useUserPreferences()
   const [searchQuery, setSearchQuery] = useState("")
+  const [pendingFavoriteOrder, setPendingFavoriteOrder] = useState<
+    string[] | null
+  >(null)
 
-  const {
-    favoriteModels: currentFavoriteModels,
-    updateFavoriteModels,
-    updateFavoriteModelsDebounced,
-  } = useFavoriteModels()
+  const { favoriteModels: currentFavoriteModels, updateFavoriteModels } =
+    useFavoriteModels()
+  const favoriteModelIds = pendingFavoriteOrder ?? currentFavoriteModels
 
   const favoriteModels: FavoriteModelItem[] = useMemo(() => {
-    if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
-      return []
-    }
-
-    return currentFavoriteModels
+    return favoriteModelIds
       .map((id: string) => {
         const model = models.find((m) => m.id === id)
         if (!model || isModelHidden(model.id)) return null
         return { ...model, isFavorite: true }
       })
       .filter(Boolean) as FavoriteModelItem[]
-  }, [currentFavoriteModels, models, isModelHidden])
+  }, [favoriteModelIds, models, isModelHidden])
 
   const availableModelSections = useMemo(() => {
-    if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
-      return []
-    }
-
     const normalizedSearchQuery = searchQuery.toLowerCase()
     const availableModels = models
       .filter(
         (model) =>
-          !currentFavoriteModels.includes(model.id) && !isModelHidden(model.id)
+          !favoriteModelIds.includes(model.id) && !isModelHidden(model.id)
       )
       .filter((model) =>
         [
@@ -66,35 +59,36 @@ export function ModelsSettings() {
       )
 
     return getOrderedModelSections(availableModels)
-  }, [models, currentFavoriteModels, isModelHidden, searchQuery])
+  }, [models, favoriteModelIds, isModelHidden, searchQuery])
 
   const handleReorder = (newOrder: FavoriteModelItem[]) => {
-    const newOrderIds = newOrder.map((item) => item.id)
+    setPendingFavoriteOrder(newOrder.map((item) => item.id))
+  }
 
-    updateFavoriteModelsDebounced(newOrderIds)
+  const commitFavoriteOrder = async () => {
+    if (!pendingFavoriteOrder) return
+    const committedOrder = pendingFavoriteOrder
+    await updateFavoriteModels(committedOrder)
+    setPendingFavoriteOrder((current) =>
+      current === committedOrder ? null : current
+    )
   }
 
   const toggleFavorite = (modelId: string) => {
-    if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
-      return
-    }
-
-    const isCurrentlyFavorite = currentFavoriteModels.includes(modelId)
+    setPendingFavoriteOrder(null)
+    const isCurrentlyFavorite = favoriteModelIds.includes(modelId)
     const newIds = isCurrentlyFavorite
-      ? currentFavoriteModels.filter((id: string) => id !== modelId)
-      : [...currentFavoriteModels, modelId]
+      ? favoriteModelIds.filter((id: string) => id !== modelId)
+      : [...favoriteModelIds, modelId]
 
-    updateFavoriteModels(newIds)
+    void updateFavoriteModels(newIds)
   }
 
   const removeFavorite = (modelId: string) => {
-    if (!currentFavoriteModels || !Array.isArray(currentFavoriteModels)) {
-      return
-    }
+    setPendingFavoriteOrder(null)
+    const newIds = favoriteModelIds.filter((id: string) => id !== modelId)
 
-    const newIds = currentFavoriteModels.filter((id: string) => id !== modelId)
-
-    updateFavoriteModels(newIds)
+    void updateFavoriteModels(newIds)
   }
 
   return (
@@ -114,7 +108,12 @@ export function ModelsSettings() {
               const ModelIcon = getModelIcon(model)
 
               return (
-                <Reorder.Item key={model.id} value={model} className="group">
+                <Reorder.Item
+                  key={model.id}
+                  value={model}
+                  className="group"
+                  onDragEnd={commitFavoriteOrder}
+                >
                   <div className="border-border flex items-center gap-3 rounded-lg border bg-transparent p-3">
                     <div className="text-muted-foreground cursor-grab opacity-60 transition-opacity group-hover:opacity-100 active:cursor-grabbing">
                       <Icon icon={RiDraggable} slotSize={16} />

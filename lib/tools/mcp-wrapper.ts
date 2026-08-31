@@ -5,18 +5,11 @@ import {
 } from "@/lib/config"
 import type { ServerInfo } from "@/lib/mcp/load-tools"
 import type { ToolSet } from "ai"
-import { extractToolErrorData, type ToolErrorCode } from "./errors"
-import { extractPolicyErrorData } from "./policy"
+import type { ToolErrorCode } from "./errors"
+import { wrapToolsWithExecutionPolicy } from "./execution-policy"
 import { ToolTraceCollector } from "./types"
 import type { ToolTrace } from "./types"
-import {
-  enrichToolError,
-  executeWithRetries,
-  extractAbortSignalFromOptions,
-  runWithToolAbortAndTimeout,
-  ToolTimeoutError,
-  truncateToolResult,
-} from "./utils"
+import { enrichToolError, ToolTimeoutError, truncateToolResult } from "./utils"
 
 // Compatibility exports for existing consumers.
 export { ToolTraceCollector, type ToolTrace }
@@ -65,171 +58,75 @@ export function wrapMcpTools(
   const serverFailureCounts = new Map<string, number>()
   const circuitThreshold = MCP_CIRCUIT_BREAKER_THRESHOLD
 
-  const wrapped: Record<string, unknown> = {}
+  return wrapToolsWithExecutionPolicy(tools, {
+    traceCollector,
+    requestId,
+    enforceToolBudget,
+    resolveAdapter: (name) => {
+      const serverInfo = toolServerMap.get(name)
+      const displayName = serverInfo?.displayName ?? name
+      // MCP annotation hints are advisory by default. Automatic retries are only
+      // enabled when the request context explicitly trusts the server AND the
+      // safety signal is clear (explicit idempotent + explicit non-destructive).
+      const hasExplicitNonDestructiveSignal =
+        serverInfo?.destructive === false || serverInfo?.readOnly === true
+      const retryMetadata =
+        serverInfo?.retrySafetyTrusted === true &&
+        serverInfo?.idempotent === true &&
+        hasExplicitNonDestructiveSignal
+          ? {
+              idempotent: true,
+              readOnly: serverInfo?.readOnly,
+              destructive: serverInfo?.destructive,
+            }
+          : undefined
 
-  for (const [name, t] of Object.entries(tools)) {
-    const original = t as Record<string, unknown>
+      // Keep circuit state isolated when server metadata is missing.
+      const circuitKey = serverInfo?.serverId ?? `tool:${name}`
 
-    // Provider-executed tools have no local execute function.
-    if (typeof original.execute !== "function") {
-      wrapped[name] = original
-      continue
-    }
-
-    const origExec = original.execute as (
-      params: unknown,
-      options: { toolCallId: string; [k: string]: unknown }
-    ) => Promise<unknown>
-
-    const serverInfo = toolServerMap.get(name)
-    const displayName = serverInfo?.displayName ?? name
-    const trustedRetryHints = serverInfo?.retrySafetyTrusted === true
-    // MCP annotation hints are advisory by default. Automatic retries are only
-    // enabled when the request context explicitly trusts the server AND the
-    // safety signal is clear (explicit idempotent + explicit non-destructive).
-    const hasExplicitNonDestructiveSignal =
-      serverInfo?.destructive === false || serverInfo?.readOnly === true
-    const retryMetadata =
-      trustedRetryHints &&
-      serverInfo?.idempotent === true &&
-      hasExplicitNonDestructiveSignal
-        ? {
-            idempotent: true,
-            readOnly: serverInfo?.readOnly,
-            destructive: serverInfo?.destructive,
+      return {
+        errorToolName: displayName,
+        timeoutMs,
+        retrySafety: retryMetadata,
+        retryLogContext: {
+          source: "mcp",
+          server: serverInfo?.serverName ?? "unknown",
+        },
+        preflight: () => {
+          const failures = serverFailureCounts.get(circuitKey) ?? 0
+          if (failures >= circuitThreshold) {
+            throw enrichToolError(
+              new Error(
+                `Server "${serverInfo?.serverName ?? displayName}" circuit open — ${failures} consecutive transient tool failures in this request`
+              ),
+              displayName
+            )
           }
-        : undefined
-
-    wrapped[name] = {
-      ...original,
-      execute: async (
-        params: unknown,
-        options: { toolCallId: string; [k: string]: unknown }
-      ): Promise<unknown> => {
-        const upstreamAbortSignal = extractAbortSignalFromOptions(options)
-        // Keep circuit state isolated when server metadata is missing.
-        const circuitKey = serverInfo?.serverId ?? `tool:${name}`
-        const failures = serverFailureCounts.get(circuitKey) ?? 0
-        if (failures >= circuitThreshold) {
-          throw enrichToolError(
-            new Error(
-              `Server "${serverInfo?.serverName ?? displayName}" circuit open — ${failures} consecutive transient tool failures in this request`
-            ),
-            displayName
-          )
-        }
-
-        const startMs = Date.now()
-        let success = true
-        let error: string | undefined
-        let resultSizeBytes: number | undefined
-        let errorCode: ToolErrorCode | undefined
-        let retryAfterSeconds: number | undefined
-        let budgetKeyMode: "platform" | "byok" | undefined
-        let budgetDenied: boolean | undefined
-        let retryCount = 0
-
-        try {
-          if (enforceToolBudget) {
-            await enforceToolBudget(name)
-          }
-
-          const { value: rawResult, retryCount: retries } =
-            await executeWithRetries({
-              toolName: name,
-              metadata: retryMetadata,
-              abortSignal: upstreamAbortSignal,
-              execute: async () =>
-                runWithToolAbortAndTimeout({
-                  toolName: name,
-                  timeoutMs,
-                  upstreamSignal: upstreamAbortSignal,
-                  operation: (combinedSignal) =>
-                    origExec(params, {
-                      ...options,
-                      abortSignal: combinedSignal,
-                    }),
-                }),
-              onRetryAttempt: (attempt) => {
-                console.warn(
-                  JSON.stringify({
-                    _tag: "tool_retry",
-                    requestId,
-                    tool: name,
-                    source: "mcp",
-                    server: serverInfo?.serverName ?? "unknown",
-                    attempt: attempt.attempt,
-                    maxAttempts: attempt.maxAttempts,
-                    delayMs: attempt.delayMs,
-                    errorCode: attempt.error.code,
-                  })
-                )
-              },
-            })
-          retryCount = retries
-
-          try {
-            const serialized = JSON.stringify(rawResult)
-            resultSizeBytes = new TextEncoder().encode(serialized).length
-          } catch {
-            // Non-serializable result — skip measurement, not critical
-          }
-
-          const truncatedResult = truncateToolResult(rawResult, {
+        },
+        transformResult: (result) =>
+          truncateToolResult(result, {
             maxBytes: maxResultBytes,
             toolName: name,
-          })
-
+          }),
+        onSuccess: () => {
           serverFailureCounts.delete(circuitKey)
-
-          return truncatedResult
-        } catch (err) {
-          success = false
-          error = err instanceof Error ? err.message : String(err)
-          const errorData = extractToolErrorData(err, { toolName: displayName })
-          errorCode = errorData.code
-          retryAfterSeconds = errorData.retryAfterSeconds
-
-          const policyData = extractPolicyErrorData(err)
-          if (policyData) {
-            budgetKeyMode = policyData.keyMode
-            budgetDenied = policyData.budgetDenied
-          }
-
-          if (isTransientCircuitFailure(errorCode)) {
+        },
+        onFailure: (facts) => {
+          if (isTransientCircuitFailure(facts.errorCode)) {
             serverFailureCounts.set(
               circuitKey,
               (serverFailureCounts.get(circuitKey) ?? 0) + 1
             )
           } else {
-            // Circuit breaker tracks consecutive transient failures only.
             serverFailureCounts.delete(circuitKey)
           }
-
           console.error(
-            `[tools/mcp] ${displayName} failed after ${Date.now() - startMs}ms:`,
-            error
+            `[tools/mcp] ${displayName} failed after ${facts.durationMs}ms:`,
+            facts.errorMessage
           )
-          throw enrichToolError(err, displayName)
-        } finally {
-          traceCollector.record({
-            toolName: name,
-            toolCallId: options.toolCallId,
-            requestId,
-            durationMs: Date.now() - startMs,
-            success,
-            error,
-            resultSizeBytes,
-            errorCode,
-            retryAfterSeconds,
-            budgetKeyMode,
-            budgetDenied,
-            retryCount,
-          })
-        }
-      },
-    }
-  }
-
-  return wrapped as ToolSet
+        },
+        transformError: (error) => enrichToolError(error, displayName),
+      }
+    },
+  })
 }

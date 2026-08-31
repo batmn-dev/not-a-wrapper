@@ -1,10 +1,7 @@
-import { paginationOptsValidator } from "convex/server"
 import { v } from "convex/values"
 import { redactSecretsInString } from "../lib/observability/secret-patterns"
-import type { Doc } from "./_generated/dataModel"
-import type { QueryCtx } from "./_generated/server"
-import { filterActiveChats, isChatActive } from "./lib/auth"
-import { authenticatedMutation, maybeAuthQuery } from "./lib/authedFunctions"
+import { isChatActive } from "./lib/auth"
+import { authenticatedMutation } from "./lib/authedFunctions"
 
 const MAX_PREVIEW_LENGTH = 500
 
@@ -18,31 +15,6 @@ function preparePreviewForPersistence(
   const redacted = redactSecretsInString(text)
   if (redacted.length <= MAX_PREVIEW_LENGTH) return redacted
   return redacted.slice(0, MAX_PREVIEW_LENGTH) + "…"
-}
-
-export async function filterToolCallLogPageForActiveChats(
-  ctx: Pick<QueryCtx, "db">,
-  user: Doc<"users">,
-  entries: readonly Doc<"toolCallLog">[]
-): Promise<Doc<"toolCallLog">[]> {
-  const chatIds = [
-    ...new Set(
-      entries.flatMap((entry) => (entry.chatId ? [entry.chatId] : []))
-    ),
-  ]
-  const chats = (
-    await Promise.all(chatIds.map(async (chatId) => await ctx.db.get(chatId)))
-  ).filter(
-    (chat): chat is Doc<"chats"> =>
-      chat !== null && chat.userId === user._id
-  )
-  const activeChatIds = new Set(
-    (await filterActiveChats(ctx, chats)).map((chat) => chat._id)
-  )
-
-  return entries.filter(
-    (entry) => !entry.chatId || activeChatIds.has(entry.chatId)
-  )
 }
 
 /**
@@ -128,49 +100,5 @@ export const log = authenticatedMutation({
       stateMutationKey: args.stateMutationKey,
       createdAt: Date.now(),
     })
-  },
-})
-
-export const listByChat = maybeAuthQuery({
-  args: { chatId: v.id("chats") },
-  handler: async (ctx, { chatId }) => {
-    const user = ctx.user
-    if (!user) return []
-
-    const chat = await ctx.db.get(chatId)
-    if (
-      !chat ||
-      chat.userId !== user._id ||
-      !(await isChatActive(ctx, chat))
-    ) {
-      return []
-    }
-
-    return await ctx.db
-      .query("toolCallLog")
-      .withIndex("by_chat", (q) => q.eq("chatId", chatId))
-      .order("desc")
-      .collect()
-  },
-})
-
-export const listByUser = maybeAuthQuery({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => {
-    const user = ctx.user
-    if (!user) {
-      return { page: [], isDone: true, continueCursor: "" }
-    }
-
-    const result = await ctx.db
-      .query("toolCallLog")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .order("desc")
-      .paginate(args.paginationOpts)
-
-    return {
-      ...result,
-      page: await filterToolCallLogPageForActiveChats(ctx, user, result.page),
-    }
   },
 })

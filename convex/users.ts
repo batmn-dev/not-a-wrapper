@@ -4,6 +4,7 @@ import {
   MAX_FILE_SIZE,
   normalizeFileMimeType,
 } from "../lib/file/policy"
+import { normalizeFavoriteModelIds } from "../lib/models/catalog"
 import type { Doc, Id } from "./_generated/dataModel"
 import { internalMutation, type MutationCtx } from "./_generated/server"
 import {
@@ -126,9 +127,13 @@ export const updateFavoriteModels = authenticatedMutation({
   args: {
     favoriteModels: v.array(v.string()),
   },
+  returns: v.array(v.string()),
   handler: async (ctx, { favoriteModels }) => {
-    await ctx.db.patch(ctx.user._id, { favoriteModels })
-    return favoriteModels
+    const normalizedFavoriteModels = normalizeFavoriteModelIds(favoriteModels)
+    await ctx.db.patch(ctx.user._id, {
+      favoriteModels: normalizedFavoriteModels,
+    })
+    return normalizedFavoriteModels
   },
 })
 

@@ -2,7 +2,6 @@ import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { describe, expect, it } from "vitest"
 import { createToolMetadataResolver } from "../metadata-resolver"
 import type { ToolMetadata } from "../types"
-import { buildToolInvocationMetadataByName } from "../ui-metadata"
 
 const builtInTool: ToolMetadata = {
   displayName: "Web Search",
@@ -183,26 +182,44 @@ describe("createToolMetadataResolver — precedence (documented effective behavi
 })
 
 describe("createToolMetadataResolver — toInvocationMetadataByName", () => {
-  it("matches buildToolInvocationMetadataByName byte-for-byte and never leaks resolver-only keys", () => {
-    const resolver = buildResolver()
-    const byName = resolver.toInvocationMetadataByName()
-
-    expect(byName).toEqual(
-      buildToolInvocationMetadataByName({
-        nonMcpMetadata: new Map([
-          ["web_search", builtInTool],
-          ["exa_search", thirdPartyTool],
-          ["extract_content", contentTool],
-        ]),
-        mcpToolServerMap: new Map([["github_create_issue", mcpTool]]),
-      })
-    )
-
-    // MCP entry is humanized and stripped of resolver-only fields (the shape is
-    // persisted/streamed, so it must stay ToolInvocationDisplayMetadata).
-    expect(byName.github_create_issue.displayName).toBe("Create Issue")
-    expect(byName.github_create_issue).not.toHaveProperty("mcpServer")
-    expect(byName.github_create_issue).not.toHaveProperty("policyHintsTrusted")
-    expect(byName.github_create_issue).not.toHaveProperty("retrySafetyTrusted")
+  it("projects the transport contract without resolver-only execution or trust facts", () => {
+    expect(
+      JSON.parse(JSON.stringify(buildResolver().toInvocationMetadataByName()))
+    ).toEqual({
+      web_search: {
+        displayName: "Web Search",
+        source: "builtin",
+        serviceName: "OpenAI",
+        icon: "search",
+        readOnly: true,
+        idempotent: true,
+      },
+      exa_search: {
+        displayName: "Exa Search",
+        source: "third-party",
+        serviceName: "Exa",
+        icon: "search",
+        estimatedCostPer1k: 5,
+        readOnly: true,
+        idempotent: true,
+      },
+      extract_content: {
+        displayName: "Extract Content",
+        source: "third-party",
+        serviceName: "Exa",
+        icon: "extract",
+        readOnly: true,
+      },
+      github_create_issue: {
+        displayName: "Create Issue",
+        source: "mcp",
+        serviceName: "GitHub MCP",
+        icon: "wrench",
+        readOnly: false,
+        destructive: false,
+        idempotent: true,
+        openWorld: true,
+      },
+    })
   })
 })

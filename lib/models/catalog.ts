@@ -778,6 +778,10 @@ export function resolveModelSelections(modelIds: readonly string[]): string[] {
   return normalized
 }
 
+export function normalizeFavoriteModelIds(modelIds: readonly string[]) {
+  return resolveModelSelections(modelIds).filter(isLogicalModelId)
+}
+
 /** Logical models a key for `provider` can serve (any catalog status). */
 export function getLogicalModelsServedByProvider(
   provider: Provider

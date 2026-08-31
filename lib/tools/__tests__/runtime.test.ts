@@ -1,7 +1,6 @@
 import type { ServerInfo } from "@/lib/mcp/load-tools"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ToolPolicyError } from "../policy"
-
 import {
   prepareToolRuntime,
   type PrepareToolRuntimeOptions,
@@ -28,8 +27,8 @@ const mocks = vi.hoisted(() => ({
       remaining: number
     }>
   },
-  // Simulates a failure after MCP clients open.
-  failTracing: false,
+  // Simulates an execution-wrapper failure after MCP clients open.
+  failExecutionWrapping: false,
 }))
 
 vi.mock("@/lib/posthog", () => ({
@@ -64,18 +63,19 @@ vi.mock("@/lib/tools/policy", async () => {
   }
 })
 
-vi.mock("@/lib/tools/utils", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/tools/utils")>(
-      "@/lib/tools/utils"
-    )
+vi.mock("@/lib/tools/execution-policy", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/tools/execution-policy")
+  >("@/lib/tools/execution-policy")
   return {
     ...actual,
-    wrapToolsWithTracing: (
-      ...args: Parameters<typeof actual.wrapToolsWithTracing>
+    wrapToolsWithExecutionPolicy: (
+      ...args: Parameters<typeof actual.wrapToolsWithExecutionPolicy>
     ) => {
-      if (mocks.failTracing) throw new Error("tracing wrap failed")
-      return actual.wrapToolsWithTracing(...args)
+      if (mocks.failExecutionWrapping) {
+        throw new Error("execution wrapping failed")
+      }
+      return actual.wrapToolsWithExecutionPolicy(...args)
     },
   }
 })
@@ -163,7 +163,7 @@ async function activeToolsForStep(
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.failTracing = false
+  mocks.failExecutionWrapping = false
   mocks.store = availableStore()
   mocks.getProviderTools.mockResolvedValue({ tools: {}, metadata: new Map() })
   mocks.getThirdPartyTools.mockResolvedValue({ tools: {}, metadata: new Map() })
@@ -485,7 +485,7 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
   })
 
   it("closes MCP clients when preparation fails after they open", async () => {
-    mocks.failTracing = true
+    mocks.failExecutionWrapping = true
     const close = vi.fn().mockResolvedValue(undefined)
     mocks.loadUserMcpTools.mockResolvedValue({
       tools: { mcp_tool: {} },
@@ -493,7 +493,7 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
       toolServerMap: new Map([["mcp_tool", serverInfo()]]),
       failedServerCount: 0,
     })
-    // A content tool makes the tracing wrapper run (and throw) after MCP loaded.
+    // A local tool makes execution wrapping fail after the MCP client opens.
     mocks.getContentExtractionTools.mockResolvedValue({
       tools: { extract_content: {} },
       metadata: new Map([["extract_content", meta({ source: "third-party" })]]),
@@ -508,7 +508,7 @@ describe("prepareToolRuntime — MCP client lifecycle", () => {
           onMcpClientsOpened,
         })
       )
-    ).rejects.toThrow("tracing wrap failed")
+    ).rejects.toThrow("execution wrapping failed")
 
     expect(close).toHaveBeenCalledTimes(1)
     // The telemetry hook still reported the opened-client count, so the

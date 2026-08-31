@@ -1,4 +1,5 @@
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import { resolveModelId } from "@/lib/models/model-id-migration"
 
 export type ConvexChat = Doc<"chats">
 
@@ -49,7 +50,7 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
     title: convexChat.title ?? null,
     title_source: convexChat.titleSource,
     title_generation: convexChat.titleGeneration,
-    model: convexChat.model ?? null,
+    model: convexChat.model ? resolveModelId(convexChat.model) : null,
     system_prompt: convexChat.systemPrompt ?? null,
     project_id: convexChat.projectId ?? null,
     public: convexChat.public,

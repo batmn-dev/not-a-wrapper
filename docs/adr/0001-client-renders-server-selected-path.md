@@ -8,9 +8,10 @@
 
 The backend owns message identity, non-destructive sibling **message branches**,
 and **selected path** derivation (`convex/domain/message_branches.ts`). The
-`getForChat` query returns **only the selected linear path**, annotating each
-message with a transient `metadata.branch` descriptor that lists its siblings by
-id. The client never receives the full branch tree.
+`getSelectedPath` query returns the selected linear path plus its reconciliation
+fingerprint, annotating each message with a transient `metadata.branch`
+descriptor that lists its siblings by id. The client never receives the full
+branch tree.
 
 The AI SDK's `useChat` holds a single flat array with no concept of siblings,
 and `sendMessage`/`regenerate` destructively truncate it

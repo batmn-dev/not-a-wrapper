@@ -30,7 +30,7 @@ import {
   isLocalChatId,
 } from "../identity"
 import { clearMessagesCache } from "../messages/api"
-import type { Chats } from "../types"
+import { convexChatToChat, type Chats } from "../types"
 import {
   cacheChat,
   deleteCachedChat,
@@ -45,7 +45,6 @@ import {
   applyOptimisticOps,
   dedupeById,
   deriveSidebarLoading,
-  mapConvexChat,
   partitionSidebarChats,
   type OptimisticOperation,
 } from "./sidebar-window"
@@ -228,8 +227,8 @@ export function ChatsProvider({
   const serverChats: Chats[] = useMemo(
     () =>
       dedupeById([
-        ...recentWindow.results.map(mapConvexChat),
-        ...(pinnedServerChats ?? []).map(mapConvexChat),
+        ...recentWindow.results.map(convexChatToChat),
+        ...(pinnedServerChats ?? []).map(convexChatToChat),
       ]),
     [recentWindow.results, pinnedServerChats]
   )

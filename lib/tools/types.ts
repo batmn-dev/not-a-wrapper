@@ -72,7 +72,7 @@ export type ToolTrace = {
  *
  * Lifecycle:
  *   1. Created by the Chat turn runtime before streamText()
- *   2. wrapMcpTools() / wrapToolsWithTracing() record traces during execute()
+ *   2. The shared execution policy records traces during execute()
  *   3. The Tool runtime's onStepFinish reads traces at step end and the
  *      outcome sinks project them into Convex, PostHog, and trace logs
  *   4. Garbage collected when the request ends

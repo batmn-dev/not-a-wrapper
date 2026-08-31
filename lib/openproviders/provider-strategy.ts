@@ -2,6 +2,7 @@ import type {
   ModelReasoningEffort,
   ModelReasoningSettings,
 } from "@/lib/models/types"
+import type { Provider } from "@/lib/provider-identity"
 import type { ToolMetadata } from "@/lib/tools/types"
 import { anthropic, createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogle, google } from "@ai-sdk/google"
@@ -12,7 +13,6 @@ import type { LanguageModelV4 } from "@ai-sdk/provider"
 import { createXai, xai } from "@ai-sdk/xai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import type { ToolSet } from "ai"
-import type { Provider } from "./types"
 
 /**
  * Per-model settings a strategy MAY consume when constructing the language
@@ -117,13 +117,14 @@ export type ProviderInstance = {
  * true about one provider's @ai-sdk SDK — how to instantiate its client (BYOK
  * key vs default/env credentials), its optional native search tool plus that
  * tool's display metadata, and its platform API-key environment variable.
- * Stateless; one per Provider, behind a registry keyed by `getProviderForModel`.
+ * Stateless; one per Provider, selected from the already-resolved model route's
+ * `providerId`.
  *
- * It deliberately does NOT own routing (the selector that reads catalog
- * membership), key selection/precedence (BYOK > env, decryption — it only
- * declares the env-var NAME; resolution consumes it), request shaping
- * (per-model request policy — see `shapeRequest`), or history adaptation
- * (a sibling seam with a different, non-1:1 taxonomy).
+ * It deliberately does NOT own route admission (the Route resolver already
+ * selected this provider), key selection/precedence (BYOK > env, decryption —
+ * it only declares the env-var NAME; resolution consumes it), request shaping
+ * (per-model request policy — see `shapeRequest`), or history adaptation (a
+ * sibling seam with a different, non-1:1 taxonomy).
  *
  * `languageModel` is synchronous: the registry is statically constructed and
  * the provider SDKs are eagerly imported, because model construction has

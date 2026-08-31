@@ -37,4 +37,33 @@ describe("classifyChatError", () => {
 
     expect(classifyChatError(wrapped)).toBe("provider_api")
   })
+
+  it.each([
+    ["lastError", { lastError: { statusCode: 429 } }, "rate_limit"],
+    ["errors", { errors: [{ statusCode: 429 }] }, "rate_limit"],
+    ["payment", { lastError: { statusCode: 402 } }, "provider_api"],
+  ])(
+    "classifies telemetry from AI SDK retry %s",
+    (_shape, wrapped, expected) => {
+      expect(classifyChatError(wrapped)).toBe(expected)
+    }
+  )
+
+  it("handles cyclic error causes", () => {
+    const error: { cause?: unknown; message: string } = {
+      message: "MCP tool timed out",
+    }
+    error.cause = error
+
+    expect(classifyChatError(error)).toBe("tool_timeout")
+  })
+
+  it("bounds nested error traversal", () => {
+    let error: unknown = { statusCode: 401 }
+    for (let depth = 0; depth < 5; depth += 1) {
+      error = { cause: error }
+    }
+
+    expect(classifyChatError(error)).toBe("unknown")
+  })
 })

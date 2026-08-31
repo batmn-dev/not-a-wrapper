@@ -1,8 +1,4 @@
 const CHAT_ROUTE_PATTERN = "/api/chat"
-const CHAT_CRITICAL_ROUTE_PATTERNS = [
-  CHAT_ROUTE_PATTERN,
-  "/api/user-preferences/favorite-models",
-]
 const HEALTHCHECK_ROUTE_PATTERNS = [
   "/api/health",
   "/healthz",
@@ -23,7 +19,6 @@ type TraceSamplerConfig = {
   chatHealthyRate: number
   chatFailureRate: number
   chatClientErrorRate: number
-  criticalApiRate: number
   defaultApiRate: number
   frontendRate: number
   healthcheckRate: number
@@ -68,7 +63,6 @@ function loadTraceSamplerConfig(): TraceSamplerConfig {
       "SENTRY_TRACES_RATE_CHAT_CLIENT_ERROR",
       0.5
     ),
-    criticalApiRate: parseRateFromEnv("SENTRY_TRACES_RATE_CRITICAL_API", 0.2),
     defaultApiRate: parseRateFromEnv("SENTRY_TRACES_RATE_DEFAULT_API", 0.05),
     frontendRate: parseRateFromEnv("SENTRY_TRACES_RATE_FRONTEND", 0.01),
     healthcheckRate: parseRateFromEnv("SENTRY_TRACES_RATE_HEALTHCHECK", 0),
@@ -201,14 +195,6 @@ export function sentryTracesSampler(
     // We sample at the max chat rate, then down-sample by final status
     // inside sentryBeforeSendTransaction once status_code is known.
     return sampleWithInheritance(samplingContext, getEnvelopeChatRate())
-  }
-
-  // Keep strong fidelity for other chat-critical API routes.
-  if (hasAnyPattern(transactionName, CHAT_CRITICAL_ROUTE_PATTERNS)) {
-    return sampleWithInheritance(
-      samplingContext,
-      traceSamplerConfig.criticalApiRate
-    )
   }
 
   // Down-sample lower-value API traffic.

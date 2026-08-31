@@ -5,10 +5,11 @@ import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
 import { fetchClient } from "@/lib/fetch"
 import {
   isLogicalModelId,
+  normalizeFavoriteModelIds,
   resolveModelSelection,
-  resolveModelSelections,
   type LogicalModelView,
 } from "@/lib/models/catalog"
+import { useUser } from "@/lib/user-store/provider"
 import {
   createContext,
   useCallback,
@@ -48,7 +49,6 @@ type ModelContextType = {
   modelPrefsHydrated: boolean
   setLastUsedModel: (model: string) => void
   isLoading: boolean
-  refreshFavoriteModelsSilent: () => Promise<void>
   refreshAll: () => Promise<void>
 }
 
@@ -63,18 +63,22 @@ function normalizeFavoriteModels(value: unknown): string[] {
 
   // Logical normalization (ADR-0020): aliases, successions, and old routed
   // ids collapse to logical ids, deduplicated while preserving user order.
-  const resolvedFavorites = resolveModelSelections(rawFavorites)
-  return resolvedFavorites.filter((entry) => isLogicalModelId(entry))
+  return normalizeFavoriteModelIds(rawFavorites)
 }
 
 export function ModelProvider({ children }: { children: React.ReactNode }) {
   const [rawModels, setRawModels] = useState<LogicalModelView[]>([])
-  // Keep first render deterministic between SSR and hydration.
-  // Persisted browser values are applied after mount.
-  const [favoriteModels, setFavoriteModels] = useState<string[]>([])
   const [lastUsedModel, setLastUsedModelState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [modelPrefsHydrated, setModelPrefsHydrated] = useState(false)
+  const [lastUsedModelHydrated, setLastUsedModelHydrated] = useState(false)
+  const { user } = useUser()
+
+  const favoriteModels = useMemo(
+    () => normalizeFavoriteModels(user?.favorite_models),
+    [user?.favorite_models]
+  )
+  const modelPrefsHydrated =
+    lastUsedModelHydrated && (!user || user.favorite_models !== null)
 
   const setLastUsedModel = useCallback((model: string) => {
     const resolvedModel = resolveModelSelection(model).modelId
@@ -130,65 +134,18 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const fetchFavoriteModels = useCallback(async () => {
-    try {
-      const response = await fetchClient(
-        "/api/user-preferences/favorite-models"
-      )
-      if (response.ok) {
-        const data = await response.json()
-        const normalized = normalizeFavoriteModels(data.favorite_models)
-        setFavoriteModels(normalized)
-        try {
-          localStorage.setItem(
-            "cachedFavoriteModels",
-            JSON.stringify(normalized)
-          )
-        } catch {}
-      }
-    } catch (error) {
-      console.error("Failed to fetch favorite models:", error)
-      setFavoriteModels([])
-    }
-  }, [])
-
-  const refreshFavoriteModelsSilent = useCallback(async () => {
-    try {
-      await fetchFavoriteModels()
-    } catch (error) {
-      console.error(
-        "❌ ModelProvider: Failed to silently refresh favorite models:",
-        error
-      )
-    }
-  }, [fetchFavoriteModels])
-
   const refreshAll = useCallback(async () => {
     setIsLoading(true)
     try {
-      // User key status is reactive via Convex, no need to fetch manually
-      await Promise.all([fetchModels(), fetchFavoriteModels()])
+      // User key status and favorites are reactive via Convex.
+      await fetchModels()
     } finally {
       setIsLoading(false)
     }
-  }, [fetchModels, fetchFavoriteModels])
+  }, [fetchModels])
 
-  // Hydrate cached browser-only model preferences after mount.
+  // Hydrate the browser-only last-used model after mount.
   useEffect(() => {
-    try {
-      const cachedFavoriteModels = localStorage.getItem("cachedFavoriteModels")
-      if (cachedFavoriteModels) {
-        const parsed = JSON.parse(cachedFavoriteModels)
-        const normalized = normalizeFavoriteModels(parsed)
-        setFavoriteModels(normalized)
-
-        const normalizedSerialized = JSON.stringify(normalized)
-        if (normalizedSerialized !== cachedFavoriteModels) {
-          localStorage.setItem("cachedFavoriteModels", normalizedSerialized)
-        }
-      }
-    } catch {}
-
     try {
       const cachedLastUsedModel = localStorage.getItem("lastUsedModel")
       const resolvedLastUsedModel = cachedLastUsedModel
@@ -205,20 +162,12 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
-    setModelPrefsHydrated(true)
+    setLastUsedModelHydrated(true)
   }, [])
 
   useEffect(() => {
-    const initFetch = async () => {
-      setIsLoading(true)
-      try {
-        await Promise.all([fetchModels(), fetchFavoriteModels()])
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    initFetch()
-  }, [fetchModels, fetchFavoriteModels])
+    void refreshAll()
+  }, [refreshAll])
 
   return (
     <ModelContext.Provider
@@ -230,7 +179,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
         modelPrefsHydrated,
         setLastUsedModel,
         isLoading,
-        refreshFavoriteModelsSilent,
         refreshAll,
       }}
     >

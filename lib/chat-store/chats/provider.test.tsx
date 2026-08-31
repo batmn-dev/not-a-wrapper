@@ -119,6 +119,7 @@ function durableChat() {
     _creationTime: 1,
     userId: "user-1",
     title: "Durable chat",
+    model: "o4-mini",
     public: false,
     pinned: true,
     updatedAt: 1,
@@ -317,6 +318,7 @@ describe("ChatsProvider guest local chats", () => {
     expect(capture.current?.chats.map((chat) => chat.id)).toEqual([
       "chat-server",
     ])
+    expect(capture.current?.chats[0]?.model).toBe("gpt-5-mini")
 
     let deleted: boolean | undefined
     await act(async () => {

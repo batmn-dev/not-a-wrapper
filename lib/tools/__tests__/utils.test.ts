@@ -1,14 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import { ToolExecutionError } from "../errors"
+import { wrapToolsWithExecutionPolicy } from "../execution-policy"
 import { ToolPolicyError } from "../policy"
 import { ToolTraceCollector } from "../types"
-import {
-  enrichToolError,
-  isTruncated,
-  truncateToolResult,
-  wrapToolsWithTracing,
-  wrapToolsWithTruncation,
-} from "../utils"
+import { enrichToolError, isTruncated, truncateToolResult } from "../utils"
 
 function serializedSize(value: unknown): number {
   try {
@@ -304,67 +299,6 @@ describe("isTruncated", () => {
   })
 })
 
-describe("wrapToolsWithTruncation", () => {
-  it("wraps execute functions with truncation", async () => {
-    const largeResult = "x".repeat(2000)
-    const mockTools = {
-      myTool: {
-        description: "A test tool",
-        execute: async () => largeResult,
-      },
-    }
-
-    const wrapped = wrapToolsWithTruncation(
-      mockTools as unknown as import("ai").ToolSet,
-      100
-    )
-    const wrappedTool = wrapped.myTool as unknown as {
-      execute: () => Promise<unknown>
-    }
-    const result = await wrappedTool.execute()
-
-    expect(typeof result).toBe("string")
-    expect((result as string).length).toBeLessThan(2000)
-    expect(result).toContain("[truncated — showing first")
-  })
-
-  it("preserves tool properties other than execute", () => {
-    const mockTools = {
-      myTool: {
-        description: "A test tool",
-        inputSchema: { type: "object" },
-        execute: async () => "result",
-      },
-    }
-
-    const wrapped = wrapToolsWithTruncation(
-      mockTools as unknown as import("ai").ToolSet,
-      1024
-    )
-    const wrappedTool = wrapped.myTool as Record<string, unknown>
-
-    expect(wrappedTool.description).toBe("A test tool")
-    expect(wrappedTool.inputSchema).toEqual({ type: "object" })
-  })
-
-  it("skips tools without execute functions", () => {
-    const mockTools = {
-      noExecTool: {
-        description: "No execute",
-      },
-    }
-
-    const wrapped = wrapToolsWithTruncation(
-      mockTools as unknown as import("ai").ToolSet,
-      1024
-    )
-    const wrappedTool = wrapped.noExecTool as Record<string, unknown>
-
-    expect(wrappedTool.description).toBe("No execute")
-    expect(wrappedTool.execute).toBeUndefined()
-  })
-})
-
 describe("structured tool errors", () => {
   it("enrichToolError returns ToolExecutionError with taxonomy code", () => {
     const err = enrichToolError(
@@ -391,7 +325,7 @@ describe("structured tool errors", () => {
     expect(enrichToolError(policyError, "web_search")).toBe(policyError)
   })
 
-  it("wrapToolsWithTracing records taxonomy code for failures", async () => {
+  it("records taxonomy code for failures", async () => {
     const traces = new ToolTraceCollector()
     const tools = {
       flaky_tool: {
@@ -402,10 +336,9 @@ describe("structured tool errors", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTracing(
+    const wrapped = wrapToolsWithExecutionPolicy(
       tools as unknown as import("ai").ToolSet,
-      traces,
-      "req_1"
+      { traceCollector: traces, requestId: "req_1" }
     )
 
     await expect(
@@ -421,7 +354,7 @@ describe("structured tool errors", () => {
   })
 })
 
-describe("wrapToolsWithTracing reliability", () => {
+describe("local tool execution policy", () => {
   it("cancels promptly when upstream abortSignal is aborted", async () => {
     const traces = new ToolTraceCollector()
     const tools = {
@@ -447,17 +380,19 @@ describe("wrapToolsWithTracing reliability", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTracing(
+    const wrapped = wrapToolsWithExecutionPolicy(
       tools as unknown as import("ai").ToolSet,
-      traces,
-      "req_abort",
-      undefined,
-      new Map([
-        [
-          "cancellable_tool",
-          { readOnly: true, idempotent: true, destructive: false },
-        ],
-      ])
+      {
+        traceCollector: traces,
+        requestId: "req_abort",
+        resolveAdapter: () => ({
+          retrySafety: {
+            readOnly: true,
+            idempotent: true,
+            destructive: false,
+          },
+        }),
+      }
     )
 
     const controller = new AbortController()
@@ -485,17 +420,19 @@ describe("wrapToolsWithTracing reliability", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTracing(
+    const wrapped = wrapToolsWithExecutionPolicy(
       tools as unknown as import("ai").ToolSet,
-      traces,
-      "req_retry",
-      undefined,
-      new Map([
-        [
-          "flaky_tool",
-          { readOnly: true, idempotent: true, destructive: false },
-        ],
-      ])
+      {
+        traceCollector: traces,
+        requestId: "req_retry",
+        resolveAdapter: () => ({
+          retrySafety: {
+            readOnly: true,
+            idempotent: true,
+            destructive: false,
+          },
+        }),
+      }
     )
 
     const result = await (wrapped.flaky_tool as { execute: Function }).execute(
@@ -520,17 +457,19 @@ describe("wrapToolsWithTracing reliability", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTracing(
+    const wrapped = wrapToolsWithExecutionPolicy(
       tools as unknown as import("ai").ToolSet,
-      traces,
-      "req_non_idempotent",
-      undefined,
-      new Map([
-        [
-          "write_tool",
-          { readOnly: false, idempotent: false, destructive: false },
-        ],
-      ])
+      {
+        traceCollector: traces,
+        requestId: "req_non_idempotent",
+        resolveAdapter: () => ({
+          retrySafety: {
+            readOnly: false,
+            idempotent: false,
+            destructive: false,
+          },
+        }),
+      }
     )
 
     await expect(
@@ -562,17 +501,19 @@ describe("wrapToolsWithTracing reliability", () => {
       },
     }
 
-    const wrapped = wrapToolsWithTracing(
+    const wrapped = wrapToolsWithExecutionPolicy(
       tools as unknown as import("ai").ToolSet,
-      traces,
-      "req_no_retry",
-      undefined,
-      new Map([
-        [
-          "guarded_tool",
-          { readOnly: true, idempotent: true, destructive: false },
-        ],
-      ])
+      {
+        traceCollector: traces,
+        requestId: "req_no_retry",
+        resolveAdapter: () => ({
+          retrySafety: {
+            readOnly: true,
+            idempotent: true,
+            destructive: false,
+          },
+        }),
+      }
     )
 
     await expect(

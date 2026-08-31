@@ -130,7 +130,6 @@ bun run lint
 bun run typecheck
 bun run test
 bun run build:next
-bun run convex:schema-guard
 ```
 
 Use `bun run test`; the configured test runner is Vitest.

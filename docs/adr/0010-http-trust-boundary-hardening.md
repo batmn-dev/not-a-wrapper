@@ -42,12 +42,12 @@ call. Migrated: `user-keys`, `mcp-servers`, `mcp-servers/test`, `projects/[id]`,
 `user-preferences/favorite-models`, `providers`. `/api/providers` no longer reads
 a client `userId`.
 
-Follow-up (2026-08-30): `/api/providers` and the
-`/api/projects/[projectId]` HTTP adapter were retired after caller-reachability
-checks found no production consumer. Provider admission already resolves
-server credentials directly, while project screens use the owner-checked
-Convex project functions. The Projects feature and `/projects` page remain;
-only the duplicate Next.js adapter was removed.
+Follow-up (2026-08-30): `/api/providers`, `/api/projects/[projectId]`, and
+`/api/user-preferences/favorite-models` were retired after caller-reachability
+checks found no need for duplicate Next.js adapters. Provider admission resolves
+server credentials directly, project screens use owner-checked Convex functions,
+and favorite models read and write through the reactive authenticated Convex
+user state. The Projects feature and `/projects` page remain.
 
 CSRF is now a real double-submit: `validateCsrfDoubleSubmit` requires the header
 token to equal the cookie token **and** to carry a valid signature, compared with

@@ -1,5 +1,3 @@
-import type { Doc } from "@/convex/_generated/dataModel"
-import { resolveModelId } from "@/lib/models/model-id-migration"
 import { isOptimisticChatId } from "../identity"
 import type { Chats } from "../types"
 
@@ -13,29 +11,6 @@ type OptimisticUpdate = {
 type OptimisticDelete = { type: "delete"; id: string }
 export type OptimisticOperation =
   OptimisticAdd | OptimisticUpdate | OptimisticDelete
-
-export function mapConvexChat(chat: Doc<"chats">): Chats {
-  return {
-    id: chat._id,
-    user_id: chat.userId,
-    title: chat.title ?? null,
-    title_source: chat.titleSource,
-    title_generation: chat.titleGeneration,
-    model: chat.model ? resolveModelId(chat.model) : null,
-    system_prompt: chat.systemPrompt ?? null,
-    project_id: chat.projectId ?? null,
-    public: chat.public,
-    pinned: chat.pinned,
-    pinned_at: chat.pinnedAt ? new Date(chat.pinnedAt).toISOString() : null,
-    created_at: new Date(chat._creationTime).toISOString(),
-    updated_at: chat.updatedAt ? new Date(chat.updatedAt).toISOString() : null,
-    live_run_status: chat.liveRunStatus ?? null,
-    live_run_fresh_until: chat.liveRunFreshUntil ?? null,
-    last_run_ended_at: chat.lastRunEndedAt ?? null,
-    last_run_status: chat.lastRunStatus ?? null,
-    last_read_at: chat.lastReadAt ?? null,
-  }
-}
 
 /** Keep the first occurrence of each chat id (window before pinned). */
 export function dedupeById(chats: Chats[]): Chats[] {

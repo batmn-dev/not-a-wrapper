@@ -1,15 +1,8 @@
 import type { UIMessage } from "ai"
-import type {
-  AdaptationContext,
-  AdaptationResult,
-  AdaptationWarning,
-  ProviderHistoryAdapter,
-} from "./types"
 import {
-  createEmptyStats,
+  defineHistoryAdapter,
+  dropNonFinalToolPart,
   incrementStat,
-  isToolPart,
-  isToolPartFinal,
   stripCallProviderMetadata,
 } from "./types"
 
@@ -58,7 +51,7 @@ function isDropByType(type: string): boolean {
   )
 }
 
-export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
+export const openaiCompatibleAdapter = defineHistoryAdapter({
   providerId: "openai-compatible",
   metadata: {
     droppedPartTypes: new Set([
@@ -72,16 +65,8 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
     description: "OpenAI-compatible format — shared for xAI + Mistral",
   },
 
-  async adaptMessages(
-    messages: readonly UIMessage[],
-    _context: AdaptationContext
-  ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    const stats = createEmptyStats(messages.length, totalPartsOriginal)
-    const warnings: AdaptationWarning[] = []
+  async adaptMessages(messages, _context, session) {
+    const { stats, warnings } = session
     const adaptedMessages: UIMessage[] = []
 
     for (const [messageIndex, message] of messages.entries()) {
@@ -99,17 +84,7 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
           continue
         }
 
-        if (
-          isToolPart(part) &&
-          "state" in (part as Record<string, unknown>) &&
-          !isToolPartFinal(part as { state?: string })
-        ) {
-          incrementStat(stats.partsDropped, type)
-          warnings.push({
-            code: "non_final_state_dropped",
-            messageIndex,
-            detail: `Dropped non-final tool part (${type}).`,
-          })
+        if (dropNonFinalToolPart(part, messageIndex, session)) {
           continue
         }
 
@@ -236,18 +211,6 @@ export const openaiCompatibleAdapter: ProviderHistoryAdapter = {
       })
     }
 
-    stats.adaptedMessageCount = adaptedMessages.length
-    stats.totalPartsAdapted = adaptedMessages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    stats.droppedMessages +=
-      messages.length - adaptedMessages.length - stats.droppedMessages
-
-    return {
-      messages: adaptedMessages,
-      stats,
-      warnings,
-    }
+    return adaptedMessages
   },
-}
+})

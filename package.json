@@ -16,7 +16,6 @@
     "dev:convex": "convex dev",
     "build": "bun run convex:deploy",
     "build:next": "next build",
-    "convex:schema-guard": "node scripts/convex-schema-contract-guard.mjs --fetch-base",
     "convex:schema-preflight": "node scripts/convex-schema-contract-preflight.mjs --fetch-base --prod --require-diff-base",
     "convex:schema-preflight:dry-run": "node scripts/convex-schema-contract-preflight.mjs --fetch-base --require-diff-base --dry-run",
     "convex:deploy": "node scripts/convex-deploy.mjs",

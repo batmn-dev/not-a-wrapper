@@ -1,5 +1,5 @@
 import { getProviderStrategy } from "@/lib/openproviders/provider-strategy"
-import type { Provider } from "@/lib/openproviders/types"
+import type { Provider } from "@/lib/provider-identity"
 import type { ToolSet } from "ai"
 import type { ToolMetadata } from "./types"
 
@@ -13,7 +13,7 @@ import type { ToolMetadata } from "./types"
  * convention. Providers without a native search tool (mistral, perplexity)
  * return an empty set.
  *
- * @param providerId - The provider string from getProviderForModel()
+ * @param providerId - The provider id from the resolved model route
  * @param apiKey - The resolved API key (BYOK or undefined for env fallback)
  */
 export async function getProviderTools(

@@ -18,6 +18,7 @@ import {
   type ToolPolicyInput,
   type UserTier,
 } from "@/lib/tools/capability-policy"
+import { wrapToolsWithExecutionPolicy } from "@/lib/tools/execution-policy"
 import { ToolTraceCollector, wrapMcpTools } from "@/lib/tools/mcp-wrapper"
 import {
   createToolMetadataResolver,
@@ -649,30 +650,31 @@ async function buildToolRuntime(
     }) as ToolSet
   }
 
-  const { wrapToolsWithTracing } = await import("@/lib/tools/utils")
   if (Object.keys(thirdPartyTools).length > 0) {
-    thirdPartyTools = wrapToolsWithTracing(
-      thirdPartyTools,
+    thirdPartyTools = wrapToolsWithExecutionPolicy(thirdPartyTools, {
       traceCollector,
       requestId,
-      async (toolName) => {
+      enforceToolBudget: async (toolName) => {
         if (!thirdPartyBudgetEnforcer) return
         await thirdPartyBudgetEnforcer(toolName)
       },
-      thirdPartyToolMetadata
-    )
+      resolveAdapter: (toolName) => ({
+        retrySafety: thirdPartyToolMetadata.get(toolName),
+      }),
+    })
   }
   if (Object.keys(contentTools).length > 0) {
-    contentTools = wrapToolsWithTracing(
-      contentTools,
+    contentTools = wrapToolsWithExecutionPolicy(contentTools, {
       traceCollector,
       requestId,
-      async (toolName) => {
+      enforceToolBudget: async (toolName) => {
         if (!contentBudgetEnforcer) return
         await contentBudgetEnforcer(toolName)
       },
-      contentToolMetadata
-    )
+      resolveAdapter: (toolName) => ({
+        retrySafety: contentToolMetadata.get(toolName),
+      }),
+    })
   }
 
   const toolLayers: ToolLayerMap = {

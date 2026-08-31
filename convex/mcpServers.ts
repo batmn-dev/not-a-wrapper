@@ -1,5 +1,4 @@
 import { v } from "convex/values"
-import { internalMutation } from "./_generated/server"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -284,28 +283,5 @@ export const updateConnectionStatus = ownedMcpServerMutation({
     }
 
     await ctx.db.patch(ctx.server._id, patch)
-  },
-})
-
-/** Authless internal path; callers must establish user authority. */
-export const internalUpdateConnectionStatus = internalMutation({
-  args: {
-    serverId: v.id("mcpServers"),
-    lastConnectedAt: v.optional(v.number()),
-    lastError: v.optional(v.string()),
-  },
-  handler: async (ctx, { serverId, lastConnectedAt, lastError }) => {
-    const server = await ctx.db.get(serverId)
-    if (!server) return
-
-    const patch: Record<string, unknown> = {}
-    if (lastConnectedAt !== undefined) patch.lastConnectedAt = lastConnectedAt
-    if (lastError !== undefined) patch.lastError = lastError
-
-    if (lastConnectedAt && !lastError) {
-      patch.lastError = undefined
-    }
-
-    await ctx.db.patch(serverId, patch)
   },
 })

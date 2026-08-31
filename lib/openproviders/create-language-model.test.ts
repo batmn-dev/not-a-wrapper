@@ -3,26 +3,20 @@ import { describe, expect, it } from "vitest"
 import { createLanguageModel } from "./create-language-model"
 
 describe("createLanguageModel", () => {
-  it("accepts catalog model configs and resolves legacy aliases", () => {
+  it("builds the already-resolved catalog route", () => {
     const modelConfig = getModelInfo("gpt-5-mini")
     expect(modelConfig).toBeDefined()
 
     expect(createLanguageModel(modelConfig!, "test-api-key").modelId).toBe(
       "gpt-5-mini"
     )
-    expect(createLanguageModel("o4-mini", "test-api-key").modelId).toBe(
-      "gpt-5-mini"
-    )
-    expect(createLanguageModel("deepseek-r1", "test-api-key").modelId).toBe(
-      "openai/gpt-oss-120b"
-    )
   })
 
-  it("uses OpenRouter runtime behavior for prefixed model ids", () => {
-    const model = createLanguageModel(
-      "openrouter:openai/gpt-oss-120b",
-      "test-api-key"
-    ) as unknown as {
+  it("uses the resolved route provider instead of deriving one from its id", () => {
+    const route = getModelInfo("openrouter:openai/gpt-oss-120b")
+    expect(route).toBeDefined()
+
+    const model = createLanguageModel(route!, "test-api-key") as unknown as {
       config?: { compatibility?: string }
       modelId?: string
       provider?: string
@@ -41,12 +35,5 @@ describe("createLanguageModel", () => {
       settings?: { reasoning?: unknown }
     }
     expect(configured.settings?.reasoning).toEqual({ effort: "medium" })
-
-    // Bare string ids carry no catalog config — prior construction unchanged.
-    const bare = createLanguageModel(
-      "openrouter:openai/gpt-oss-120b",
-      "test-api-key"
-    ) as { settings?: { reasoning?: unknown } }
-    expect(bare.settings?.reasoning).toBeUndefined()
   })
 })

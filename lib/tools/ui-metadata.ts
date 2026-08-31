@@ -1,18 +1,18 @@
-import type { ServerInfo } from "@/lib/mcp/load-tools"
 import type { ModelReasoningEffort } from "@/lib/models/types"
-import type { ToolMetadata, ToolSource } from "./types"
+import type { ResolvedToolMetadata } from "./metadata-resolver"
 
-export type ToolInvocationDisplayMetadata = {
-  displayName: string
-  source: ToolSource
-  serviceName: string
-  icon?: ToolMetadata["icon"]
-  estimatedCostPer1k?: number
-  readOnly?: boolean
-  destructive?: boolean
-  idempotent?: boolean
-  openWorld?: boolean
-}
+export type ToolInvocationDisplayMetadata = Pick<
+  ResolvedToolMetadata,
+  | "displayName"
+  | "source"
+  | "serviceName"
+  | "icon"
+  | "estimatedCostPer1k"
+  | "readOnly"
+  | "destructive"
+  | "idempotent"
+  | "openWorld"
+>
 
 export type ToolInvocationMetadataByName = Record<
   string,
@@ -60,49 +60,20 @@ export function humanizeToolName(name: string): string {
     .join(" ")
 }
 
-function toDisplayMetadata(meta: ToolMetadata): ToolInvocationDisplayMetadata {
+export function toToolInvocationDisplayMetadata(
+  metadata: ResolvedToolMetadata
+): ToolInvocationDisplayMetadata {
   return {
-    displayName: meta.displayName,
-    source: meta.source,
-    serviceName: meta.serviceName,
-    icon: meta.icon,
-    estimatedCostPer1k: meta.estimatedCostPer1k,
-    readOnly: meta.readOnly,
-    destructive: meta.destructive,
-    idempotent: meta.idempotent,
-    openWorld: meta.openWorld,
+    displayName: metadata.displayName,
+    source: metadata.source,
+    serviceName: metadata.serviceName,
+    icon: metadata.icon,
+    estimatedCostPer1k: metadata.estimatedCostPer1k,
+    readOnly: metadata.readOnly,
+    destructive: metadata.destructive,
+    idempotent: metadata.idempotent,
+    openWorld: metadata.openWorld,
   }
-}
-
-function toMcpDisplayMetadata(info: ServerInfo): ToolInvocationDisplayMetadata {
-  return {
-    displayName: humanizeToolName(info.displayName),
-    source: "mcp",
-    serviceName: info.serverName,
-    icon: "wrench",
-    readOnly: info.readOnly,
-    destructive: info.destructive,
-    idempotent: info.idempotent,
-    openWorld: info.openWorld,
-  }
-}
-
-export function buildToolInvocationMetadataByName(options: {
-  nonMcpMetadata: ReadonlyMap<string, ToolMetadata>
-  mcpToolServerMap: ReadonlyMap<string, ServerInfo>
-}): ToolInvocationMetadataByName {
-  const { nonMcpMetadata, mcpToolServerMap } = options
-  const byName: ToolInvocationMetadataByName = {}
-
-  for (const [toolName, meta] of nonMcpMetadata) {
-    byName[toolName] = toDisplayMetadata(meta)
-  }
-
-  for (const [toolName, info] of mcpToolServerMap) {
-    byName[toolName] = toMcpDisplayMetadata(info)
-  }
-
-  return byName
 }
 
 export function buildStartToolInvocationStreamMetadata(

@@ -1,12 +1,6 @@
 import type { UIMessage } from "ai"
-import type {
-  AdaptationContext,
-  AdaptationResult,
-  AdaptationWarning,
-  ProviderHistoryAdapter,
-} from "./types"
 import {
-  createEmptyStats,
+  defineHistoryAdapter,
   incrementStat,
   stripCallProviderMetadata,
 } from "./types"
@@ -17,7 +11,7 @@ function getPartType(part: MessagePart): string {
   return (part as { type?: string }).type ?? "unknown"
 }
 
-export const textOnlyAdapter: ProviderHistoryAdapter = {
+export const textOnlyAdapter = defineHistoryAdapter({
   providerId: "text-only",
   metadata: {
     droppedPartTypes: new Set([
@@ -34,16 +28,8 @@ export const textOnlyAdapter: ProviderHistoryAdapter = {
     description: "Text-only providers — strip everything except text",
   },
 
-  async adaptMessages(
-    messages: readonly UIMessage[],
-    _context: AdaptationContext
-  ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    const stats = createEmptyStats(messages.length, totalPartsOriginal)
-    const warnings: AdaptationWarning[] = []
+  async adaptMessages(messages, _context, session) {
+    const { stats, warnings } = session
     const adaptedMessages: UIMessage[] = []
 
     for (const [messageIndex, message] of messages.entries()) {
@@ -92,18 +78,6 @@ export const textOnlyAdapter: ProviderHistoryAdapter = {
       })
     }
 
-    stats.adaptedMessageCount = adaptedMessages.length
-    stats.totalPartsAdapted = adaptedMessages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    stats.droppedMessages +=
-      messages.length - adaptedMessages.length - stats.droppedMessages
-
-    return {
-      messages: adaptedMessages,
-      stats,
-      warnings,
-    }
+    return adaptedMessages
   },
-}
+})

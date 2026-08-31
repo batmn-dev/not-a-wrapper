@@ -54,7 +54,7 @@ export function mergeUserProfileWithConvexFields(
       user.last_active_at
     ),
     created_at: String(convexUser._creationTime),
-    favorite_models: convexUser.favoriteModels ?? user.favorite_models,
+    favorite_models: convexUser.favoriteModels ?? user.favorite_models ?? [],
     system_prompt: convexUser.systemPrompt ?? user.system_prompt,
   }
 }
