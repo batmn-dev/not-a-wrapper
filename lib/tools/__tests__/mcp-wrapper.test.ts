@@ -205,9 +205,10 @@ describe("wrapMcpTools", () => {
       .mockRejectedValueOnce(new Error("fetch failed ECONNREFUSED"))
       .mockRejectedValueOnce(new Error("fetch failed ECONNREFUSED"))
 
+    const config = makeConfig()
     const wrapped = wrapMcpTools(
       { test_tool: makeTool(execute) } as unknown as ToolSet,
-      makeConfig()
+      config
     )
 
     await expect(
@@ -250,6 +251,16 @@ describe("wrapMcpTools", () => {
       )
     ).rejects.toThrow(/circuit open/i)
 
+    expect(config.traceCollector.get("call_reset_6")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/circuit open/i),
+    })
+    await expect(
+      (wrapped.test_tool as { execute: Function }).execute(
+        {},
+        { toolCallId: "call_reset_7" }
+      )
+    ).rejects.toThrow(/circuit open/i)
     expect(execute).toHaveBeenCalledTimes(5)
   })
 

@@ -112,13 +112,15 @@ export function wrapMcpTools(
           serverFailureCounts.delete(circuitKey)
         },
         onFailure: (facts) => {
-          if (isTransientCircuitFailure(facts.errorCode)) {
-            serverFailureCounts.set(
-              circuitKey,
-              (serverFailureCounts.get(circuitKey) ?? 0) + 1
-            )
-          } else {
-            serverFailureCounts.delete(circuitKey)
+          if (facts.stage === "execution") {
+            if (isTransientCircuitFailure(facts.errorCode)) {
+              serverFailureCounts.set(
+                circuitKey,
+                (serverFailureCounts.get(circuitKey) ?? 0) + 1
+              )
+            } else {
+              serverFailureCounts.delete(circuitKey)
+            }
           }
           console.error(
             `[tools/mcp] ${displayName} failed after ${facts.durationMs}ms:`,

@@ -20,6 +20,7 @@ type ToolExecutionFailureFacts = {
   durationMs: number
   errorMessage: string
   errorCode: ToolErrorCode
+  stage: "preflight" | "execution"
   retryAfterSeconds?: number
 }
 
@@ -66,10 +67,9 @@ export function wrapToolsWithExecutionPolicy(
     wrapped[toolName] = {
       ...original,
       execute: async (input: unknown, options: ToolExecuteOptions) => {
-        adapter.preflight?.()
-
         const startMs = Date.now()
         const upstreamAbortSignal = extractAbortSignalFromOptions(options)
+        let stage: ToolExecutionFailureFacts["stage"] = "preflight"
         let success = true
         let error: string | undefined
         let resultSizeBytes: number | undefined
@@ -80,6 +80,8 @@ export function wrapToolsWithExecutionPolicy(
         let retryCount = 0
 
         try {
+          adapter.preflight?.()
+          stage = "execution"
           await config.enforceToolBudget?.(toolName)
 
           const execution = await executeWithRetries({
@@ -143,6 +145,7 @@ export function wrapToolsWithExecutionPolicy(
             durationMs: Date.now() - startMs,
             errorMessage: error,
             errorCode,
+            stage,
             retryAfterSeconds,
           })
           throw adapter.transformError ? adapter.transformError(caught) : caught
