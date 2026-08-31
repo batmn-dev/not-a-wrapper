@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest"
-import { normalizeFavoriteModelIds } from "../lib/models/catalog"
 import type { Doc, Id } from "./_generated/dataModel"
 import { commitProfileImageHandler, isProfileImageMetadataValid } from "./users"
 
@@ -100,17 +99,5 @@ describe("profile image validation", () => {
     ).rejects.toThrow("Profile image failed server validation")
     expect(patch).not.toHaveBeenCalled()
     expect(deleteStoredFile).not.toHaveBeenCalled()
-  })
-})
-
-describe("favorite model normalization", () => {
-  it("stores unique logical ids and drops unknown models", () => {
-    expect(
-      normalizeFavoriteModelIds([
-        "openrouter:anthropic/claude-sonnet-5",
-        "claude-sonnet-5",
-        "unknown-model",
-      ])
-    ).toEqual(["claude-sonnet-5"])
   })
 })

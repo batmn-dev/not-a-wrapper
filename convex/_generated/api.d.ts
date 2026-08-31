@@ -21,6 +21,7 @@ import type * as domain_generation_run_liveness from "../domain/generation_run_l
 import type * as domain_message_branch_writes from "../domain/message_branch_writes.js";
 import type * as domain_message_branches from "../domain/message_branches.js";
 import type * as domain_message_contract from "../domain/message_contract.js";
+import type * as domain_message_facts from "../domain/message_facts.js";
 import type * as domain_message_parts from "../domain/message_parts.js";
 import type * as domain_message_visibility from "../domain/message_visibility.js";
 import type * as domain_project_activity from "../domain/project_activity.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   "domain/message_branch_writes": typeof domain_message_branch_writes;
   "domain/message_branches": typeof domain_message_branches;
   "domain/message_contract": typeof domain_message_contract;
+  "domain/message_facts": typeof domain_message_facts;
   "domain/message_parts": typeof domain_message_parts;
   "domain/message_visibility": typeof domain_message_visibility;
   "domain/project_activity": typeof domain_project_activity;

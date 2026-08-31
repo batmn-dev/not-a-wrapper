@@ -1,6 +1,7 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import { useModel } from "@/lib/model-store/provider"
+import { normalizeFavoriteModelIds } from "@/lib/models/catalog"
 import type { OptimisticLocalStore } from "convex/browser"
 import { useMutation } from "convex/react"
 import { useCallback, useMemo } from "react"
@@ -37,7 +38,7 @@ export function useFavoriteModels() {
     async (nextFavoriteModels: string[]) => {
       try {
         await updateFavoriteModelsMutation({
-          favoriteModels: nextFavoriteModels,
+          favoriteModels: normalizeFavoriteModelIds(nextFavoriteModels),
         })
       } catch (error) {
         const message =
