@@ -21,8 +21,6 @@ import {
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { recordChatActivity } from "./domain/project_activity"
 import {
-  getAuthorizedChatForRead,
-  getCurrentUser,
   isChatActive,
   requireOwnedChat,
 } from "./lib/auth"
@@ -80,14 +78,6 @@ function stripRunLinkageForViewer<
   })
 }
 
-async function isChatOwner(
-  ctx: QueryCtx,
-  chat: Doc<"chats">
-): Promise<boolean> {
-  const viewer = await getCurrentUser(ctx)
-  return viewer !== null && chat.userId === viewer._id
-}
-
 async function listMessagesByChatOrder(
   ctx: QueryCtx | MutationCtx,
   chatId: Id<"chats">
@@ -96,19 +86,6 @@ async function listMessagesByChatOrder(
     .query("messages")
     .withIndex("by_chat_order", (q) => q.eq("chatId", chatId))
     .collect()
-}
-
-export async function getForChatHandler(
-  ctx: QueryCtx,
-  { chatId }: { chatId: Id<"chats"> }
-) {
-  const chat = await getAuthorizedChatForRead(ctx, chatId)
-  if (!chat) return []
-
-  const messages = await listMessagesByChatOrder(ctx, chatId)
-  const visible = getVisibleSelectedMessages(messages)
-  if (await isChatOwner(ctx, chat)) return visible
-  return stripRunLinkageForViewer(visible)
 }
 
 export async function getPublicForChatHandler(
@@ -124,19 +101,6 @@ export async function getPublicForChatHandler(
       (message) => message.status !== "awaiting_approval"
     )
   )
-}
-
-export async function getLastMessagesHandler(
-  ctx: QueryCtx,
-  { chatId, limit = 2 }: { chatId: Id<"chats">; limit?: number }
-) {
-  const chat = await getAuthorizedChatForRead(ctx, chatId)
-  if (!chat) return []
-
-  const messages = await listMessagesByChatOrder(ctx, chatId)
-  const tail = getVisibleSelectedMessages(messages).slice(-limit)
-  if (await isChatOwner(ctx, chat)) return tail
-  return stripRunLinkageForViewer(tail)
 }
 
 // Selected-conversation projections.
@@ -168,7 +132,7 @@ export type SelectedRunProjection = {
 }
 
 export type SelectedPathProjection = {
-  selectedMessages: Awaited<ReturnType<typeof getForChatHandler>>
+  selectedMessages: ReturnType<typeof getVisibleSelectedMessages>
   /**
    * Cheap reconciliation fingerprint derived from the data this execution
    * read — no schema change, sufficient for client-side consistency
@@ -318,11 +282,6 @@ export const getSelectedRunState = readableChatQuery({
     getSelectedRunStateForViewer(ctx, { chat: ctx.chat, viewer: ctx.user }),
 })
 
-export const getForChat = query({
-  args: { chatId: v.id("chats") },
-  handler: getForChatHandler,
-})
-
 /**
  * Get messages for a public chat (no authentication required)
  * For public share pages
@@ -330,14 +289,6 @@ export const getForChat = query({
 export const getPublicForChat = query({
   args: { chatId: v.id("chats") },
   handler: getPublicForChatHandler,
-})
-
-export const getLastMessages = query({
-  args: {
-    chatId: v.id("chats"),
-    limit: v.optional(v.number()),
-  },
-  handler: getLastMessagesHandler,
 })
 
 /**

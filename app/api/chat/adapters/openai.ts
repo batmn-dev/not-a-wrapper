@@ -1,15 +1,9 @@
 import type { UIMessage } from "ai"
-import type {
-  AdaptationContext,
-  AdaptationResult,
-  AdaptationWarning,
-  ProviderHistoryAdapter,
-} from "./types"
 import {
-  createEmptyStats,
+  defineHistoryAdapter,
+  dropNonFinalToolPart,
   incrementStat,
   isToolPart,
-  isToolPartFinal,
   stripCallProviderMetadata,
 } from "./types"
 
@@ -204,7 +198,7 @@ function stripProviderMetadataFromPart(part: MessagePart): {
   }
 }
 
-export const openaiAdapter: ProviderHistoryAdapter = {
+export const openaiAdapter = defineHistoryAdapter({
   providerId: "openai",
   metadata: {
     droppedPartTypes: new Set(["step-start", "source-url", "source-document"]),
@@ -213,16 +207,8 @@ export const openaiAdapter: ProviderHistoryAdapter = {
     description:
       "OpenAI Responses API — atomic reasoning→tool→result triple enforcement",
   },
-  async adaptMessages(
-    messages: readonly UIMessage[],
-    _context: AdaptationContext
-  ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    const stats = createEmptyStats(messages.length, totalPartsOriginal)
-    const warnings: AdaptationWarning[] = []
+  async adaptMessages(messages, _context, session) {
+    const { stats, warnings } = session
     const adaptedMessages: UIMessage[] = []
 
     for (const [messageIndex, message] of messages.entries()) {
@@ -232,16 +218,7 @@ export const openaiAdapter: ProviderHistoryAdapter = {
 
       if (role !== "assistant") {
         const prefilteredParts = originalParts.filter((part) => {
-          if (!isToolPart(part)) return true
-          if (isToolPartFinal(part as { state?: string })) return true
-
-          incrementStat(stats.partsDropped, part.type)
-          warnings.push({
-            code: "non_final_state_dropped",
-            messageIndex,
-            detail: `Dropped non-final tool part (${part.type})`,
-          })
-          return false
+          return !dropNonFinalToolPart(part, messageIndex, session)
         })
 
         for (const part of prefilteredParts) {
@@ -285,17 +262,9 @@ export const openaiAdapter: ProviderHistoryAdapter = {
       for (const block of blocks) {
         let blockHadNonFinalTool = false
         const prefilteredBlock = block.filter((part) => {
-          if (!isToolPart(part)) return true
-          if (isToolPartFinal(part as { state?: string })) return true
-
-          blockHadNonFinalTool = true
-          incrementStat(stats.partsDropped, part.type)
-          warnings.push({
-            code: "non_final_state_dropped",
-            messageIndex,
-            detail: `Dropped non-final tool part (${part.type})`,
-          })
-          return false
+          const dropped = dropNonFinalToolPart(part, messageIndex, session)
+          blockHadNonFinalTool ||= dropped
+          return !dropped
         })
 
         if (blockHadNonFinalTool) {
@@ -363,20 +332,6 @@ export const openaiAdapter: ProviderHistoryAdapter = {
       })
     }
 
-    stats.adaptedMessageCount = adaptedMessages.length
-    stats.droppedMessages = Math.max(
-      0,
-      stats.originalMessageCount - stats.adaptedMessageCount
-    )
-    stats.totalPartsAdapted = adaptedMessages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-
-    return {
-      messages: adaptedMessages,
-      stats,
-      warnings,
-    }
+    return adaptedMessages
   },
-}
+})

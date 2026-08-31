@@ -27,8 +27,7 @@ const pendingProfileImageUrl = "https://images.test/new-avatar.png"
 const secondPendingProfileImageUrl =
   "https://images.test/second-user-avatar.png"
 let capturedUpdateUser:
-  | ((updates: Partial<UserProfile>) => Promise<void>)
-  | null = null
+  ((updates: Partial<UserProfile>) => Promise<void>) | null = null
 
 vi.mock("@workos-inc/authkit-nextjs/components", () => ({
   useAuth: () => ({
@@ -131,6 +130,7 @@ function UserSnapshot() {
     {
       "data-created-at": user?.created_at ?? "",
       "data-display-name": user?.display_name ?? "",
+      "data-favorite-models": user?.favorite_models?.join(",") ?? "loading",
       "data-profile-image": user?.profile_image ?? "",
       "data-premium": String(user?.premium ?? ""),
       "data-system-prompt": user?.system_prompt ?? "",
@@ -241,12 +241,12 @@ describe("UserProvider", () => {
       profilePictureUrl: null,
       updatedAt: "2026-06-07T00:00:00.000Z",
     }
-
     renderProvider()
 
     const snapshot = container?.querySelector("div")
 
     expect(snapshot?.getAttribute("data-display-name")).toBe("Convex User")
+    expect(snapshot?.getAttribute("data-favorite-models")).toBe("")
     expect(snapshot?.getAttribute("data-premium")).toBe("true")
     expect(snapshot?.getAttribute("data-system-prompt")).toBe("Be concise")
     expect(snapshot?.getAttribute("data-created-at")).toBe("100")
@@ -377,9 +377,7 @@ describe("UserProvider", () => {
 
     await act(async () => {
       container
-        ?.querySelector<HTMLButtonElement>(
-          "[data-update-second-profile-image]"
-        )
+        ?.querySelector<HTMLButtonElement>("[data-update-second-profile-image]")
         ?.click()
     })
 

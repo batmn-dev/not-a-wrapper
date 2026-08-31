@@ -1,5 +1,6 @@
 import type { ToolSet } from "ai"
 import { describe, expect, it } from "vitest"
+import { wrapToolsWithExecutionPolicy } from "../execution-policy"
 import { ToolTraceCollector, wrapMcpTools } from "../mcp-wrapper"
 import {
   createOutageTolerantToolBudgetEnforcer,
@@ -12,7 +13,6 @@ import {
   ToolPolicyError,
   type ToolLimitStore,
 } from "../policy"
-import { wrapToolsWithTracing } from "../utils"
 
 describe("tool policy guardrails", () => {
   it("persists extract_content domain limits across separate requests", async () => {
@@ -94,7 +94,7 @@ describe("tool policy guardrails", () => {
     ).resolves.toBeUndefined()
   })
 
-  it("enforces tool budgets in Layer 2 tracing wrapper", async () => {
+  it("enforces tool budgets in the Layer 2 execution policy", async () => {
     const traces = new ToolTraceCollector()
     const tools = {
       web_search: {
@@ -104,11 +104,10 @@ describe("tool policy guardrails", () => {
       },
     } as unknown as ToolSet
 
-    const wrapped = wrapToolsWithTracing(
-      tools,
-      traces,
-      "req_layer2",
-      async () => {
+    const wrapped = wrapToolsWithExecutionPolicy(tools, {
+      traceCollector: traces,
+      requestId: "req_layer2",
+      enforceToolBudget: async () => {
         throw new ToolPolicyError(
           "TOOL_BUDGET_EXCEEDED: Tool budget exceeded. Retry after approximately 30 seconds.",
           {
@@ -118,8 +117,8 @@ describe("tool policy guardrails", () => {
             budgetDenied: true,
           }
         )
-      }
-    )
+      },
+    })
 
     await expect(
       (wrapped.web_search as { execute: Function }).execute(

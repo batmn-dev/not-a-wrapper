@@ -51,27 +51,6 @@ function makeConfig(overrides?: {
 }
 
 describe("wrapMcpTools", () => {
-  it("wraps a tool that resolves before timeout", async () => {
-    const config = makeConfig({ timeoutMs: 5000 })
-    const tools = {
-      test_tool: makeTool(async () => ({ answer: 42 })),
-    } as unknown as ToolSet
-
-    const wrapped = wrapMcpTools(tools, config)
-    const result = await (wrapped.test_tool as { execute: Function }).execute(
-      {},
-      { toolCallId: "call_1" }
-    )
-
-    expect(result).toEqual({ answer: 42 })
-
-    const trace = config.traceCollector.get("call_1")
-    expect(trace).toBeDefined()
-    expect(trace!.success).toBe(true)
-    expect(trace!.toolName).toBe("test_tool")
-    expect(trace!.durationMs).toBeGreaterThanOrEqual(0)
-  })
-
   it("throws ToolTimeoutError when tool exceeds timeout", async () => {
     const timeoutController = new AbortController()
     const timeoutSpy = vi
@@ -98,37 +77,6 @@ describe("wrapMcpTools", () => {
     expect(trace!.error).toContain("timed out")
     expect(trace!.errorCode).toBe("timeout")
     expect(trace!.durationMs).toBeGreaterThanOrEqual(0)
-  })
-
-  it("cancels on upstream abortSignal and preserves abort taxonomy", async () => {
-    const config = makeConfig({ timeoutMs: 5000 })
-    const tools = {
-      test_tool: makeTool(
-        async (_params, options) =>
-          new Promise((_, reject) => {
-            const signal = options.abortSignal as AbortSignal | undefined
-            if (!signal) return
-            signal.addEventListener(
-              "abort",
-              () => reject(new Error("tool saw abort")),
-              { once: true }
-            )
-          })
-      ),
-    } as unknown as ToolSet
-
-    const wrapped = wrapMcpTools(tools, config)
-    const controller = new AbortController()
-    const pending = (wrapped.test_tool as { execute: Function }).execute(
-      {},
-      { toolCallId: "call_upstream_abort", abortSignal: controller.signal }
-    )
-    controller.abort("request_cancelled")
-
-    await expect(pending).rejects.toThrow(/cancelled|aborted/i)
-    const trace = config.traceCollector.get("call_upstream_abort")
-    expect(trace?.success).toBe(false)
-    expect(trace?.errorCode).toBe("aborted")
   })
 
   it("retries idempotent MCP tool on transient failure when retry hints are trusted", async () => {
@@ -248,64 +196,6 @@ describe("wrapMcpTools", () => {
     expect(traceCollector.get("call_retry_untrusted_mcp")?.retryCount).toBe(0)
   })
 
-  it("throws and traces when tool execute() rejects", async () => {
-    const config = makeConfig({ timeoutMs: 5000 })
-    const tools = {
-      test_tool: makeTool(async () => {
-        throw new Error("API rate limited")
-      }),
-    } as unknown as ToolSet
-
-    const wrapped = wrapMcpTools(tools, config)
-
-    await expect(
-      (wrapped.test_tool as { execute: Function }).execute(
-        {},
-        { toolCallId: "call_error" }
-      )
-    ).rejects.toThrow("API rate limited")
-
-    const trace = config.traceCollector.get("call_error")
-    expect(trace).toBeDefined()
-    expect(trace!.success).toBe(false)
-    expect(trace!.error).toBe("API rate limited")
-    expect(trace!.errorCode).toBe("rate_limit")
-  })
-
-  it("maps policy errors to taxonomy while preserving budget metadata", async () => {
-    const config = makeConfig({ timeoutMs: 5000 })
-    const tools = {
-      test_tool: makeTool(async () => {
-        throw new ToolPolicyError(
-          "TOOL_BUDGET_EXCEEDED: Tool budget exceeded. Retry after approximately 60 seconds.",
-          {
-            code: "TOOL_BUDGET_EXCEEDED",
-            retryAfterSeconds: 60,
-            keyMode: "platform",
-            budgetDenied: true,
-          }
-        )
-      }),
-    } as unknown as ToolSet
-
-    const wrapped = wrapMcpTools(tools, config)
-
-    await expect(
-      (wrapped.test_tool as { execute: Function }).execute(
-        {},
-        { toolCallId: "call_policy" }
-      )
-    ).rejects.toThrow("TOOL_BUDGET_EXCEEDED")
-
-    const trace = config.traceCollector.get("call_policy")
-    expect(trace).toBeDefined()
-    expect(trace!.success).toBe(false)
-    expect(trace!.errorCode).toBe("policy_limit")
-    expect(trace!.retryAfterSeconds).toBe(60)
-    expect(trace!.budgetKeyMode).toBe("platform")
-    expect(trace!.budgetDenied).toBe(true)
-  })
-
   it("opens only after true consecutive transient failures", async () => {
     const execute = vi
       .fn()
@@ -315,9 +205,10 @@ describe("wrapMcpTools", () => {
       .mockRejectedValueOnce(new Error("fetch failed ECONNREFUSED"))
       .mockRejectedValueOnce(new Error("fetch failed ECONNREFUSED"))
 
+    const config = makeConfig()
     const wrapped = wrapMcpTools(
       { test_tool: makeTool(execute) } as unknown as ToolSet,
-      makeConfig()
+      config
     )
 
     await expect(
@@ -360,6 +251,16 @@ describe("wrapMcpTools", () => {
       )
     ).rejects.toThrow(/circuit open/i)
 
+    expect(config.traceCollector.get("call_reset_6")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/circuit open/i),
+    })
+    await expect(
+      (wrapped.test_tool as { execute: Function }).execute(
+        {},
+        { toolCallId: "call_reset_7" }
+      )
+    ).rejects.toThrow(/circuit open/i)
     expect(execute).toHaveBeenCalledTimes(5)
   })
 

@@ -181,10 +181,11 @@ schema/manifest check before `convex deploy`. It does not query production data
 from preview builds, because the Convex preview deployment may not exist until
 `convex deploy` claims or creates it.
 
-Vercel build checkouts may not expose a usable `origin` remote. The schema guard
-first uses an explicit `SCHEMA_GUARD_REPO_URL`, then the checkout's existing
-`origin`, and only falls back to Vercel's public GitHub metadata when no origin
-remote is present and `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1` is set.
+Vercel build checkouts may not expose a usable `origin` remote. The schema
+preflight first uses an explicit `SCHEMA_GUARD_REPO_URL`, then the checkout's
+existing `origin`, and only falls back to Vercel's public GitHub metadata when
+no origin remote is present and `SCHEMA_GUARD_ALLOW_VERCEL_GITHUB_FALLBACK=1`
+is set.
 Private forks, renamed repositories, non-GitHub sources, and projects where the
 base ref requires credentials must either make `origin` fetchable or set
 `SCHEMA_GUARD_REPO_URL` in Vercel to a read-capable repository URL. Public
@@ -275,9 +276,9 @@ fetch the base schema before relying on deploy automation. Configure either a
 fetchable `origin` remote or `SCHEMA_GUARD_REPO_URL`; production deploys fail
 closed if neither can provide the configured base ref.
 
-## Schema Guard Repository Access
+## Schema Preflight Repository Access
 
-The schema guard and deploy preflight need read access to the base schema ref.
+The schema preflight needs read access to the base schema ref.
 For the default `origin/main` base, configure one of these:
 
 - A checkout with a fetchable `origin` remote. This is normally enough for

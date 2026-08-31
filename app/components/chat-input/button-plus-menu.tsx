@@ -62,6 +62,8 @@ const composerPlusTooltip = (
  * touch-optimized popover. */
 const touchMenuRowClassName =
   "mx-1.5 h-auto min-h-(--floating-menu-item-height) cursor-auto scroll-m-1.5 gap-3 rounded-[28px] border-y-0! [corner-shape:superellipse(1.1)] px-1.5 py-1.5 text-sm hover:bg-(--floating-menu-touch-tertiary) focus:bg-(--floating-menu-touch-tertiary) data-highlighted:bg-(--floating-menu-touch-tertiary)"
+const compactMenuRowClassName =
+  "mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
 const touchMenuChipClassName =
   "flex size-9 shrink-0 items-center justify-center rounded-full bg-(--floating-menu-touch-tertiary) text-foreground"
 const touchMenuActionIcons = {
@@ -101,6 +103,178 @@ type ButtonPlusMenuProps = {
   /** Coordinates every background tooltip owned by the composer. */
   tooltipDisabled?: boolean
   onMenuOpenChange?: (open: boolean) => void
+}
+
+type NativeMobileMenuRowContentProps = {
+  icon: React.ComponentProps<typeof Icon>["icon"]
+  label: string
+  touchOptimized: boolean
+}
+
+function NativeMobileMenuRowContent({
+  icon,
+  label,
+  touchOptimized,
+}: NativeMobileMenuRowContentProps) {
+  const glyph = <Icon icon={icon} glyphInset={0} slotSize={20} />
+
+  return touchOptimized ? (
+    <>
+      <span className={touchMenuChipClassName}>{glyph}</span>
+      <span className="flex min-w-0 grow items-center gap-2.5">
+        <span className="truncate">{label}</span>
+      </span>
+    </>
+  ) : (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {glyph}
+      <span className="min-w-0 truncate">{label}</span>
+    </span>
+  )
+}
+
+type NativeMobileMenuContentProps = {
+  touchOptimized: boolean
+  isFileUploadAvailable: boolean
+  commandItems: readonly ComposerActionMenuItem[]
+  toggleItems: readonly ComposerActionMenuItem[]
+  connectors: readonly ComposerMenuConnector[] | undefined
+  onActivate: (itemId: string) => void
+  onToggleConnector: ((connectorId: string) => void) | undefined
+  onOpenCamera: () => void
+  onOpenPhotos: () => void
+}
+
+function NativeMobileMenuContent({
+  touchOptimized,
+  isFileUploadAvailable,
+  commandItems,
+  toggleItems,
+  connectors,
+  onActivate,
+  onToggleConnector,
+  onOpenCamera,
+  onOpenPhotos,
+}: NativeMobileMenuContentProps) {
+  const rowClassName = touchOptimized
+    ? touchMenuRowClassName
+    : compactMenuRowClassName
+
+  return (
+    <DropdownMenuContent
+      side="top"
+      sideOffset={touchOptimized ? -45 : 0}
+      align="start"
+      alignOffset={touchOptimized ? -8 : -7}
+      animated={false}
+      geometry="custom"
+      data-content-appearance={touchOptimized ? "touch-optimized" : undefined}
+      style={
+        touchOptimized
+          ? ({ "--min-items": 5.8 } as React.CSSProperties)
+          : undefined
+      }
+      className={
+        touchOptimized
+          ? "shadow-floating-menu-touch max-h-[min(var(--available-height,50svh),calc(var(--spacing)*1.5+var(--min-items,6.8)*var(--floating-menu-item-height)))] w-max max-w-xs min-w-60 [scrollbar-width:none] overflow-y-auto [overscroll-behavior:contain] rounded-[28px] bg-(--floating-menu-touch-surface) py-1.5 select-none [corner-shape:superellipse(1.1)]"
+          : "max-h-(--available-height) w-max max-w-xs [scrollbar-width:none] overflow-y-auto rounded-[20px] py-2.5"
+      }
+      onKeyDownCapture={(event) => {
+        if (event.key === "Tab") event.preventDefault()
+      }}
+    >
+      <DropdownMenuGroup>
+        {touchOptimized && isFileUploadAvailable && (
+          <DropdownMenuItem
+            geometry="custom"
+            className={rowClassName}
+            onClick={onOpenCamera}
+          >
+            <NativeMobileMenuRowContent
+              icon={ComposerCameraIcon}
+              label="Camera"
+              touchOptimized
+            />
+          </DropdownMenuItem>
+        )}
+        {touchOptimized && isFileUploadAvailable && (
+          <DropdownMenuItem
+            geometry="custom"
+            className={rowClassName}
+            onClick={onOpenPhotos}
+          >
+            <NativeMobileMenuRowContent
+              icon={ComposerImageSquareIcon}
+              label="Photos"
+              touchOptimized
+            />
+          </DropdownMenuItem>
+        )}
+        {commandItems.map((item) => (
+          <DropdownMenuItem
+            key={item.itemId}
+            geometry="custom"
+            disabled={item.disabled}
+            className={rowClassName}
+            onClick={() => onActivate(item.itemId)}
+          >
+            <NativeMobileMenuRowContent
+              icon={
+                touchOptimized
+                  ? touchMenuActionIcons[item.itemId]
+                  : item.action.icon
+              }
+              label={
+                touchOptimized
+                  ? (item.action.touchLabel ?? item.label)
+                  : item.label
+              }
+              touchOptimized={touchOptimized}
+            />
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuGroup>
+      <DropdownMenuRadioGroup
+        value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
+      >
+        {toggleItems.map((item) => (
+          <DropdownMenuRadioItem
+            key={item.itemId}
+            value={item.itemId}
+            disabled={item.disabled}
+            indicator={touchOptimized ? touchMenuCheck : undefined}
+            className={rowClassName}
+            onClick={() => onActivate(item.itemId)}
+          >
+            <NativeMobileMenuRowContent
+              icon={
+                touchOptimized
+                  ? touchMenuActionIcons[item.itemId]
+                  : item.action.icon
+              }
+              label={item.label}
+              touchOptimized={touchOptimized}
+            />
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+      {connectors?.map((connector) => (
+        <DropdownMenuCheckboxItem
+          key={connector.id}
+          checked={connector.enabled}
+          indicator={touchOptimized ? touchMenuCheck : undefined}
+          className={rowClassName}
+          onCheckedChange={() => onToggleConnector?.(connector.id)}
+        >
+          <NativeMobileMenuRowContent
+            icon={RiPlugLine}
+            label={connector.name}
+            touchOptimized={touchOptimized}
+          />
+        </DropdownMenuCheckboxItem>
+      ))}
+    </DropdownMenuContent>
+  )
 }
 
 type ComposerActionMenuRowProps = {
@@ -454,203 +628,19 @@ export function ButtonPlusMenu({
               {composerPlusTooltip}
             </TooltipContent>
           </Tooltip>
-          {isTouchMenu ? (
-            /* The touch menu splits file sources into Camera, Photos, and
-               Files. data-content-appearance scopes this treatment. */
-            <DropdownMenuContent
-              side="top"
-              sideOffset={-45}
-              align="start"
-              alignOffset={-8}
-              animated={false}
-              geometry="custom"
-              data-content-appearance="touch-optimized"
-              style={{ "--min-items": 5.8 } as React.CSSProperties}
-              className="bg-(--floating-menu-touch-surface) shadow-floating-menu-touch max-h-[min(var(--available-height,50svh),calc(var(--spacing)*1.5+var(--min-items,6.8)*var(--floating-menu-item-height)))] w-max min-w-60 max-w-xs overflow-y-auto rounded-[28px] [corner-shape:superellipse(1.1)] py-1.5 select-none [scrollbar-width:none] [overscroll-behavior:contain]"
-              onKeyDownCapture={(event) => {
-                if (event.key === "Tab") event.preventDefault()
-              }}
-            >
-              <DropdownMenuGroup>
-                {isFileUploadAvailable && (
-                  <DropdownMenuItem
-                    geometry="custom"
-                    className={touchMenuRowClassName}
-                    onClick={() => cameraInputRef.current?.click()}
-                  >
-                    <span className={touchMenuChipClassName}>
-                      <Icon
-                        icon={ComposerCameraIcon}
-                        glyphInset={0}
-                        slotSize={20}
-                      />
-                    </span>
-                    <span className="flex min-w-0 grow items-center gap-2.5">
-                      <span className="truncate">Camera</span>
-                    </span>
-                  </DropdownMenuItem>
-                )}
-                {isFileUploadAvailable && (
-                  <DropdownMenuItem
-                    geometry="custom"
-                    className={touchMenuRowClassName}
-                    onClick={() => photosInputRef.current?.click()}
-                  >
-                    <span className={touchMenuChipClassName}>
-                      <Icon
-                        icon={ComposerImageSquareIcon}
-                        glyphInset={0}
-                        slotSize={20}
-                      />
-                    </span>
-                    <span className="flex min-w-0 grow items-center gap-2.5">
-                      <span className="truncate">Photos</span>
-                    </span>
-                  </DropdownMenuItem>
-                )}
-                {commandItems.map((item) => (
-                  <DropdownMenuItem
-                    key={item.itemId}
-                    geometry="custom"
-                    disabled={item.disabled}
-                    className={touchMenuRowClassName}
-                    onClick={() => activateItem(item.itemId)}
-                  >
-                    <span className={touchMenuChipClassName}>
-                      <Icon
-                        icon={touchMenuActionIcons[item.itemId]}
-                        glyphInset={0}
-                        slotSize={20}
-                      />
-                    </span>
-                    <span className="flex min-w-0 grow items-center gap-2.5">
-                      <span className="truncate">
-                        {item.action.touchLabel ?? item.label}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuRadioGroup
-                value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
-              >
-                {toggleItems.map((item) => (
-                  <DropdownMenuRadioItem
-                    key={item.itemId}
-                    value={item.itemId}
-                    disabled={item.disabled}
-                    indicator={touchMenuCheck}
-                    className={touchMenuRowClassName}
-                    onClick={() => activateItem(item.itemId)}
-                  >
-                    <span className={touchMenuChipClassName}>
-                      <Icon
-                        icon={touchMenuActionIcons[item.itemId]}
-                        glyphInset={0}
-                        slotSize={20}
-                      />
-                    </span>
-                    <span className="flex min-w-0 grow items-center gap-2.5">
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              {connectors?.map((connector) => (
-                <DropdownMenuCheckboxItem
-                  key={connector.id}
-                  checked={connector.enabled}
-                  indicator={touchMenuCheck}
-                  className={touchMenuRowClassName}
-                  onCheckedChange={() => onToggleConnector?.(connector.id)}
-                >
-                  <span className={touchMenuChipClassName}>
-                    <Icon icon={RiPlugLine} glyphInset={0} slotSize={20} />
-                  </span>
-                  <span className="flex min-w-0 grow items-center gap-2.5">
-                    <span className="truncate">{connector.name}</span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          ) : (
-            /* `w-max` overrides the shared dropdown's anchor-width sizing so
-               rows, not the 36px trigger, determine the popover width. */
-            <DropdownMenuContent
-              side="top"
-              sideOffset={0}
-              align="start"
-              alignOffset={-7}
-              animated={false}
-              geometry="custom"
-              className="max-h-(--available-height) w-max max-w-xs overflow-y-auto rounded-[20px] py-2.5 [scrollbar-width:none]"
-              onKeyDownCapture={(event) => {
-                if (event.key === "Tab") event.preventDefault()
-              }}
-            >
-              <DropdownMenuGroup>
-                {commandItems.map((item) => (
-                  <DropdownMenuItem
-                    key={item.itemId}
-                    geometry="custom"
-                    disabled={item.disabled}
-                    className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
-                    onClick={() => activateItem(item.itemId)}
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {/* Mobile rows use currentColor glyphs; per-action icon
-                          tint belongs to the @ menu. */}
-                      <Icon
-                        icon={item.action.icon}
-                        glyphInset={0}
-                        slotSize={20}
-                      />
-                      <span className="min-w-0 truncate">
-                        {item.label}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuRadioGroup
-                value={toggleItems.find((item) => item.selected)?.itemId ?? ""}
-              >
-                {toggleItems.map((item) => (
-                  <DropdownMenuRadioItem
-                    key={item.itemId}
-                    value={item.itemId}
-                    disabled={item.disabled}
-                    className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
-                    onClick={() => activateItem(item.itemId)}
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <Icon
-                        icon={item.action.icon}
-                        glyphInset={0}
-                        slotSize={20}
-                      />
-                      <span className="min-w-0 truncate">
-                        {item.label}
-                      </span>
-                    </span>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              {connectors?.map((connector) => (
-                <DropdownMenuCheckboxItem
-                  key={connector.id}
-                  checked={connector.enabled}
-                  className="mx-2.5 min-h-9 justify-between gap-6 rounded-[12px] px-2.5 py-1.5 text-sm"
-                  onCheckedChange={() => onToggleConnector?.(connector.id)}
-                >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <Icon icon={RiPlugLine} glyphInset={0} slotSize={20} />
-                    <span className="min-w-0 truncate">{connector.name}</span>
-                  </span>
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          )}
+          {/* Mobile OSes add touch-sized chips and native media sources;
+              narrow fine-pointer windows keep the compact presentation. */}
+          <NativeMobileMenuContent
+            touchOptimized={isTouchMenu}
+            isFileUploadAvailable={isFileUploadAvailable}
+            commandItems={commandItems}
+            toggleItems={toggleItems}
+            connectors={connectors}
+            onActivate={activateItem}
+            onToggleConnector={onToggleConnector}
+            onOpenCamera={() => cameraInputRef.current?.click()}
+            onOpenPhotos={() => photosInputRef.current?.click()}
+          />
         </DropdownMenu>
         {isTouchMenu && isFileUploadAvailable && (
           /* Camera and photo-library sources are hidden file inputs mounted

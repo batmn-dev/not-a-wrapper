@@ -5,6 +5,7 @@ import {
   compileLogicalCatalog,
   getLogicalModel,
   LOGICAL_MODELS,
+  normalizeFavoriteModelIds,
   resolveModelSearchMode,
   resolveModelSelection,
   resolveModelSelections,
@@ -850,5 +851,15 @@ describe("resolveModelSelection", () => {
         "openrouter:openai/gpt-5.4",
       ])
     ).toEqual(["claude-sonnet-5", "gpt-5.4"])
+  })
+
+  it("keeps favorites on current logical model ids", () => {
+    expect(
+      normalizeFavoriteModelIds([
+        "openrouter:anthropic/claude-sonnet-5",
+        "claude-sonnet-5",
+        "mystery-model",
+      ])
+    ).toEqual(["claude-sonnet-5"])
   })
 })

@@ -126,6 +126,7 @@ export const updateFavoriteModels = authenticatedMutation({
   args: {
     favoriteModels: v.array(v.string()),
   },
+  returns: v.array(v.string()),
   handler: async (ctx, { favoriteModels }) => {
     await ctx.db.patch(ctx.user._id, { favoriteModels })
     return favoriteModels

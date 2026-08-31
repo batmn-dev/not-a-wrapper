@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
+import { vGenerationRunStatus, vMessageStatus } from "./domain/message_contract"
 import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
 import { vReasoningEffort } from "./lib/reasoningEffort"
 import {
@@ -10,25 +11,6 @@ import {
   vTitleTerminalUsageEvidence,
   vUsageReservationStatus,
 } from "./lib/usageValidators"
-
-const messageStatus = v.union(
-  v.literal("submitted"),
-  v.literal("streaming"),
-  v.literal("completed"),
-  v.literal("aborted"),
-  v.literal("failed"),
-  v.literal("awaiting_approval")
-)
-
-const generationRunStatus = v.union(
-  v.literal("queued"),
-  v.literal("running"),
-  v.literal("streaming"),
-  v.literal("awaiting_approval"),
-  v.literal("completed"),
-  v.literal("aborted"),
-  v.literal("failed")
-)
 
 const toolSource = v.union(
   v.literal("builtin"),
@@ -170,7 +152,7 @@ export default defineSchema({
     // Sibling a regeneration placeholder forked from; the branch to restore
     // when the run dies before its first chunk
     regenerationSourceMessageId: v.optional(v.id("messages")),
-    status: messageStatus,
+    status: vMessageStatus,
     requestId: v.optional(v.string()),
     generationRunId: v.optional(v.id("generationRuns")),
     model: v.optional(v.string()),
@@ -229,7 +211,7 @@ export default defineSchema({
     // hidden reasoning output; applied is route/funding clamped.
     requestedGenerationBudget: v.optional(v.number()),
     appliedGenerationBudget: v.optional(v.number()),
-    status: generationRunStatus,
+    status: vGenerationRunStatus,
     startedAt: v.optional(v.number()),
     // Optional only for runs created before work-duration persistence.
     workStartedAt: v.optional(v.number()),
@@ -712,9 +694,5 @@ export default defineSchema({
     chatVersion: v.optional(v.number()),
     toolKey: v.optional(v.string()),
     stateMutationKey: v.optional(v.string()),
-  })
-    .index("by_user", ["userId"])
-    .index("by_chat", ["chatId"])
-    .index("by_server", ["serverId"])
-    .index("by_source", ["source"]),
+  }).index("by_chat", ["chatId"]),
 })

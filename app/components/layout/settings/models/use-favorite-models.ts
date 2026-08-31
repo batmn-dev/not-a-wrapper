@@ -1,143 +1,61 @@
 import { toast } from "@/components/ui/toast"
-import { fetchClient } from "@/lib/fetch"
+import { api } from "@/convex/_generated/api"
 import { useModel } from "@/lib/model-store/provider"
-import { debounce } from "@/lib/utils"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useRef } from "react"
+import { normalizeFavoriteModelIds } from "@/lib/models/catalog"
+import type { OptimisticLocalStore } from "convex/browser"
+import { useMutation } from "convex/react"
+import { useCallback, useMemo } from "react"
 
-type FavoriteModelsResponse = {
-  favorite_models: string[]
+function applyFavoriteModelsOptimistically(
+  localStore: OptimisticLocalStore,
+  { favoriteModels }: { favoriteModels: string[] }
+) {
+  const currentUser = localStore.getQuery(api.users.getCurrent, {})
+  if (!currentUser) return
+
+  localStore.setQuery(
+    api.users.getCurrent,
+    {},
+    {
+      ...currentUser,
+      favoriteModels,
+    }
+  )
 }
 
 export function useFavoriteModels() {
-  const queryClient = useQueryClient()
-  const { favoriteModels: initialFavoriteModels, refreshFavoriteModelsSilent } =
-    useModel()
-
-  const safeInitialData = Array.isArray(initialFavoriteModels)
-    ? initialFavoriteModels
-    : []
-
-  const {
-    data: favoriteModels = safeInitialData,
-    isLoading,
-    error,
-  } = useQuery<string[]>({
-    queryKey: ["favorite-models"],
-    queryFn: async () => {
-      const response = await fetchClient(
-        "/api/user-preferences/favorite-models"
-      )
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch pinned models")
-      }
-
-      const data: FavoriteModelsResponse = await response.json()
-      return data.favorite_models || []
-    },
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-    initialData: safeInitialData,
-  })
-
-  const updateFavoriteModelsMutation = useMutation({
-    mutationFn: async (favoriteModels: string[]) => {
-      const response = await fetchClient(
-        "/api/user-preferences/favorite-models",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            favorite_models: favoriteModels,
-          }),
-        }
-      )
-
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: "Unknown error" }))
-        throw new Error(
-          errorData.error ||
-            `Failed to save pinned models: ${response.statusText}`
-        )
-      }
-
-      const result = await response.json()
-      return result
-    },
-    onMutate: async (newFavoriteModels: string[]) => {
-      await queryClient.cancelQueries({ queryKey: ["favorite-models"] })
-
-      const previousFavoriteModels = queryClient.getQueryData<string[]>([
-        "favorite-models",
-      ])
-
-      queryClient.setQueryData(["favorite-models"], newFavoriteModels)
-
-      return { previousFavoriteModels }
-    },
-    onError: (
-      error: Error,
-      _newFavoriteModels: string[],
-      context: { previousFavoriteModels?: string[] } | undefined
-    ) => {
-      if (
-        context &&
-        "previousFavoriteModels" in context &&
-        context.previousFavoriteModels
-      ) {
-        queryClient.setQueryData(
-          ["favorite-models"],
-          context.previousFavoriteModels
-        )
-      }
-
-      console.error("❌ Error saving favorite models:", error)
-
-      toast({
-        title: "Failed to save pinned models",
-        description: error.message || "Please try again.",
-      })
-
-      refreshFavoriteModelsSilent()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["favorite-models"] })
-      refreshFavoriteModelsSilent()
-    },
-  })
-
-  const debouncedUpdateFavoriteModels = useRef(
-    debounce((favoriteModels: string[]) => {
-      updateFavoriteModelsMutation.mutate(favoriteModels)
-    }, 500)
-  ).current
+  const { favoriteModels, modelPrefsHydrated } = useModel()
+  const favoriteModelsMutation = useMutation(api.users.updateFavoriteModels)
+  const updateFavoriteModelsMutation = useMemo(
+    () =>
+      favoriteModelsMutation.withOptimisticUpdate(
+        applyFavoriteModelsOptimistically
+      ),
+    [favoriteModelsMutation]
+  )
 
   const updateFavoriteModels = useCallback(
-    (favoriteModels: string[], shouldDebounce = false) => {
-      queryClient.setQueryData(["favorite-models"], favoriteModels)
-
-      if (shouldDebounce) {
-        debouncedUpdateFavoriteModels(favoriteModels)
-      } else {
-        updateFavoriteModelsMutation.mutate(favoriteModels)
+    async (nextFavoriteModels: string[]) => {
+      try {
+        await updateFavoriteModelsMutation({
+          favoriteModels: normalizeFavoriteModelIds(nextFavoriteModels),
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Please try again."
+        console.error("Failed to save favorite models:", error)
+        toast({
+          title: "Failed to save pinned models",
+          description: message,
+        })
       }
     },
-    [updateFavoriteModelsMutation, debouncedUpdateFavoriteModels, queryClient]
+    [updateFavoriteModelsMutation]
   )
 
   return {
     favoriteModels,
-    isLoading,
-    error,
     updateFavoriteModels,
-    updateFavoriteModelsDebounced: (favoriteModels: string[]) =>
-      updateFavoriteModels(favoriteModels, true),
-    isUpdating: updateFavoriteModelsMutation.isPending,
-    updateError: updateFavoriteModelsMutation.error,
+    isLoading: !modelPrefsHydrated,
   }
 }

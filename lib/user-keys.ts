@@ -2,10 +2,13 @@ import { api } from "@/convex/_generated/api"
 import { fetchQuery } from "convex/nextjs"
 import { decryptSecret, isSupportedCiphertext } from "./encryption"
 import { getProviderStrategy } from "./openproviders/provider-strategy"
-import { Provider } from "./openproviders/types"
-import { TOOL_PROVIDER_IDENTITY, type ToolProvider } from "./provider-identity"
+import {
+  TOOL_PROVIDER_IDENTITY,
+  type Provider,
+  type ToolProvider,
+} from "./provider-identity"
 
-export type { Provider } from "./openproviders/types"
+export type { Provider } from "./provider-identity"
 
 export type ApiKeySource = "platform" | "byok"
 export type ToolKeyMode = ApiKeySource

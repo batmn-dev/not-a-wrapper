@@ -1,5 +1,4 @@
-import { MAX_TOOL_RESULT_SIZE, TOOL_EXECUTION_TIMEOUT_MS } from "@/lib/config"
-import type { ToolSet } from "ai"
+import { MAX_TOOL_RESULT_SIZE } from "@/lib/config"
 import {
   extractToolErrorData,
   getToolRecoveryHint,
@@ -8,7 +7,7 @@ import {
   type ToolErrorCode,
   type ToolErrorData,
 } from "./errors"
-import { extractPolicyErrorData, isToolPolicyError } from "./policy"
+import { isToolPolicyError } from "./policy"
 import {
   findSemanticBoundary,
   resolveTruncationStrategy,
@@ -16,15 +15,9 @@ import {
   type TruncationCategory,
   type TruncationContext,
 } from "./truncation-policy"
-import { ToolTraceCollector, type ToolMetadata } from "./types"
+import type { ToolMetadata } from "./types"
 
-type ToolExecuteOptions = {
-  toolCallId: string
-  abortSignal?: AbortSignal
-  [k: string]: unknown
-}
-
-type RetrySafetyMetadata = Pick<
+export type RetrySafetyMetadata = Pick<
   ToolMetadata,
   "idempotent" | "readOnly" | "destructive"
 >
@@ -722,169 +715,6 @@ export function isTruncated(result: unknown): boolean {
     "_truncated" in result &&
     (result as Record<string, unknown>)._truncated === true
   )
-}
-
-/**
- * Wrap all tools in a ToolSet with result truncation.
- * Used for tool sources that don't manage their own result sizes
- * (e.g., MCP tools from user-configured servers).
- *
- * Layer 1 tools are exempt (provider-managed limits).
- * Layer 2 tools apply truncation inside their execute() directly.
- */
-export function wrapToolsWithTruncation(
-  tools: ToolSet,
-  maxBytes: number = MAX_TOOL_RESULT_SIZE
-): ToolSet {
-  const wrapped: Record<string, unknown> = {}
-  for (const [name, t] of Object.entries(tools)) {
-    const original = t as Record<string, unknown>
-    if (typeof original.execute === "function") {
-      const origExec = original.execute as (
-        ...args: unknown[]
-      ) => Promise<unknown>
-      wrapped[name] = {
-        ...original,
-        execute: async (...args: unknown[]) => {
-          const result = await origExec(...args)
-          return truncateToolResult(result, {
-            maxBytes,
-            toolName: name,
-          })
-        },
-      }
-    } else {
-      wrapped[name] = original
-    }
-  }
-  return wrapped as ToolSet
-}
-
-/**
- * Wrap all tools in a ToolSet with timing + trace recording.
- * Records start/end time around each execute() call and writes
- * the trace to the shared ToolTraceCollector so the step-end
- * outcome recording can read durationMs for ALL tool types.
- *
- * Structural twin of wrapToolsWithTruncation — same iteration
- * and casting pattern. Applied SEPARATELY (not composed) because
- * truncation is an MCP-only concern while tracing applies to
- * Layer 2 (third-party) and Layer 4 (platform) tools.
- */
-export function wrapToolsWithTracing(
-  tools: ToolSet,
-  traceCollector: ToolTraceCollector,
-  requestId?: string,
-  enforceToolBudget?: (toolName: string) => Promise<void>,
-  metadataByToolName?: ReadonlyMap<string, RetrySafetyMetadata>
-): ToolSet {
-  const wrapped: Record<string, unknown> = {}
-  for (const [name, t] of Object.entries(tools)) {
-    const original = t as Record<string, unknown>
-    if (typeof original.execute === "function") {
-      const origExec = original.execute as (
-        params: unknown,
-        options: { toolCallId: string; [k: string]: unknown }
-      ) => Promise<unknown>
-
-      wrapped[name] = {
-        ...original,
-        execute: async (
-          params: unknown,
-          options: ToolExecuteOptions
-        ): Promise<unknown> => {
-          const startMs = Date.now()
-          const upstreamAbortSignal = extractAbortSignalFromOptions(options)
-          let success = true
-          let error: string | undefined
-          let resultSizeBytes: number | undefined
-          let errorCode: ToolErrorCode | undefined
-          let retryAfterSeconds: number | undefined
-          let budgetKeyMode: "platform" | "byok" | undefined
-          let budgetDenied: boolean | undefined
-          let retryCount = 0
-
-          try {
-            if (enforceToolBudget) {
-              await enforceToolBudget(name)
-            }
-
-            const { value: result, retryCount: retries } =
-              await executeWithRetries({
-                toolName: name,
-                metadata: metadataByToolName?.get(name),
-                abortSignal: upstreamAbortSignal,
-                execute: async () =>
-                  runWithToolAbortAndTimeout({
-                    toolName: name,
-                    timeoutMs: TOOL_EXECUTION_TIMEOUT_MS,
-                    upstreamSignal: upstreamAbortSignal,
-                    operation: (combinedSignal) =>
-                      origExec(params, {
-                        ...options,
-                        abortSignal: combinedSignal,
-                      }),
-                  }),
-                onRetryAttempt: (attempt) => {
-                  console.warn(
-                    JSON.stringify({
-                      _tag: "tool_retry",
-                      requestId,
-                      tool: name,
-                      attempt: attempt.attempt,
-                      maxAttempts: attempt.maxAttempts,
-                      delayMs: attempt.delayMs,
-                      errorCode: attempt.error.code,
-                    })
-                  )
-                },
-              })
-            retryCount = retries
-
-            try {
-              const serialized = JSON.stringify(result)
-              resultSizeBytes = new TextEncoder().encode(serialized).length
-            } catch {
-              // Non-serializable — skip measurement
-            }
-
-            return result
-          } catch (err) {
-            success = false
-            error = err instanceof Error ? err.message : String(err)
-            const errorData = extractToolErrorData(err, { toolName: name })
-            errorCode = errorData.code
-            retryAfterSeconds = errorData.retryAfterSeconds
-
-            const policyData = extractPolicyErrorData(err)
-            if (policyData) {
-              budgetKeyMode = policyData.keyMode
-              budgetDenied = policyData.budgetDenied
-            }
-            throw err
-          } finally {
-            traceCollector.record({
-              toolName: name,
-              toolCallId: options.toolCallId,
-              requestId,
-              durationMs: Date.now() - startMs,
-              success,
-              error,
-              resultSizeBytes,
-              errorCode,
-              retryAfterSeconds,
-              budgetKeyMode,
-              budgetDenied,
-              retryCount,
-            })
-          }
-        },
-      }
-    } else {
-      wrapped[name] = original
-    }
-  }
-  return wrapped as ToolSet
 }
 
 /**

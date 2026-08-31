@@ -1,8 +1,8 @@
 import type { ServerInfo } from "@/lib/mcp/load-tools"
 import type { ToolMetadata, ToolSource } from "./types"
 import {
-  buildToolInvocationMetadataByName,
   humanizeToolName,
+  toToolInvocationDisplayMetadata,
   type ToolInvocationMetadataByName,
 } from "./ui-metadata"
 
@@ -80,9 +80,7 @@ export type ToolMetadataResolver = {
    */
   source(toolName: string): ToolSource
   /**
-   * Transport-safe by-name display metadata. Delegates to the unchanged
-   * `buildToolInvocationMetadataByName`, so the persisted/streamed shape stays
-   * byte-for-byte identical.
+   * Transport-safe by-name display metadata projected from resolved records.
    */
   toInvocationMetadataByName(): ToolInvocationMetadataByName
 }
@@ -103,8 +101,8 @@ function resolveFromToolMetadata(meta: ToolMetadata): ResolvedToolMetadata {
 }
 
 function resolveFromServerInfo(info: ServerInfo): ResolvedToolMetadata {
-  // Mirror `toMcpDisplayMetadata`: humanized name, server-derived service name,
-  // wrench icon, and risk hints carried VERBATIM (no trust filtering).
+  // MCP display facts are resolved here once; risk hints stay VERBATIM so
+  // policy call sites can apply trust independently.
   return {
     displayName: humanizeToolName(info.displayName),
     source: "mcp",
@@ -139,22 +137,30 @@ export function createToolMetadataResolver(maps: {
   ])
   const mcp = maps.mcpToolServerMap
 
+  function resolve(toolName: string): ResolvedToolMetadata | undefined {
+    const info = mcp.get(toolName)
+    if (info) return resolveFromServerInfo(info)
+    const meta = nonMcp.get(toolName)
+    return meta ? resolveFromToolMetadata(meta) : undefined
+  }
+
   return {
-    get(toolName) {
-      const info = mcp.get(toolName)
-      if (info) return resolveFromServerInfo(info)
-      const meta = nonMcp.get(toolName)
-      return meta ? resolveFromToolMetadata(meta) : undefined
-    },
+    get: resolve,
     source(toolName) {
-      if (mcp.has(toolName)) return "mcp"
-      return nonMcp.get(toolName)?.source ?? "platform"
+      return resolve(toolName)?.source ?? "platform"
     },
     toInvocationMetadataByName() {
-      return buildToolInvocationMetadataByName({
-        nonMcpMetadata: nonMcp,
-        mcpToolServerMap: mcp,
-      })
+      const byName: ToolInvocationMetadataByName = {}
+      const toolNames = new Set([...nonMcp.keys(), ...mcp.keys()])
+
+      for (const toolName of toolNames) {
+        const metadata = resolve(toolName)
+        if (metadata) {
+          byName[toolName] = toToolInvocationDisplayMetadata(metadata)
+        }
+      }
+
+      return byName
     },
   }
 }

@@ -1,3 +1,5 @@
+import { collectChatErrorEvidence } from "./chat-error-evidence"
+
 export type ChatErrorType =
   | "auth"
   | "rate_limit"
@@ -16,76 +18,8 @@ export function getToolDimensionForError(
     : "no"
 }
 
-type ErrorLike = {
-  code?: unknown
-  statusCode?: unknown
-  status?: unknown
-  message?: unknown
-  name?: unknown
-  error?: unknown
-  cause?: unknown
-}
-
-function toLowerString(value: unknown): string {
-  return typeof value === "string" ? value.toLowerCase() : ""
-}
-
 function matchesAny(haystack: string, needles: string[]): boolean {
   return needles.some((needle) => haystack.includes(needle))
-}
-
-function getErrorLike(error: unknown): ErrorLike {
-  if (error && typeof error === "object") {
-    return error as ErrorLike
-  }
-  return {}
-}
-
-function extractStatusCode(err: ErrorLike): number | undefined {
-  const candidates = [err.statusCode, err.status]
-  for (const candidate of candidates) {
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      return candidate
-    }
-    if (typeof candidate === "string") {
-      const parsed = Number.parseInt(candidate, 10)
-      if (Number.isFinite(parsed)) {
-        return parsed
-      }
-    }
-  }
-  return undefined
-}
-
-function collectErrorChain(error: unknown): ErrorLike[] {
-  const queue: Array<{ value: unknown; depth: number }> = [
-    { value: error, depth: 0 },
-  ]
-  const seen = new Set<object>()
-  const collected: ErrorLike[] = []
-
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current || !current.value || typeof current.value !== "object") {
-      continue
-    }
-
-    if (seen.has(current.value)) continue
-    seen.add(current.value)
-
-    const err = current.value as ErrorLike
-    collected.push(err)
-
-    if (current.depth >= 3) continue
-    if (err.error && typeof err.error === "object") {
-      queue.push({ value: err.error, depth: current.depth + 1 })
-    }
-    if (err.cause && typeof err.cause === "object") {
-      queue.push({ value: err.cause, depth: current.depth + 1 })
-    }
-  }
-
-  return collected
 }
 
 function matchesAnyIn(values: string[], needles: string[]): boolean {
@@ -97,18 +31,7 @@ function hasStatus(statuses: number[], status: number): boolean {
 }
 
 export function classifyChatError(error: unknown): ChatErrorType {
-  const chain = collectErrorChain(error)
-  const fallback = getErrorLike(error)
-  if (chain.length === 0) chain.push(fallback)
-
-  const codes = chain.map((err) => toLowerString(err.code)).filter(Boolean)
-  const names = chain.map((err) => toLowerString(err.name)).filter(Boolean)
-  const messages = chain
-    .map((err) => toLowerString(err.message))
-    .filter(Boolean)
-  const statuses = chain
-    .map((err) => extractStatusCode(err))
-    .filter((status): status is number => typeof status === "number")
+  const { codes, names, messages, statuses } = collectChatErrorEvidence(error)
 
   if (
     hasStatus(statuses, 400) ||
@@ -180,6 +103,7 @@ export function classifyChatError(error: unknown): ChatErrorType {
   }
 
   if (
+    hasStatus(statuses, 402) ||
     hasStatus(statuses, 502) ||
     hasStatus(statuses, 503) ||
     hasStatus(statuses, 504) ||

@@ -1,15 +1,13 @@
 import type { UIMessage } from "ai"
 import {
-  createEmptyStats,
+  defineHistoryAdapter,
   detectSourceProvider,
+  dropNonFinalToolPart,
   incrementStat,
   isToolPart,
-  isToolPartFinal,
   stripCallProviderMetadata,
-  type AdaptationContext,
   type AdaptationResult,
   type AdaptationWarning,
-  type ProviderHistoryAdapter,
 } from "./types"
 
 type MessagePart = Record<string, unknown> & {
@@ -340,7 +338,7 @@ function injectGemini3ThoughtSignatures(
   return nextMessages
 }
 
-export const googleAdapter: ProviderHistoryAdapter = {
+export const googleAdapter = defineHistoryAdapter({
   providerId: "google",
 
   metadata: {
@@ -351,16 +349,8 @@ export const googleAdapter: ProviderHistoryAdapter = {
       "Google Gemini - strict FC/FR parity, role alternation, thought signatures",
   },
 
-  async adaptMessages(
-    messages: readonly UIMessage[],
-    context: AdaptationContext
-  ): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    const stats = createEmptyStats(messages.length, totalPartsOriginal)
-    const warnings: AdaptationWarning[] = []
+  async adaptMessages(messages, context, session) {
+    const { stats, warnings } = session
 
     const pass1Messages: UIMessage[] = messages.map((message, messageIndex) => {
       const nextPartsRaw: MessagePart[] = []
@@ -373,13 +363,7 @@ export const googleAdapter: ProviderHistoryAdapter = {
           continue
         }
 
-        if (isToolPart(part) && part.state != null && !isToolPartFinal(part)) {
-          warnings.push({
-            code: "non_final_state_dropped",
-            messageIndex,
-            detail: `Dropped non-final tool state ${String(part.state)}.`,
-          })
-          dropWithStat(stats.partsDropped, part.type)
+        if (dropNonFinalToolPart(part, messageIndex, session)) {
           continue
         }
 
@@ -483,18 +467,6 @@ export const googleAdapter: ProviderHistoryAdapter = {
         )
       : pass2Messages
 
-    stats.adaptedMessageCount = finalMessages.length
-    stats.droppedMessages =
-      stats.originalMessageCount - stats.adaptedMessageCount
-    stats.totalPartsAdapted = finalMessages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-
-    return {
-      messages: finalMessages,
-      stats,
-      warnings,
-    }
+    return finalMessages
   },
-}
+})

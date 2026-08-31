@@ -6,8 +6,6 @@ import {
   getSelectedPathMessages,
 } from "./domain/message_branches"
 import {
-  getForChatHandler,
-  getLastMessagesHandler,
   getPublicForChatHandler,
   getSelectedPathForViewer,
   getSelectedRunStateForViewer,
@@ -348,21 +346,13 @@ describe("message branch selection", () => {
       messageId: asMessageId("message_assistant_old"),
     })
 
-    await expect(getForChatHandler(ctx, { chatId })).resolves.toMatchObject([
-      { _id: "message_user_1" },
-      { _id: "message_assistant_old" },
-    ])
     await expect(
       getPublicForChatHandler(ctx, { chatId })
     ).resolves.toMatchObject([
       { _id: "message_user_1" },
       { _id: "message_assistant_old" },
     ])
-    await expect(
-      getLastMessagesHandler(ctx, { chatId, limit: 1 })
-    ).resolves.toMatchObject([{ _id: "message_assistant_old" }])
   })
-
 })
 
 describe("selected conversation projections", () => {

@@ -5,7 +5,9 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 const settingsMocks = vi.hoisted(() => ({
+  favoriteModels: ["claude-sonnet-5"],
   isModelHidden: vi.fn(() => false),
+  updateFavoriteModels: vi.fn(),
   models: [
     {
       id: "claude-sonnet-5",
@@ -78,9 +80,8 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
 
 vi.mock("./use-favorite-models", () => ({
   useFavoriteModels: () => ({
-    favoriteModels: ["claude-sonnet-5"],
-    updateFavoriteModels: vi.fn(),
-    updateFavoriteModelsDebounced: vi.fn(),
+    favoriteModels: settingsMocks.favoriteModels,
+    updateFavoriteModels: settingsMocks.updateFavoriteModels,
   }),
 }))
 
@@ -89,22 +90,35 @@ vi.mock("framer-motion", () => ({
     Group: ({
       children,
       className,
+      onReorder,
+      values,
     }: {
       children: React.ReactNode
       className?: string
+      onReorder: (values: unknown[]) => void
+      values: unknown[]
     }) => (
       <div data-testid="reorder-group" className={className}>
+        <button
+          data-testid="reorder-trigger"
+          onClick={() => {
+            onReorder(values)
+            onReorder([...values].reverse())
+          }}
+        />
         {children}
       </div>
     ),
     Item: ({
       children,
       className,
+      onDragEnd,
     }: {
       children: React.ReactNode
       className?: string
+      onDragEnd?: () => void
     }) => (
-      <div data-testid="reorder-item" className={className}>
+      <div data-testid="reorder-item" className={className} onClick={onDragEnd}>
         {children}
       </div>
     ),
@@ -130,6 +144,8 @@ describe("ModelsSettings", () => {
     root = null
     container = null
     settingsMocks.isModelHidden.mockClear()
+    settingsMocks.updateFavoriteModels.mockClear()
+    settingsMocks.favoriteModels = ["claude-sonnet-5"]
   })
 
   function renderSettings() {
@@ -187,9 +203,7 @@ describe("ModelsSettings", () => {
   it("renders available models in the shared provider-section order", () => {
     const rendered = renderSettings()
     const availableModelNames = Array.from(
-      rendered.querySelectorAll<HTMLButtonElement>(
-        'button[title="Pin model"]'
-      )
+      rendered.querySelectorAll<HTMLButtonElement>('button[title="Pin model"]')
     ).map((button) =>
       button.parentElement?.querySelector("span")?.textContent?.trim()
     )
@@ -198,6 +212,29 @@ describe("ModelsSettings", () => {
       "Claude Fable 5",
       "Claude Opus 4.8",
       "GPT-5.6 Sol",
+    ])
+  })
+
+  it("persists one reorder when dragging finishes", () => {
+    settingsMocks.favoriteModels = ["claude-sonnet-5", "claude-fable-5"]
+    const rendered = renderSettings()
+
+    act(() => {
+      rendered
+        .querySelector<HTMLButtonElement>('[data-testid="reorder-trigger"]')
+        ?.click()
+    })
+    expect(settingsMocks.updateFavoriteModels).not.toHaveBeenCalled()
+
+    act(() => {
+      rendered
+        .querySelector<HTMLElement>('[data-testid="reorder-item"]')
+        ?.click()
+    })
+    expect(settingsMocks.updateFavoriteModels).toHaveBeenCalledOnce()
+    expect(settingsMocks.updateFavoriteModels).toHaveBeenCalledWith([
+      "claude-fable-5",
+      "claude-sonnet-5",
     ])
   })
 })

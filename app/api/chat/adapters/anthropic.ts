@@ -1,14 +1,11 @@
 import type { UIMessage } from "ai"
 import {
-  createEmptyStats,
+  defineHistoryAdapter,
   detectSourceProvider,
+  dropNonFinalToolPart,
   incrementStat,
-  isToolPart,
-  isToolPartFinal,
   stripCallProviderMetadata,
-  type AdaptationResult,
   type AdaptationWarning,
-  type ProviderHistoryAdapter,
 } from "./types"
 
 type WebSearchResult = {
@@ -209,7 +206,7 @@ function warnForOrphanedToolPairs(
   }
 }
 
-export const anthropicAdapter: ProviderHistoryAdapter = {
+export const anthropicAdapter = defineHistoryAdapter({
   providerId: "anthropic",
   metadata: {
     droppedPartTypes: new Set(["step-start"]),
@@ -218,13 +215,8 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
     description:
       "Anthropic near-passthrough - API auto-manages thinking lifecycle",
   },
-  async adaptMessages(messages, _context): Promise<AdaptationResult> {
-    const totalPartsOriginal = messages.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-    const stats = createEmptyStats(messages.length, totalPartsOriginal)
-    const warnings: AdaptationWarning[] = []
+  async adaptMessages(messages, _context, session) {
+    const { stats, warnings } = session
     const adapted: UIMessage[] = []
 
     for (const [messageIndex, message] of messages.entries()) {
@@ -236,13 +228,13 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
         const partType =
           typeof mutablePart.type === "string" ? mutablePart.type : "unknown"
 
-        if (isToolPart({ type: partType }) && !isToolPartFinal(mutablePart)) {
-          incrementStat(stats.partsDropped, partType)
-          warnings.push({
-            code: "non_final_state_dropped",
+        if (
+          dropNonFinalToolPart(
+            { type: partType, state: mutablePart.state },
             messageIndex,
-            detail: `Dropped non-final tool state "${String(mutablePart.state ?? "unknown")}"`,
-          })
+            session
+          )
+        ) {
           continue
         }
 
@@ -299,20 +291,6 @@ export const anthropicAdapter: ProviderHistoryAdapter = {
       })
     }
 
-    stats.adaptedMessageCount = adapted.length
-    stats.droppedMessages = Math.max(
-      0,
-      stats.originalMessageCount - adapted.length
-    )
-    stats.totalPartsAdapted = adapted.reduce(
-      (sum, message) => sum + message.parts.length,
-      0
-    )
-
-    return {
-      messages: adapted,
-      stats,
-      warnings,
-    }
+    return adapted
   },
-}
+})

@@ -48,7 +48,7 @@ deployment's label can be a custom string while its real id is the
 
    ```bash
    bunx convex data chats            # page a table
-   bunx convex run messages:getForChat '{"chatId":"<id>"}'
+   bunx convex run messages:getSelectedPath '{"chatId":"<id>"}'
    bunx convex logs                  # tail function logs
    ```
 

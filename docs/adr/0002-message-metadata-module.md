@@ -63,9 +63,9 @@ unknown>`. The `isRecord` guard lives once in `branch.ts` (the lower module
   validator, so the stored shape is provably the owned key-set rather than an
   opaque `v.any()`. This was safe because there is no production data; the
   narrowed schema pushed cleanly to the dev deployment. Note this is a validator
-  _narrowing_, which the repo's expand/migrate/contract tooling
-  (`convex:schema-guard` / `convex:schema-preflight`) does **not** guard — that
-  tooling detects field _removals_ only. A future narrowing against a populated
+  _narrowing_, which the repo's schema contraction preflight
+  (`convex:schema-preflight`) does **not** guard — that tooling detects field
+  _removals_ only. A future narrowing against a populated
   deployment would need a bespoke cleanup + verifier (Convex strict objects
   reject unknown keys, and the preflight would not catch non-conforming rows),
   not the removal-oriented manifest flow.

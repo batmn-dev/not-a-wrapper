@@ -15,7 +15,6 @@ import {
 } from "@/lib/provider-identity"
 import { cn } from "@/lib/utils"
 import { RiAddLine, RiKeyLine } from "@remixicon/react"
-import { useQueryClient } from "@tanstack/react-query"
 import { useMutation as useConvexMutation } from "convex/react"
 import type { ComponentType } from "react"
 import { ProviderKeyPanel } from "../provider-key-panel"
@@ -132,7 +131,6 @@ function ByokProviderDetails({
 }
 
 export function ByokSection() {
-  const queryClient = useQueryClient()
   const { userKeyStatus, refreshAll } = useModel()
 
   return (
@@ -181,12 +179,9 @@ export function ByokSection() {
           <Icon icon={RiAddLine} slotSize={16} />
         </button>
       }
-      onSaved={async (_provider, result) => {
-        // Keep models, key status, and favorites in sync after saving a key.
+      onSaved={async () => {
+        // Key status is reactive; refresh the model catalog after saving.
         await refreshAll()
-        if (result.isNewKey) {
-          queryClient.invalidateQueries({ queryKey: ["favorite-models"] })
-        }
       }}
       onDeleted={async () => {
         await refreshAll()

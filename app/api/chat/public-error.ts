@@ -2,6 +2,7 @@ import {
   OPENROUTER_AFFORDABILITY_MESSAGE,
   type ChatErrorRecovery,
 } from "@/lib/chat-errors"
+import { collectChatErrorEvidence } from "@/lib/observability/chat-error-evidence"
 import type { Provider } from "@/lib/provider-identity"
 import type { ApiKeySource } from "@/lib/user-keys"
 
@@ -26,20 +27,6 @@ export type PublicChatError = {
   recovery?: ChatErrorRecovery
 }
 
-type ErrorRecord = {
-  statusCode?: unknown
-  status?: unknown
-  code?: unknown
-  message?: unknown
-  error_type?: unknown
-  metadata?: unknown
-  responseBody?: unknown
-  error?: unknown
-  cause?: unknown
-  lastError?: unknown
-  errors?: unknown
-}
-
 const PROVIDER_NAMES: Record<Provider, string> = {
   openai: "OpenAI",
   mistral: "Mistral",
@@ -48,111 +35,6 @@ const PROVIDER_NAMES: Record<Provider, string> = {
   anthropic: "Anthropic",
   xai: "xAI",
   openrouter: "OpenRouter",
-}
-
-function asRecord(value: unknown): ErrorRecord | null {
-  return value && typeof value === "object" ? (value as ErrorRecord) : null
-}
-
-function collectErrorChain(error: unknown): ErrorRecord[] {
-  const queue: Array<{ value: unknown; depth: number }> = [
-    { value: error, depth: 0 },
-  ]
-  const seen = new Set<object>()
-  const records: ErrorRecord[] = []
-
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) continue
-
-    const record = asRecord(current.value)
-    if (!record || seen.has(record as object)) continue
-    seen.add(record as object)
-    records.push(record)
-
-    if (current.depth >= 4) continue
-    for (const nested of [record.error, record.cause, record.lastError]) {
-      if (nested && typeof nested === "object") {
-        queue.push({ value: nested, depth: current.depth + 1 })
-      }
-    }
-    if (Array.isArray(record.errors)) {
-      for (const nested of record.errors) {
-        if (nested && typeof nested === "object") {
-          queue.push({ value: nested, depth: current.depth + 1 })
-        }
-      }
-    }
-  }
-
-  return records
-}
-
-function parseStatus(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value !== "string") return undefined
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
-type ResponseBodyDetails = { message?: string; errorType?: string }
-
-function extractResponseBodyDetails(
-  responseBody: unknown
-): ResponseBodyDetails {
-  if (typeof responseBody !== "string" || responseBody.length === 0) return {}
-  try {
-    const parsed = JSON.parse(responseBody) as {
-      error?:
-        | {
-            message?: unknown
-            error_type?: unknown
-            metadata?: { error_type?: unknown }
-          }
-        | string
-      message?: unknown
-      error_type?: unknown
-      metadata?: { error_type?: unknown }
-    }
-    if (typeof parsed.error === "object" && parsed.error) {
-      const errorType =
-        typeof parsed.error.error_type === "string"
-          ? parsed.error.error_type
-          : typeof parsed.error.metadata?.error_type === "string"
-            ? parsed.error.metadata.error_type
-            : undefined
-      return {
-        ...(typeof parsed.error.message === "string"
-          ? { message: parsed.error.message }
-          : {}),
-        ...(errorType ? { errorType } : {}),
-      }
-    }
-    const errorType =
-      typeof parsed.error_type === "string"
-        ? parsed.error_type
-        : typeof parsed.metadata?.error_type === "string"
-          ? parsed.metadata.error_type
-          : undefined
-    return {
-      ...(typeof parsed.error === "string"
-        ? { message: parsed.error }
-        : typeof parsed.message === "string"
-          ? { message: parsed.message }
-          : {}),
-      ...(errorType ? { errorType } : {}),
-    }
-  } catch {
-    return {}
-  }
-}
-
-function extractDirectErrorType(record: ErrorRecord): string | undefined {
-  if (typeof record.error_type === "string") return record.error_type
-  const metadata = asRecord(record.metadata)
-  return typeof metadata?.error_type === "string"
-    ? metadata.error_type
-    : undefined
 }
 
 function includesAny(values: string[], needles: string[]): boolean {
@@ -206,45 +88,12 @@ export function normalizeChatError(
   error: unknown,
   context: PublicChatErrorContext = {}
 ): PublicChatError {
-  const records = collectErrorChain(error)
-  const statuses = records
-    .flatMap((record) => [
-      parseStatus(record.statusCode),
-      parseStatus(record.status),
-      parseStatus(record.code),
-    ])
-    .filter((status): status is number => status !== undefined)
-  const codes = records
-    .map((record) =>
-      typeof record.code === "string" ? record.code.toLowerCase() : ""
-    )
-    .filter(Boolean)
-  const responseDetails = records.map((record) =>
-    extractResponseBodyDetails(record.responseBody)
-  )
-  const providerErrorTypes = records
-    .flatMap((record, index) => [
-      extractDirectErrorType(record)?.toLowerCase() ?? "",
-      responseDetails[index]?.errorType?.toLowerCase() ?? "",
-    ])
-    .filter(Boolean)
-  const messages = records
-    .flatMap((record) => [
-      typeof record.message === "string" ? record.message : "",
-      extractResponseBodyDetails(record.responseBody).message ?? "",
-    ])
-    .filter(Boolean)
-  if (typeof error === "string" && error.length > 0) messages.unshift(error)
-  const normalizedMessages = messages.map((message) => message.toLowerCase())
-  const rootError = records[0]
+  const evidence = collectChatErrorEvidence(error)
   const internalMissingApiKeyMessage =
-    rootError?.code === "MISSING_API_KEY" &&
-    [rootError.statusCode, rootError.status].some(
-      (status) => parseStatus(status) === 401
-    ) &&
-    typeof rootError.message === "string" &&
-    rootError.message.length > 0
-      ? rootError.message
+    evidence.root?.code === "MISSING_API_KEY" &&
+    evidence.root.statuses.includes(401) &&
+    evidence.root.message
+      ? evidence.root.message
       : null
   const base = {
     ...(context.provider ? { provider: context.provider } : {}),
@@ -253,7 +102,7 @@ export function normalizeChatError(
       : {}),
   }
 
-  if (codes.includes("missing_api_key")) {
+  if (evidence.codes.includes("missing_api_key")) {
     return {
       ...base,
       code: "AUTHENTICATION_ERROR",
@@ -263,9 +112,13 @@ export function normalizeChatError(
   }
 
   if (
-    statuses.includes(401) ||
-    includesAny(codes, ["authentication", "unauthorized", "invalid_api_key"]) ||
-    includesAny(normalizedMessages, [
+    evidence.statuses.includes(401) ||
+    includesAny(evidence.codes, [
+      "authentication",
+      "unauthorized",
+      "invalid_api_key",
+    ]) ||
+    includesAny(evidence.messages, [
       "invalid x-api-key",
       "authentication_error",
       "incorrect api key",
@@ -281,13 +134,13 @@ export function normalizeChatError(
   }
 
   if (
-    statuses.includes(402) ||
-    includesAny(codes, ["payment_required", "insufficient_quota"]) ||
-    includesAny(providerErrorTypes, [
+    evidence.statuses.includes(402) ||
+    includesAny(evidence.codes, ["payment_required", "insufficient_quota"]) ||
+    includesAny(evidence.errorTypes, [
       "payment_required",
       "token_limit_exceeded",
     ]) ||
-    includesAny(normalizedMessages, [
+    includesAny(evidence.messages, [
       "payment required",
       "insufficient credit",
       "insufficient quota",
@@ -298,9 +151,9 @@ export function normalizeChatError(
     const openRouterAffordability =
       context.provider === "openrouter" &&
       context.credentialSource === "byok" &&
-      (providerErrorTypes.includes("token_limit_exceeded") ||
-        (includesAny(normalizedMessages, ["max_tokens", "maximum output"]) &&
-          includesAny(normalizedMessages, ["afford", "credit", "balance"])))
+      (evidence.errorTypes.includes("token_limit_exceeded") ||
+        (includesAny(evidence.messages, ["max_tokens", "maximum output"]) &&
+          includesAny(evidence.messages, ["afford", "credit", "balance"])))
     return {
       ...base,
       code: "PAYMENT_REQUIRED",
@@ -315,9 +168,9 @@ export function normalizeChatError(
   }
 
   if (
-    statuses.includes(429) ||
-    includesAny(codes, ["rate_limit", "too_many_requests"]) ||
-    includesAny(normalizedMessages, ["rate limit", "too many requests"])
+    evidence.statuses.includes(429) ||
+    includesAny(evidence.codes, ["rate_limit", "too_many_requests"]) ||
+    includesAny(evidence.messages, ["rate limit", "too many requests"])
   ) {
     return {
       ...base,
@@ -327,8 +180,7 @@ export function normalizeChatError(
     }
   }
 
-  const fallbackMessage = messages[0]
-  if (fallbackMessage) {
+  if (evidence.messages.length > 0) {
     return {
       ...base,
       code: "PROVIDER_ERROR",

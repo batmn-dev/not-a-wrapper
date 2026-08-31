@@ -1,5 +1,4 @@
 import { v } from "convex/values"
-import { internalMutation } from "./_generated/server"
 import {
   authenticatedMutation,
   maybeAuthQuery,
@@ -34,40 +33,6 @@ export const listByUser = maybeAuthQuery({
       .query("mcpToolApprovals")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect()
-  },
-})
-
-export const upsertApproval = ownedMcpServerMutation({
-  args: {
-    toolName: v.string(),
-    approved: v.boolean(),
-  },
-  handler: async (ctx, { toolName, approved }) => {
-    const userId = ctx.user._id
-    const serverId = ctx.server._id
-
-    const existing = await ctx.db
-      .query("mcpToolApprovals")
-      .withIndex("by_user_server_tool", (q) =>
-        q.eq("userId", userId).eq("serverId", serverId).eq("toolName", toolName)
-      )
-      .unique()
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        approved,
-        approvedAt: approved ? Date.now() : existing.approvedAt,
-      })
-      return existing._id
-    }
-
-    return await ctx.db.insert("mcpToolApprovals", {
-      userId,
-      serverId,
-      toolName,
-      approved,
-      approvedAt: approved ? Date.now() : undefined,
-    })
   },
 })
 
@@ -125,19 +90,5 @@ export const toggleApproval = authenticatedMutation({
       approved: newApproved,
       approvedAt: newApproved ? Date.now() : approval.approvedAt,
     })
-  },
-})
-
-export const removeByServer = internalMutation({
-  args: { serverId: v.id("mcpServers") },
-  handler: async (ctx, { serverId }) => {
-    const approvals = await ctx.db
-      .query("mcpToolApprovals")
-      .withIndex("by_server", (q) => q.eq("serverId", serverId))
-      .collect()
-
-    for (const approval of approvals) {
-      await ctx.db.delete(approval._id)
-    }
   },
 })
