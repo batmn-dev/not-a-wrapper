@@ -19,7 +19,6 @@ import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
 import type { EditTurnResult } from "@/lib/chat-turn/chat-turn-controller"
 import { cn } from "@/lib/utils"
 import {
-  RiArrowDownSLine,
   RiCheckLine,
   RiEditLine,
   RiFileCopyLine,
@@ -139,6 +138,22 @@ function SharePromptIcon() {
   )
 }
 
+function CollapsibleUserMessageChevron() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="size-4"
+      fill="currentColor"
+    >
+      <path d="M12.629 5.879a.525.525 0 1 1 .742.742l-4.765 4.765a.86.86 0 0 1-1.212 0L2.629 6.62a.525.525 0 1 1 .742-.742L8 10.508z" />
+    </svg>
+  )
+}
+
 const collapsedMessageMaxHeight = 264
 
 function CollapsibleUserMessage({ children }: { children: string }) {
@@ -199,14 +214,14 @@ function CollapsibleUserMessage({ children }: { children: string }) {
         >
           <span className={cn(isExpanded && "hidden")}>Show more</span>
           <span className={cn(!isExpanded && "hidden")}>Show less</span>
-          <span
+          <div
             className={cn(
-              "motion-safe:transition-transform motion-safe:duration-150",
+              "size-4 motion-safe:transition-transform motion-safe:duration-150",
               isExpanded && "rotate-180"
             )}
           >
-            <Icon icon={RiArrowDownSLine} slotSize={16} />
-          </span>
+            <CollapsibleUserMessageChevron />
+          </div>
         </button>
       )}
     </div>
@@ -230,7 +245,7 @@ function UserMessageBubble({
       <div className="contents w-full">
         <div
           className={cn(
-            "user-message-bubble-color relative w-full min-w-0 overflow-hidden rounded-[22px] [background-color:var(--theme-user-msg-bg,var(--user-message-bg))] px-4 py-2.5 leading-6 [color:var(--theme-user-msg-text,var(--foreground))] [corner-shape:superellipse(0.98)]",
+            "corner-superellipse/0.98 user-message-bubble-color relative w-full min-w-0 overflow-hidden rounded-[22px] [background-color:var(--theme-user-msg-bg,var(--user-message-bg))] px-4 py-2.5 leading-6 [color:var(--theme-user-msg-text,var(--foreground))]",
             containsAttachments && "rounded-se-lg"
           )}
         >
@@ -266,7 +281,7 @@ function UserMessageEditor({
   }, [])
 
   return (
-    <div className="font-native bg-secondary rounded-3xl px-3 py-3 [corner-shape:superellipse(1)]">
+    <div className="font-native bg-secondary rounded-3xl px-3 py-3">
       {attachments && attachments.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {attachments.map((attachment, index) => (
@@ -340,6 +355,8 @@ export type MessageUserProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
+  isEditing: boolean
+  onEditingChange: (isEditing: boolean) => void
   isDurableChat?: boolean
 }
 
@@ -354,15 +371,16 @@ export function MessageUser({
   branch,
   onSelectBranch,
   onEdit,
+  isEditing,
+  onEditingChange,
   isDurableChat,
 }: MessageUserProps) {
   const [editInput, setEditInput] = useState(children)
-  const [isEditing, setIsEditing] = useState(false)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
 
   const handleEditCancel = () => {
-    setIsEditing(false)
+    onEditingChange(false)
     setEditInput(children)
     setEditError(null)
     setIsSavingEdit(false)
@@ -384,7 +402,7 @@ export function MessageUser({
         setEditError(result.message || "The edit was not submitted.")
         return
       }
-      setIsEditing(false)
+      onEditingChange(false)
     } catch {
       setEditError("Failed to submit the edit. Please try again.")
     } finally {
@@ -393,7 +411,7 @@ export function MessageUser({
   }
 
   const handleEditStart = () => {
-    setIsEditing(true)
+    onEditingChange(true)
     setEditInput(children)
     setEditError(null)
   }

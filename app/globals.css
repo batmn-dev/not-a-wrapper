@@ -29,6 +29,10 @@
 @custom-variant tall (@media (min-height: 40rem));
 @custom-variant not-tall (@media (max-height: 39.99rem));
 
+.corner-superellipse\/0\.98 {
+  corner-shape: superellipse(0.98);
+}
+
 /* Base UI orientation shorthands (basecn convention). Base UI components emit
    data-orientation="…", so the bare data-horizontal:/data-vertical: utilities
    in ui/tabs.tsx, ui/button-group.tsx, and ui/field.tsx never match without
@@ -951,6 +955,13 @@
 @layer base {
   * {
     @apply border-border outline-ring;
+  }
+  /* Chat's shared form reset prevents the browser focus outline from becoming editor chrome. */
+  textarea:focus {
+    border-color: inherit;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: none;
   }
   /* Search fields use product-owned clear controls instead of browser chrome. */
   input[type="search"]::-webkit-search-cancel-button {

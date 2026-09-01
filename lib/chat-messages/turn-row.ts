@@ -30,6 +30,7 @@ export type AssistantTurnRowModel = BaseTurnRowModel & {
 
 export type UserTurnRowModel = BaseTurnRowModel & {
   kind: "user"
+  isEditing: boolean
   attachments?: TurnRowAttachment[]
   branch?: MessageBranchInfo
 }
@@ -116,6 +117,7 @@ export function turnRowModelsEqual(
 
   if (previous.kind === "user" && next.kind === "user") {
     return (
+      previous.isEditing === next.isEditing &&
       attachmentsEqual(previous.attachments, next.attachments) &&
       branchesEqual(previous.branch, next.branch)
     )

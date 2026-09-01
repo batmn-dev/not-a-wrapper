@@ -12,10 +12,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import type { Metadata } from "next"
@@ -25,10 +23,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 
@@ -38,19 +34,19 @@ export function DialogDefault() {
       <DialogTrigger render={<Button variant="outline" />}>
         Edit profile
       </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit profile</DialogTitle>
-          <DialogDescription>
-            Make changes to your profile here. Click save when you are done.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
-          <DialogClose render={<Button />}>Save changes</DialogClose>
-        </DialogFooter>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader
+          title="Edit profile"
+          description="Make changes to your profile here. Click save when you are done."
+        />
+        <DialogFooter
+          secondaryButton={
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          }
+          primaryButton={
+            <DialogClose render={<Button />}>Save changes</DialogClose>
+          }
+        />
       </DialogContent>
     </Dialog>
   )
@@ -91,15 +87,27 @@ const apiRows = [
   },
   {
     prop: "DialogContent size",
-    type: '"default" | "large"',
-    defaultValue: '"default"',
-    description: "Uses the standard 448px or large 512px content width.",
+    type: '"normal" | "large" | "xlarge" | "fullscreen"',
+    defaultValue: '"normal"',
+    description: "Uses a shared responsive modal width or the full container.",
   },
   {
-    prop: "DialogFooter showCloseButton",
-    type: "boolean",
-    defaultValue: "false",
-    description: "Appends an outline Close button after the footer children.",
+    prop: "DialogHeader title / description",
+    type: "ReactNode",
+    defaultValue: "—",
+    description: "Builds the title region and shared close affordance.",
+  },
+  {
+    prop: "DialogCloseButton",
+    type: "DialogPrimitive.Close props",
+    defaultValue: "—",
+    description: "Provides the shared 36px close affordance.",
+  },
+  {
+    prop: "DialogFooter button slots",
+    type: "ReactNode",
+    defaultValue: "—",
+    description: "Places footer content and secondary/primary actions.",
   },
 ] as const
 
@@ -130,20 +138,21 @@ export default function DialogPage() {
             <DialogTrigger render={<Button variant="outline" />}>
               Edit profile
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Edit profile</DialogTitle>
-                <DialogDescription>
-                  Make changes to your profile here. Click save when you are
-                  done.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>
-                  Cancel
-                </DialogClose>
-                <DialogClose render={<Button />}>Save changes</DialogClose>
-              </DialogFooter>
+            <DialogContent showCloseButton={false}>
+              <DialogHeader
+                title="Edit profile"
+                description="Make changes to your profile here. Click save when you are done."
+              />
+              <DialogFooter
+                secondaryButton={
+                  <DialogClose render={<Button variant="outline" />}>
+                    Cancel
+                  </DialogClose>
+                }
+                primaryButton={
+                  <DialogClose render={<Button />}>Save changes</DialogClose>
+                }
+              />
             </DialogContent>
           </Dialog>
         </ComponentPreview>

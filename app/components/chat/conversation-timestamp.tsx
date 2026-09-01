@@ -1,10 +1,15 @@
+import { getMessageBranchInfo } from "@/lib/chat-messages/branch"
+import { isOptimisticEditMessageId } from "@/lib/chat-store/identity"
+
 const ONE_HOUR_MS = 60 * 60 * 1000
 const TEN_MINUTES_MS = 10 * 60 * 1000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
 type TimestampTurn = {
+  id?: string
   role: string
   createdAt?: unknown
+  metadata?: unknown
 }
 
 export type ConversationTimestampHeader = {
@@ -21,6 +26,12 @@ export type ConversationTimestampText = {
 function validDate(value: unknown): Date | undefined {
   if (!(value instanceof Date)) return undefined
   return Number.isFinite(value.getTime()) ? value : undefined
+}
+
+function isEditedUserTurn(turn: TimestampTurn): boolean {
+  if (turn.role !== "user") return false
+  if (isOptimisticEditMessageId(turn.id)) return true
+  return (getMessageBranchInfo(turn)?.currentIndex ?? 0) > 0
 }
 
 function localDayNumber(date: Date, timeZone?: string): number {
@@ -133,6 +144,7 @@ export function deriveConversationTimestampHeaders(
         : undefined
 
       if (
+        isEditedUserTurn(turn) ||
         (isFirstRenderedUser && now.getTime() - dateMs > ONE_HOUR_MS) ||
         (previousTurn?.role === "assistant" &&
           turn.role === "user" &&

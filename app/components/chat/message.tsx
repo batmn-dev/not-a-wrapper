@@ -16,6 +16,7 @@ type MessageProps = {
     id: string,
     newText: string
   ) => Promise<EditTurnResult | void> | EditTurnResult | void
+  onEditingChange?: (messageId: string, isEditing: boolean) => void
   onReload?: (messageId: string, overrides?: RegenerationTurnOverrides) => void
   onSelectBranch?: (messageId: string) => void
   onQuote?: (text: string, messageId: string) => void
@@ -36,6 +37,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
 function MessageInner({
   model,
   onEdit,
+  onEditingChange,
   onReload,
   onSelectBranch,
   onQuote,
@@ -109,6 +111,8 @@ function MessageInner({
         sharePrompt={sharePrompt}
         onReload={onReload}
         onEdit={onEdit}
+        isEditing={model.isEditing}
+        onEditingChange={(isEditing) => onEditingChange?.(model.id, isEditing)}
         id={model.id}
         attachments={model.attachments}
         className={model.className}

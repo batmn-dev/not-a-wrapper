@@ -5,7 +5,12 @@ import { CollapsibleSection } from "@/components/ui/collapsible-section"
 import { Icon } from "@/components/ui/icon"
 import { useSidebar } from "@/components/ui/sidebar"
 import type { Id } from "@/convex/_generated/dataModel"
-import { RiAddLine, RiFolderLine, RiFolderOpenFill } from "@remixicon/react"
+import {
+  RiAddLine,
+  RiFolderAddLine,
+  RiFolderLine,
+  RiFolderOpenFill,
+} from "@remixicon/react"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import type { ChatOrganization } from "./chat-organization"
@@ -82,15 +87,26 @@ export function SidebarProject({
           }
         >
           <SidebarCollection>
-            {projects.map((project) => (
-              <SidebarCollectionItem key={project._id}>
-                <SidebarProjectItem
-                  project={project}
-                  isPinPending={isPinPending(project._id)}
-                  onTogglePinned={() => onTogglePinned(project)}
+            {projects.length === 0 ? (
+              <SidebarCollectionItem>
+                <SidebarMenuItem
+                  icon={RiFolderAddLine}
+                  label="New project"
+                  testId="sidebar-new-project"
+                  onClick={() => setIsDialogOpen(true)}
                 />
               </SidebarCollectionItem>
-            ))}
+            ) : (
+              projects.map((project) => (
+                <SidebarCollectionItem key={project._id}>
+                  <SidebarProjectItem
+                    project={project}
+                    isPinPending={isPinPending(project._id)}
+                    onTogglePinned={() => onTogglePinned(project)}
+                  />
+                </SidebarCollectionItem>
+              ))
+            )}
           </SidebarCollection>
         </CollapsibleSection>
       )}

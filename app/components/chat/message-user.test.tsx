@@ -47,6 +47,8 @@ describe("MessageUser attachments", () => {
           copied={false}
           copyToClipboard={() => {}}
           id="message-1"
+          isEditing={false}
+          onEditingChange={() => {}}
         >
           Upload smoke test
         </MessageUser>
@@ -99,7 +101,7 @@ describe("MessageUser attachments", () => {
     expect(bubble?.className).toContain("rounded-[22px]")
     expect(bubble?.className).toContain("px-4 py-2.5 leading-6")
     expect(bubble?.className).toContain("user-message-bubble-color")
-    expect(bubble?.className).toContain("[corner-shape:superellipse(0.98)]")
+    expect(bubble?.className).toContain("corner-superellipse/0.98")
     expect(
       bubble?.querySelector('[data-testid="collapsible-user-message-root"]')
     ).toBeTruthy()
@@ -121,6 +123,14 @@ describe("MessageUser attachments", () => {
     expect(content?.className).toContain("100%_-_48px")
     expect(toggle?.getAttribute("aria-expanded")).toBe("false")
     expect(toggle?.textContent).toContain("Show more")
+
+    const toggleIconWrapper = toggle?.lastElementChild
+    const toggleIcon = toggleIconWrapper?.querySelector("svg")
+
+    expect(toggleIconWrapper?.tagName).toBe("DIV")
+    expect(toggleIconWrapper?.className).toContain("size-4")
+    expect(toggleIcon?.getAttribute("viewBox")).toBe("0 0 16 16")
+    expect(toggleIcon?.classList.contains("size-4")).toBe(true)
 
     act(() => {
       toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
@@ -156,18 +166,26 @@ describe("MessageUser edits", () => {
     container = mountedContainer
     root = createRoot(mountedContainer)
 
-    act(() => {
-      root?.render(
+    function ControlledEditableMessage() {
+      const [isEditing, setIsEditing] = React.useState(false)
+
+      return (
         <MessageUser
           copied={false}
           copyToClipboard={() => {}}
           id="msg-client-123"
           isDurableChat={true}
           {...props}
+          isEditing={isEditing}
+          onEditingChange={setIsEditing}
         >
           Original text
         </MessageUser>
       )
+    }
+
+    act(() => {
+      root?.render(<ControlledEditableMessage />)
     })
   }
 
@@ -253,6 +271,7 @@ describe("MessageUser edits", () => {
     const actionRow = editor?.lastElementChild
 
     expect(editor?.className).toContain("rounded-3xl")
+    expect(editor?.className).not.toContain("corner-shape")
     expect(editor?.className).toContain("bg-secondary")
     expect(editor?.className).toContain("font-native")
     expect(editor?.className).toContain("px-3 py-3")

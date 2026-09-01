@@ -3,17 +3,15 @@
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog"
 import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
-import { RiCloseLine, RiFolderLine, RiLightbulbLine } from "@remixicon/react"
+import { RiFolderLine, RiLightbulbLine } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { useRouter } from "next/navigation"
 import { useId, useState } from "react"
@@ -77,30 +75,11 @@ export function DialogCreateProject({
         className="font-native group/dialog @container block overflow-hidden p-0 text-base"
       >
         <div className="flex w-[100cqw] max-w-lg shrink-0 flex-col overflow-hidden">
-          <DialogHeader className="min-h-13 flex-row flex-wrap items-start gap-2 p-2 ps-4">
-            <div className="flex max-w-[calc(100%-100px)] min-w-0 gap-2 self-center">
-              <div className="flex min-w-0 flex-col">
-                <DialogTitle className="font-[inherit] text-lg leading-7 font-normal">
-                  Create project
-                </DialogTitle>
-              </div>
-            </div>
-            <div className="grow" />
-            <DialogClose
-              render={
-                <Button
-                  aria-label="Close"
-                  className="size-9 rounded-lg"
-                  pressMotion="none"
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                />
-              }
-            >
-              <Icon icon={RiCloseLine} slotSize={20} glyphInset={0} />
-            </DialogClose>
-          </DialogHeader>
+          <DialogHeader
+            disableAutoFocusTitle
+            disableCloseButtonAutoFocus
+            title="Create project"
+          />
 
           <form data-testid="create-new-project-form" onSubmit={handleSubmit}>
             <div className="px-4 pt-2">
@@ -160,18 +139,20 @@ export function DialogCreateProject({
               ) : null}
             </div>
 
-            <DialogFooter className="h-17 flex-row items-center justify-end gap-1.5 p-4">
-              <Button
-                type="submit"
-                disabled={!canSubmit || isPending}
-                aria-busy={isPending}
-                pressMotion="none"
-              >
-                <span className="flex items-center justify-center">
+            <DialogFooter
+              className="p-4"
+              primaryButton={
+                <Button
+                  type="submit"
+                  disabled={!canSubmit}
+                  disabledVariant="muted"
+                  loading={isPending}
+                  pressMotion="none"
+                >
                   Create project
-                </span>
-              </Button>
-            </DialogFooter>
+                </Button>
+              }
+            />
           </form>
         </div>
       </DialogContent>

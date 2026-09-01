@@ -87,11 +87,36 @@ vi.mock("@/components/ui/dialog", () => ({
     <div>{children}</div>
   ),
   DialogClose: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  DialogCloseButton: () => <button type="button" aria-label="Close" />,
+  DialogHeader: ({
+    children,
+    title,
+  }: {
+    children?: React.ReactNode
+    title?: React.ReactNode
+  }) => (
+    <div>
+      {title ? <h2>{title}</h2> : null}
+      {children}
+    </div>
   ),
-  DialogFooter: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  DialogFooter: ({
+    children,
+    footerContent,
+    primaryButton,
+    secondaryButton,
+  }: {
+    children?: React.ReactNode
+    footerContent?: React.ReactNode
+    primaryButton?: React.ReactNode
+    secondaryButton?: React.ReactNode
+  }) => (
+    <div>
+      {footerContent}
+      {secondaryButton}
+      {children}
+      {primaryButton}
+    </div>
   ),
   DialogTitle: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -341,6 +366,9 @@ describe("ProjectsView essential behavior", () => {
     )!
 
     expect(createButton.disabled).toBe(true)
+    expect(createButton.className.split(" ")).toContain(
+      "disabled:bg-primary/50"
+    )
     await act(async () => setInputValue(nameInput, "P".repeat(51)))
     expect(nameInput.getAttribute("aria-invalid")).toBe("true")
     expect(

@@ -88,31 +88,46 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 vi.mock("./message", () => ({
   Message: ({
     model,
+    onEditingChange,
     onReload,
   }: {
     model: {
       id: string
+      kind: "assistant" | "user" | "unsupported"
       text: string
+      isEditing?: boolean
       status?: string
       finishReason?: string
       retryDisabled?: boolean
       view?: { reasoning?: { phase?: string } }
     }
+    onEditingChange?: (messageId: string, isEditing: boolean) => void
     onReload?: (messageId: string) => void
   }) => (
-    <button
-      data-can-reload={Boolean(onReload)}
-      data-finish-reason={model.finishReason}
-      data-reasoning-phase={model.view?.reasoning?.phase}
-      data-retry-disabled={Boolean(model.retryDisabled)}
-      data-status={model.status}
-      data-testid={`message-${model.id}`}
-      disabled={model.retryDisabled}
-      onClick={() => onReload?.(model.id)}
-      type="button"
-    >
-      {model.text}
-    </button>
+    <>
+      <button
+        data-can-reload={Boolean(onReload)}
+        data-finish-reason={model.finishReason}
+        data-reasoning-phase={model.view?.reasoning?.phase}
+        data-retry-disabled={Boolean(model.retryDisabled)}
+        data-status={model.status}
+        data-testid={`message-${model.id}`}
+        disabled={model.retryDisabled}
+        onClick={() => onReload?.(model.id)}
+        type="button"
+      >
+        {model.text}
+      </button>
+      {model.kind === "user" ? (
+        <button
+          data-testid={`toggle-edit-${model.id}`}
+          onClick={() => onEditingChange?.(model.id, !Boolean(model.isEditing))}
+          type="button"
+        >
+          Toggle edit
+        </button>
+      ) : null}
+    </>
   ),
 }))
 
@@ -173,6 +188,30 @@ describe("Conversation recovered turn contracts", () => {
     ).toContain(
       "keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))]"
     )
+  })
+
+  it("puts the edit-only 40px separation on the user turn-message owner", () => {
+    render()
+
+    const userOwner = () =>
+      container?.querySelector<HTMLElement>(
+        '[data-turn="user"] [data-conversation-screenshot-content]'
+      )
+    const assistantOwner = container?.querySelector<HTMLElement>(
+      '[data-turn="assistant"] [data-conversation-screenshot-content]'
+    )
+
+    expect(userOwner()?.classList.contains("mb-10")).toBe(false)
+    expect(assistantOwner?.classList.contains("mb-10")).toBe(false)
+
+    act(() => {
+      container
+        ?.querySelector<HTMLButtonElement>('[data-testid="toggle-edit-user-1"]')
+        ?.click()
+    })
+
+    expect(userOwner()?.classList.contains("mb-10")).toBe(true)
+    expect(assistantOwner?.classList.contains("mb-10")).toBe(false)
   })
 
   it("uses the exact assistant containment guard and deep-link sentinels", () => {
