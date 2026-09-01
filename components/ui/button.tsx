@@ -7,11 +7,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary-bg-hover",
+        default:
+          "border border-transparent bg-primary text-primary-foreground hover:bg-primary-bg-hover",
         outline:
           "bg-input-bg shadow-border hover:bg-input-bg-hover hover:text-foreground hover:shadow-border-hover aria-expanded:bg-input-bg-hover aria-expanded:text-foreground",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary-bg-hover aria-expanded:bg-secondary-bg-hover aria-expanded:text-secondary-foreground",
+          "border-border-default bg-(--composer-surface-primary) border text-secondary-foreground hover:bg-secondary-bg-hover aria-expanded:bg-secondary-bg-hover aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-interactive-hover hover:text-foreground active:bg-interactive-pressed",
         composer: "text-foreground",
@@ -70,9 +71,7 @@ function Button({
       data-visually-disabled={visuallyDisabled ? "" : undefined}
       disabled={disabled || visuallyDisabled}
       focusableWhenDisabled={visuallyDisabled || focusableWhenDisabled}
-      className={cn(
-        buttonVariants({ variant, size, pressMotion, className })
-      )}
+      className={cn(buttonVariants({ variant, size, pressMotion, className }))}
       {...props}
     />
   )

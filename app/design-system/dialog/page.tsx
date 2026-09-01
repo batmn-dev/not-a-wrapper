@@ -90,6 +90,12 @@ const apiRows = [
     description: "Renders the ghost close button in the top-right corner.",
   },
   {
+    prop: "DialogContent size",
+    type: '"default" | "large"',
+    defaultValue: '"default"',
+    description: "Uses the standard 448px or large 512px content width.",
+  },
+  {
     prop: "DialogFooter showCloseButton",
     type: "boolean",
     defaultValue: "false",

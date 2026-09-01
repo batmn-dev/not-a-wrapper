@@ -89,11 +89,24 @@ function MessageInner({
     }, 500)
   }
 
+  const sharePrompt = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: model.text })
+        return
+      }
+      await navigator.clipboard?.writeText(model.text)
+    } catch {
+      // Closing the platform share sheet is not an error state for the turn.
+    }
+  }
+
   if (model.kind === "user") {
     return (
       <MessageUser
         copied={copied}
         copyToClipboard={copyToClipboard}
+        sharePrompt={sharePrompt}
         onReload={onReload}
         onEdit={onEdit}
         id={model.id}

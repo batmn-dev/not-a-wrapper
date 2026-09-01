@@ -2,8 +2,8 @@
  * Responsive thread variables use explicit 40rem/53.5rem/64rem container
  * thresholds; Tailwind's named container scale resolves to different
  * widths. Keep these declaration fragments last at call sites so their class
- * order remains stable. The main container spans the dock slot intentionally,
- * avoiding a width-tier jump while the Activity panel closes.
+ * order remains stable. LayoutApp makes `#main` the nearest named container,
+ * so opening the source-shaped side pane narrows these tiers with the thread.
  */
 export const THREAD_GUTTER_VARS =
   "[--thread-content-margin:1rem] @[40rem]/main:[--thread-content-margin:1.5rem] @[64rem]/main:[--thread-content-margin:4rem]"

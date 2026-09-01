@@ -10,7 +10,7 @@ describe("resolveChatChrome", () => {
     ).toEqual({
       surface: "home-onboarding",
       appHeader: true,
-      fixedHeader: "always",
+      fixedHeader: "less-than-xl",
     })
   })
 
@@ -20,7 +20,7 @@ describe("resolveChatChrome", () => {
     ).toEqual({
       surface: "project-onboarding",
       appHeader: false,
-      fixedHeader: "always",
+      fixedHeader: "less-than-xl",
     })
   })
 
@@ -33,7 +33,7 @@ describe("resolveChatChrome", () => {
       ).toEqual({
         surface: "thread",
         appHeader: true,
-        fixedHeader: "always",
+        fixedHeader: "less-than-xl",
       })
     }
   })
@@ -45,14 +45,14 @@ describe("resolveChatChrome", () => {
       ).toEqual({
         surface: "thread",
         appHeader: true,
-        fixedHeader: "always",
+        fixedHeader: "less-than-xl",
       })
       expect(
         resolveChatChrome({ chatId: "chat-1", messageCount: 4, hasProject })
       ).toEqual({
         surface: "thread",
         appHeader: true,
-        fixedHeader: "always",
+        fixedHeader: "less-than-xl",
       })
     }
   })

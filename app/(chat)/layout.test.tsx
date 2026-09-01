@@ -21,7 +21,13 @@ vi.mock("@/app/components/layout/layout-app", () => ({
 }))
 
 vi.mock("@/app/components/chat/chat-chrome-host", () => ({
-  ChatChromeProvider: ({ children }: { children: React.ReactNode }) => children,
+  ChatChromeProvider: ({
+    children,
+    initialFixedHeader,
+  }: {
+    children: React.ReactNode
+    initialFixedHeader: string
+  }) => <div data-initial-fixed-header={initialFixedHeader}>{children}</div>,
   ChatChromeHeader: () => <div data-chat-chrome-header="" />,
 }))
 
@@ -82,6 +88,11 @@ describe("chat route layout ownership", () => {
     expect(settledScrollRoot).toBe(originalScrollRoot)
     expect(settledScrollRoot?.scrollTop).toBe(312)
     expect(container.querySelector("[data-chat-chrome-header]")).not.toBeNull()
+    expect(
+      container
+        .querySelector("[data-initial-fixed-header]")
+        ?.getAttribute("data-initial-fixed-header")
+    ).toBe("less-than-xl")
     expect(container.querySelector("[data-route='first']")).toBeNull()
     expect(container.querySelector("[data-route='second']")).not.toBeNull()
   })

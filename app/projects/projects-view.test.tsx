@@ -86,6 +86,7 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  DialogClose: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DialogHeader: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -333,9 +334,23 @@ describe("ProjectsView essential behavior", () => {
     )!
     await act(async () => void click(newButton))
     const nameInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Project name"]'
+      'input[placeholder="Copenhagen Trip"]'
     )!
+    const createButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Create project"
+    )!
+
+    expect(createButton.disabled).toBe(true)
+    await act(async () => setInputValue(nameInput, "P".repeat(51)))
+    expect(nameInput.getAttribute("aria-invalid")).toBe("true")
+    expect(
+      leafWithText("Project names cannot be longer than 50 characters.")
+    ).toBeTruthy()
+    expect(createButton.disabled).toBe(true)
+
     await act(async () => setInputValue(nameInput, "My project"))
+    expect(nameInput.hasAttribute("aria-invalid")).toBe(false)
+    expect(createButton.disabled).toBe(false)
     await act(async () => {
       nameInput
         .closest("form")

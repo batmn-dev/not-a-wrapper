@@ -6,6 +6,7 @@ import { RiCloseLargeLine } from "@remixicon/react"
 import * as React from "react"
 
 type DialogSurface = "default" | "centered"
+type DialogSize = "default" | "large"
 
 function Dialog({
   ...props
@@ -63,10 +64,12 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
   surface = "default",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  size?: DialogSize
   surface?: DialogSurface
 }) {
   return (
@@ -74,9 +77,11 @@ function DialogContent({
       <DialogOverlay surface={surface} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-size={size}
         data-surface={surface}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 p-6 text-sm outline-none sm:max-w-md",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 p-6 text-sm outline-none",
+          size === "large" ? "sm:max-w-lg" : "sm:max-w-md",
           surface === "centered"
             ? "bg-modal-centered text-modal-centered-foreground shadow-modal-centered rounded-(--modal-centered-radius)"
             : "bg-popover text-popover-foreground shadow-border-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 rounded-xl duration-100",

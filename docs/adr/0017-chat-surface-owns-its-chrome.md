@@ -70,16 +70,18 @@ Rules:
   optimistic-row, and composer continuity); pathname conditionals in LayoutApp
   (rejected — the slot exists to avoid exactly that).
 
-## 2026-08-23 rendering addendum
+## 2026-08-31 rendering addendum
 
-The ownership and DOM-position decision above is unchanged. The header contract
-has since been reverified as a transparent, shadowless sticky
-header whose fixed mode follows the resolved surface: home onboarding uses
-`data-fixed-header="always"`, while threads use `data-fixed-header="never"`.
-`ScrollRoot` therefore reserves the header height on onboarding and zeroes
-sticky top padding for threads without subscribing to scroll position. Future
-fixed-header variants remain valid extension points, and the active header does
-not copy scroll state into React or need an effect-driven shadow.
+The ownership and DOM-position decision above is unchanged. The authenticated
+production component uses a sticky, opaque main-surface header with
+`data-fixed-header="always"`. This app intentionally applies its earlier
+`data-fixed-header="less-than-xl"` presentation to the standard layout: below
+the 80rem main-container breakpoint, the header is opaque and shows its bottom
+edge after scrolling; at or above that breakpoint, it is transparent and
+shadowless. `ScrollRoot` uses the same mode to remove the sticky header inset at
+the wide breakpoint. An explicitly transparent surface still uses
+`data-fixed-header="never"`. The scroll root owns the scroll attribute, so the
+header does not copy scroll state into React.
 
 The resolved `ChatSurface` now also drives `ThreadBottomContainer` posture
 directly. The previous `variant` plus `isOnboarding` pair could express invalid

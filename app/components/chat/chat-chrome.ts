@@ -28,8 +28,8 @@ export type ChatChrome = {
   appHeader: boolean
   /**
    * Whether the sticky app header reserves its height in thread scroll
-   * geometry. The authenticated front end currently keeps the standard chat
-   * header in its default `always` mode on both onboarding and thread routes.
+   * geometry. The standard app header uses the responsive `less-than-xl`
+   * contract on both onboarding and thread routes.
    */
   fixedHeader: HeaderFixedMode
 }
@@ -48,15 +48,15 @@ export function resolveChatChrome({
     return {
       surface: "project-onboarding",
       appHeader: false,
-      fixedHeader: "always",
+      fixedHeader: "less-than-xl",
     }
   }
   if (onboarding) {
     return {
       surface: "home-onboarding",
       appHeader: true,
-      fixedHeader: "always",
+      fixedHeader: "less-than-xl",
     }
   }
-  return { surface: "thread", appHeader: true, fixedHeader: "always" }
+  return { surface: "thread", appHeader: true, fixedHeader: "less-than-xl" }
 }

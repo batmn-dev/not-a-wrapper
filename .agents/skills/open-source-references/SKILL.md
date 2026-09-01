@@ -15,326 +15,274 @@ open-source implementation override directly observed behavior.
 Prefer the local clone path in each entry when that directory exists. If it is
 missing, use the GitHub URL.
 
-## Vercel Chatbot
+P0 means consult first for its matching surface. P1 is a strong specialist; P2 is narrow; P3 is forensic only.
 
-Source Path: `/Users/andresgonzalez/Github/Projects/VercelChatbot`
-
-Github URL: https://github.com/vercel/chatbot
-
-Reference Priority:
-
-Question: Next.js App Router, or first-party AI SDK composition of streams, tools, and artifacts
-
-Description: Canonical `createUIMessageStream` composition with a typed custom data-part vocabulary (transient artifact deltas kept out of persisted history), client-sends-one-message/server-owns-history persistence of UIMessage parts with tool-approval-state merge, a DocumentHandler registry with composite-key `(id, createdAt)` document versioning plus a string-replace edit tool, a gateway model catalog with runtime capability probing and per-model failover order, and a mock-provider seam driving Playwright e2e — its stream-resume GET handler is a 204 stub and persistence is one `onEnd` batch write (disconnect completion needs Redis, no crash durability), so never cite it for durability/recovery, BYOK provider abstraction, or attachment handling
-
-## LibreChat
+## P0 — LibreChat
 
 Source Path: `/Users/andresgonzalez/Github/Projects/LibreChat`
 
 Github URL: https://github.com/danny-avila/LibreChat
 
-Reference Priority:
+**Use for:** Provider-neutral chat contracts: branching, resumable multi-device streams, steer/queue/HITL runs, artifact Canvas and conversational images, visible memory controls, MCP OAuth/per-user credentials/RBAC, and current-main’s leased, fenced scheduler.
 
-Question: Multi-provider endpoint config, MCP connections, permissions, spend accounting, or multi-replica operations
+**Avoid for:** Semantic memory, project knowledge, image-library UX or stack adoption. Memory is bounded key/value injection; Projects are conversation buckets; schedules are unreleased/default-off. Express/Mongo/Redis plus separate RAG and agent packages conflict with Wrapper’s architecture.
 
-Description: Two-tier permissions (role feature gates + resource ACL bitmasks), token-credit spend accounting, a dual-source MCP registry with per-user OAuth connections, Redis-swappable resumable stream jobs, storage-strategy file dispatch, search-as-schema-plugin, and an external pgvector RAG service boundary — its agent graph engine and code interpreter are closed-source, and `api/` is legacy JS, so never cite it for agent-loop internals or code organization
-
-## T3 Code
-
-Source Path: `/Users/andresgonzalez/Github/Projects/T3Code`
-
-Github URL: https://github.com/pingdotgg/t3code
-
-Reference Priority:
-
-Question: Coding-agent harness adapters, event-sourced local orchestration, approval/interrupt protocols, worktree or checkpoint isolation, or remote attach to a single-machine runtime
-
-Description: A single-writer command→event orchestrator on local SQLite (append-only event log with per-aggregate stream versions, durable command receipts for idempotent retries, rebuildable checkpointed projections), a driver/adapter SPI normalizing five coding-agent harnesses (Claude Agent SDK, Codex app-server JSON-RPC, ACP, OpenCode HTTP) into one canonical runtime-event union routed by threadId, a Deferred-blocking approval state machine whose session-stop path synthesizes resolutions so threads can always settle, per-thread git worktrees plus orphan-commit checkpoint refs (`refs/t3/checkpoints/*` written through a throwaway index) reverted in lockstep with provider-conversation rollback, a staged commit→push→PR pipeline with streamed hook output across four SCM hosts, and cursor-gap snapshot/replay/`synchronized`-marker resume over one scope-authorized WS RPC boundary (remoteness is a transport choice — bearer, tunnel, SSH — never a second runtime) — it has no cloud state sync, no sandbox of its own, no raw-LLM provider layer, and assumes one long-lived local process, so never cite it for multi-user replication, server-side sandboxing, LLM-API provider abstraction, or serverless/multi-replica patterns
-
-## DeepSeek Harness
-
-Source Path: `/Users/andresgonzalez/Github/Projects/deepseek-harness`
-
-Github URL: https://github.com/deepseek-ai/deepseek-harness
-
-Reference Priority:
-
-Question: Plugin-composable agent harnesses, reversible runtime composition, durable event-sourced sessions, swappable capability providers, or SDK, ACP, and JSON-RPC surfaces
-
-Description: An everything-is-a-plugin Cordis tree where profiles, bundles, and patch layers compose model adapters, the agent loop, tools, persistence, sandboxing, approvals, and UI; registrations are reversible effects and live configuration can recompose through HMR. Its append-only `SessionEvent` log is the source of model context and drives replay, resume, fork, transcripts, telemetry, and UI, while capability seams swap LLM, filesystem, subprocess, sandbox, subagent, workflow, and tool providers. It ships Web and headless profiles plus TypeScript/Python JSON-RPC and ACP surfaces. It is a developer preview with breaking formats, E2B remains a POC, and it is not evidence for a production multi-tenant cloud control plane.
-
-## Trigger.dev
-
-Source Path: `/Users/andresgonzalez/Github/Projects/trigger.dev`
-
-Github URL: https://github.com/triggerdotdev/trigger.dev
-
-Reference Priority:
-
-Question: Durable TypeScript background tasks, checkpoint-and-resume workflows, human approval waits, queues and concurrency, idempotent retries, realtime run updates, or versioned isolated deployments
-
-Description: A production-grade durable execution reference: long-running TypeScript tasks use CRIU-backed process checkpoints around waits and child-task joins, release compute while suspended, then restore memory, registers, and file descriptors to continue. Idempotency keys and cached child results bound retry work; queues, concurrency limits, cron schedules, waitpoints, realtime subscriptions, OpenTelemetry traces, atomic task versions, and Docker/Kubernetes self-hosting complete the control plane. Use it for workflow durability and operator-facing run infrastructure, not agent reasoning loops, chat state, memory, or computer-use mechanics.
-
-## OpenHands Agent Canvas
-
-Source Path: `/Users/andresgonzalez/Github/Projects/OpenHands`
-
-Github URL: https://github.com/OpenHands/OpenHands
-
-Reference Priority:
-
-Question: Multi-backend coding-agent control planes, ACP agent onboarding, trusted automation catalogs, or a self-hosted agent UI that can also ship as embeddable modules
-
-Description: Agent Canvas selects among local and cloud Agent Server backends (remote servers persist as `local` with a URL) while keeping backend-scoped settings; configures Claude Code, Codex, Gemini, or custom ACP subprocesses while the server owns execution and credentials; strictly validates extension-authored skill and automation manifests before rendering or acting on them; and exposes cron/event automation setup and run history through a separate Automation Server. Current `main` is the React/TypeScript Agent Canvas, not the former Python agent runtime: execution, persistence, isolation, and scheduling live in OpenHands Agent Server/Automation repositories, and direct host mode grants full filesystem access, so never cite this clone for agent-loop, sandbox, or durable-orchestration internals
-
-## Grok Bot 0.18 reconstructed
-
-Source Path: `/Users/andresgonzalez/Github/Projects/grok-bot-0.18-reconstructed`
-
-Github URL: https://github.com/b-nnett/grok-bot-0.18-reconstructed
-
-Reference Priority:
-
-Question: `computer-use`, `agent-runtime`, or `reconstructed-product-research`: durable runtime, tool permissions, progress communication, persistence and transcripts, automations, multi-agent coordination, computer-use boundaries, or MCP and extensions
-
-Description: Evidence-backed reconstructions of durable agent-runtime ownership and recovery, permission-gated tools, streaming progress and activity communication, persisted state and transcripts, automation lifecycles, multi-agent coordination, explicit host/box/computer-use trust boundaries, and MCP/plugin/extension contracts. Treat it only as reconstructed product research: no upstream source-code license is asserted, it is not authoritative Grok source, and it mixes reconstructed components with author-added components. Skip the partial `frontend/`, custom model router, pinned dependency versions, reconstruction/bootstrap/packaging scripts, and the missing cloud backend.
-
-## Rakazo
-
-Source Path: `/Users/andresgonzalez/Github/Projects/rakazo`
-
-Github URL: https://github.com/elie222/rakazo
-
-Reference Priority:
-
-Question: Open-source Grok Bot product architecture: persistent AI teammates, shared or private computers, multi-screen concurrency, portable workspaces, takeover, or provider adapters
-
-Description: The closest Grokbot product-architecture reference: persistent bots with memory, routines, and history; shared Team and isolated Private Computers; distinct screens for concurrent teammates; and live human takeover. Its provider-neutral `SandboxProvider` contract spans Docker, E2B, Daytona, Box, and trusted local computers, while portable workspaces checkpoint files and browser profiles outside disposable machines so provider replacements can restore logged-in state. It remains beta, and the portable boundary excludes system packages installed outside the workspace.
-
-## OpenMausBot
-
-Source Path: `/Users/andresgonzalez/Github/Projects/OpenMausBot`
-
-Github URL: https://github.com/milind-soni/OpenMausBot
-
-Reference Priority:
-
-Question: Open-source Grok Bot alternative: desktop contact-list UX, per-bot model selection, live computer previews and takeover, connected apps, or inline approvals
-
-Description: The strongest desktop-experience reference: bots behave like contacts, each can select a Claude, Codex, or Grok model, show a live computer preview, hand control to the user, connect to apps through Composio, and surface risky actions as inline approval cards. Its local-first harness and desktop app must remain running, so it does not provide truly cloud-hosted, always-on behavior.
-
-## Memoh
-
-Source Path: `/Users/andresgonzalez/Github/Projects/Memoh`
-
-Github URL: https://github.com/memohai/Memoh
-
-Reference Priority:
-
-Question: Open-source Grok Bot alternative: always-on isolated bot computers, long-term memory, schedules, MCP, group or bot-to-bot conversations, or multi-channel delivery
-
-Description: The strongest always-on infrastructure reference: each bot gets an isolated computer with filesystem, network, desktop, browser, and long-term memory; bots can run scheduled tasks, manage MCP connections, talk privately, in groups, or to each other, and span Telegram, Discord, Lark, WeChat, email, and web. Its Go/Vue architecture is a weak fit for this codebase, and AGPLv3 complicates direct commercial reuse.
-
-## Kortix (Suna)
-
-Source Path: `/Users/andresgonzalez/Github/Projects/suna`
-
-Github URL: https://github.com/kortix-ai/suna
-
-Reference Priority:
-
-Question: Open-source Grok Bot alternative: enterprise sandboxing, credential brokering, audit trails, approvals, organizational permissions, self-hosting, or git-governed agent work
-
-Description: The most mature enterprise reference: isolated sandbox and branch per session, server-brokered connector credentials, per-agent grants, audit trails, approval-gated change requests, organizational roles and permissions, triggers, and self-hosting. It is organized around disposable work sessions rather than persistent AI teammates, and Elastic License 2.0 restricts using it as the foundation of a competing hosted service; also treat OpenCode's loop and each sandbox provider's isolation as external boundaries.
-
-## Browser Use
-
-Source Path: `/Users/andresgonzalez/Github/Projects/browser-use`
-
-Github URL: https://github.com/browser-use/browser-use
-
-Reference Priority:
-
-Question: LLM-controlled browser automation, CDP-native action execution, DOM serialization, resilient browser lifecycle management, or typed custom browser tools
-
-Description: A Python agent loop with typed action results, replayable history, and structured final output; a `BrowserSession` event bus with watchdogs for crashes, DOM state, popups, downloads, permissions, CAPTCHA handling, recordings, and storage; a CDP `DOMSnapshot` serializer that preserves backend-node identity, frames, shadow DOM, layout, and interactivity; and a typed tool registry with domain restrictions and injected browser/session objects. Hosted-agent accuracy, stealth fingerprinting, proxy rotation, and cross-session browser profiles are cloud-only (static proxy config, a Gmail integration, and an MCP client/server do ship in-repo), so cite this clone for browser-agent mechanics, not durable multi-tenant orchestration or the hosted security boundary
-
-## E2B Desktop
-
-Source Path: `/Users/andresgonzalez/Github/Projects/desktop`
-
-Github URL: https://github.com/e2b-dev/desktop
-
-Reference Priority:
-
-Question: Isolated cloud Linux desktops, authenticated live streaming, screenshots, mouse or keyboard control, files, shell commands, or a TypeScript computer-use SDK
-
-Description: An isolated E2B Linux desktop wrapper with Python and TypeScript SDKs for launching apps, authenticated or view-only live streams, screenshots, mouse and keyboard input, file access, and shell commands. It is a client/template layer built on E2B Sandbox, supports only one active stream at a time, and should not be cited for the underlying Firecracker isolation or control-plane internals.
-
-## Cua
-
-Source Path: `/Users/andresgonzalez/Github/Projects/cua`
-
-Github URL: https://github.com/trycua/cua
-
-Reference Priority:
-
-Question: Provider-neutral computer-control primitives across cloud or local Linux, macOS, Windows, and Android environments
-
-Description: One sandbox API for cloud and local containers or VMs across Linux, macOS, Windows, and Android, with shell, screenshots, mouse, keyboard, and mobile gestures; plus cross-platform background desktop drivers, MCP/CLI surfaces, benchmarking environments, and local macOS virtualization through Lume. Use it for provider-neutral computer-control contracts and cross-OS capability design, not as proof that every OS/runtime combination has identical implementation depth or input semantics.
-
-## E2B SDKs and CLI
-
-Source Path: `/Users/andresgonzalez/Github/Projects/E2B`
-
-Github URL: https://github.com/e2b-dev/E2B
-
-Reference Priority:
-
-Question: Agent sandbox SDK contracts, ephemeral environment lifecycle, reusable templates or snapshots, command/PTY/filesystem APIs, or persistent volumes
-
-Description: JavaScript and Python SDK parity for sandbox create/connect/pause/kill and snapshot operations (resume is `Sandbox.connect()`, optionally auto-resume — only the CLI has a `resume` verb); Connect RPC plus HTTP clients for `envd` process, PTY, filesystem, watch, and file-transfer surfaces; a template builder and CLI that compose base images, copied files, build commands, environment, and a ready command; and authenticated per-sandbox traffic plus volume APIs. This repository owns SDKs, CLI, generated contracts, and template ergonomics; the Firecracker orchestrator, placement, networking, and template-build implementation live in the separate `e2b-dev/infra` repository, so never cite this clone for isolation or control-plane internals
-
-## Hermes Agent
-
-Source Path: `/Users/andresgonzalez/Github/Projects/hermes-agent`
-
-Github URL: https://github.com/NousResearch/hermes-agent
-
-Reference Priority:
-
-Question: Personal agent loops, provider-agnostic tool execution, self-improving skills, bounded memory plus session recall, multi-channel gateways, or swappable terminal backends
-
-Description: One `AIAgent` core shared by CLI, gateway, ACP, cron, batch, and library entry points; a common resolver spanning multiple API modes and provider credential pools; a typed central tool registry with composable toolsets and, orthogonally, swappable terminal execution backends (local, Docker, SSH, Daytona, Modal, Singularity, Vercel Sandbox); stable/context/volatile prompt tiers with compression and caching; SQLite session lineage with FTS5 recall; bounded agent-curated `MEMORY.md`/`USER.md`; progressively disclosed, scanned skills with background review and an optional write-approval gate; and a messaging gateway with allowlists and DM pairing. The default local backend and in-process plugins can access the host, while SQLite/profile state is designed around one Hermes home, so never cite it for strong default isolation, shared multi-user tenancy, or multi-replica durability
-
-## QM
-
-Source Path: `/Users/andresgonzalez/Github/Projects/QM`
-
-Github URL: https://github.com/yc-software/qm
-
-Reference Priority:
-
-Question: Scope-isolated multi-user agents, swappable agent harnesses, credential and skill governance, or operator-owned deployment
-
-Description: A personal/channel/team/org/group scope-kind tenancy where org security posture is a floor narrower scopes can only tighten, a Postgres run queue with lease-token claim/heartbeat and reap-or-park semantics (`FOR UPDATE SKIP LOCKED`), four real harnesses (Pi/OpenCode/Codex/Claude Code) behind one interface with an org-approved allowlist router, keychain grants with env/file/broker credential delivery and egress authorization, a draft→review→publish→promote skill state machine with HMAC-signed manifests and git skill packs, cron/watch/webhook triggers guarded by membership and consent, agent-deployed internal apps with signed access tokens, and a CLI-validated deployment directory over four swappable sandbox substrates — persistence is generic `(id, JSONB)` DurableMap blobs and delivery is queued whole turns (Slack edits, no token streams), so never cite it for relational schema design, streaming, or chat-completions patterns
-
-## OpenDesign
-
-Source Path: `/Users/andresgonzalez/Github/Projects/open-design`
-
-Github URL: https://github.com/nexu-io/open-design
-
-Reference Priority:
-
-Question: Scaling a declarative adapter registry to dozens of agent CLIs, materializing artifacts from both text-only and filesystem-writing agents, staging skills or token/brand context into agent prompts, or server-verified critique of agent output (for event-sourced orchestration, approvals, or checkpoint isolation of coding agents, use T3 Code)
-
-Description: A declarative agent-runtime registry (one `RuntimeAgentDef` data object per CLI — probe, argv builder, prompt delivery, stream format — with a zero-per-agent engine and seven stream-parser families normalized into one persisted SSE event union plus an AG-UI bridge), dual execution profiles routing filesystem-writing and text-artifact-only runtimes into the same materialized workspace via a streaming tag-suppression parser, per-run dereferenced skill staging under `.od-skills/`, a code-owned design-system package contract (manifest + `DESIGN.md` + `tokens.css` with token-extraction importers, self-checking token contracts, and regenerated derived caches) assembled by the prompt composer, a daemon-verified critique state machine with composite-score recomputation and a per-adapter conformance/rollout ratchet, and content-addressed file versioning with per-version prompt provenance — it is a local Express/SQLite/Electron daemon spawning unsandboxed CLIs (`bypassPermissions`; only previews are iframe-sandboxed), so never cite it for serverless-deployable backends, agent-execution isolation, or true multi-agent critique
-
-## LobeHub
+## P0 — LobeHub
 
 Source Path: `/Users/andresgonzalez/Github/Projects/LobeHub`
 
 Github URL: https://github.com/lobehub/lobehub
 
-Reference Priority:
+**Use for:** Broad product-shape reference: capability-aware model routing, dedicated image/video feeds, layered source-linked memory, agents/groups/pages/projects/workspaces, skill/MCP discovery, connector permissions and approvals, schedules, and desktop/mobile continuity.
 
-Question: Provider runtime scale, model-metadata catalogs, durable agent execution, or tool/plugin manifests
+**Avoid for:** V2 is a fast-moving Next/Vite/Drizzle/Postgres/Redis/S3/Upstash platform; hosted Marketplace, credential proxy, credits and cloud runtimes do not prove self-host parity.
 
-Description: An 85-provider model-runtime built from compatible-factory configs with per-model router fallback, a typed model catalog (pricing, abilities, context windows) merged with DB overrides, a queue-dispatched step-based agent runtime with human-in-the-loop instruction types, packaged tool/skill manifests with per-API execution policy, and a workspace-scoped Drizzle/pgvector schema — v2 removed the PGlite local-first mode, so never cite it for client-side or local-first persistence
-
-## Open WebUI
+## P0 — Open WebUI
 
 Source Path: `/Users/andresgonzalez/Github/Projects/OpenWebUI`
 
 Github URL: https://github.com/open-webui/open-webui
 
-Reference Priority:
+**Use for:** Broadest self-hosted parity flows: multi-provider chat/knowledge, editable automatic memory, OpenAI/Gemini/ComfyUI image creation/editing, MCP OAuth/OpenAPI tools, skills/subagents, recurring automations, voice, RBAC, analytics, Notes and Channels.
 
-Question: Local-model (Ollama) lifecycle and load-balancing, group-merged access grants, in-process Python plugin systems, exposing an OpenAI-compatible API of your own, self-hosted multi-replica operations, or pluggable vector/hybrid retrieval backends
+**Avoid for:** Persistence or extension foundations. Legacy whole-chat JSON still penalizes long branched histories; migrations carry debt; Python plugins are server-equivalent trusted code. Branding-preserving licensing and an administrator-provisioned MCP registry constrain branded derivatives and consumer-style connector installation.
 
-Description: Full Ollama model-lifecycle proxying (pull/create/delete/unload/ps) across N load-balanced instances with per-connection model prefixing and allowlists, an `owned_by`-dispatched unified catalog spanning Ollama/OpenAI/plugin models, group permission-dicts merged most-permissive over a normalized `access_grant` table (user/group/anyone principals per resource — distinct from LibreChat's role+bitmask model) plus SCIM 2.0 provisioning, a three-tier Python extension system (exec-loaded pipe/filter/action Functions with encrypted valves, Tools, external Pipelines server), an exposed `/api/chat/completions` with restricted per-user API keys, DB-persisted dot-key config with REST export/import, Redis pub/sub cross-replica task cancellation with OTel wiring, a 15-backend `VectorDBBase` factory with BM25+vector RRF hybrid search and ~30 web-search adapters, and a server-side Elo evaluation arena — it is an unsandboxed stateful Python monolith with a blob-canonical chat JSON column (the normalized `chat_message` table is a dual-written retrofit) under a non-OSI branding-locked license, so never cite it for serverless/durable-run architecture, plugin sandboxing, chat schema design, or anything UX
+## P0 — Hermes Agent
 
-## AnythingLLM
+Source Path: `/Users/andresgonzalez/Github/Projects/hermes-agent`
+
+Github URL: https://github.com/NousResearch/hermes-agent
+
+**Use for:** Personal-agent continuity: curated profile memory plus session search, self-authoring skills with review, multi-channel identity, image generation/editing, and scheduled jobs with model/tool/skill selection, preflight checks, run ledger, chaining and delivery.
+
+**Avoid for:** Shared tenancy or distributed scheduling. One Hermes home is effectively single-writer; the file-backed scheduler serializes some work and does not reliably reclaim abandoned runs. Approval and memory behavior vary across surfaces. Portal, Tool Gateway and Cloud are paid packaging, not reusable OSS internals.
+
+## P0 — Vercel Chatbot
+
+Source Path: `/Users/andresgonzalez/Github/Projects/VercelChatbot`
+
+Github URL: https://github.com/vercel/chatbot
+
+**Use for:** Wrapper-stack implementation patterns: typed AI SDK message/tool/reasoning parts, normalized persistence, attachments, sharing, approval continuation, streamed/versioned Artifact handlers and deterministic mock-model Playwright tests.
+
+**Avoid for:** Product-parity requirements. It has no memory, knowledge workspace, connector catalog/OAuth, automation or governed BYOK. Gateway, Blob, Neon/Auth and Redis are template choices, while resumable streaming remains experimental and complicates explicit stop/abort semantics.
+
+## P0 — Trigger.dev
+
+Source Path: `/Users/andresgonzalez/Github/Projects/trigger.dev`
+
+Github URL: https://github.com/triggerdotdev/trigger.dev
+
+**Use for:** Durable TypeScript automation mechanics: user-scoped cron/delay CRUD, queues and concurrency, retries, dispatch idempotency, approval waitpoints, child/batch runs, realtime subscriptions, replay, tracing and deployment versioning.
+
+**Avoid for:** Assistant reasoning, connectors or Tasks UX—and never equate trigger idempotency with exactly-once external side effects. Checkpoints, warm starts and autoscaling are cloud boundaries; production self-hosting is operationally heavy. Place it beneath Wrapper’s permissions, notifications, history and provider-level idempotency.
+
+## P0 — Rakazo
+
+Source Path: `/Users/andresgonzalez/Github/Projects/rakazo`
+
+Github URL: https://github.com/elie222/rakazo
+
+**Use for:** Grokbot control-plane architecture: persistent bot/thread/run schemas, provider-neutral sandboxes with portable workspace checkpoints, Team versus Private computers, screen leases/takeover, peer/subagent delegation, connector adapters, and cron/webhook routines shared across web, Electron and Expo.
+
+**Avoid for:** Approval or production-cloud precedent. Computer and shell tools bypass approval rules; Team homes organize rather than isolate; semantic memory and connector catalogs depend on external services. The beta’s only tag trails main, while object-storage persistence and managed cloud remain unfinished.
+
+## P1 — AnythingLLM
 
 Source Path: `/Users/andresgonzalez/Github/Projects/AnythingLLM`
 
 Github URL: https://github.com/Mintplex-Labs/anything-llm
 
-Reference Priority:
+**Use for:** Permissive local-first product patterns: document RAG/citations, workspace and user memory controls, model routing, tool-selecting agents, MCP/custom skills, no-code flows, image creation/editing, Electron/mobile continuity and scheduled-agent traces.
 
-Question: Workspace-scoped document and vector tenancy, ingestion pipelines, pluggable vector stores, or cron-scheduled agent jobs
+**Avoid for:** Multi-tenant automation, connector governance or isolated computer use. Schedules are single-user, host-bound and miss downtime; skills/MCP can execute host processes; mobile requires tool synchronization. Host control is a macOS/Claude beta and Open Computer remains unfinished. RAG quality depends heavily on model, embedding, chunking and context configuration.
 
-Description: A workspace-as-vector-namespace data model where each workspace owns its documents, threads, prompt, model config, and retrieval params (threshold/topN/chat-vs-query/rerank), a separate HMAC-coupled collector process (format converters + data-source extensions) that only parses while chunking/embedding happen server-side at workspace-add time, a document-keyed embed-once vector cache that replays vectors into new namespaces, an 11-provider `VectorDatabase` abstraction with pinned-doc token capping and current-search-only citations, watched-document re-sync queues, cron `scheduled_jobs` with a status/trace run ledger executed by killable Bree workers, and an open in-repo agent framework (aibitat) with sandboxed skill manifests and MCP-to-plugin conversion — chat rows are single prompt/response strings and multi-user is three flat roles, so never cite it for message data models, stream durability, or permissions
+## P1 — OpenBot
 
-## HuggingChat Chat UI
+Source Path: `/Users/andresgonzalez/Github/Projects/OpenBot`
 
-Source Path: `/Users/andresgonzalez/Github/Projects/HuggingChat`
+Github URL: https://github.com/CopilotKit/openbot
 
-Github URL: https://github.com/huggingface/chat-ui
+**Use for:** Enterprise action governance: AG-UI adapters, server-resolved targets, fail-closed CEL policy, audit-before-execute, encrypted credentials, per-bot tool/MCP grants, live takeover, isolated computers, delegated handoffs, and routines with owner-scoped permissions, caps and failure fatigue.
 
-Reference Priority:
+**Avoid for:** A complete assistant or vendor-neutral foundation. Durable threads/memory require licensed CopilotKit Intelligence; curated connectors are narrow; per-bot isolation needs Supervisor/Helm; UI-created remote agents cannot delegate. It lacks native desktop/mobile/images and remains alpha.
 
-Question: Durable generation streams, reconnect/resume lifecycle, or a thin-waist OpenAI-compatible + MCP backend
+## P1 — OpenMausBot
 
-Description: An append-only generation event log with heartbeat + reaper run lifecycle and seq-addressed SSE replay (Last-Event-ID resume from any pod), stop-clamp truncation written atomically with materialized content, a cross-conversation liveness feed, a boot-time `/models`-autodiscovered OpenAI-compatible-only gateway with heuristic router fallback policies, MCP lowered to function calling as the sole tool system, and anonymous sessions sharing the authed query model — websearch/RAG and per-provider adapters exist only on the `legacy` branch, and its in-process singletons assume a long-lived Node server, so never cite `main` for RAG pipelines, provider abstraction, or serverless patterns
+Source Path: `/Users/andresgonzalez/Github/Projects/OpenMausBot`
 
-## LibreChat
+Github URL: https://github.com/milind-soni/OpenMausBot
 
-Source Path: `/Users/andresgonzalez/Github/Projects/LibreChat`
+**Use for:** Grokbot’s desktop shell and harness: bots-as-contacts, normalized CLI events, per-bot models/computers/apps, live view/takeover, inline approvals, channels and team imports, routines, voice and paired-phone control.
 
-Github URL: https://github.com/danny-avila/LibreChat
+**Avoid for:** Always-on or multi-tenant infrastructure and agent isolation. The app must remain awake; its loopback harness trusts the host user; installed CLIs inherit host privileges; computer, connectors and voice depend on CUA, Box, Composio and ElevenLabs. Cross-platform packaging remains young.
 
-Reference Priority:
+## P1 — Kortix / Suna
 
-Question: Assistant memory: background memory-agent runtime, storage schema, or permission gating
+Source Path: `/Users/andresgonzalez/Github/Projects/suna`
 
-Description: Agent-partitioned key/value memory schema with per-entry token counts and budgets, an LLM memory agent (`set_memory`/`delete_memory`) racing the main completion under a hard timeout, keyed vs. unkeyed context rendering by tool privilege, and layered opt-out/permission/config gating
+Github URL: https://github.com/kortix-ai/suna
 
-## Supermemory
+**Use for:** Enterprise agent governance where company state is code: Git-versioned agents, skills and memory; branch-per-session sandboxes; change-request approval; roles and resource grants; connector brokerage; computer tunnels; audit; and cron/webhook sessions.
 
-Source Path: `/Users/andresgonzalez/Github/Projects/supermemory`
+**Avoid for:** Persistent teammate UX, semantic memory or a self-contained stack. Sessions auto-stop, memory is agent-edited files, OpenCode supplies the loop, and self-hosting still requires an external sandbox provider. Project secrets enter sandboxes by default, safer egress is experimental, and ELv2 forbids a competing managed service.
 
-Github URL: https://github.com/supermemoryai/supermemory
+## P1 — T3 Code
 
-Reference Priority:
+Source Path: `/Users/andresgonzalez/Github/Projects/T3Code`
 
-Question: Assistant memory: Vercel AI SDK injection middleware, conversation capture, or memory-service client architecture
+Github URL: https://github.com/pingdotgg/t3code
 
-Description: AI SDK v5/v6 LanguageModel middleware (`withSupermemory`) that fetches a static+dynamic profile per turn in profile/query/full modes and appends it to the system prompt with turn-keyed caching, a fail-open retrieval timeout, and post-response whole-conversation capture (tool calls excluded as low-signal); model-callable memory tools, containerTag scoping, an Anthropic memory-tool→document-CRUD adapter, and versioned-memory schema archaeology (version/parent/root ids, updates/extends/derives relations, static vs. dynamic split, forget-after) in `packages/validation/schemas.ts` — the engine itself (extraction, embedding, hybrid search) lives behind api.supermemory.ai and the "local" binary ships no source in this repo, so never cite it for extraction, retrieval, or storage internals
+**Use for:** Local coding-harness control: provider-driver normalization, typed command/event projections and idempotent receipts, inline approval/interruption, Git-ref checkpoints/diff/revert, capability-scoped WebSocket RPC, authenticated remote pairing, and one client runtime across web, Electron and React Native.
 
-## Mem0
+**Avoid for:** Raw-model chat, memory, connectors, schedules or cloud workers. Authentication and permissions remain with installed CLIs; one long-lived host owns execution; provider/mobile/remote states can diverge. Copy its event store only when offline replay and exact rollback justify the complexity.
+
+## P1 — QM
+
+Source Path: `/Users/andresgonzalez/Github/Projects/QM`
+
+Github URL: https://github.com/yc-software/qm
+
+**Use for:** Organizational coworker tenancy: principal-to-scope resolution; private/shared scopes owning a computer, memory, keychain, skills and schedules; authorization floors; Slack/web identity continuity; harness adapters; and cron/watch/webhook jobs.
+
+**Avoid for:** Consumer chat or hardened public SaaS. It requires operator-managed Postgres and sandbox infrastructure, while harness-neutral replay sacrifices provider-native behavior. Its security model documents bypassable command policy, plaintext in-use credentials, incomplete screening/egress enforcement, privileged administrator access and indefinite artifact retention.
+
+## P1 — OpenDesign
+
+Source Path: `/Users/andresgonzalez/Github/Projects/open-design`
+
+Github URL: https://github.com/nexu-io/open-design
+
+**Use for:** Artifact-first creative workflows: brief → `DESIGN.md` → skill/template → canonical files → sandboxed preview/critique/export; separate skill/template/design-system/plugin registries; normalized CLI/ACP adapters; and image, video, document and presentation task/library flows.
+
+**Avoid for:** General assistant architecture or dependable export fidelity. External CLIs/models perform the reasoning; the local daemon is broad and heavy; users report generic output, high CPU, adapter churn, blank or mismatched PDF/PPTX and preview-capture failures. Borrow the contracts and retest every generator/exporter.
+
+## P1 — Memoh
+
+Source Path: `/Users/andresgonzalez/Github/Projects/Memoh`
+
+Github URL: https://github.com/felinics/Memoh
+
+**Use for:** Self-hosted multi-user/multi-bot operations: cross-channel identity and ACLs, private/group/bot-to-bot chat, persistent computer workspaces, source-linked graph memory, ACP-hosted Codex/Claude, MCP/connectors, schedules with run history, and bot backup/import.
+
+**Avoid for:** Proprietary reuse or its isolation model. AGPL obligations apply, while the official server runs privileged with host PID and container access. Managed cloud is not live; setup/runtime-contract bugs recur; advertised Mem0/OpenViking adapters are currently disabled placeholders.
+
+## P1 — Browser Use
+
+Source Path: `/Users/andresgonzalez/Github/Projects/browser-use`
+
+Github URL: https://github.com/browser-use/browser-use
+
+**Use for:** Browser-agent mechanics when no structured API exists: CDP/tab lifecycle, enhanced DOM snapshots, stable element reconciliation, typed actions/results, scoped secret substitution, redacted histories, custom tools and watchdog recovery.
+
+**Avoid for:** A production control plane or security boundary. Agents can loop, degrade, hit bot defenses or leak secrets through prompt injection. Enforce budgets, approvals, egress rules and checkpoints. Stealth, proxies, CAPTCHA handling, durable profiles and managed scale are cloud boundaries. Prefer MCP or APIs whenever equivalent structured actions exist.
+
+## P1 — Cua
+
+Source Path: `/Users/andresgonzalez/Github/Projects/cua`
+
+Github URL: https://github.com/trycua/cua
+
+**Use for:** Cross-OS computer contracts: Linux/macOS/Windows/Android sandbox lifecycle, exact-window screenshot/input/shell, focus-preserving Driver interfaces through MCP/CLI/SDK, manifest-bounded permissions, structured outcomes, trajectories and computer-use benchmarks.
+
+**Avoid for:** Product orchestration or a uniform OS guarantee. Behavior remains app- and OS-specific: TCC/Spaces on macOS, signing/UWP/RDP/DPI on Windows, and incomplete Wayland capture/input. Treat Driver, Sandbox, Bench and Lume as separate references; pin and test every target-app/OS combination.
+
+## P1 — E2B SDKs and CLI
+
+Source Path: `/Users/andresgonzalez/Github/Projects/E2B`
+
+Github URL: https://github.com/e2b-dev/e2b
+
+**Use for:** Remote-sandbox client contracts: typed JS/Python lifecycle; templates, volumes, secrets and metadata; pause/auto-resume, snapshots and forks; commands/PTY/stdin/reattach; streamed files/watch/transfers; metrics/logs and service URLs.
+
+**Avoid for:** Agent governance or Firecracker implementation—the latter lives in `e2b-dev/infra`, whose self-host path is an entire cloud platform. Do not assume idempotent creation, per-run resource overrides or seamless stream recovery after resume. Add Wrapper’s lifecycle state machine, authorization, cleanup and cost controls.
+
+## P1 — OpenHands Agent Canvas
+
+Source Path: `/Users/andresgonzalez/Github/Projects/OpenHands`
+
+Github URL: https://github.com/OpenHands/OpenHands
+
+**Use for:** Coding-agent control-center UX: conversation/terminal/browser/files panes, backend registry and switching, ACP onboarding, typed Agent Server access, runtime discovery, embeddable frontend modules, and schedule/webhook/run-history UI. Follow each seam into its owning sibling repository.
+
+**Avoid for:** General chat, images, memory—or treating Canvas as the runtime. It is a React frontend over changing Python services; automation is beta; extensions and ACP bridges remain incomplete; direct-host mode exposes the filesystem; Docker and remote operation are heavier than the shell implies.
+
+## P1 — Mem0
 
 Source Path: `/Users/andresgonzalez/Github/Projects/mem0`
 
 Github URL: https://github.com/mem0ai/mem0
 
-Reference Priority:
+**Use for:** A permissive baseline for scoped memory services: extraction configuration, semantic/BM25/entity retrieval, CRUD/history, expiration, filters, reranking, multimodal input, provider/vector adapters and self-hosted administration.
 
-Question: Assistant memory: extraction prompts, hybrid retrieval scoring, or per-memory audit history
+**Avoid for:** Canonical current truth. OSS v3 is ADD-first, so mutable facts and near-duplicates accumulate; temporal ranking, supersession, decay, consolidation, graph and organization audit are platform boundaries. Extraction quality varies by model and input. Add provenance, selective-storage gates, human review and deletion propagation yourself.
 
-Description: A single-LLM-call additive extraction pipeline (v3: ADD-only contextually-rich facts grounded to an observation date, MD5 hash dedup, spaCy entity linking into a second vector collection), hybrid vector+BM25+entity-boost retrieval with explainable scoring and optional cross-encoder rerank, a SQLite ADD/UPDATE/DELETE history table per memory id, user/agent/run scoping enforced in both stored payloads and query filters, and 25-vector-store/17-LLM provider factories mirrored across the Python and TS engines — the famous extract→ADD/UPDATE/DELETE reconciliation loop is dead code at this HEAD (prompts survive unused in `mem0/configs/prompts.py`) and graph memory was removed from OSS in v3, so never cite it for fact reconciliation, contradiction handling, graph memory, or decay/temporal reasoning
-
-## Graphiti
+## P1 — Graphiti
 
 Source Path: `/Users/andresgonzalez/Github/Projects/graphiti`
 
 Github URL: https://github.com/getzep/graphiti
 
-Reference Priority:
+**Use for:** Temporal truth and provenance: source episodes, fact validity windows, contradiction invalidation, incremental graph updates, custom ontologies, hybrid semantic/BM25/graph retrieval and historical queries. Borrow its lifecycle when “what was true when, and according to which conversation?” matters.
 
-Question: Assistant memory: bi-temporal facts, contradiction expiry, or fact provenance
+**Avoid for:** Turnkey user memory, profile UX or cheap ingestion. You must build account/project controls and operate Python plus a graph database. Ingestion fans out many LLM calls, smaller models produce brittle schemas, and false invalidation is possible. Implement only the temporal concepts Wrapper genuinely needs.
 
-Description: A bi-temporal edge model (system-time `created_at`/`expired_at` vs. LLM-extracted event-time `valid_at`/`invalid_at`) where contradictions are LLM-flagged then deterministically arbitrated by validity timespans — the losing fact is expired, never deleted, keeping point-in-time queries via temporal search filters; provenance through first-class episode nodes, MENTIONS edges, and per-edge episode lists, two-stage MinHash/LSH-then-LLM entity dedupe, hybrid BM25+cosine+BFS retrieval with five reranker families over a four-backend graph-driver abstraction, and Pydantic-typed custom ontologies — there is no user/profile abstraction (only `group_id` partitions), each episode fans out many LLM calls, and the bulk-ingestion path skips invalidation entirely, so never cite it as a turnkey per-user memory service or for lifecycle policy (decay, forgetting, importance)
+## P2 — DeepSeek Harness
 
-## Letta
+Source Path: `/Users/andresgonzalez/Github/Projects/deepseek-harness`
 
-Source Path: `/Users/andresgonzalez/Github/Projects/letta`
+Github URL: https://github.com/deepseek-ai/deepseek-harness
 
-Github URL: https://github.com/letta-ai/letta
+**Use for:** Harness composition: reversible Cordis plugins, profile/bundle overlays, replaceable model/tool/session/loop/filesystem/sandbox providers, interception waterfalls, and one model-visible event stream driving replay, resume, forks and ACP/SDK/web surfaces.
 
-Reference Priority:
+**Avoid for:** Product parity or production control. It is an unaudited developer preview; plugin/config breadth adds setup and token overhead; persisted custom events can strand sessions; and its sandbox does not contain networking, processes, plugins or allowed assets. Borrow seams, not the foundation.
 
-Question: Assistant memory: durable agent-as-entity state, self-edited memory blocks, or context-window ownership
+## P2 — E2B Desktop
 
-Description: A DB-backed agent entity owning its system prompt, tool rules, and context window as a persisted `message_ids` pointer set, memory blocks as schema rows (label/value/char-limit/read-only, optimistic-lock versioning, per-block history, many-to-many sharing across agents), agent-editable memory tools that mutate blocks then rebuild the system prompt, core/recall/archival tiering over a pgvector passage store, turn-counter-triggered sleeptime agents maintaining shared blocks in the background, a stateful send-only-new-messages API, and whole-agent `.af` export — read the `archive` **branch** (main is a landing page; the Python server was retired 2026-08 for the TypeScript letta-code harness) and pin the v3-agent/compaction generation among layered rewrites, and never cite it for current Letta behavior, fact extraction (mem0's claim), or temporal/graph memory (graphiti's)
+Source Path: `/Users/andresgonzalez/Github/Projects/desktop`
+
+Github URL: https://github.com/e2b-dev/desktop
+
+**Use for:** Minimal cloud-Linux computer transport: reproducible Xfce template, app launch, screenshots, coordinate input, files/shell, and whole-desktop or window-specific noVNC viewing with view-only/auth options. It clearly demonstrates the sandbox-to-human-takeover seam.
+
+**Avoid for:** Grokbot architecture or a trusted control surface. It is Linux/X11 `xdotool`, `scrot` and noVNC; supports one stream; lacks accessibility grounding, verified actions, approvals and multi-viewer control; and makes authentication optional. Current SDK source lives in the core E2B repository.
+
+## P2 — Hugging Face Chat UI
+
+Source Path: `/Users/andresgonzalez/Github/Projects/HuggingChat`
+
+Github URL: https://github.com/huggingface/chat-ui
+
+**Use for:** Lean Apache Svelte interaction components: response alternatives, model switching, reasoning effort, plans, tool progress/errors/elicitation, attachments, image annotation, voice, sharing, heuristic multimodal/agentic routing and MCP health checks.
+
+**Avoid for:** Full assistant architecture or assuming repository parity with hosted HuggingChat. Current main removed provider-native integrations, embeddings and web search; it lacks memory, knowledge workspaces, image generation/editing and automations. Pin main versus legacy; hosted models, quotas and availability are not repository behavior.
+
+## P2 — Supermemory
+
+Source Path: `/Users/andresgonzalez/Github/Projects/supermemory`
+
+Github URL: https://github.com/supermemoryai/supermemory
+
+**Use for:** Vercel AI SDK memory middleware and product UX: static/dynamic profile injection, bounded fail-open retrieval, hybrid RAG-plus-memory context, source visibility, conversational save/search/forget, review, approval and undo.
+
+**Avoid for:** Memory-engine implementation or production self-hosting. The repository exposes clients and UI while the local server is a prebuilt binary; hosted models/connectors differ. Open issues document missing governance/idempotency, similarity-based deletion, memory-heavy snapshots, wedged ingestion and concurrency failures. Use Mem0/Graphiti for inspectable internals.
+
+## P2 — Letta Code
+
+Source Path: `/Users/andresgonzalez/Github/Projects/letta-code`
+
+Github URL: https://github.com/letta-ai/letta-code
+
+**Use for:** Agent-authored identity and long-horizon learning: editable memory files, Git-tracked history, diffs/rollback, active/archive tiers, periodic reflection in isolated worktrees, and memory inspection/health UX. It is especially relevant to persistent desktop teammates.
+
+**Avoid for:** ChatGPT-style factual memory or passive personalization. The agent edits prose instead of reconciling atomic temporal facts; source-turn lineage is weak; quality depends on reflection-model judgment; memory is agent-scoped unless deliberately shared; and cross-device identity/conversations rely on Letta Cloud. Do not route to retired Letta V1.
+
+## P3 — Grok Bot 0.18 reconstructed
+
+Source Path: `/Users/andresgonzalez/Github/Projects/grok-bot-0.18-reconstructed`
+
+Github URL: https://github.com/b-nnett/grok-bot-0.18-reconstructed
+
+**Use for:** Forensic comparison of Grok Bot 0.18’s Electron/preload RPC, host/coordinator, turn events, plugin/MCP and remote-box boundaries, plus its experimental provider router and local-Docker replacement.
+
+**Avoid for:** Implementation, UI source or current product truth. This archived two-commit hybrid preserves a minified upstream renderer and installers, has no asserted upstream source license, only partially reconstructs the frontend, retains known dependency advisories and targets one pinned Apple-silicon release.

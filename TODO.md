@@ -42,6 +42,15 @@ source provenance. Make compaction idempotent, observable, and visible to the
 user; fall back to an explicit hard stop when safe compaction cannot fit. Cover
 authenticated and guest chats, model switches, attachments, and multi-step
 tool turns with cross-provider tests and token/compaction telemetry.
+- **Durable long-running generations:** design and implement provider execution
+outside the lifetime of the initiating HTTP request so deep research and long
+reasoning turns are not stopped by Vercel's function-duration ceiling. Preserve
+live Convex snapshots, user Stop and supersession behavior, authorization,
+concurrency ownership, usage and allowance settlement, recovery, and terminal
+state correctness. Replace the total provider deadline and its settlement
+reserve/watchdog coupling with durable worker ownership and, if needed, a true
+stream-inactivity safeguard. Review the architecture against current ADRs and
+open-source reference chat apps, then document the final decision in an ADR.
 - **Project-scoped agent context:** let each project define shared instructions,
 knowledge and files, tool or connector permissions, and optional durable
 memory that are automatically available to every chat in that project, similar
@@ -53,6 +62,10 @@ do not leak context across project boundaries.
 - **Assistant Response UI Widgets:** Image Carousels, Image Previews, Weather, Stock UI, Charts (maybe), editable markdown (maybe)
 - **Monetization:** Setup Usage-based monthly pricing using Stripe or better option
 - **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
+- **Evaluate Next.js to TanStack migration:** From [Theo's post](https://x.com/theo/status/1997406196660400228?lang=en)
+- **Evaluate inference on Fluid:** From [Theo's post](https://x.com/theo/status/1997784385337372877)
+- **Evaluate Vercel's BotID:** Consider narrowly scoped bot attestation before
+expensive platform-funded generations.
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic design system (future):** Define an agent-readable, customizable
 visual system after the product's core interaction patterns stabilize.
