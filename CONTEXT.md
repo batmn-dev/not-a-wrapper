@@ -360,6 +360,14 @@ _Avoid_: provider options (reserved for the AI SDK field it produces), model tun
 
 ### Observability
 
+**Run timing receipt**:
+The durable, content-free record stamped on a **Generation run** at settlement of where that run's time went: server preparation, the provider's time to first output, the server's delay before first response write, model response time, tool execution, the wire stream window, and settlement. Always recorded, so any run can be compared by model, route, and build; browser-side time (network delivery, render, paint) is outside it and belongs to **Chat-performance instrumentation**.
+_Avoid_: perf metrics / telemetry (unqualified), spans (those are the sampled log seam), latency breakdown, timing metadata (the message-level **Generation stats** is a different, user-facing record)
+
+**Generation stats**:
+The user-facing record on an assistant message of how its generation performed: time to first token, the output stream window, and the provider-reported input, cached-input, output, and reasoning token counts, accumulated across an approval continuation. It holds only figures comparable across models, so nothing about this server's own overhead; tokens per second is derived from it at presentation and never stored, and absent provider usage stays absent rather than estimated. Shares its provider figures with the **Run timing receipt**.
+_Avoid_: stats for nerds (a borrowed product name), usage (the billing aggregate), response stats, token metrics
+
 **Chat-performance instrumentation**:
 The content-free, off-by-default measurement seam for chat responsiveness (`lib/observability/chat-performance.ts` core + `chat-performance-client.ts` React hooks + the callback-ref-owned **Composer paint probe**). Client turn/navigation/composer-paint marks go to the User Timing API behind the build-time `NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION` flag; server preparation spans and checkpoint counters emit `_tag:"chat_perf"` structured log lines behind per-request `CHAT_PERF_SAMPLE_RATE` sampling. Every event passes a per-event field allow-list (unknown fields — string fields especially — are rejected; strings must be declared enums or the correlation id, and credential-shaped values are refused). A per-turn random UUID crosses as the one-shot `x-chat-perf-id` header, is validated by the route, rides only spans, is never persisted to any document, never reused across turns, and is never an admission idempotency key. The measurement protocol lives in `docs/performance/measurement-runbook.md`.
 _Avoid_: analytics (PostHog product analytics is a different sink and identity domain), tracing (Sentry spans exist independently; this seam owns only the plan's content-free performance events), live toggle (every NEXT_PUBLIC_ flag is a redeploy)

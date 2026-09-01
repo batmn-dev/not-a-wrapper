@@ -43,28 +43,28 @@ export function LayoutApp({
             <div className="relative z-0 flex min-h-0 w-full flex-1">
               <div className="relative flex min-h-0 w-full min-w-0 flex-1">
                 {hasSidebar && <AppSidebar />}
-                <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
-                  <ScrollRoot>
-                    <Fragment key="app-header">
-                      {header === undefined ? (
-                        <Header
-                          hasSidebar={hasSidebar}
-                          fixedHeader="less-than-xl"
-                        />
-                      ) : (
-                        header
-                      )}
-                    </Fragment>
-                    <div className="side-pane-shell-host relative flex min-h-0 flex-1 items-start">
+                <div className="side-pane-shell-host relative flex min-h-0 min-w-0 flex-1">
+                  <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
+                    <ScrollRoot>
+                      <Fragment key="app-header">
+                        {header === undefined ? (
+                          <Header
+                            hasSidebar={hasSidebar}
+                            fixedHeader="less-than-xl"
+                          />
+                        ) : (
+                          header
+                        )}
+                      </Fragment>
                       <MainContent
                         id="main"
                         className="@container/main min-h-0 min-w-0 flex-1 self-stretch"
                       >
                         {children}
                       </MainContent>
-                      <ActivityPanelDockSlot />
-                    </div>
-                  </ScrollRoot>
+                    </ScrollRoot>
+                  </div>
+                  <ActivityPanelDockSlot />
                 </div>
               </div>
             </div>

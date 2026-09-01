@@ -11,8 +11,8 @@ import {
 } from "react"
 
 /**
- * Bridges the Chat-owned `ActivityPanel` to the FloatingContent slot rendered
- * beside `#main` inside LayoutApp's scroll root.
+ * Bridges the Chat-owned `ActivityPanel` to the full-height FloatingContent
+ * slot rendered beside LayoutApp's conversation scroll column.
  *
  * The bridge shares the slot's DOM element rather than a React node: `Chat`
  * portals the docked shell into that element, so the docked subtree stays in
