@@ -27,6 +27,10 @@
  */
 
 import { isChatErrorRecovery, type ChatErrorRecovery } from "@/lib/chat-errors"
+import {
+  parseGenerationStats,
+  type GenerationStats,
+} from "@/lib/chat-messages/generation-stats"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import { isModelReasoningEffort } from "@/lib/models/types"
 import {
@@ -156,6 +160,17 @@ export function getReasoningDurationMs(metadata: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : undefined
+}
+
+/**
+ * Read the Generation stats (ADR-0030) off a message's metadata. Stamped by the
+ * chat turn runtime at finish; malformed values are dropped, never coerced.
+ */
+export function getGenerationStats(
+  metadata: unknown
+): GenerationStats | undefined {
+  if (!isRecord(metadata)) return undefined
+  return parseGenerationStats(metadata.generationStats)
 }
 
 /** Read the server-persisted total assistant work duration (ms). */
@@ -355,6 +370,7 @@ export function adoptServerOwned(
     "workDurationMs",
     "reasoningEffort",
     "generationBudget",
+    "generationStats",
   ] as const
   const persistedStreamMetadataChanged = persistedStreamKeys.some(
     (key) =>

@@ -9,6 +9,12 @@ import {
   type QueryCtx,
 } from "./_generated/server"
 import {
+  sanitizeRunTimingReceipt,
+  TIMING_RECEIPT_ATTACH_WINDOW_MS,
+  vRunTimingReceipt,
+  type RunTimingReceipt,
+} from "./lib/runTimingReceipt"
+import {
   isIgnoredSignal,
   isSupersedableGenerationRunStatus,
   isSupersedableMessageStatus,
@@ -214,6 +220,8 @@ export const generationRunWriteArgs = {
     ),
     totalToolCalls: v.optional(v.number()),
     failedToolCalls: v.optional(v.number()),
+    // Run timing receipt (ADR-0030): rides every terminal write.
+    timingReceipt: v.optional(vRunTimingReceipt),
   },
   markGenerationRunFailed: {
     messageId: v.optional(v.id("messages")),
@@ -222,11 +230,13 @@ export const generationRunWriteArgs = {
       v.literal("retry_with_shorter_generation_budget")
     ),
     workDurationMs: v.optional(v.number()),
+    timingReceipt: v.optional(vRunTimingReceipt),
   },
   markGenerationRunAborted: {
     messageId: v.optional(v.id("messages")),
     reason: v.optional(v.string()),
     workDurationMs: v.optional(v.number()),
+    timingReceipt: v.optional(vRunTimingReceipt),
     // Cancellation terminal-usage evidence (ADR-0021 cancellation
     // amendment): completed-step aggregates, partial-output estimate, and
     // title attempt facts, settled atomically when this worker still owns
@@ -245,6 +255,14 @@ export const generationRunWriteArgs = {
   finalizeTerminalUsage: {
     reservationId: v.id("usageReservations"),
     terminalUsage: vTerminalUsageEvidence,
+  },
+  // Run timing receipt attach (ADR-0030). Like finalizeTerminalUsage, this
+  // authenticates against a digest the absorbing terminal copied onto the run
+  // (`timingReceiptGrantDigest`), not the revoked grant — see
+  // chatRuntimeWorker. Content-free diagnostics only; it can patch nothing
+  // but the receipt.
+  attachRunTimingReceipt: {
+    timingReceipt: vRunTimingReceipt,
   },
 }
 
@@ -331,6 +349,29 @@ function grantRevocationForStatus(
   return status === "aborted" || status === "failed"
     ? { grantDigest: undefined, grantExpiresAt: undefined }
     : {}
+}
+
+/**
+ * Receipt-attach capability (ADR-0030). An absorbing terminal that revokes
+ * the run grant WITHOUT carrying a Run timing receipt (user Stop,
+ * supersession, reap) copies the grant digest onto the run for a bounded
+ * window, so the stopped worker's later `attachRunTimingReceipt` —
+ * authenticated against this copy, never the revoked grant — can still land
+ * the receipt its own abort write would have carried. Single-use: the attach
+ * clears it. A terminal that carries its receipt mints nothing.
+ */
+function timingReceiptAttachGrant(
+  run: Doc<"generationRuns">,
+  status: GenerationRunStatus,
+  receipt: RunTimingReceipt | undefined,
+  now: number
+): Partial<Doc<"generationRuns">> {
+  if (receipt || !run.grantDigest) return {}
+  if (status !== "aborted" && status !== "failed") return {}
+  return {
+    timingReceiptGrantDigest: run.grantDigest,
+    timingReceiptGrantExpiresAt: now + TIMING_RECEIPT_ATTACH_WINDOW_MS,
+  }
 }
 
 /**
@@ -721,13 +762,15 @@ async function applyLifecycleVerdict(
   resolved: ResolvedAssistantMessage | null,
   now: number,
   explicitWorkDurationMs?: number,
-  terminalUsage?: TerminalUsageEvidencePayload
+  terminalUsage?: TerminalUsageEvidencePayload,
+  timingReceipt?: RunTimingReceipt
 ): Promise<Id<"messages"> | undefined> {
   // The accounting hooks below read PRE-terminal run facts (grant digest,
   // usage, boundary markers). Snapshot them before the terminal patch so the
   // grant revocation can never race the settlement-capability copy.
   const preTerminalRun: Doc<"generationRuns"> = { ...run }
   const workDurationMs = resolveWorkDurationMs(run, now, explicitWorkDurationMs)
+  const receipt = sanitizeRunTimingReceipt(timingReceipt)
   let assistantMessageId = run.assistantMessageId
   if (resolved) {
     const survivingId = await applyMessageResolution(
@@ -766,6 +809,8 @@ async function applyLifecycleVerdict(
     ...LEASE_CLEAR,
     assistantMessageId,
     ...(workDurationMs !== undefined ? { workDurationMs } : {}),
+    ...(receipt ? { timingReceipt: receipt } : {}),
+    ...timingReceiptAttachGrant(run, verdict.run.status, receipt, now),
   })
 
   // Mirror the terminal phase onto the chat row (fail/abort/supersede all reach
@@ -2585,9 +2630,11 @@ export async function markGenerationRunCompletedForChat(
     titleUsage?: TitleUsageEvidence
     totalToolCalls?: number
     failedToolCalls?: number
+    timingReceipt?: RunTimingReceipt
   }
 ) {
   const { run } = owner
+  const timingReceipt = sanitizeRunTimingReceipt(args.timingReceipt)
   // The first-terminal-wins guard and the completed-vs-awaiting_approval shape
   // live in the Generation run lifecycle's `complete` rule. `hasPendingApprovals`
   // is fact-gathering for it; the message payload (content/parts/metadata/usage)
@@ -2636,6 +2683,7 @@ export async function markGenerationRunCompletedForChat(
     ...(args.metadata?.workDurationMs !== undefined
       ? { workDurationMs: Math.max(0, args.metadata.workDurationMs) }
       : {}),
+    ...(timingReceipt ? { timingReceipt } : {}),
     activeStreamId: undefined,
     ...(verdict.run.terminalReason
       ? { terminalReason: verdict.run.terminalReason }
@@ -2685,6 +2733,7 @@ export async function markGenerationRunFailedForChat(
     error: string
     errorRecovery?: "retry_with_shorter_generation_budget"
     workDurationMs?: number
+    timingReceipt?: RunTimingReceipt
   }
 ) {
   const { run } = owner
@@ -2706,7 +2755,9 @@ export async function markGenerationRunFailedForChat(
     verdict,
     resolved,
     now,
-    args.workDurationMs
+    args.workDurationMs,
+    undefined,
+    args.timingReceipt
   )
   await ctx.db.patch(run._id, { errorRecovery: args.errorRecovery })
   if (assistantMessageId) {
@@ -2724,6 +2775,7 @@ export async function markGenerationRunAbortedForChat(
     reason?: string
     workDurationMs?: number
     terminalUsage?: TerminalUsageEvidencePayload
+    timingReceipt?: RunTimingReceipt
   }
 ) {
   const { run } = owner
@@ -2751,7 +2803,8 @@ export async function markGenerationRunAbortedForChat(
     resolved,
     now,
     args.workDurationMs,
-    args.terminalUsage
+    args.terminalUsage,
+    args.timingReceipt
   )
 }
 

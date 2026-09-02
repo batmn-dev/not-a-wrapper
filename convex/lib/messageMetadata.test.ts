@@ -27,6 +27,15 @@ describe("projectPersistedMessageMetadata", () => {
       reasoningDurationMs: 1200,
       workDurationMs: 5200,
       generationBudget: 16_384,
+      generationStats: {
+        timeToFirstTokenMs: 420.5,
+        outputStreamMs: 4223,
+        outputTokens: 146,
+        providerToolCalls: 1,
+        // Malformed values drop individually; the rest of the record survives.
+        reasoningTokens: 1.5,
+        stepCount: -1,
+      },
       toolMetadataByName: { web_search: display },
       toolMetadataByCallId: { call_1: display },
     })
@@ -34,6 +43,12 @@ describe("projectPersistedMessageMetadata", () => {
       reasoningDurationMs: 1200,
       workDurationMs: 5200,
       generationBudget: 16_384,
+      generationStats: {
+        timeToFirstTokenMs: 420.5,
+        outputStreamMs: 4223,
+        outputTokens: 146,
+        providerToolCalls: 1,
+      },
       toolMetadataByName: { web_search: display },
       toolMetadataByCallId: { call_1: display },
     })

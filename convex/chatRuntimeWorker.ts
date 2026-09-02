@@ -20,6 +20,7 @@ import {
   type TerminalUsageEvidencePayload,
 } from "./domain/usage_accounting"
 import type { AuthenticatedRunOwner } from "./lib/auth"
+import { sanitizeRunTimingReceipt } from "./lib/runTimingReceipt"
 import { timingSafeEqualHex } from "./lib/sha256"
 import { finalizePendingTerminalUsage } from "./usageAllowance"
 
@@ -299,4 +300,77 @@ export const finalizeTerminalUsage = internalMutation({
   args: { ...grantArgs, ...generationRunWriteArgs.finalizeTerminalUsage },
   handler: async (ctx, args) =>
     finalizeTerminalUsageWithSettlementGrant(ctx, args),
+})
+
+function rejectTimingReceiptAttach(
+  reason: string,
+  code: GrantRejectionCode = "grant_unauthorized"
+): never {
+  console.warn(
+    JSON.stringify({ _tag: "run_timing_receipt_attach_rejected", reason })
+  )
+  throw grantRejection(code)
+}
+
+/**
+ * The Run timing receipt attach (ADR-0030). Authenticates the SAME raw worker
+ * secret against the run's `timingReceiptGrantDigest` — copied there by the
+ * absorbing terminal transaction that revoked the run grant without carrying
+ * a receipt (user Stop, supersession) — so a stopped worker keeps exactly one
+ * further capability: attaching its content-free timing receipt to its own,
+ * already-terminal run, once, before the window closes. It can patch no
+ * message, status, usage, tool, approval, lease, or grant state, and never
+ * overwrites a receipt that already landed.
+ */
+export async function attachRunTimingReceiptWithTerminalGrant(
+  ctx: MutationCtx,
+  {
+    runId,
+    grantDigest,
+    timingReceipt,
+  }: GrantAuthArgs & DurableWorkerPayloads["attachRunTimingReceipt"]
+): Promise<{ outcome: "attached" | "already-attached" | "empty" }> {
+  const now = Date.now()
+  const run = await ctx.db.get(runId)
+  if (!run) rejectTimingReceiptAttach("run_missing")
+  // A cleared digest with a receipt in place is the benign double-delivery
+  // case (the terminal write carried one, or this attach already landed).
+  if (run.timingReceiptGrantDigest === undefined) {
+    if (run.timingReceipt !== undefined) {
+      return { outcome: "already-attached" as const }
+    }
+    rejectTimingReceiptAttach("attach_not_pending")
+  }
+  if (!timingSafeEqualHex(run.timingReceiptGrantDigest, grantDigest)) {
+    rejectTimingReceiptAttach("digest_mismatch")
+  }
+  if (
+    run.timingReceiptGrantExpiresAt === undefined ||
+    run.timingReceiptGrantExpiresAt <= now
+  ) {
+    rejectTimingReceiptAttach("attach_grant_expired", "grant_expired")
+  }
+  if (!isTerminalGenerationRunStatus(run.status)) {
+    rejectTimingReceiptAttach("run_not_terminal")
+  }
+  const receipt = sanitizeRunTimingReceipt(timingReceipt)
+  const attaches = receipt !== undefined && run.timingReceipt === undefined
+  await ctx.db.patch(runId, {
+    ...(attaches ? { timingReceipt: receipt } : {}),
+    timingReceiptGrantDigest: undefined,
+    timingReceiptGrantExpiresAt: undefined,
+  })
+  return {
+    outcome: attaches
+      ? "attached"
+      : receipt === undefined
+        ? "empty"
+        : "already-attached",
+  }
+}
+
+export const attachRunTimingReceipt = internalMutation({
+  args: { ...grantArgs, ...generationRunWriteArgs.attachRunTimingReceipt },
+  handler: async (ctx, args) =>
+    attachRunTimingReceiptWithTerminalGrant(ctx, args),
 })

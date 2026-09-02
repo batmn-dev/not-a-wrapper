@@ -49,8 +49,10 @@ function setChatConversationCorrelation(chatId: string): void {
 // the durable-persistence timeline.
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID()
-  // Receipt spans start before the runtime's construction clock.
+  // Receipt spans start before the runtime's construction clock. The
+  // monotonic twin anchors the run timing receipt's `prepareMs` (ADR-0030).
   const requestReceivedAtMs = Date.now()
+  const requestReceivedPerfMs = performance.now()
   // Sampled chat-performance session: off unless CHAT_PERF_SAMPLE_RATE
   // is set. The client's x-chat-perf-id is validated here and carried only
   // through perf spans — never persisted to chat/run/message docs and never
@@ -312,6 +314,7 @@ export async function POST(req: Request) {
         generationInput: admission.generationInput,
         perf,
         requestReceivedAtMs,
+        requestReceivedPerfMs,
       },
     })
 

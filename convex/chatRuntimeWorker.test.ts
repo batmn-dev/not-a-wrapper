@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
+  attachRunTimingReceiptWithTerminalGrant,
   finalizeTerminalUsageWithSettlementGrant,
   grantRejectionCode,
   requireGrantAuthorizedRun,
@@ -265,5 +266,83 @@ describe("finalizeTerminalUsageWithSettlementGrant authorization", () => {
         },
       })
     ).rejects.toThrow("Invalid terminal usage evidence")
+  })
+})
+
+describe("attachRunTimingReceiptWithTerminalGrant", () => {
+  function makeAttachWorld(run: Partial<Doc<"generationRuns">> = {}) {
+    const runDoc: Record<string, unknown> = {
+      _id: "run_1",
+      chatId: "chat_1",
+      status: "aborted",
+      terminalReason: "user_stop",
+      timingReceiptGrantDigest: DIGEST,
+      timingReceiptGrantExpiresAt: Date.now() + 30_000,
+      ...run,
+    }
+    const patches: Array<Record<string, unknown>> = []
+    const ctx = {
+      db: {
+        get: async (id: string) => (id === "run_1" ? runDoc : null),
+        patch: async (_id: string, value: Record<string, unknown>) => {
+          patches.push(value)
+          Object.assign(runDoc, value)
+        },
+      },
+    } as unknown as MutationCtx
+    return { ctx, patches }
+  }
+
+  it("attaches once against the copied digest and burns the capability", async () => {
+    const { ctx, patches } = makeAttachWorld()
+
+    const result = await attachRunTimingReceiptWithTerminalGrant(ctx, {
+      runId,
+      grantDigest: DIGEST,
+      timingReceipt: { prepareMs: 40, wireStreamMs: 12, settlementMs: -1 },
+    })
+
+    expect(result).toEqual({ outcome: "attached" })
+    expect(patches).toEqual([
+      {
+        // Sanitized like every terminal write: the negative segment drops.
+        timingReceipt: { prepareMs: 40, wireStreamMs: 12 },
+        timingReceiptGrantDigest: undefined,
+        timingReceiptGrantExpiresAt: undefined,
+      },
+    ])
+    // Second delivery: capability gone, receipt present → benign no-op.
+    await expect(
+      attachRunTimingReceiptWithTerminalGrant(ctx, {
+        runId,
+        grantDigest: DIGEST,
+        timingReceipt: { prepareMs: 999 },
+      })
+    ).resolves.toEqual({ outcome: "already-attached" })
+    expect(patches).toHaveLength(1)
+  })
+
+  it.each([
+    ["a wrong secret", { grantDigest: sha256Hex("other") }, {}],
+    ["an expired window", {}, { timingReceiptGrantExpiresAt: Date.now() - 1 }],
+    ["a run that is not terminal", {}, { status: "streaming" as const }],
+    [
+      "no pending capability and no receipt",
+      {},
+      { timingReceiptGrantDigest: undefined },
+    ],
+  ])("rejects %s without patching", async (_name, auth, run) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const { ctx, patches } = makeAttachWorld(run)
+    await expect(
+      attachRunTimingReceiptWithTerminalGrant(ctx, {
+        runId,
+        grantDigest: DIGEST,
+        ...auth,
+        timingReceipt: { prepareMs: 40 },
+      })
+    ).rejects.toThrow(/Execution grant/)
+    expect(patches).toHaveLength(0)
+    warn.mockRestore()
   })
 })

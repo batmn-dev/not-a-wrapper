@@ -1,3 +1,4 @@
+import type { GenerationStats } from "@/lib/chat-messages/generation-stats"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { ResolvedToolMetadata } from "./metadata-resolver"
 
@@ -38,6 +39,8 @@ export type ToolInvocationStreamMetadata = {
    * request preparation, persistence, analytics, and resource cleanup.
    */
   workDurationMs?: number
+  /** Generation stats (ADR-0030), stamped at finish from SDK step performance. */
+  generationStats?: GenerationStats
   toolMetadataByName?: ToolInvocationMetadataByName
   toolMetadataByCallId?: ToolInvocationMetadataByCallId
 }
@@ -87,6 +90,7 @@ export function buildFinishToolInvocationStreamMetadata(options: {
   toolMetadataByCallId: ToolInvocationMetadataByCallId
   reasoningDurationMs: number | null
   workDurationMs: number
+  generationStats?: GenerationStats
 }): ToolInvocationStreamMetadata {
   const metadata: ToolInvocationStreamMetadata = {}
   if (Object.keys(options.toolMetadataByCallId).length > 0) {
@@ -96,6 +100,9 @@ export function buildFinishToolInvocationStreamMetadata(options: {
     metadata.reasoningDurationMs = options.reasoningDurationMs
   }
   metadata.workDurationMs = options.workDurationMs
+  if (options.generationStats) {
+    metadata.generationStats = options.generationStats
+  }
   return metadata
 }
 

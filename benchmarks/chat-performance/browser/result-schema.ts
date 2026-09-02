@@ -42,6 +42,12 @@ export type RunMetrics = {
   jsHeapUsedAfterBytes?: number
   /** Server spans joined by correlation id (ms), when the server was sampled. */
   serverSpans?: Record<string, number>
+  /**
+   * The run timing receipt's durations (ADR-0030) joined by correlation id,
+   * when the server was sampled: prepareMs, providerFirstOutputMs,
+   * firstWriteDelayMs, modelResponseMs, toolExecutionMs, wireStreamMs.
+   */
+  timingReceipt?: Record<string, number>
   /** Durable worker-wire writes joined by correlation id (durable runs). */
   durableWrites?: {
     snapshotCount: number

@@ -854,6 +854,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
         responseMessage: RESPONSE_MESSAGE,
         isAborted: true,
         finishReason: "stop",
+        timingReceipt: { prepareMs: 40, wireStreamMs: 12 },
       })
 
       expect(receipt).toEqual({
@@ -863,6 +864,15 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       })
       // No retries: the rejection is deterministic and benign.
       expect(wireCalls(wire, "markGenerationRunAborted")).toHaveLength(1)
+      // The run timing receipt the rejected abort carried still lands, once,
+      // through the attach capability the Stop transaction minted (ADR-0030).
+      const attaches = wireCalls(wire, "attachRunTimingReceipt")
+      expect(attaches).toHaveLength(1)
+      expect(attaches[0]?.args.timingReceipt).toEqual({
+        prepareMs: 40,
+        wireStreamMs: 12,
+        settlementMs: expect.any(Number),
+      })
       const settledWarning = warn.mock.calls
         .map(([message]) => JSON.parse(String(message)))
         .find(

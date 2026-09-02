@@ -14,6 +14,19 @@ Convex-side read/write bucket logs (`CHAT_PERF_CONVEX_SAMPLE_RATE`, `_tag:
 "chat_perf_convex"`) all exist. Rows below are annotated individually; `proposed` rows
 that remain are harness-derived (Phase 3) or deferred to an experiment.
 
+**Status update (2026-09-01, ADR-0030):** provider timing now has one source — the AI
+SDK's per-step `performance` (`timeToFirstOutputMs`, `responseTimeMs`,
+`toolExecutionMs`), sampled on a monotonic clock upstream of every
+`experimental_transform`. The former `provider_first_event` span was measured in the
+SDK chunk callback, which runs AFTER the word-chunking transform, so for the one
+smoothing-eligible model (Claude Haiku 4.5) it included this server's own holdback
+delay; its rows in the 2026-08-27 baseline are post-transform contaminated for that
+model and must not be compared with the re-sourced figure. `provider_first_event` is
+retired; `provider_first_output` replaces it; `provider_first_text_delta` moves to the
+transport group with its true meaning. The same step figures feed the always-on **Run
+timing receipt** on the generation run (group 13) and the user-facing **Generation
+stats** on the assistant message.
+
 ## Global rules
 
 - **Privacy class — all metrics are `content-free`.** No metric or dimension may carry
@@ -95,13 +108,13 @@ nested, not additive across groups — never sum overlapping spans.
 
 | Metric | Start → End | Layer | Gate? | Status |
 |---|---|---|---|---|
-| `provider_invocation_to_first_event` | `streamText` call → first chunk of any type | provider | no | existing (Phase 2: `server_span` `provider_first_event`; Braintrust/Sentry buckets retained) |
-| `provider_invocation_to_first_text` | `streamText` call → first `text-delta` chunk | provider | no | existing (Phase 2: `server_span` `provider_first_text_delta`) |
+| `provider_invocation_to_first_output` | provider call start → first output chunk (text, reasoning, tool-input delta, tool call, or file) of step 0 | provider | no (correctness-checked against the deterministic script) | existing (ADR-0030: `server_span` `provider_first_output`, sourced from SDK step performance; Braintrust/Sentry buckets read the same figure) |
+| `provider_invocation_to_first_event` | — | — | — | **retired 2026-09-01** (post-transform; see the status note) |
 
-Reasoning, source, and tool events can precede visible text — the two metrics are kept
-separate deliberately. Smoke-suite only; labeled by provider+model+route tier; never a
-population with other providers. Dimensions: provider, model, route tier (platform/BYOK),
-warm/cold credential path.
+Smoke-suite only; labeled by provider+model+route tier; never a population with other
+providers. Dimensions: provider, model, route tier (platform/BYOK), warm/cold credential
+path. Reasoning counts as output here, exactly as in the SDK's definition, so a hidden
+thinking phase is inside this figure.
 
 ## 4. Transport
 
@@ -111,6 +124,7 @@ warm/cold credential path.
 | `first_write_to_client_first_bytes` | `server_first_stream_write` → `client_first_stream_bytes` | network | no | proposed (both endpoints now exist; the join is harness-side, cross-machine clocks — report medians only) |
 | `client_first_stream_bytes` | fetch dispatch → first parsed response chunk | browser | no | existing (Phase 2; transport tap reads only the chunk `type` discriminant) |
 | `client_first_text_delta_received` | fetch dispatch → first text-delta chunk | browser | no | existing (Phase 2) |
+| `provider_first_text_delta` | `streamText` call → first text delta RELEASED to the response pipeline (post-transform: smoothing holdback is inside it) | next | no | existing (re-homed from group 3 on 2026-09-01; the name is unchanged, the meaning was always this) |
 
 ## 5. Rendering (browser)
 
@@ -196,6 +210,55 @@ status/error publications are exempt (they bypass the coalescer by design).
 `snapshot_acceptance_ratio`, `provider_duration_ms` + token counts where the provider
 reports them (smoke suite only). Sources: Convex deployment metrics + the counters in
 groups 8–9, aggregated per scenario in the result file.
+
+## 13. Run timing receipt (always-on, per generation run — ADR-0030)
+
+Stored on the `generationRuns` row (`timingReceipt`) by every terminal write, durable
+turns only; mirrored per sampled turn (guest turns included) as the `run_timing_receipt`
+perf event, durations only. Every segment is a `performance.now()` difference in the
+Next.js process (wall-clock steps cannot corrupt it); every field optional; absent =
+unobserved, never zero. Per run — never accumulated across an approval continuation.
+A user Stop or supersession lands the stopped worker's partial receipt through the
+single-use receipt-attach capability (`attachRunTimingReceipt`, authenticated against
+the digest the Stop transaction copied onto the run); a run that dies without any
+worker write (reap) has none. Read with `runTiming:timingSummary` (see the runbook).
+
+| Field | Start → End | Owner | Gate? |
+|---|---|---|---|
+| `prepareMs` | HTTP receipt → provider dispatch (`streamText` call) | us | yes |
+| `providerFirstOutputMs` | provider call start → first output chunk, step 0 (SDK); anchored at the call ATTEMPT that succeeded, so SDK retry backoff (default 2 retries) is outside it | provider | no — correctness check |
+| `firstWriteDelayMs` | first output chunk → that chunk released to the response stream; same successful-attempt anchor as above | us | yes |
+| `modelResponseMs` | Σ per-step provider response time (SDK). Provider-executed (hosted) tools — OpenAI `web_search` and the like — run INSIDE it | provider | no |
+| `toolExecutionMs` | Σ per-step CLIENT-side tool execution (SDK); hosted tools contribute nothing | tools | no |
+| `wireStreamMs` | first output chunk released → finish part released to the response stream, observed in the UI-stream conversion (post-transform, in SDK order); ends at the finish so it spans the same last-delta → provider-finish tail as `modelResponseMs` | us + provider | via `pacingOverheadMs` |
+| `settlementMs` | settle start → terminal write dispatch (drain + final flush) | us | via `settlement_total` |
+| `buildId` | short commit identity of the server build | — | dimension |
+
+Derived at read time, never stored:
+
+- `serverTimeToFirstTokenMs = prepareMs + providerFirstOutputMs + firstWriteDelayMs`.
+- `pacingOverheadMs = wireStreamMs − (modelResponseMs − providerFirstOutputMs) −
+  toolExecutionMs` — what the response pipeline added on top of the provider's own
+  output window. Watch this when touching smoothing or the UI-stream conversion.
+  Hosted-tool part conversion is inside it (≈100 ms observed on an OpenAI web-search
+  turn versus 1–3 ms on plain turns): compare like with like, never a mixed population.
+
+The harness gates `prepareMs`, `firstWriteDelayMs`, `pacingOverheadMs`, and
+`settlementTotalMs` (from the span) in `compare-results.ts`; the provider segments are
+checked against the deterministic script's scheduled delays and invalidate the run when
+they disagree. `timingSummary` reports p50/max per segment and withholds p95 under 20
+samples, per the non-metrics rule below; its `model`/`buildId` filters apply before the
+scan limit.
+
+**Generation stats (user-facing, message-level — same provider figures):** time to first
+token = `providerFirstOutputMs` of the first run's first step; the output window is Σ
+per output step of (response − time to first output); **tokens per second = visible
+(output − reasoning) tokens ÷ output window**. Providers that hide reasoning (OpenAI)
+generate it before the first output chunk, inside time to first token, so counting it
+would inflate the rate by exactly the hidden share (live: 271 tokens incl. 128 reasoning
+over 1,284 ms read 211 tok/s for text that streamed at 111). Providers that stream
+thinking inside the window read conservatively instead — never inflated. Hosted tool
+calls are counted (`providerToolCalls`) because their time stays in the window.
 
 ## Non-metrics (explicitly out of contract)
 

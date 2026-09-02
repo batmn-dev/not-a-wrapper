@@ -33,6 +33,7 @@ import {
   CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   signChatAdmissionProof,
 } from "./lib/chatAdmissionProof"
+import { TIMING_RECEIPT_ATTACH_WINDOW_MS } from "./lib/runTimingReceipt"
 import { selectBranchForChat } from "./messages"
 
 type TableDocuments = {
@@ -4428,6 +4429,11 @@ describe("stopGenerationRun", () => {
       grantDigest: undefined,
       leaseExpiresAt: undefined,
       workDurationMs: 6000,
+      // The Stop carried no run timing receipt, so the revoked grant's digest
+      // is copied into the single-use attach capability (ADR-0030) the
+      // stopped worker's receipt will authenticate against.
+      timingReceiptGrantDigest: "d".repeat(64),
+      timingReceiptGrantExpiresAt: NOW + TIMING_RECEIPT_ATTACH_WINDOW_MS,
     })
     expect(fixture.message.status).toBe("aborted")
     expect(fixture.message.content).toBe("partial answer")

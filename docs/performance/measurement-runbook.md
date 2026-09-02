@@ -23,6 +23,26 @@ Interpret results using:
 - `docs/performance/2026-08-27-system-performance-baseline.md` for the pinned
   runner class, fixture hashes, and comparison baseline.
 
+## Reading run timing receipts (production or dev)
+
+Every durable generation run carries a **Run timing receipt** (ADR-0030,
+metric dictionary group 13). To ask "did build X slow prepare for route Y",
+summarize completed runs in a window, grouped by model, route, and build:
+
+```bash
+bunx convex run runTiming:timingSummary '{"sinceMs": 1725148800000}'
+```
+
+Optional filters: `"model"`, `"buildId"` (the short commit SHA stamped on the
+run), `"limit"` (default 2000, max 5000); filters apply before the limit, so
+a filtered window is never silently under-counted. The result lists n, p50,
+and max per receipt segment plus the derived `serverTimeToFirstTokenMs` and
+`pacingOverheadMs`; `p95` appears only from 20 samples up (the dictionary's
+non-metrics rule). Add `--prod` to read the production deployment. Compare
+two builds side by side by running it twice with each `buildId`; local runs
+carry no build id. Stopped runs carry the partial receipt their worker
+attached after the Stop; runs the reaper closed carry none.
+
 ## Manual measurement
 
 Use an authenticated Chrome session only when the deterministic harness does

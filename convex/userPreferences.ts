@@ -22,6 +22,7 @@ export const update = authenticatedMutation({
     webSearchEnabled: v.optional(v.boolean()),
     streamingPresentation: v.optional(v.string()),
     hiddenModels: v.optional(v.array(v.string())),
+    showGenerationStats: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db

@@ -45,12 +45,31 @@ percentiles) alongside per-step usage.
    short build identity. Absent means unobserved; nothing is zero-filled. It
    holds durations and a build id only, never content or correlation ids, so
    the seam's privacy posture is unchanged. Per run, never accumulated across
-   an approval continuation.
+   an approval continuation. A user Stop or supersession terminalizes the run
+   before the worker's abort write arrives and revokes the grant that write
+   would authenticate with, so the absorbing transaction copies the grant
+   digest into a single-use, bounded receipt-attach capability on the run;
+   the stopped worker's `attachRunTimingReceipt` lands its partial receipt
+   against that copy and can patch nothing else — the settlement-only usage
+   receipt's shape (ADR-0021 amendment), reused for diagnostics.
 
 3. **Only segments this server owns may gate.** Prepare, first-write delay,
    pacing overhead, and settlement enter the weekly benchmark's gate table.
    Provider segments are a correctness check against the deterministic
    script's known delays and never a regression gate.
+
+4. **Tokens per second counts visible output over the output window.** The
+   SDK's own `outputTokensPerSecond` divides all output tokens (hidden
+   reasoning included) by the post-first-output window, but providers that
+   hide reasoning generate it before the first output chunk — inside time to
+   first token — so that figure inflates by the hidden share (a live GPT-5
+   Mini turn read 211 tok/s for text streaming at 111). The stats line
+   therefore rates (output − reasoning) tokens; providers that stream
+   thinking inside the window read conservatively, never inflated, and the
+   tooltip states the rule whenever reasoning is present. Provider-executed
+   (hosted) tools run inside the provider response, so their time stays in
+   the window and in `modelResponseMs`; the stats count them so the line can
+   say so, and every "tool execution excluded" claim means client tools.
 
 ## Considered options
 
@@ -81,3 +100,12 @@ percentiles) alongside per-step usage.
   and build.
 - Anyone adding a transform or changing prepare must expect the weekly gate
   to notice. That is the point.
+- The SDK retries a failed provider call (default two attempts) and re-takes
+  its call-start anchor per attempt, notifying `onLanguageModelCallStart`
+  each time. The runtime keeps the latest attempt's anchor until the first
+  step ends, so a 429 backoff never lands in the gated first-write delay.
+- The receipt validator is a strict object on every terminal write's
+  arguments. A Next build that emits it against a Convex deployment without
+  it would fail every terminal write at argument validation and leave runs
+  to the reaper; `bun run build` deploys Convex first, and a half-failed
+  deploy must be re-run before the Next build ships.

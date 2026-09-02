@@ -17,6 +17,7 @@ export function InteractionPreferences() {
     setShowConversationPreviews,
     setWebSearchEnabled,
     setStreamingPresentation,
+    setShowGenerationStats,
   } = useUserPreferences()
 
   return (
@@ -74,6 +75,19 @@ export function InteractionPreferences() {
         <Switch
           checked={preferences.webSearchEnabled}
           onCheckedChange={setWebSearchEnabled}
+        />
+      </Field>
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldTitle className="text-balance">Generation stats</FieldTitle>
+          <FieldDescription className="text-xs text-pretty">
+            Show tokens per second, token counts, and time to first token under
+            each response
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          checked={preferences.showGenerationStats}
+          onCheckedChange={setShowGenerationStats}
         />
       </Field>
     </FieldGroup>

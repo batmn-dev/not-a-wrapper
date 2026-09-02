@@ -10,7 +10,12 @@ import {
   type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
-import { getDurableError, getErrorRecovery } from "@/lib/chat-messages/metadata"
+import {
+  getDurableError,
+  getErrorRecovery,
+  getGenerationStats,
+} from "@/lib/chat-messages/metadata"
+import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import type { RegenerationTurnOverrides } from "@/lib/chat-turn/chat-turn-controller"
 import { getModelInfo } from "@/lib/models"
 import { AFFORDABILITY_RETRY_GENERATION_BUDGET } from "@/lib/openproviders/output-budget"
@@ -26,6 +31,7 @@ import {
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
 import { AssistantActivityIndicator } from "./assistant-activity-indicator"
+import { GenerationStatsLine } from "./generation-stats"
 import { MessageActionButton } from "./message-action-button"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
@@ -81,6 +87,7 @@ export function MessageAssistant({
   const preservedResponse = hasPreservedResponseContent(view)
   const durableError = getDurableError(view.metadata)
   const errorRecovery = getErrorRecovery(view.metadata)
+  const showGenerationStats = useUserPreferences().preferences.showGenerationStats
 
   // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
   // row with activity keeps its own trigger; only the row currently projected
@@ -419,6 +426,12 @@ export function MessageAssistant({
                 onOpen={handleSourcesBadgeOpen}
                 controlsId={panelId}
               />
+            )}
+            {/* Generation stats (ADR-0030): settled turns only, behind the
+                    preference; the line renders nothing without persisted
+                    stats, so guests and pre-feature messages show no gap. */}
+            {!turnActive && showGenerationStats && (
+              <GenerationStatsLine stats={getGenerationStats(view.metadata)} />
             )}
           </MessageActions>
         </div>

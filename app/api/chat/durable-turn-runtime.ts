@@ -19,6 +19,7 @@ import type {
   TitleTerminalUsageEvidence,
 } from "@/convex/domain/usage_accounting"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
+import type { RunTimingReceipt } from "@/convex/lib/runTimingReceipt"
 import { estimatePartialOutputTokens } from "@/lib/usage/terminal-usage-estimate"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { ChatErrorRecovery } from "@/lib/chat-errors"
@@ -324,7 +325,11 @@ export type DurableStreamBinding = {
     ): Promise<boolean>
     onChunk(chunk: TextStreamPart<ToolSet>): void
     recordStep(step: DurableStepRecord): void
-    noteStreamError(failure: DurableFailure, workDurationMs: number): void
+    noteStreamError(
+      failure: DurableFailure,
+      workDurationMs: number,
+      timingReceipt?: RunTimingReceipt
+    ): void
     /**
      * Flush the snapshot, then mark the run aborted — carrying terminal
      * usage evidence when the parent observed any. If a Stop/supersession
@@ -334,7 +339,8 @@ export type DurableStreamBinding = {
     onAbort(
       reason: string,
       workDurationMs: number,
-      facts?: TerminalUsageFacts
+      facts?: TerminalUsageFacts,
+      timingReceipt?: RunTimingReceipt
     ): Promise<void>
     /** Stream-onEnd half of the finish handoff (sync capture). */
     captureFinish(facts: StreamFinishFacts): void
@@ -376,6 +382,11 @@ export type DurableStreamBinding = {
        * settled-elsewhere) — the envelope only ever contributes title state.
        */
       terminalFacts?: Pick<TerminalUsageFacts, "title">
+      /**
+       * The run timing receipt as the parent observed it (ADR-0030). The
+       * binding adds `settlementMs` and ships it with the terminal write.
+       */
+      timingReceipt?: RunTimingReceipt
     }): Promise<DurableSettlementReceipt>
   }
 }
@@ -1172,7 +1183,8 @@ export function createConvexDurableTurn(args: {
   const markRunAborted = async (
     reason: string,
     workDurationMs?: number,
-    terminalUsage?: TerminalUsageEvidencePayload
+    terminalUsage?: TerminalUsageEvidencePayload,
+    timingReceipt?: RunTimingReceipt
   ): Promise<TerminalWriteResult> => {
     const currentMessageId = assistantMessageId
     if (!runId || !currentMessageId) return "landed"
@@ -1181,6 +1193,7 @@ export function createConvexDurableTurn(args: {
       reason,
       workDurationMs,
       ...(terminalUsage ? { terminalUsage } : {}),
+      ...(timingReceipt ? { timingReceipt } : {}),
     })
   }
 
@@ -1250,6 +1263,37 @@ export function createConvexDurableTurn(args: {
         chatId,
         runId,
         reservationId,
+        error: describeError(error),
+      })
+    }
+  }
+
+  // Run timing receipt attach (ADR-0030): when an absorbing terminal settled
+  // this run elsewhere WITHOUT a receipt (user Stop, supersession), the same
+  // worker secret authorizes exactly one receipt attach against the digest
+  // that transaction copied onto the run. One attempt, outside the
+  // grant-gated workerWrite (authority loss is the very state this serves);
+  // the receipt is diagnostics, so a miss is logged, never retried.
+  let timingReceiptAttachAttempted = false
+  const submitTimingReceipt = async (
+    timingReceipt: RunTimingReceipt | undefined
+  ): Promise<void> => {
+    if (!runId || !timingReceipt) return
+    if (timingReceiptAttachAttempted) return
+    timingReceiptAttachAttempted = true
+    try {
+      await withWorkerWriteTimeout(
+        wire({
+          op: "attachRunTimingReceipt",
+          args: { runId, timingReceipt },
+        }),
+        "attaching run timing receipt"
+      )
+    } catch (error) {
+      warnDurable("durable_timing_receipt_attach_failed", {
+        requestId,
+        chatId,
+        runId,
         error: describeError(error),
       })
     }
@@ -1812,7 +1856,7 @@ export function createConvexDurableTurn(args: {
             )
           },
 
-          noteStreamError(failure, workDurationMs) {
+          noteStreamError(failure, workDurationMs, timingReceipt) {
             const normalizedFailure = normalizeDurableFailure(failure)
             void (async () => {
               await drainPendingWrites(stepWritePromises)
@@ -1823,6 +1867,7 @@ export function createConvexDurableTurn(args: {
                   ? { errorRecovery: normalizedFailure.recovery }
                   : {}),
                 workDurationMs,
+                ...(timingReceipt ? { timingReceipt } : {}),
               })
             })().catch((error: unknown) => {
               if (noteIfGrantRejection(error, "stream-error")) return
@@ -1835,7 +1880,7 @@ export function createConvexDurableTurn(args: {
             })
           },
 
-          async onAbort(reason, workDurationMs, facts) {
+          async onAbort(reason, workDurationMs, facts, timingReceipt) {
             await drainPendingWrites(stepWritePromises)
             await tracker.flush().catch(() => {})
             if (facts) lastTerminalFacts = facts
@@ -1845,7 +1890,8 @@ export function createConvexDurableTurn(args: {
             await markRunAborted(
               reason,
               workDurationMs,
-              terminalUsage
+              terminalUsage,
+              timingReceipt
             )
             // Do not finalize a Stop/supersession receipt here: the title and
             // final response snapshot may still gain evidence before the
@@ -1875,8 +1921,21 @@ export function createConvexDurableTurn(args: {
             finishReason,
             titleUsage,
             terminalFacts,
+            timingReceipt,
           }) {
-            const settleStartedAtMs = Date.now()
+            // Monotonic: the receipt's clock, like every other segment.
+            const settleStartedAtMs = performance.now()
+            // Settlement up to the terminal write (drain + final flush); the
+            // write itself cannot be inside the receipt it carries.
+            const receiptForTerminalWrite = (): RunTimingReceipt | undefined =>
+              timingReceipt
+                ? {
+                    ...timingReceipt,
+                    settlementMs:
+                      Math.round((performance.now() - settleStartedAtMs) * 100) /
+                      100,
+                  }
+                : undefined
             // Keep the heartbeat alive through bounded terminal retries; a
             // mid-retry reap would race the write. Then stop on every exit. A
             // degraded exit stops too: lease expiry is the honest convergence
@@ -1962,11 +2021,13 @@ export function createConvexDurableTurn(args: {
                 const aborted = await markRunAborted(
                   "ui message stream aborted",
                   terminalMetadata?.workDurationMs,
-                  terminalUsage
+                  terminalUsage,
+                  receiptForTerminalWrite()
                 )
                 if (aborted === "failed") return degrade("abort write failed")
                 if (aborted === "settled-elsewhere") {
                   await submitSettlementReceipt(terminalUsage)
+                  await submitTimingReceipt(receiptForTerminalWrite())
                 }
                 deps.perf?.counter("settlement_receipt_confirmed")
                 return {
@@ -1996,6 +2057,7 @@ export function createConvexDurableTurn(args: {
                 toolCounts = countToolParts(responseMessage)
               }
 
+              const completionReceipt = receiptForTerminalWrite()
               const landed = await writeTerminal("markGenerationRunCompleted", {
                 messageId: currentMessageId,
                 content: getFinalAssistantText(responseMessage),
@@ -2008,6 +2070,9 @@ export function createConvexDurableTurn(args: {
                 titleUsage,
                 totalToolCalls: toolCounts.totalToolCalls,
                 failedToolCalls: toolCounts.failedToolCalls,
+                ...(completionReceipt
+                  ? { timingReceipt: completionReceipt }
+                  : {}),
               })
 
               if (landed === "failed") {
@@ -2041,6 +2106,7 @@ export function createConvexDurableTurn(args: {
                         )
                       : undefined
                 await submitSettlementReceipt(actualEvidence)
+                await submitTimingReceipt(completionReceipt)
               }
 
               deps.perf?.counter("settlement_receipt_confirmed")
@@ -2056,7 +2122,7 @@ export function createConvexDurableTurn(args: {
               // Drain + final flush + terminal write, whatever the outcome.
               deps.perf?.record(
                 "settlement_total",
-                Date.now() - settleStartedAtMs
+                performance.now() - settleStartedAtMs
               )
               stopHeartbeat()
             }

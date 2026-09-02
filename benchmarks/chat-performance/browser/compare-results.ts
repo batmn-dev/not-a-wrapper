@@ -30,6 +30,13 @@ const GATES: Record<string, Threshold> = {
   sendToFirstVisibleTextMs: { relative: 0.35, absoluteFloor: 150 },
   totalBlockingTimeMs: { relative: 0.5, absoluteFloor: 100 },
   markdownProjectionMaxMs: { relative: 0.5, absoluteFloor: 20 },
+  // Run timing receipt segments this server owns (ADR-0030). The provider
+  // segments never gate: the deterministic script fixes them, and the harness
+  // correctness-checks the receipt against that script instead.
+  prepareMs: { relative: 0.35, absoluteFloor: 40 },
+  firstWriteDelayMs: { relative: 0.5, absoluteFloor: 20 },
+  pacingOverheadMs: { relative: 0.5, absoluteFloor: 50 },
+  settlementTotalMs: { relative: 0.5, absoluteFloor: 100 },
   stopToTerminalMs: { relative: 0.5, absoluteFloor: 20 },
 }
 

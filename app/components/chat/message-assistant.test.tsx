@@ -23,6 +23,7 @@ import {
 import { MessageAssistant } from "./message-assistant"
 
 const responsive = vi.hoisted(() => ({ isMobile: false }))
+const preferenceState = vi.hoisted(() => ({ showGenerationStats: false }))
 
 vi.mock("@/hooks/use-breakpoint", () => ({
   useBreakpoint: () => responsive.isMobile,
@@ -32,6 +33,7 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
   useUserPreferences: () => ({
     preferences: {
       showToolInvocations: false,
+      showGenerationStats: preferenceState.showGenerationStats,
     },
   }),
 }))
@@ -87,9 +89,48 @@ describe("MessageAssistant activity trigger", () => {
 
   beforeEach(() => {
     responsive.isMobile = false
+    preferenceState.showGenerationStats = false
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
+  })
+
+  it("renders the generation stats line on settled turns behind the preference", () => {
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [{ type: "text", text: "Answer" }] as UIMessage["parts"]
+    const metadata = {
+      generationStats: {
+        timeToFirstTokenMs: 420,
+        outputStreamMs: 4223,
+        outputTokens: 146,
+      },
+    }
+    const renderRow = () =>
+      act(() => {
+        root?.render(
+          <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+            <MessageAssistant
+              messageId="assistant-1"
+              view={makeView(parts, "ready", metadata)}
+              status="ready"
+              finishReason="stop"
+            >
+              Answer
+            </MessageAssistant>
+          </ActivityPanelStoreProvider>
+        )
+      })
+
+    renderRow()
+    expect(
+      container?.querySelector('[data-testid="generation-stats"]')
+    ).toBeNull()
+
+    preferenceState.showGenerationStats = true
+    renderRow()
+    expect(
+      container?.querySelector('[data-testid="generation-stats"]')?.textContent
+    ).toBe("34.6 tok/s · 146 tokens · 0.42 s to first token")
   })
 
   it("focuses a newly completed final response on mobile without scrolling", () => {
