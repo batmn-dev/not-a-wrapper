@@ -72,8 +72,8 @@ export const timingSummary = internalQuery({
   handler: async (ctx, args) => {
     const since = args.sinceMs ?? Date.now() - DEFAULT_WINDOW_MS
     const limit = Math.min(5000, Math.max(1, Math.floor(args.limit ?? 2000)))
-    // `take` before filtering: a `.filter()` on the index range would keep
-    // reading past sparse matches until `limit` were met, unbounded by `sinceMs`.
+    // `take` before filtering: a `.filter()` ahead of `take` could walk the
+    // whole `sinceMs` window to gather `limit` matches; `take` caps the read.
     const scanned = await ctx.db
       .query("generationRuns")
       .withIndex("by_status_completed", (q) =>

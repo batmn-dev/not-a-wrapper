@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   MAX_PROJECT_NAME_LENGTH,
   normalizeProjectName,
+  PROJECT_NAME_REQUIRED_MESSAGE,
 } from "../lib/projects/policy"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
@@ -136,11 +137,14 @@ describe("removeProjectForOwner", () => {
 })
 
 describe("normalizeProjectName", () => {
-  it("applies the length limit to the trimmed name, as create and updateName do", () => {
+  it("rejects blank and over-long trimmed names, as create and updateName do", () => {
     const maxName = "a".repeat(MAX_PROJECT_NAME_LENGTH)
     expect(normalizeProjectName(`  ${maxName}  `)).toBe(maxName)
     expect(() => normalizeProjectName(`${maxName}b`)).toThrow(
       `${MAX_PROJECT_NAME_LENGTH} characters`
+    )
+    expect(() => normalizeProjectName("   ")).toThrow(
+      PROJECT_NAME_REQUIRED_MESSAGE
     )
   })
 })

@@ -189,8 +189,15 @@ describe("MessageUser edits", () => {
     container = mountedContainer
     root = createRoot(mountedContainer)
 
+    // Lets a test close the editor from the parent, the way Chat does when a
+    // turn changes underneath a pending edit.
+    const parent = { setEditing: (_isEditing: boolean) => {} }
+
     function ControlledEditableMessage() {
       const [isEditing, setIsEditing] = React.useState(false)
+      React.useEffect(() => {
+        parent.setEditing = setIsEditing
+      }, [])
 
       return (
         <MessageUser
@@ -210,6 +217,7 @@ describe("MessageUser edits", () => {
     act(() => {
       root?.render(<ControlledEditableMessage />)
     })
+    return parent
   }
 
   function openEditor() {
@@ -437,6 +445,37 @@ describe("MessageUser edits", () => {
       settle?.()
     })
     expect(container?.querySelector("textarea")).toBeNull()
+  })
+
+  it("ignores a save that settles after the editor was closed and reopened", async () => {
+    let settle: (() => void) | undefined
+    const onEdit = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          settle = () => resolve({ ok: true })
+        })
+    )
+    const parent = renderEditableMessage({ onEdit })
+
+    openEditor()
+    updateTextarea("First draft")
+    await clickSend()
+
+    act(() => {
+      parent.setEditing(false)
+    })
+    expect(container?.querySelector("textarea")).toBeNull()
+    openEditor()
+    updateTextarea("Second draft")
+
+    await act(async () => {
+      settle?.()
+    })
+
+    const textarea = container?.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea?.value).toBe("Second draft")
+    expect(textarea?.readOnly).toBe(false)
+    expect(onEdit).toHaveBeenCalledOnce()
   })
 
   it("cancels edit without submitting and restores original content", () => {
