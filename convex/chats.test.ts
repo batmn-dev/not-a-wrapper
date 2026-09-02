@@ -170,6 +170,27 @@ describe("project conversation previews", () => {
   })
 
   const directoryOwner = createUser("directory-owner")
+  it("returns an empty directory when signed out without reading Projects", async () => {
+    const ctx = {
+      user: null,
+      db: {
+        get: () => {
+          throw new Error("Signed-out reads must not load the Project")
+        },
+        query: () => {
+          throw new Error("Signed-out reads must not read linked Chats")
+        },
+      },
+    } as unknown as Parameters<typeof getProjectChatsForCurrentUserHandler>[0]
+
+    await expect(
+      getProjectChatsForCurrentUserHandler(
+        ctx,
+        asId<"projects">("signed-out-project")
+      )
+    ).resolves.toEqual([])
+  })
+
   it.each([
     [
       "tombstoned before route teardown",
