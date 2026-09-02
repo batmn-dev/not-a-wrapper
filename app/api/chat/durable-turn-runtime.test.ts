@@ -917,6 +917,11 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
         expect(wireCalls(wire, "updateAssistantSnapshot")).toHaveLength(1)
       })
       expect(turn.executionAbortSignal.aborted).toBe(true)
+      expect(turn.executionAbortSignal.reason).toBeInstanceOf(DOMException)
+      expect(turn.executionAbortSignal.reason).toMatchObject({
+        name: "AbortError",
+        message: "Durable worker execution lost: grant grant_unauthorized",
+      })
 
       const receipt = await binding.envelope.settle({
         responseMessage: RESPONSE_MESSAGE,
@@ -1090,9 +1095,7 @@ describe("durable turn runtime — settlement receipts (never rejects)", () => {
       stepNumber: 1,
       usage: { inputTokens: 111, outputTokens: 22 },
     })
-    expect(
-      (calls[1]!.args as { usage?: unknown }).usage
-    ).toBeUndefined()
+    expect((calls[1]!.args as { usage?: unknown }).usage).toBeUndefined()
   })
 })
 

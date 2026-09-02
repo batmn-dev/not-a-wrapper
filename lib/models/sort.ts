@@ -123,6 +123,6 @@ export function getOrderedModelSections<M extends SectionSortableModel>(
     .sort(([a], [b]) => compareProviderSections(a, b))
     .map(([vendorId, vendorModels]) => ({
       vendorId,
-      models: vendorModels.toSorted(compareModelsForProviderSection),
+      models: [...vendorModels].sort(compareModelsForProviderSection),
     }))
 }

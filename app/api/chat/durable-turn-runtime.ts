@@ -9,19 +9,17 @@ import {
   LEASE_DURATION_MS,
 } from "@/convex/domain/generation_run_liveness"
 import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
+import type {
+  TerminalUsageEvidencePayload,
+  TitleTerminalUsageEvidence,
+} from "@/convex/domain/usage_accounting"
 import {
   CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   signChatAdmissionProof,
   type ChatAdmissionProofPayload,
 } from "@/convex/lib/chatAdmissionProof"
-import type {
-  TerminalUsageEvidencePayload,
-  TitleTerminalUsageEvidence,
-} from "@/convex/domain/usage_accounting"
 import { projectPersistedMessageMetadata } from "@/convex/lib/messageMetadata"
 import type { RunTimingReceipt } from "@/convex/lib/runTimingReceipt"
-import { estimatePartialOutputTokens } from "@/lib/usage/terminal-usage-estimate"
-import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { ChatErrorRecovery } from "@/lib/chat-errors"
 import type {
   ChatTurnEditRequest,
@@ -31,8 +29,10 @@ import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import { isServerChatId } from "@/lib/chat-store/identity"
+import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import type { ToolSource } from "@/lib/tools/types"
+import { estimatePartialOutputTokens } from "@/lib/usage/terminal-usage-estimate"
 import * as Sentry from "@sentry/nextjs"
 import type {
   DynamicToolUIPart,
@@ -1331,7 +1331,10 @@ export function createConvexDurableTurn(args: {
     stopHeartbeat()
     if (!executionAbortController.signal.aborted) {
       executionAbortController.abort(
-        new Error(`Durable worker execution lost: ${reason}`)
+        new DOMException(
+          `Durable worker execution lost: ${reason}`,
+          "AbortError"
+        )
       )
     }
   }
@@ -1516,8 +1519,7 @@ export function createConvexDurableTurn(args: {
         generationBudget,
         grantDigest,
         reservationId,
-        cancellationSettlementVersion:
-          CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
+        cancellationSettlementVersion: CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
         generationInputHash,
         issuedAt: admissionIssuedAt,
       })
@@ -1932,8 +1934,9 @@ export function createConvexDurableTurn(args: {
                 ? {
                     ...timingReceipt,
                     settlementMs:
-                      Math.round((performance.now() - settleStartedAtMs) * 100) /
-                      100,
+                      Math.round(
+                        (performance.now() - settleStartedAtMs) * 100
+                      ) / 100,
                   }
                 : undefined
             // Keep the heartbeat alive through bounded terminal retries; a
@@ -2010,8 +2013,7 @@ export function createConvexDurableTurn(args: {
                         primary: lastTerminalFacts?.primary ?? {
                           kind: "started-without-usage" as const,
                         },
-                        title:
-                          terminalFacts?.title ??
+                        title: terminalFacts?.title ??
                           lastTerminalFacts?.title ?? { kind: "not-run" },
                       }
                     : undefined
