@@ -574,7 +574,7 @@ export function classifyLogicalModel(
     firstSuccessorRelease + MODEL_SUCCESSOR_GRACE_DAYS * DAY_MS
   if (asOfTimestamp < effectiveAt) return currentPriority()
 
-  const recommendedSuccessor = eligibleSuccessors.toSorted(
+  const recommendedSuccessor = [...eligibleSuccessors].sort(
     (left, right) => right.releasedAt - left.releasedAt
   )[0]!
 
@@ -675,7 +675,7 @@ export function auditLogicalModelPriorities(
         },
       ]
     })
-    .toSorted(
+    .sort(
       (left, right) =>
         left.vendorId.localeCompare(right.vendorId) ||
         left.laneId.localeCompare(right.laneId)

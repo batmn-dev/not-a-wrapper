@@ -6,6 +6,7 @@ import {
   createChatWithFirstTurnForUser,
   getPinnedForCurrentUserHandler,
   getProjectChatDirectoryForProject,
+  getProjectChatsForCurrentUserHandler,
   getPublicByIdHandler,
   getRecentWindowForCurrentUserHandler,
   listForCurrentUserPaginatedHandler,
@@ -98,9 +99,7 @@ describe("project conversation previews", () => {
                 buildQuery(query)
                 let chats = [older, newer]
                 const resultApi = {
-                  filter: (
-                    buildFilter: (filter: FilterBuilder) => unknown
-                  ) => {
+                  filter: (buildFilter: (filter: FilterBuilder) => unknown) => {
                     let fieldName = ""
                     let expected: unknown
                     buildFilter({
@@ -169,6 +168,39 @@ describe("project conversation previews", () => {
       { chatId: older._id, limit: PROJECT_CHAT_PREVIEW_SCAN_LIMIT },
     ])
   })
+
+  const directoryOwner = createUser("directory-owner")
+  it.each([
+    [
+      "tombstoned before route teardown",
+      createProject("deleting", directoryOwner._id, { deletingAt: 2 }),
+    ],
+    ["removed by the deletion drain", null],
+    [
+      "owned by another user",
+      createProject("private", asId<"users">("another-owner")),
+    ],
+  ])(
+    "returns an empty directory when the Project is %s",
+    async (_case, project) => {
+      const ctx = {
+        user: directoryOwner,
+        db: {
+          get: async () => project,
+          query: () => {
+            throw new Error("Unreadable Projects must not read linked Chats")
+          },
+        },
+      } as unknown as Parameters<typeof getProjectChatsForCurrentUserHandler>[0]
+
+      await expect(
+        getProjectChatsForCurrentUserHandler(
+          ctx,
+          project?._id ?? asId<"projects">("physically-deleted")
+        )
+      ).resolves.toEqual([])
+    }
+  )
 })
 
 function createUser(id: string): Doc<"users"> {
@@ -1102,9 +1134,7 @@ describe("removeChatForOwner", () => {
       state: "pending",
       phase: "toolInvocations",
     })
-    expect(scheduled).toEqual([
-      { delay: 0, args: { jobId: "job-1" } },
-    ])
+    expect(scheduled).toEqual([{ delay: 0, args: { jobId: "job-1" } }])
     expect(messages).toEqual([{ _id: "message-1", chatId: chat._id }])
     expect(deleted).toEqual([])
     // Live runs must be closed (and their reservations deferred) BEFORE the

@@ -19,6 +19,27 @@ function model(
   return { name, ...fields }
 }
 
+function withoutArrayToSorted<T>(run: () => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    Array.prototype,
+    "toSorted"
+  )
+  Object.defineProperty(Array.prototype, "toSorted", {
+    configurable: true,
+    value: undefined,
+  })
+
+  try {
+    return run()
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(Array.prototype, "toSorted", descriptor)
+    } else {
+      Reflect.deleteProperty(Array.prototype, "toSorted")
+    }
+  }
+}
+
 describe("compareModelsForProviderSection", () => {
   it("has complete ranking facts for every visible logical model", () => {
     const incompleteModels = getVisibleLogicalModelViews()
@@ -127,8 +148,8 @@ describe("compareProviderSections", () => {
 })
 
 describe("getOrderedModelSections", () => {
-  it("centralizes provider grouping and within-provider model order", () => {
-    const sections = getOrderedModelSections([
+  it("orders models without requiring Array.prototype.toSorted", () => {
+    const input = [
       {
         ...model("Mistral Older", { releasedAt: "2025-01-01" }),
         baseProviderId: "mistral",
@@ -149,7 +170,11 @@ describe("getOrderedModelSections", () => {
         ...model("DeepSeek", { releasedAt: "2026-04-01" }),
         baseProviderId: "deepseek",
       },
-    ])
+    ]
+    const sections = withoutArrayToSorted(() => {
+      expect(getVisibleLogicalModelViews()).not.toHaveLength(0)
+      return getOrderedModelSections(input)
+    })
 
     expect(sections.map(({ vendorId }) => vendorId)).toEqual([
       "anthropic",
@@ -162,5 +187,12 @@ describe("getOrderedModelSections", () => {
         .find(({ vendorId }) => vendorId === "mistral")
         ?.models.map(({ name }) => name)
     ).toEqual(["Mistral Newer", "Mistral Older"])
+    expect(input.map(({ name }) => name)).toEqual([
+      "Mistral Older",
+      "OpenAI Newer",
+      "Anthropic Older",
+      "Mistral Newer",
+      "DeepSeek",
+    ])
   })
 })
