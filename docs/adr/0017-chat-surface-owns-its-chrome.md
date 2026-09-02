@@ -72,9 +72,12 @@ Rules:
 
 ## 2026-08-31 rendering addendum
 
-The ownership and DOM-position decision above is unchanged. The authenticated
-production component uses a sticky, opaque main-surface header with
-`data-fixed-header="always"`. This app intentionally applies its earlier
+The ownership and DOM-position decision above is unchanged. For reference,
+ChatGPT's authenticated production header (the captured `reference-ui/ChatGPT`
+bundle) defaults to a sticky, opaque main-surface header with
+`data-fixed-header="always"`; `less-than-xl` is an opt-in there. This app does
+not copy that default: every production chat route (`chat-chrome.ts` resolver,
+`LayoutApp`, `ChatChromeHeader`) intentionally applies the earlier
 `data-fixed-header="less-than-xl"` presentation to the standard layout: below
 the 80rem main-container breakpoint, the header is opaque and shows its bottom
 edge after scrolling; at or above that breakpoint, it is transparent and

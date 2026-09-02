@@ -9,7 +9,12 @@
  */
 
 export type GenerationStats = {
-  /** Provider dispatch → first output chunk; first run and first step only. */
+  /**
+   * Provider dispatch → first output chunk (text, reasoning, tool input, tool
+   * call, or file; the SDK's `timeToFirstOutputMs`), first run and first step
+   * only. Labeled "time to first output" everywhere; the key is the persisted
+   * metadata name and stays for stored messages.
+   */
   timeToFirstTokenMs?: number
   /**
    * Σ over output-producing steps of (response time − time to first output):
@@ -81,12 +86,12 @@ export function parseGenerationStats(
 
 /**
  * Presentation-ready view. Three states, switched exhaustively by the row:
- * nothing to show; time to first token alone (the provider omitted usage);
+ * nothing to show; time to first output alone (the provider omitted usage);
  * or the complete line.
  *
  * `tokensPerSecond` is the VISIBLE output rate: (output − reasoning) tokens
  * over the output window. Providers that hide reasoning (OpenAI) generate
- * those tokens before the first output chunk — inside time to first token,
+ * those tokens before the first output chunk — inside time to first output,
  * outside the window — so counting them would inflate the rate by exactly
  * the hidden share. Providers that stream thinking inside the window read
  * conservatively instead; never inflated. Undefined when the window is zero

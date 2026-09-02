@@ -5,6 +5,8 @@
  */
 
 export type MetricSummary = {
+  /** Sample count. 0 means no run produced the metric; the percentiles are then 0, not measurements. */
+  n: number
   p50: number
   p75: number
   p95: number
@@ -116,11 +118,12 @@ export type BenchmarkResultFile = {
 }
 
 export function summarize(values: number[]): MetricSummary {
-  if (values.length === 0) return { p50: 0, p75: 0, p95: 0, max: 0 }
+  if (values.length === 0) return { n: 0, p50: 0, p75: 0, p95: 0, max: 0 }
   const sorted = [...values].sort((a, b) => a - b)
   const at = (q: number) =>
     sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
   return {
+    n: sorted.length,
     p50: round2(at(0.5)),
     p75: round2(at(0.75)),
     p95: round2(at(0.95)),

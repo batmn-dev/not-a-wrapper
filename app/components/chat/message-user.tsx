@@ -13,6 +13,7 @@ import {
   MorphingDialogContainer,
   MorphingDialogContent,
   MorphingDialogImage,
+  MorphingDialogTitle,
   MorphingDialogTrigger,
 } from "@/components/ui/morphing-dialog"
 import type { MessageBranchInfo } from "@/lib/chat-messages/branch"
@@ -109,6 +110,10 @@ function MessageAttachmentView({
       </MorphingDialogTrigger>
       <MorphingDialogContainer>
         <MorphingDialogContent className="relative rounded-lg">
+          {/* Names the lightbox for screen readers; the content's aria-labelledby points here. */}
+          <MorphingDialogTitle className="sr-only">
+            Attachment preview: {attachment.name || "image"}
+          </MorphingDialogTitle>
           <MorphingDialogImage
             src={attachment.url}
             alt={attachment.name || ""}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   pacingOverheadMs,
   sanitizeRunTimingReceipt,
-  serverTimeToFirstTokenMs,
+  serverTimeToFirstOutputMs,
 } from "./runTimingReceipt"
 
 describe("sanitizeRunTimingReceipt", () => {
@@ -24,7 +24,7 @@ describe("sanitizeRunTimingReceipt", () => {
 })
 
 describe("derived figures", () => {
-  it("decomposes server time to first token and pacing overhead", () => {
+  it("decomposes server time to first output and pacing overhead", () => {
     const receipt = {
       prepareMs: 120,
       providerFirstOutputMs: 250,
@@ -33,13 +33,13 @@ describe("derived figures", () => {
       toolExecutionMs: 0,
       wireStreamMs: 1040,
     }
-    expect(serverTimeToFirstTokenMs(receipt)).toBe(400)
+    expect(serverTimeToFirstOutputMs(receipt)).toBe(400)
     // Released window (1040) minus the provider's output window (1250 − 250).
     expect(pacingOverheadMs(receipt)).toBe(40)
   })
 
   it("stays undefined when a segment was unobserved", () => {
-    expect(serverTimeToFirstTokenMs({ prepareMs: 1 })).toBeUndefined()
+    expect(serverTimeToFirstOutputMs({ prepareMs: 1 })).toBeUndefined()
     expect(pacingOverheadMs({ wireStreamMs: 1 })).toBeUndefined()
   })
 })

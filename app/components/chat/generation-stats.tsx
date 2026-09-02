@@ -18,7 +18,7 @@ import {
  * The Generation stats line (ADR-0030): plain text in the response actions
  * row, settled turns only, behind the `showGenerationStats` preference. The
  * view is a closed union, so a rate can only render from a valid window and
- * absent provider usage leaves time to first token standing alone. Hover
+ * absent provider usage leaves time to first output standing alone. Hover
  * reveals exact milliseconds and the token breakdown.
  */
 export function GenerationStatsLine({
@@ -39,10 +39,10 @@ export function GenerationStatsLine({
     segments.push(`${formatTokenCount(view.outputTokens)} tokens`)
     if (view.timeToFirstTokenMs !== undefined) {
       segments.push(
-        `${formatMsAsSeconds(view.timeToFirstTokenMs)} s to first token`
+        `${formatMsAsSeconds(view.timeToFirstTokenMs)} s to first output`
       )
       detail.push(
-        `Time to first token: ${Math.round(view.timeToFirstTokenMs)} ms`
+        `Time to first output: ${Math.round(view.timeToFirstTokenMs)} ms`
       )
     }
     if (view.outputStreamMs !== undefined) {
@@ -81,10 +81,10 @@ export function GenerationStatsLine({
     }
   } else {
     segments.push(
-      `${formatMsAsSeconds(view.timeToFirstTokenMs)} s to first token`
+      `${formatMsAsSeconds(view.timeToFirstTokenMs)} s to first output`
     )
     detail.push(
-      `Time to first token: ${Math.round(view.timeToFirstTokenMs)} ms`
+      `Time to first output: ${Math.round(view.timeToFirstTokenMs)} ms`
     )
     detail.push("Token counts unavailable: the provider did not report usage")
   }

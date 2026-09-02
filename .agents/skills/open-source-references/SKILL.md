@@ -12,14 +12,15 @@ For product behavior, interaction, or visual parity, inspect the user's
 authenticated reference product named in the task first. Do not let an
 open-source implementation override directly observed behavior.
 
-Prefer the local clone path in each entry when that directory exists. If it is
-missing, use the GitHub URL.
+Source paths are relative to this repository's root and point at sibling
+checkouts, the same convention as `../reference-ui`. Prefer the local clone in
+each entry when that directory exists. If it is missing, use the GitHub URL.
 
 P0 means consult first for its matching surface. P1 is a strong specialist; P2 is narrow; P3 is forensic only.
 
 ## P0 — LibreChat
 
-Source Path: `/Users/andresgonzalez/Github/Projects/LibreChat`
+Source Path: `../LibreChat`
 
 Github URL: https://github.com/danny-avila/LibreChat
 
@@ -29,7 +30,7 @@ Github URL: https://github.com/danny-avila/LibreChat
 
 ## P0 — LobeHub
 
-Source Path: `/Users/andresgonzalez/Github/Projects/LobeHub`
+Source Path: `../LobeHub`
 
 Github URL: https://github.com/lobehub/lobehub
 
@@ -39,7 +40,7 @@ Github URL: https://github.com/lobehub/lobehub
 
 ## P0 — Open WebUI
 
-Source Path: `/Users/andresgonzalez/Github/Projects/OpenWebUI`
+Source Path: `../OpenWebUI`
 
 Github URL: https://github.com/open-webui/open-webui
 
@@ -49,7 +50,7 @@ Github URL: https://github.com/open-webui/open-webui
 
 ## P0 — Hermes Agent
 
-Source Path: `/Users/andresgonzalez/Github/Projects/hermes-agent`
+Source Path: `../hermes-agent`
 
 Github URL: https://github.com/NousResearch/hermes-agent
 
@@ -59,7 +60,7 @@ Github URL: https://github.com/NousResearch/hermes-agent
 
 ## P0 — Vercel Chatbot
 
-Source Path: `/Users/andresgonzalez/Github/Projects/VercelChatbot`
+Source Path: `../VercelChatbot`
 
 Github URL: https://github.com/vercel/chatbot
 
@@ -69,7 +70,7 @@ Github URL: https://github.com/vercel/chatbot
 
 ## P0 — Trigger.dev
 
-Source Path: `/Users/andresgonzalez/Github/Projects/trigger.dev`
+Source Path: `../trigger.dev`
 
 Github URL: https://github.com/triggerdotdev/trigger.dev
 
@@ -79,7 +80,7 @@ Github URL: https://github.com/triggerdotdev/trigger.dev
 
 ## P0 — Rakazo
 
-Source Path: `/Users/andresgonzalez/Github/Projects/rakazo`
+Source Path: `../rakazo`
 
 Github URL: https://github.com/elie222/rakazo
 
@@ -89,7 +90,7 @@ Github URL: https://github.com/elie222/rakazo
 
 ## P1 — AnythingLLM
 
-Source Path: `/Users/andresgonzalez/Github/Projects/AnythingLLM`
+Source Path: `../AnythingLLM`
 
 Github URL: https://github.com/Mintplex-Labs/anything-llm
 
@@ -99,7 +100,7 @@ Github URL: https://github.com/Mintplex-Labs/anything-llm
 
 ## P1 — OpenBot
 
-Source Path: `/Users/andresgonzalez/Github/Projects/OpenBot`
+Source Path: `../OpenBot`
 
 Github URL: https://github.com/CopilotKit/openbot
 
@@ -109,7 +110,7 @@ Github URL: https://github.com/CopilotKit/openbot
 
 ## P1 — OpenMausBot
 
-Source Path: `/Users/andresgonzalez/Github/Projects/OpenMausBot`
+Source Path: `../OpenMausBot`
 
 Github URL: https://github.com/milind-soni/OpenMausBot
 
@@ -119,7 +120,7 @@ Github URL: https://github.com/milind-soni/OpenMausBot
 
 ## P1 — Kortix / Suna
 
-Source Path: `/Users/andresgonzalez/Github/Projects/suna`
+Source Path: `../suna`
 
 Github URL: https://github.com/kortix-ai/suna
 
@@ -129,7 +130,7 @@ Github URL: https://github.com/kortix-ai/suna
 
 ## P1 — T3 Code
 
-Source Path: `/Users/andresgonzalez/Github/Projects/T3Code`
+Source Path: `../T3Code`
 
 Github URL: https://github.com/pingdotgg/t3code
 
@@ -139,7 +140,7 @@ Github URL: https://github.com/pingdotgg/t3code
 
 ## P1 — QM
 
-Source Path: `/Users/andresgonzalez/Github/Projects/QM`
+Source Path: `../QM`
 
 Github URL: https://github.com/yc-software/qm
 
@@ -149,7 +150,7 @@ Github URL: https://github.com/yc-software/qm
 
 ## P1 — OpenDesign
 
-Source Path: `/Users/andresgonzalez/Github/Projects/open-design`
+Source Path: `../open-design`
 
 Github URL: https://github.com/nexu-io/open-design
 
@@ -159,7 +160,7 @@ Github URL: https://github.com/nexu-io/open-design
 
 ## P1 — Memoh
 
-Source Path: `/Users/andresgonzalez/Github/Projects/Memoh`
+Source Path: `../Memoh`
 
 Github URL: https://github.com/felinics/Memoh
 
@@ -169,7 +170,7 @@ Github URL: https://github.com/felinics/Memoh
 
 ## P1 — Browser Use
 
-Source Path: `/Users/andresgonzalez/Github/Projects/browser-use`
+Source Path: `../browser-use`
 
 Github URL: https://github.com/browser-use/browser-use
 
@@ -179,7 +180,7 @@ Github URL: https://github.com/browser-use/browser-use
 
 ## P1 — Cua
 
-Source Path: `/Users/andresgonzalez/Github/Projects/cua`
+Source Path: `../cua`
 
 Github URL: https://github.com/trycua/cua
 
@@ -189,7 +190,7 @@ Github URL: https://github.com/trycua/cua
 
 ## P1 — E2B SDKs and CLI
 
-Source Path: `/Users/andresgonzalez/Github/Projects/E2B`
+Source Path: `../E2B`
 
 Github URL: https://github.com/e2b-dev/e2b
 
@@ -199,7 +200,7 @@ Github URL: https://github.com/e2b-dev/e2b
 
 ## P1 — OpenHands Agent Canvas
 
-Source Path: `/Users/andresgonzalez/Github/Projects/OpenHands`
+Source Path: `../OpenHands`
 
 Github URL: https://github.com/OpenHands/OpenHands
 
@@ -209,7 +210,7 @@ Github URL: https://github.com/OpenHands/OpenHands
 
 ## P1 — Mem0
 
-Source Path: `/Users/andresgonzalez/Github/Projects/mem0`
+Source Path: `../mem0`
 
 Github URL: https://github.com/mem0ai/mem0
 
@@ -219,7 +220,7 @@ Github URL: https://github.com/mem0ai/mem0
 
 ## P1 — Graphiti
 
-Source Path: `/Users/andresgonzalez/Github/Projects/graphiti`
+Source Path: `../graphiti`
 
 Github URL: https://github.com/getzep/graphiti
 
@@ -229,7 +230,7 @@ Github URL: https://github.com/getzep/graphiti
 
 ## P2 — DeepSeek Harness
 
-Source Path: `/Users/andresgonzalez/Github/Projects/deepseek-harness`
+Source Path: `../deepseek-harness`
 
 Github URL: https://github.com/deepseek-ai/deepseek-harness
 
@@ -239,7 +240,7 @@ Github URL: https://github.com/deepseek-ai/deepseek-harness
 
 ## P2 — E2B Desktop
 
-Source Path: `/Users/andresgonzalez/Github/Projects/desktop`
+Source Path: `../desktop`
 
 Github URL: https://github.com/e2b-dev/desktop
 
@@ -249,7 +250,7 @@ Github URL: https://github.com/e2b-dev/desktop
 
 ## P2 — Hugging Face Chat UI
 
-Source Path: `/Users/andresgonzalez/Github/Projects/HuggingChat`
+Source Path: `../HuggingChat`
 
 Github URL: https://github.com/huggingface/chat-ui
 
@@ -259,7 +260,7 @@ Github URL: https://github.com/huggingface/chat-ui
 
 ## P2 — Supermemory
 
-Source Path: `/Users/andresgonzalez/Github/Projects/supermemory`
+Source Path: `../supermemory`
 
 Github URL: https://github.com/supermemoryai/supermemory
 
@@ -269,7 +270,7 @@ Github URL: https://github.com/supermemoryai/supermemory
 
 ## P2 — Letta Code
 
-Source Path: `/Users/andresgonzalez/Github/Projects/letta-code`
+Source Path: `../letta-code`
 
 Github URL: https://github.com/letta-ai/letta-code
 
@@ -279,7 +280,7 @@ Github URL: https://github.com/letta-ai/letta-code
 
 ## P3 — Grok Bot 0.18 reconstructed
 
-Source Path: `/Users/andresgonzalez/Github/Projects/grok-bot-0.18-reconstructed`
+Source Path: `../grok-bot-0.18-reconstructed`
 
 Github URL: https://github.com/b-nnett/grok-bot-0.18-reconstructed
 

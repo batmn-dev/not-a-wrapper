@@ -156,4 +156,17 @@ describe("createGenerationTimingTracker", () => {
       toolExecutionMs: 0,
     })
   })
+
+  it("keeps a count absent when the continuation seed lacks it", () => {
+    // The prior run's output count was unknown: this run's count alone would
+    // be published as the whole message's total.
+    const tracker = createGenerationTimingTracker({
+      initialStats: { timeToFirstTokenMs: 90, inputTokens: 30 },
+    })
+    tracker.recordStep(step({ ttfo: 200, response: 700 }, { in: 70, out: 25 }))
+
+    const stats = tracker.stats()
+    expect(stats?.outputTokens).toBeUndefined()
+    expect(stats?.inputTokens).toBe(100)
+  })
 })

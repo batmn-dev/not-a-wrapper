@@ -6,10 +6,10 @@ import {
   adoptServerOwned,
   getBranch,
   getFinishReason,
-  getWorkDurationMs,
+  getGenerationBudget,
   getServerMessageId,
   getToolDisplayMetadataRecords,
-  getGenerationBudget,
+  getWorkDurationMs,
   SERVER_OWNED_METADATA_KEYS,
   stampServerFields,
   type DurableMetadataSource,
@@ -216,9 +216,7 @@ describe("adoptServerOwned", () => {
     })
 
     const liveOnly = { serverMessageId: "s", workDurationMs: 5200 }
-    expect(adoptServerOwned(liveOnly, { serverMessageId: "s" })).toBe(
-      liveOnly
-    )
+    expect(adoptServerOwned(liveOnly, { serverMessageId: "s" })).toBe(liveOnly)
   })
 
   it("returns the original reference on a no-op (idempotent)", () => {
@@ -254,6 +252,17 @@ describe("adoptServerOwned", () => {
     )
 
     expect(adoptServerOwned(local, server)).toBe(local)
+  })
+
+  it("keeps a freshly materialized but equal generationStats idempotent", () => {
+    const stats = () => ({ outputTokens: 120, outputStreamMs: 900 })
+    const local = { serverMessageId: "s", generationStats: stats() }
+    expect(
+      adoptServerOwned(local, {
+        serverMessageId: "s",
+        generationStats: stats(),
+      })
+    ).toBe(local)
   })
 })
 

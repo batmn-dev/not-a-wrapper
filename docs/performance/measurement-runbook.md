@@ -30,13 +30,18 @@ metric dictionary group 13). To ask "did build X slow prepare for route Y",
 summarize completed runs in a window, grouped by model, route, and build:
 
 ```bash
-bunx convex run runTiming:timingSummary '{"sinceMs": 1725148800000}'
+# Last 7 days, computed at run time; change the day count to widen the window.
+bunx convex run runTiming:timingSummary "{\"sinceMs\": $(( $(date +%s) * 1000 - 7*24*60*60*1000 ))}"
 ```
 
-Optional filters: `"model"`, `"buildId"` (the short commit SHA stamped on the
-run), `"limit"` (default 2000, max 5000); filters apply before the limit, so
-a filtered window is never silently under-counted. The result lists n, p50,
-and max per receipt segment plus the derived `serverTimeToFirstTokenMs` and
+`sinceMs` is optional and defaults to the last 24 hours. Keep the window
+recent: the query returns at most `"limit"` runs, newest first, so a window
+holding more completed runs than the limit silently drops the oldest ones.
+`scannedRuns` equal to the limit means the window was capped. Optional
+filters: `"model"`, `"buildId"` (the short commit SHA stamped on the run),
+`"limit"` (default 2000, max 5000); filters apply before the limit, so a
+filtered window is never silently under-counted. The result lists n, p50,
+and max per receipt segment plus the derived `serverTimeToFirstOutputMs` and
 `pacingOverheadMs`; `p95` appears only from 20 samples up (the dictionary's
 non-metrics rule). Add `--prod` to read the production deployment. Compare
 two builds side by side by running it twice with each `buildId`; local runs

@@ -167,6 +167,13 @@ async function readMarks(page: Page): Promise<CollectedMark[]> {
   )
 }
 
+/** The send's correlation id, carried by the `chat_send_intent` mark detail. */
+function correlationIdOf(marks: CollectedMark[]): string | undefined {
+  const sendIntent = marks.find((mark) => mark.name === "chat_send_intent")
+  const id = sendIntent?.detail?.correlationId
+  return typeof id === "string" ? id : undefined
+}
+
 async function waitForMark(
   page: Page,
   name: string,
@@ -433,6 +440,7 @@ async function runScenarioOnce(
     }
 
     let reloadedMidStream = false
+    let preReloadCorrelationId: string | undefined
     // Durable sends occasionally lose live-stream adoption after the hard
     // navigation to /c/<chatId>: the turn runs and settles server-side and
     // content renders from the 750 ms snapshots, but the local stream marks
@@ -473,6 +481,11 @@ async function runScenarioOnce(
       if (await awaitFirstVisible()) {
         // Let a couple of 750 ms snapshot beats land before the cut.
         await page.waitForTimeout(2000)
+        // The reload discards this document's marks; keep the send's
+        // correlation id so the server-span, receipt, and durable-write
+        // joins still find the run. (The /c/<chatId> hop is a pushState,
+        // so marks survive it.)
+        preReloadCorrelationId = correlationIdOf(await readMarks(page))
         await page.reload({ waitUntil: "domcontentloaded" })
         reloadedMidStream = true
       }
@@ -621,11 +634,7 @@ async function runScenarioOnce(
       }
     }
 
-    const sendIntent = marks.find((mark) => mark.name === "chat_send_intent")
-    const correlationId =
-      typeof sendIntent?.detail?.correlationId === "string"
-        ? (sendIntent.detail.correlationId as string)
-        : undefined
+    const correlationId = preReloadCorrelationId ?? correlationIdOf(marks)
     const serverSpans = correlationId
       ? collectServerSpans(correlationId)
       : undefined

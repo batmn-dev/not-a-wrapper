@@ -74,6 +74,29 @@ describe("MessageUser attachments", () => {
     ).toBeTruthy()
   })
 
+  it("names the image lightbox after the attachment", () => {
+    renderMessage([
+      {
+        name: "photo.png",
+        contentType: "image/png",
+        url: "https://files.example/photo.png",
+      },
+    ])
+
+    const trigger = container?.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="dialog"]'
+    )
+    act(() => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    const dialog = document.querySelector('[role="dialog"]')
+    const labelId = dialog?.getAttribute("aria-labelledby") ?? ""
+    expect(document.getElementById(labelId)?.textContent).toBe(
+      "Attachment preview: photo.png"
+    )
+  })
+
   it("leaves the role heading to the owning turn section", () => {
     renderMessage(undefined)
 

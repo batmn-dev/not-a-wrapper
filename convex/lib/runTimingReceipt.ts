@@ -92,8 +92,8 @@ export function sanitizeRunTimingReceipt(
 
 // Derived figures. Computed at read time from stored facts, never stored.
 
-/** Server-side time to first token: prepare + provider first output + first-write delay. */
-export function serverTimeToFirstTokenMs(
+/** Server-side time to first output: prepare + provider first output + first-write delay. */
+export function serverTimeToFirstOutputMs(
   receipt: RunTimingReceipt
 ): number | undefined {
   const { prepareMs, providerFirstOutputMs, firstWriteDelayMs } = receipt

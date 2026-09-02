@@ -83,7 +83,8 @@ const apiRows = [
     prop: "DialogContent showCloseButton",
     type: "boolean",
     defaultValue: "true",
-    description: "Renders the ghost close button in the top-right corner.",
+    description:
+      "Renders the ghost close button in the top-right corner unless a titled DialogHeader owns the close control.",
   },
   {
     prop: "DialogContent size",
@@ -95,13 +96,22 @@ const apiRows = [
     prop: "DialogHeader title / description",
     type: "ReactNode",
     defaultValue: "—",
-    description: "Builds the title region and shared close affordance.",
+    description:
+      "Builds the title region and owns the close affordance; DialogContent's default close stays suppressed while a titled header is mounted.",
+  },
+  {
+    prop: "DialogHeader hideCloseButton",
+    type: "boolean",
+    defaultValue: "false",
+    description:
+      "Hides the titled header's close button. The header still owns the control, so no fallback close appears.",
   },
   {
     prop: "DialogCloseButton",
     type: "DialogPrimitive.Close props",
     defaultValue: "—",
-    description: "Provides the shared 36px close affordance.",
+    description:
+      "Provides the shared 36px close affordance. Never auto-focuses unless autoFocus is passed.",
   },
   {
     prop: "DialogFooter button slots",

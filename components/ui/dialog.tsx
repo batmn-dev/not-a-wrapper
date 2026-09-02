@@ -10,6 +10,15 @@ import * as React from "react"
 type DialogSurface = "default" | "centered"
 type DialogSize = "normal" | "large" | "xlarge" | "fullscreen"
 
+// A titled DialogHeader claims the close control so DialogContent's default
+// close button is suppressed instead of rendering a second "Close".
+type DialogContentContextValue = {
+  claimCloseButton: () => () => void
+}
+
+const DialogContentContext =
+  React.createContext<DialogContentContextValue | null>(null)
+
 const dialogSizeClassNames: Record<DialogSize, string> = {
   normal: "sm:max-w-md",
   large: "sm:max-w-lg",
@@ -48,14 +57,14 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
 
 type DialogCloseButtonProps = Omit<DialogPrimitive.Close.Props, "children"> & {
   background?: "transparent" | "primary"
-  disableAutoFocus?: boolean
   iconSize?: "md" | "lg"
 }
 
+// Never auto-focuses by default so Base UI's initial focus (first tabbable) and
+// explicit targets win; pass `autoFocus` only where Close is the intended target.
 function DialogCloseButton({
   background = "transparent",
   className,
-  disableAutoFocus = false,
   iconSize = "md",
   ...props
 }: DialogCloseButtonProps) {
@@ -65,7 +74,6 @@ function DialogCloseButton({
       data-slot="dialog-close-button"
       data-testid="close-button"
       aria-label="Close"
-      autoFocus={!disableAutoFocus}
       className={cn(
         "hover:bg-interactive-hover focus-visible:bg-interactive-hover focus-visible:outline-foreground flex size-9 grow-0 items-center justify-center rounded-[8px] focus-visible:outline-[1.5px] focus-visible:outline-offset-[2.5px] focus-visible:[outline-style:solid]",
         background === "transparent" ? "bg-transparent" : "bg-modal-centered",
@@ -117,29 +125,42 @@ function DialogContent({
   size?: DialogSize
   surface?: DialogSurface
 }) {
+  const [closeButtonClaims, setCloseButtonClaims] = React.useState(0)
+  const contextValue = React.useMemo<DialogContentContextValue>(
+    () => ({
+      claimCloseButton: () => {
+        setCloseButtonClaims((count) => count + 1)
+        return () => setCloseButtonClaims((count) => count - 1)
+      },
+    }),
+    []
+  )
+
   return (
-    <DialogPortal>
-      <DialogOverlay surface={surface} />
-      <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        data-size={size}
-        data-surface={surface}
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 p-6 text-sm outline-none",
-          dialogSizeClassNames[size],
-          surface === "centered"
-            ? "bg-modal-centered text-modal-centered-foreground shadow-modal-centered rounded-(--modal-centered-radius)"
-            : "bg-popover text-popover-foreground shadow-border-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 rounded-xl duration-100",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton ? (
-          <DialogCloseButton className="absolute top-4 right-4" />
-        ) : null}
-      </DialogPrimitive.Popup>
-    </DialogPortal>
+    <DialogContentContext.Provider value={contextValue}>
+      <DialogPortal>
+        <DialogOverlay surface={surface} />
+        <DialogPrimitive.Popup
+          data-slot="dialog-content"
+          data-size={size}
+          data-surface={surface}
+          className={cn(
+            "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 p-6 text-sm outline-none",
+            dialogSizeClassNames[size],
+            surface === "centered"
+              ? "bg-modal-centered text-modal-centered-foreground shadow-modal-centered rounded-(--modal-centered-radius)"
+              : "bg-popover text-popover-foreground shadow-border-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 rounded-xl duration-100",
+            className
+          )}
+          {...props}
+        >
+          {children}
+          {showCloseButton && closeButtonClaims === 0 ? (
+            <DialogCloseButton className="absolute top-4 right-4" />
+          ) : null}
+        </DialogPrimitive.Popup>
+      </DialogPortal>
+    </DialogContentContext.Provider>
   )
 }
 
@@ -164,10 +185,17 @@ function DialogHeader({
   ...props
 }: DialogHeaderProps) {
   const titleRef = React.useRef<HTMLHeadingElement>(null)
+  const content = React.useContext(DialogContentContext)
+  const ownsCloseButton = title !== undefined
 
   React.useLayoutEffect(() => {
     if (!disableAutoFocusTitle) titleRef.current?.focus()
   }, [disableAutoFocusTitle])
+
+  // Claimed even with hideCloseButton: a titled header is the sole close owner.
+  React.useLayoutEffect(() => {
+    if (ownsCloseButton) return content?.claimCloseButton()
+  }, [content, ownsCloseButton])
 
   if (title === undefined) {
     return (
@@ -223,9 +251,7 @@ function DialogHeader({
       {children ? <span>{children}</span> : null}
       {hideCloseButton ? null : (
         <DialogCloseButton
-          disableAutoFocus={
-            disableCloseButtonAutoFocus || !disableAutoFocusTitle
-          }
+          autoFocus={disableAutoFocusTitle && !disableCloseButtonAutoFocus}
         />
       )}
     </div>

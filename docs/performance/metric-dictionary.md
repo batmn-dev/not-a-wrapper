@@ -236,7 +236,10 @@ worker write (reap) has none. Read with `runTiming:timingSummary` (see the runbo
 
 Derived at read time, never stored:
 
-- `serverTimeToFirstTokenMs = prepareMs + providerFirstOutputMs + firstWriteDelayMs`.
+- `serverTimeToFirstOutputMs = prepareMs + providerFirstOutputMs + firstWriteDelayMs`.
+  "First output" is the SDK's definition (§3): text, reasoning, tool-input delta, tool
+  call, or file, so it can precede the first text token. Nothing here is a "time to
+  first token"; `provider_first_text_delta` (§4) is the text-specific, post-transform figure.
 - `pacingOverheadMs = wireStreamMs − (modelResponseMs − providerFirstOutputMs) −
   toolExecutionMs` — what the response pipeline added on top of the provider's own
   output window. Watch this when touching smoothing or the UI-stream conversion.
@@ -244,17 +247,20 @@ Derived at read time, never stored:
   turn versus 1–3 ms on plain turns): compare like with like, never a mixed population.
 
 The harness gates `prepareMs`, `firstWriteDelayMs`, `pacingOverheadMs`, and
-`settlementTotalMs` (from the span) in `compare-results.ts`; the provider segments are
+`settlementTotalMs` (from the span) in `compare-results.ts`, on sampled summaries only
+(a gated metric the baseline sampled but the current run did not fails the comparison
+rather than reading as 0); the provider segments are
 checked against the deterministic script's scheduled delays and invalidate the run when
 they disagree. `timingSummary` reports p50/max per segment and withholds p95 under 20
 samples, per the non-metrics rule below; its `model`/`buildId` filters apply before the
 scan limit.
 
 **Generation stats (user-facing, message-level — same provider figures):** time to first
-token = `providerFirstOutputMs` of the first run's first step; the output window is Σ
-per output step of (response − time to first output); **tokens per second = visible
+output = `providerFirstOutputMs` of the first run's first step (persisted on the message as
+`timeToFirstTokenMs`, a stored name kept for existing rows; the label reads "first output");
+the output window is Σ per output step of (response − time to first output); **tokens per second = visible
 (output − reasoning) tokens ÷ output window**. Providers that hide reasoning (OpenAI)
-generate it before the first output chunk, inside time to first token, so counting it
+generate it before the first output chunk, inside time to first output, so counting it
 would inflate the rate by exactly the hidden share (live: 271 tokens incl. 128 reasoning
 over 1,284 ms read 211 tok/s for text that streamed at 111). Providers that stream
 thinking inside the window read conservatively instead — never inflated. Hosted tool

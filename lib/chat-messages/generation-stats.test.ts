@@ -69,7 +69,7 @@ describe("deriveGenerationStatsView", () => {
     expect(view.kind === "complete" && view.tokensPerSecond).toBeUndefined()
   })
 
-  it("shows time to first token alone when the provider omitted usage", () => {
+  it("shows time to first output alone when the provider omitted usage", () => {
     expect(deriveGenerationStatsView({ timeToFirstTokenMs: 300 })).toEqual({
       kind: "tokens-unavailable",
       timeToFirstTokenMs: 300,

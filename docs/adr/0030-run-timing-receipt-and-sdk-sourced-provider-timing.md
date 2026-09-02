@@ -6,7 +6,7 @@
 ## Context
 
 Two needs arrived together. Users want a per-response stat line (time to
-first token, token counts, tokens per second) like other chat clients ship.
+first output, token counts, tokens per second) like other chat clients ship.
 Engineers need to tell, per build and per model route, whether a change made
 turns slower.
 
@@ -49,9 +49,12 @@ percentiles) alongside per-step usage.
    before the worker's abort write arrives and revokes the grant that write
    would authenticate with, so the absorbing transaction copies the grant
    digest into a single-use, bounded receipt-attach capability on the run;
-   the stopped worker's `attachRunTimingReceipt` lands its partial receipt
-   against that copy and can patch nothing else — the settlement-only usage
-   receipt's shape (ADR-0021 amendment), reused for diagnostics.
+   the stopped worker's `attachRunTimingReceipt` lands a partial
+   `RunTimingReceipt` (the optional duration fields plus `buildId`, sanitized
+   before persistence) against that copy and can patch no other run field.
+   Only the capability mirrors ADR-0021's settlement-only authorization (grant
+   digest copied at Stop, one narrowly scoped worker-wire operation); the
+   payload is the timing receipt, never the usage receipt.
 
 3. **Only segments this server owns may gate.** Prepare, first-write delay,
    pacing overhead, and settlement enter the weekly benchmark's gate table.
@@ -62,7 +65,7 @@ percentiles) alongside per-step usage.
    SDK's own `outputTokensPerSecond` divides all output tokens (hidden
    reasoning included) by the post-first-output window, but providers that
    hide reasoning generate it before the first output chunk — inside time to
-   first token — so that figure inflates by the hidden share (a live GPT-5
+   first output — so that figure inflates by the hidden share (a live GPT-5
    Mini turn read 211 tok/s for text streaming at 111). The stats line
    therefore rates (output − reasoning) tokens; providers that stream
    thinking inside the window read conservatively, never inflated, and the

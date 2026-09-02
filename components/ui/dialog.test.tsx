@@ -66,4 +66,53 @@ describe("Dialog structured primitives", () => {
     expect(footer?.textContent).toBe("Default memoryCancelCreate project")
     expect(footer?.lastElementChild?.className).toContain("gap-1.5")
   })
+
+  it("leaves initial focus to the dialog's own target, not the close button", () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    containers.push(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <Dialog open>
+          <DialogContent>
+            <textarea aria-label="Feedback" autoFocus />
+          </DialogContent>
+        </Dialog>
+      )
+    })
+
+    expect(document.activeElement).toBe(document.querySelector("textarea"))
+    expect(
+      document
+        .querySelector('[data-slot="dialog-close-button"]')
+        ?.hasAttribute("autofocus")
+    ).toBe(false)
+  })
+
+  it("lets a titled header own the only close control", () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    containers.push(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <Dialog open>
+          <DialogContent>
+            <DialogHeader title="Create project" />
+          </DialogContent>
+        </Dialog>
+      )
+    })
+
+    const closeButtons = document.querySelectorAll('[aria-label="Close"]')
+    expect(closeButtons).toHaveLength(1)
+    expect(
+      closeButtons[0]?.closest('[data-slot="dialog-header"]')
+    ).not.toBeNull()
+  })
 })

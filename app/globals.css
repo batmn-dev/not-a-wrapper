@@ -963,6 +963,11 @@
     outline-offset: 2px;
     box-shadow: none;
   }
+  /* Textareas match :focus-visible on every focus, so keyboard mode owns the visible indicator (same outline as Button). */
+  html[data-focus-mode="keyboard"] textarea:focus-visible {
+    outline: 1.5px solid var(--interactive-outline-color, var(--text-primary));
+    outline-offset: 2.5px;
+  }
   /* Search fields use product-owned clear controls instead of browser chrome. */
   input[type="search"]::-webkit-search-cancel-button {
     -webkit-appearance: none;

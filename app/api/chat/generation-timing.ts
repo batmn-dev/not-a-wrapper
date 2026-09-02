@@ -87,6 +87,13 @@ export function createGenerationTimingTracker(options?: {
   // Required counts: absent for the whole message if any step omitted them.
   const output: CountSum = { total: 0, observed: false, complete: true }
   const input: CountSum = { total: 0, observed: false, complete: true }
+  // A seed that lacks the count means the prior run's total was unknown, so
+  // the message total stays unknown: this run's sum alone would be an estimate.
+  const messageTotal = (sum: CountSum, seedCount: number | undefined) => {
+    if (!sum.observed || !sum.complete) return undefined
+    if (seed !== undefined && seedCount === undefined) return undefined
+    return (seedCount ?? 0) + sum.total
+  }
   // Detail counts: a step that reports none contributes nothing.
   let reasoningTokens: number | undefined
   let cachedInputTokens: number | undefined
@@ -130,12 +137,10 @@ export function createGenerationTimingTracker(options?: {
           (seed?.outputStreamMs ?? 0) + outputStreamMs
         )
       }
-      if (output.observed && output.complete) {
-        stats.outputTokens = (seed?.outputTokens ?? 0) + output.total
-      }
-      if (input.observed && input.complete) {
-        stats.inputTokens = (seed?.inputTokens ?? 0) + input.total
-      }
+      const outputTokens = messageTotal(output, seed?.outputTokens)
+      if (outputTokens !== undefined) stats.outputTokens = outputTokens
+      const inputTokens = messageTotal(input, seed?.inputTokens)
+      if (inputTokens !== undefined) stats.inputTokens = inputTokens
       if (
         reasoningTokens !== undefined ||
         seed?.reasoningTokens !== undefined

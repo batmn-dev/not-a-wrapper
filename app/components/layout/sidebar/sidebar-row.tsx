@@ -88,7 +88,7 @@ export function SidebarRow({
       cn(
         "sidebar-row sidebar-menu-row sidebar-row-shell menu-item-hoverable text-foreground hover:bg-[var(--sidebar-row-active-background)] hover:text-foreground group/row relative flex items-center text-sm",
         (isActive || isEditing) &&
-          "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)] group-data-[collapsible=icon]:bg-transparent"
+          "bg-[var(--sidebar-row-active-background)] hover:bg-[var(--sidebar-row-active-background)]"
       ),
     [isActive, isEditing]
   )

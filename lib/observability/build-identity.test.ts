@@ -15,6 +15,12 @@ describe("resolveBuildId", () => {
     expect(resolveBuildId({ SENTRY_RELEASE: "not-a-wrapper@1.2.3" })).toBe(
       "not-a-wrapper@1.2.3"
     )
+    expect(
+      resolveBuildId({
+        VERCEL_GIT_COMMIT_SHA: "  ",
+        SENTRY_RELEASE: "not-a-wrapper@1.2.3",
+      })
+    ).toBe("not-a-wrapper@1.2.3")
     expect(resolveBuildId({ SENTRY_RELEASE: "has spaces" })).toBeUndefined()
     expect(resolveBuildId({})).toBeUndefined()
   })

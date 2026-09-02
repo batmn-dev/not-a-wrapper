@@ -130,7 +130,44 @@ describe("MessageAssistant activity trigger", () => {
     renderRow()
     expect(
       container?.querySelector('[data-testid="generation-stats"]')?.textContent
-    ).toBe("34.6 tok/s · 146 tokens · 0.42 s to first token")
+    ).toBe("34.6 tok/s · 146 tokens · 0.42 s to first output")
+  })
+
+  it("renders the generation stats line on a settled tool-only turn without text actions", () => {
+    preferenceState.showGenerationStats = true
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [
+      {
+        type: "tool-web_search",
+        toolCallId: "call-1",
+        state: "output-available",
+        input: { query: "q" },
+        output: { content: [] },
+      },
+    ] as unknown as UIMessage["parts"]
+    const metadata = { generationStats: { outputTokens: 12 } }
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", metadata)}
+            status="ready"
+            copyToClipboard={() => {}}
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(
+      container?.querySelector('[data-testid="generation-stats"]')?.textContent
+    ).toBe("12 tokens")
+    expect(
+      container?.querySelector('button[aria-label="Copy response"]')
+    ).toBeNull()
   })
 
   it("focuses a newly completed final response on mobile without scrolling", () => {

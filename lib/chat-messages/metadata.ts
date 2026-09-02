@@ -361,10 +361,11 @@ export function adoptServerOwned(
     return !metadataValueEquals(localRecord[key], serverRecord[key])
   })
   // Blob-owned keys: persisted inside the validated metadata blob rather than
-  // as top-level message fields (terminal durations and applied turn policy).
-  // Adopt them when the durable snapshot has a
-  // value, but never clear a fresher live value merely because an
-  // intermediate server snapshot has not landed it yet.
+  // as top-level message fields (terminal durations, applied turn policy, and
+  // generation stats). Adopt them when the durable snapshot has a value, but
+  // never clear a fresher live value merely because an intermediate server
+  // snapshot has not landed it yet. Compared structurally: every snapshot
+  // materializes `generationStats` fresh, so identity would read as a change.
   const persistedStreamKeys = [
     "reasoningDurationMs",
     "workDurationMs",
@@ -376,7 +377,7 @@ export function adoptServerOwned(
     (key) =>
       serverRecord &&
       Object.prototype.hasOwnProperty.call(serverRecord, key) &&
-      !Object.is(localRecord?.[key], serverRecord[key])
+      !metadataValueEquals(localRecord?.[key], serverRecord[key])
   )
 
   if (
