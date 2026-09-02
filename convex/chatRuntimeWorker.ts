@@ -320,7 +320,9 @@ function rejectTimingReceiptAttach(
  * further capability: attaching its content-free timing receipt to its own,
  * already-terminal run, once, before the window closes. It can patch no
  * message, status, usage, tool, approval, lease, or grant state, and never
- * overwrites a receipt that already landed.
+ * overwrites a receipt that already landed. Only a landed receipt consumes
+ * the capability; a payload that sanitizes to nothing writes nothing and
+ * leaves it pending to expire with the window.
  */
 export async function attachRunTimingReceiptWithTerminalGrant(
   ctx: MutationCtx,
@@ -355,11 +357,13 @@ export async function attachRunTimingReceiptWithTerminalGrant(
   }
   const receipt = sanitizeRunTimingReceipt(timingReceipt)
   const attaches = receipt !== undefined && run.timingReceipt === undefined
-  await ctx.db.patch(runId, {
-    ...(attaches ? { timingReceipt: receipt } : {}),
-    timingReceiptGrantDigest: undefined,
-    timingReceiptGrantExpiresAt: undefined,
-  })
+  if (attaches) {
+    await ctx.db.patch(runId, {
+      timingReceipt: receipt,
+      timingReceiptGrantDigest: undefined,
+      timingReceiptGrantExpiresAt: undefined,
+    })
+  }
   return {
     outcome: attaches
       ? "attached"

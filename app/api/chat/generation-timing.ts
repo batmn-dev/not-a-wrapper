@@ -47,9 +47,12 @@ export type GenerationTimingTracker = {
   /** This run's provider-owned receipt segments; empty until a step lands. */
   providerSegments(): ProviderReceiptSegments
   /**
-   * This run's first step's time to first output — the offset from provider
-   * dispatch at which the first output chunk existed. Undefined until the
-   * first step finishes.
+   * This run's FIRST step's time to first output: the offset from that step's
+   * provider dispatch (the runtime's call-start anchor) at which the first
+   * output chunk existed. Undefined until the first step finishes, and stays
+   * undefined when the first step produced no output: a later step's offset
+   * is relative to its own dispatch, and the SDK exposes no step timestamps
+   * to re-anchor it, so it never stands in.
    */
   firstOutputOffsetMs(): number | undefined
 }
@@ -108,8 +111,8 @@ export function createGenerationTimingTracker(options?: {
         runToolExecutionMs += Math.max(0, duration)
       }
       if (timeToFirstOutputMs !== undefined) {
-        if (runFirstOutputMs === undefined)
-          runFirstOutputMs = timeToFirstOutputMs
+        // First step only: later offsets are relative to their own dispatch.
+        if (recordedSteps === 1) runFirstOutputMs = timeToFirstOutputMs
         outputSteps += 1
         outputStreamMs += Math.max(0, responseTimeMs - timeToFirstOutputMs)
       }

@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import {
   applyApprovalResponses,
+  closeSupersededGenerationsForChat,
   createToolApprovalRequestForChat,
   denyPendingApprovalsForChat,
   generationRunWriteArgs,
@@ -5942,5 +5943,62 @@ describe("generation-run write trust boundary (ADR-0011 / ADR-0021)", () => {
     // reaper's boundary rule.
     const stop = runtimeModule.stopGenerationRun as { isPublic?: boolean }
     expect(stop.isPublic).toBe(true)
+  })
+})
+
+describe("closeSupersededGenerationsForChat", () => {
+  const NOW = 1700000000000
+
+  it("mints the receipt-attach capability when an orphan message's live run is superseded", async () => {
+    const { user, chat, userId, chatId } = createOwnerFixture()
+    const liveRunId = asId<"generationRuns">("run_orphan")
+    const messageId = asId<"messages">("message_orphan")
+    // 50 newer terminal runs (ACTIVE_RUN_SCAN_LIMIT) push the live run out of
+    // the scan window, so its message reaches the orphan branch.
+    const fillers = Array.from({ length: 50 }, (_, index) =>
+      createGenerationRun({
+        id: `run_done_${index}`,
+        chatId,
+        userId,
+        status: "completed",
+        updatedAt: 2000 + index,
+      })
+    )
+    const liveRun: Doc<"generationRuns"> = {
+      ...createGenerationRun({
+        id: liveRunId,
+        chatId,
+        userId,
+        assistantMessageId: messageId,
+        updatedAt: 1000,
+      }),
+      grantDigest: "d".repeat(64),
+      grantExpiresAt: NOW + 60_000,
+    }
+    const message = createAssistantRuntimeMessage({
+      id: messageId,
+      chatId,
+      runId: liveRunId,
+      orderId: 1,
+      content: "partial",
+      parts: [{ type: "text", text: "partial" }],
+    })
+    const { ctx } = createMutationCtx({
+      users: [user],
+      chats: [chat],
+      messages: [message],
+      generationRuns: [...fillers, liveRun],
+    })
+
+    await closeSupersededGenerationsForChat(ctx, chatId, userId, NOW)
+
+    expect(message.status).toBe("aborted")
+    expect(liveRun).toMatchObject({
+      status: "aborted",
+      terminalReason: "superseded",
+      grantDigest: undefined,
+      timingReceiptGrantDigest: "d".repeat(64),
+      timingReceiptGrantExpiresAt: NOW + TIMING_RECEIPT_ATTACH_WINDOW_MS,
+    })
   })
 })

@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest"
+import {
+  MAX_PROJECT_NAME_LENGTH,
+  normalizeProjectName,
+} from "../lib/projects/policy"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import { removeProjectForOwner } from "./projects"
@@ -58,8 +62,7 @@ describe("removeProjectForOwner", () => {
       project: projectDoc,
       user: owner,
       db: {
-        get: async (id: string) =>
-          jobs.find((job) => job._id === id) ?? null,
+        get: async (id: string) => jobs.find((job) => job._id === id) ?? null,
         patch: async (id: string, patch: Record<string, unknown>) => {
           expect(id).toBe(projectDoc._id)
           Object.assign(projectDoc, patch)
@@ -123,10 +126,21 @@ describe("removeProjectForOwner", () => {
       state: "pending",
       phase: "chats",
     })
-    expect(scheduled).toEqual([
-      { delay: 0, args: { jobId: "job-1" } },
-    ])
-    expect(linkedChat).toMatchObject({ _id: "chat-1", projectId: projectDoc._id })
+    expect(scheduled).toEqual([{ delay: 0, args: { jobId: "job-1" } }])
+    expect(linkedChat).toMatchObject({
+      _id: "chat-1",
+      projectId: projectDoc._id,
+    })
     expect(deleted).toEqual([])
+  })
+})
+
+describe("normalizeProjectName", () => {
+  it("applies the length limit to the trimmed name, as create and updateName do", () => {
+    const maxName = "a".repeat(MAX_PROJECT_NAME_LENGTH)
+    expect(normalizeProjectName(`  ${maxName}  `)).toBe(maxName)
+    expect(() => normalizeProjectName(`${maxName}b`)).toThrow(
+      `${MAX_PROJECT_NAME_LENGTH} characters`
+    )
   })
 })

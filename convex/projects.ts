@@ -1,4 +1,5 @@
 import { v } from "convex/values"
+import { normalizeProjectName } from "../lib/projects/policy"
 import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalQuery, type MutationCtx } from "./_generated/server"
@@ -71,7 +72,7 @@ export const create = authenticatedMutation({
     const now = Date.now()
     return await ctx.db.insert("projects", {
       userId: ctx.user._id,
-      name,
+      name: normalizeProjectName(name),
       updatedAt: now,
       pinned: false,
     })
@@ -81,8 +82,9 @@ export const create = authenticatedMutation({
 export const updateName = ownedProjectMutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
-    if (ctx.project.name === name) return
-    await patchProjectActivity(ctx, ctx.project, { name }, Date.now())
+    const nextName = normalizeProjectName(name)
+    if (ctx.project.name === nextName) return
+    await patchProjectActivity(ctx, ctx.project, { name: nextName }, Date.now())
   },
 })
 
@@ -107,13 +109,9 @@ export async function removeProjectForOwner(
     updatedAt: now,
   })
   const job = await ensureProjectDeletionJob(ctx, ctx.project, ctx.user)
-  await ctx.scheduler.runAfter(
-    0,
-    internal.deletionCleanup.runDeletionBatch,
-    {
-      jobId: job._id,
-    }
-  )
+  await ctx.scheduler.runAfter(0, internal.deletionCleanup.runDeletionBatch, {
+    jobId: job._id,
+  })
 }
 
 /** Logically delete a Project and schedule its bounded physical drain. */

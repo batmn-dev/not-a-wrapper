@@ -117,7 +117,8 @@ const apiRows = [
     prop: "DialogFooter button slots",
     type: "ReactNode",
     defaultValue: "—",
-    description: "Places footer content and secondary/primary actions.",
+    description:
+      "Places footer content and secondary/primary actions. Exclusive with children and showCloseButton, which belong to the plain children footer.",
   },
 ] as const
 

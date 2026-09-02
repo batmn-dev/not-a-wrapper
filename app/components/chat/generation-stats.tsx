@@ -18,8 +18,10 @@ import {
  * The Generation stats line (ADR-0030): plain text in the response actions
  * row, settled turns only, behind the `showGenerationStats` preference. The
  * view is a closed union, so a rate can only render from a valid window and
- * absent provider usage leaves time to first output standing alone. Hover
- * reveals exact milliseconds and the token breakdown.
+ * absent provider usage leaves time to first output standing alone. Hover or
+ * keyboard focus reveals exact milliseconds and the token breakdown: the
+ * trigger is a real button so Tab reaches it, styled as plain text with the
+ * Button keyboard outline.
  */
 export function GenerationStatsLine({
   stats,
@@ -93,8 +95,8 @@ export function GenerationStatsLine({
   return (
     <Tooltip disableHoverablePopup>
       <TooltipTrigger
-        render={<span />}
-        className="ms-1 cursor-default self-center px-2 text-xs text-[var(--text-tertiary)] tabular-nums select-none"
+        render={<button type="button" />}
+        className="keyboard-focused:[outline-color:var(--interactive-outline-color,var(--text-primary))] keyboard-focused:outline-[1.5px] keyboard-focused:outline-offset-[2.5px] keyboard-focused:[outline-style:solid] ms-1 cursor-default self-center rounded-[8px] px-2 text-xs text-[var(--text-tertiary)] tabular-nums outline-hidden select-none"
         data-testid="generation-stats"
       >
         {segments.join(" · ")}

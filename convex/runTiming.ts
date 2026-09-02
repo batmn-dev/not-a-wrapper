@@ -1,4 +1,3 @@
-import type { Expression } from "convex/server"
 import { v } from "convex/values"
 import { internalQuery } from "./_generated/server"
 import {
@@ -15,10 +14,13 @@ import {
  *
  *   bunx convex run runTiming:timingSummary "{\"sinceMs\": $(( $(date +%s) * 1000 - 7*24*60*60*1000 ))}"
  *
- * Bounded by `limit` (default 2000, max 5000) over the status+completedAt
- * index so it can never scan the table; the `model`/`buildId` filters apply
- * BEFORE the limit, so a filtered window is never silently under-counted.
- * `p95` follows the metric dictionary's non-metrics rule: absent under
+ * Reads at most `limit` rows (default 2000, max 5000), newest first, from the
+ * status+completedAt index; that read is the only table access, so the scan
+ * is bounded regardless of `sinceMs`. The `model`/`buildId` filters apply in
+ * memory WITHIN that window (neither field is indexed), so a filtered summary
+ * over a capped window (`scannedRuns === limit`) can omit older matches:
+ * narrow `sinceMs` or raise `limit`. `matchedRuns` counts what the filters
+ * kept. `p95` follows the metric dictionary's non-metrics rule: absent under
  * `P95_MINIMUM_SAMPLES` samples rather than reported from a handful of runs.
  */
 
@@ -70,26 +72,21 @@ export const timingSummary = internalQuery({
   handler: async (ctx, args) => {
     const since = args.sinceMs ?? Date.now() - DEFAULT_WINDOW_MS
     const limit = Math.min(5000, Math.max(1, Math.floor(args.limit ?? 2000)))
-    const ordered = ctx.db
+    // `take` before filtering: a `.filter()` on the index range would keep
+    // reading past sparse matches until `limit` were met, unbounded by `sinceMs`.
+    const scanned = await ctx.db
       .query("generationRuns")
       .withIndex("by_status_completed", (q) =>
         q.eq("status", "completed").gte("completedAt", since)
       )
       .order("desc")
-    const filtered =
-      args.model === undefined && args.buildId === undefined
-        ? ordered
-        : ordered.filter((q) => {
-            const clauses: Array<Expression<boolean>> = []
-            if (args.model !== undefined) {
-              clauses.push(q.eq(q.field("model"), args.model))
-            }
-            if (args.buildId !== undefined) {
-              clauses.push(q.eq(q.field("timingReceipt.buildId"), args.buildId))
-            }
-            return q.and(...clauses)
-          })
-    const runs = await filtered.take(limit)
+      .take(limit)
+    const runs = scanned.filter(
+      (run) =>
+        (args.model === undefined || run.model === args.model) &&
+        (args.buildId === undefined ||
+          run.timingReceipt?.buildId === args.buildId)
+    )
 
     const groups = new Map<
       string,
@@ -130,7 +127,8 @@ export const timingSummary = internalQuery({
 
     return {
       sinceMs: since,
-      scannedRuns: runs.length,
+      scannedRuns: scanned.length,
+      matchedRuns: runs.length,
       groups: [...groups.values()]
         .sort((a, b) => b.runs - a.runs)
         .map((group) => ({

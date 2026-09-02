@@ -126,13 +126,12 @@ export function pacingOverheadMs(
   if (
     wireStreamMs === undefined ||
     modelResponseMs === undefined ||
-    providerFirstOutputMs === undefined
+    providerFirstOutputMs === undefined ||
+    toolExecutionMs === undefined
   ) {
     return undefined
   }
   return (
-    wireStreamMs -
-    (modelResponseMs - providerFirstOutputMs) -
-    (toolExecutionMs ?? 0)
+    wireStreamMs - (modelResponseMs - providerFirstOutputMs) - toolExecutionMs
   )
 }

@@ -11,12 +11,14 @@ import { Icon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
+import {
+  MAX_PROJECT_NAME_LENGTH,
+  PROJECT_NAME_TOO_LONG_MESSAGE,
+} from "@/lib/projects/policy"
 import { RiFolderLine, RiLightbulbLine } from "@remixicon/react"
 import { useMutation } from "convex/react"
 import { useRouter } from "next/navigation"
 import { useId, useState } from "react"
-
-const MAX_PROJECT_NAME_LENGTH = 50
 
 type DialogCreateProjectProps = {
   isOpen: boolean
@@ -32,11 +34,13 @@ export function DialogCreateProject({
   const validationErrorId = useId()
   const router = useRouter()
   const createProject = useMutation(api.projects.create)
+  // Validate the trimmed value: it is what handleSubmit sends and the server checks.
+  const trimmedName = projectName.trim()
   const validationError =
-    projectName.length > MAX_PROJECT_NAME_LENGTH
-      ? `Project names cannot be longer than ${MAX_PROJECT_NAME_LENGTH} characters.`
+    trimmedName.length > MAX_PROJECT_NAME_LENGTH
+      ? PROJECT_NAME_TOO_LONG_MESSAGE
       : null
-  const canSubmit = projectName.trim().length > 0 && validationError === null
+  const canSubmit = trimmedName.length > 0 && validationError === null
 
   const handleCreate = async (name: string) => {
     setIsPending(true)
@@ -56,7 +60,7 @@ export function DialogCreateProject({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (canSubmit) {
-      handleCreate(projectName.trim())
+      handleCreate(trimmedName)
     }
   }
 

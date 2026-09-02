@@ -94,6 +94,24 @@ describe("createGenerationTimingTracker", () => {
     })
   })
 
+  it("leaves first output absent when only a later step produced output", () => {
+    // A later step's offset is relative to its own dispatch, not the run's
+    // first call, and the SDK exposes no step timestamps to re-anchor it.
+    const tracker = createGenerationTimingTracker()
+    tracker.recordStep(
+      step({ ttfo: undefined, response: 300 }, { in: 5, out: 0 })
+    )
+    tracker.recordStep(step({ ttfo: 120, response: 620 }, { in: 9, out: 30 }))
+
+    expect(tracker.firstOutputOffsetMs()).toBeUndefined()
+    expect(tracker.stats()?.timeToFirstTokenMs).toBeUndefined()
+    expect(tracker.stats()?.outputStreamMs).toBe(500)
+    expect(tracker.providerSegments()).toEqual({
+      modelResponseMs: 920,
+      toolExecutionMs: 0,
+    })
+  })
+
   it("counts provider-run tool calls, whose time stays inside the window", () => {
     // A hosted web search runs inside the provider response: the SDK's
     // toolExecutionMs stays 0 and the window is not shortened. The stats

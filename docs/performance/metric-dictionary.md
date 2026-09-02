@@ -110,6 +110,7 @@ nested, not additive across groups — never sum overlapping spans.
 |---|---|---|---|---|
 | `provider_invocation_to_first_output` | provider call start → first output chunk (text, reasoning, tool-input delta, tool call, or file) of step 0 | provider | no (correctness-checked against the deterministic script) | existing (ADR-0030: `server_span` `provider_first_output`, sourced from SDK step performance; Braintrust/Sentry buckets read the same figure) |
 | `provider_invocation_to_first_event` | — | — | — | **retired 2026-09-01** (post-transform; see the status note) |
+| `provider_invocation_to_first_text` | — | — | — | **retired 2026-09-01** (renamed: the dictionary entry is now `provider_first_text_delta` in §4; the `server_span` event name was always `provider_first_text_delta`) |
 
 Smoke-suite only; labeled by provider+model+route tier; never a population with other
 providers. Dimensions: provider, model, route tier (platform/BYOK), warm/cold credential
@@ -124,7 +125,7 @@ thinking phase is inside this figure.
 | `first_write_to_client_first_bytes` | `server_first_stream_write` → `client_first_stream_bytes` | network | no | proposed (both endpoints now exist; the join is harness-side, cross-machine clocks — report medians only) |
 | `client_first_stream_bytes` | fetch dispatch → first parsed response chunk | browser | no | existing (Phase 2; transport tap reads only the chunk `type` discriminant) |
 | `client_first_text_delta_received` | fetch dispatch → first text-delta chunk | browser | no | existing (Phase 2) |
-| `provider_first_text_delta` | `streamText` call → first text delta RELEASED to the response pipeline (post-transform: smoothing holdback is inside it) | next | no | existing (re-homed from group 3 on 2026-09-01; the name is unchanged, the meaning was always this) |
+| `provider_first_text_delta` | `streamText` call → first text delta RELEASED to the response pipeline (post-transform: smoothing holdback is inside it) | next | no | existing (re-homed from group 3 on 2026-09-01, where the dictionary entry was `provider_invocation_to_first_text`, now retired; the `server_span` event name `provider_first_text_delta` is unchanged, and the meaning was always this) |
 
 ## 5. Rendering (browser)
 

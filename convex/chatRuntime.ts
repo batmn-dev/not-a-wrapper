@@ -979,6 +979,15 @@ export async function closeSupersededGenerationsForChat(
               ? { terminalReason: verdict.run.terminalReason }
               : {}),
             ...grantRevocationForStatus(verdict.run.status),
+            // Same receipt-attach capability as the in-window supersede
+            // (ADR-0030): this run's worker may still be live and needs it to
+            // land its partial receipt after the grant above is revoked.
+            ...timingReceiptAttachGrant(
+              run,
+              verdict.run.status,
+              undefined,
+              now
+            ),
             ...LEASE_CLEAR,
             assistantMessageId: supersededMessageId,
           })

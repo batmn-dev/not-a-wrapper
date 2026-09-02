@@ -1163,17 +1163,16 @@
     content-visibility: visible;
   }
 
-  /* The persistent FloatingContent slot already owns open state. The scroll
-     root derives its presentation without copying state into React. */
-  [data-scroll-root]:has(
-    .side-pane-shell-host > [data-slot="activity-panel-dock"][data-expanded]
-  ) {
+  /* The persistent dock slot already owns open state. The shell host wraps
+     both the scroll column and the dock, so it is the :has() subject: the
+     scroll root inside it hides its scrollbar without copying state into React. */
+  .side-pane-shell-host:has(> [data-slot="activity-panel-dock"][data-expanded])
+    [data-scroll-root] {
     scrollbar-width: none;
   }
 
-  [data-scroll-root]:has(
-      .side-pane-shell-host > [data-slot="activity-panel-dock"][data-expanded]
-    )::-webkit-scrollbar {
+  .side-pane-shell-host:has(> [data-slot="activity-panel-dock"][data-expanded])
+    [data-scroll-root]::-webkit-scrollbar {
     display: none;
   }
 

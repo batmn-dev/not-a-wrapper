@@ -170,6 +170,42 @@ describe("MessageAssistant activity trigger", () => {
     ).toBeNull()
   })
 
+  it("mounts no footer when the settled stats derive to nothing renderable", () => {
+    preferenceState.showGenerationStats = true
+    const store = makeStore({ panelTurnId: "assistant-1" })
+    const parts = [
+      {
+        type: "tool-web_search",
+        toolCallId: "call-1",
+        state: "output-available",
+        input: { query: "q" },
+        output: { content: [] },
+      },
+    ] as unknown as UIMessage["parts"]
+    // Parses to a non-empty object, but the view has no rate, tokens, or
+    // time to first output to show.
+    const metadata = { generationStats: { inputTokens: 900 } }
+
+    act(() => {
+      root?.render(
+        <ActivityPanelStoreProvider store={store} panelId="activity-panel">
+          <MessageAssistant
+            messageId="assistant-1"
+            view={makeView(parts, "ready", metadata)}
+            status="ready"
+            copyToClipboard={() => {}}
+          >
+            {""}
+          </MessageAssistant>
+        </ActivityPanelStoreProvider>
+      )
+    })
+
+    expect(
+      container?.querySelector('[aria-label="Response actions"]')
+    ).toBeNull()
+  })
+
   it("focuses a newly completed final response on mobile without scrolling", () => {
     responsive.isMobile = true
     const focus = vi.spyOn(HTMLElement.prototype, "focus")

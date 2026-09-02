@@ -369,7 +369,17 @@ export function Conversation({
   scrollToMessageId,
   onCenterIntersectionChange,
 }: ConversationProps) {
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  // Chat stays mounted across route commits (ADR-0013), so the open editor is
+  // scoped to the chat it was opened in and dropped at the chat boundary
+  // (render-time reset, same idiom as turn-context's effort store).
+  const [editingState, setEditingState] = useState<{
+    chatId: string | null
+    messageId: string
+  } | null>(null)
+  if (editingState !== null && editingState.chatId !== chatId) {
+    setEditingState(null)
+  }
+  const editingMessageId = editingState?.messageId ?? null
   const contentVisibilitySupported = useContentVisibilitySupport()
   const scrollTarget = resolveConversationScrollTarget(
     messages,
@@ -378,15 +388,15 @@ export function Conversation({
   const observation = useConversationTurnObservation()
   const handleEditingChange = useCallback(
     (messageId: string, isEditing: boolean) => {
-      setEditingMessageId((currentMessageId) =>
+      setEditingState((current) =>
         isEditing
-          ? messageId
-          : currentMessageId === messageId
+          ? { chatId, messageId }
+          : current?.messageId === messageId
             ? null
-            : currentMessageId
+            : current
       )
     },
-    []
+    [chatId]
   )
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>

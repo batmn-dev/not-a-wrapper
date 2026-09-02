@@ -11,6 +11,7 @@ import {
   type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
+import { deriveGenerationStatsView } from "@/lib/chat-messages/generation-stats"
 import {
   getDurableError,
   getErrorRecovery,
@@ -200,10 +201,14 @@ export function MessageAssistant({
   const showFooterActions = hasContent && copyableStatus
   // Generation stats (ADR-0030) are stamped for every turn the provider ran,
   // text or not, so the line mounts the footer on its own; the text actions
-  // (copy, regenerate) stay gated on text.
+  // (copy, regenerate) stay gated on text. Gate on the derived view, not the
+  // parsed stats: input or step counts alone parse fine but render nothing,
+  // and would otherwise leave an empty response-actions gap.
   const generationStats = getGenerationStats(view.metadata)
   const showGenerationStatsLine =
-    !turnActive && showGenerationStats && generationStats !== undefined
+    !turnActive &&
+    showGenerationStats &&
+    deriveGenerationStatsView(generationStats).kind !== "none"
   const showFooter = showFooterActions || showGenerationStatsLine
 
   return (

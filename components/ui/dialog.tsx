@@ -258,6 +258,26 @@ function DialogHeader({
   )
 }
 
+// Slots mode and children mode are exclusive: slots own the footer layout, so
+// `children` / `showCloseButton` are rejected there instead of silently dropped.
+type DialogFooterProps = Omit<React.ComponentProps<"div">, "children"> &
+  (
+    | {
+        footerContent?: React.ReactNode
+        primaryButton?: React.ReactNode
+        secondaryButton?: React.ReactNode
+        children?: never
+        showCloseButton?: never
+      }
+    | {
+        footerContent?: never
+        primaryButton?: never
+        secondaryButton?: never
+        children?: React.ReactNode
+        showCloseButton?: boolean
+      }
+  )
+
 function DialogFooter({
   className,
   showCloseButton = false,
@@ -266,12 +286,7 @@ function DialogFooter({
   primaryButton,
   secondaryButton,
   ...props
-}: React.ComponentProps<"div"> & {
-  footerContent?: React.ReactNode
-  primaryButton?: React.ReactNode
-  secondaryButton?: React.ReactNode
-  showCloseButton?: boolean
-}) {
+}: DialogFooterProps) {
   const usesSlots =
     footerContent !== undefined ||
     primaryButton !== undefined ||

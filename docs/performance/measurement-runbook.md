@@ -38,9 +38,12 @@ bunx convex run runTiming:timingSummary "{\"sinceMs\": $(( $(date +%s) * 1000 - 
 recent: the query returns at most `"limit"` runs, newest first, so a window
 holding more completed runs than the limit silently drops the oldest ones.
 `scannedRuns` equal to the limit means the window was capped. Optional
-filters: `"model"`, `"buildId"` (the short commit SHA stamped on the run),
-`"limit"` (default 2000, max 5000); filters apply before the limit, so a
-filtered window is never silently under-counted. The result lists n, p50,
+filters: `"model"`, `"buildId"` (the server build identifier stamped on the
+run: the short commit SHA, or the Sentry release when the SHA is unavailable),
+`"limit"` (default 2000, max 5000); filters apply within the returned window
+(the newest `limit` completed runs), so when `scannedRuns` equals the limit a
+filtered summary can omit older matches: narrow `sinceMs` or raise `limit`.
+`matchedRuns` counts the runs the filters kept. The result lists n, p50,
 and max per receipt segment plus the derived `serverTimeToFirstOutputMs` and
 `pacingOverheadMs`; `p95` appears only from 20 samples up (the dictionary's
 non-metrics rule). Add `--prod` to read the production deployment. Compare

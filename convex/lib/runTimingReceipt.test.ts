@@ -41,5 +41,13 @@ describe("derived figures", () => {
   it("stays undefined when a segment was unobserved", () => {
     expect(serverTimeToFirstOutputMs({ prepareMs: 1 })).toBeUndefined()
     expect(pacingOverheadMs({ wireStreamMs: 1 })).toBeUndefined()
+    // An unobserved tool segment is never read as zero.
+    expect(
+      pacingOverheadMs({
+        wireStreamMs: 1040,
+        modelResponseMs: 1250,
+        providerFirstOutputMs: 250,
+      })
+    ).toBeUndefined()
   })
 })

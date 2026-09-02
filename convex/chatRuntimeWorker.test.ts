@@ -322,6 +322,28 @@ describe("attachRunTimingReceiptWithTerminalGrant", () => {
     expect(patches).toHaveLength(1)
   })
 
+  it("leaves the capability pending when the payload sanitizes to nothing", async () => {
+    const { ctx, patches } = makeAttachWorld()
+
+    await expect(
+      attachRunTimingReceiptWithTerminalGrant(ctx, {
+        runId,
+        grantDigest: DIGEST,
+        timingReceipt: { prepareMs: -1, buildId: "" },
+      })
+    ).resolves.toEqual({ outcome: "empty" })
+    expect(patches).toHaveLength(0)
+    // The unburnt capability still lands a real receipt inside the window.
+    await expect(
+      attachRunTimingReceiptWithTerminalGrant(ctx, {
+        runId,
+        grantDigest: DIGEST,
+        timingReceipt: { prepareMs: 40 },
+      })
+    ).resolves.toEqual({ outcome: "attached" })
+    expect(patches).toHaveLength(1)
+  })
+
   it.each([
     ["a wrong secret", { grantDigest: sha256Hex("other") }, {}],
     ["an expired window", {}, { timingReceiptGrantExpiresAt: Date.now() - 1 }],

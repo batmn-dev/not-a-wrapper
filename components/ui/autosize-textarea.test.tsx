@@ -32,6 +32,7 @@ it("applies caller sizing classes to both the textarea and its mirror", () => {
   expect(textarea?.className).toContain("resize-none overflow-hidden")
   expect(mirror?.className).toContain("invisible")
   expect(mirror?.className).toContain("whitespace-pre-wrap")
+  expect(mirror?.className).toContain("wrap-anywhere")
 
   act(() => root.unmount())
   container.remove()

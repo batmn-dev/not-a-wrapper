@@ -161,7 +161,7 @@ describe("Conversation recovered turn contracts", () => {
     vi.unstubAllGlobals()
   })
 
-  function render(scrollToMessageId?: string) {
+  function render(scrollToMessageId?: string, chatId?: string) {
     if (!container) {
       container = document.createElement("div")
       document.body.append(container)
@@ -171,6 +171,7 @@ describe("Conversation recovered turn contracts", () => {
       root?.render(
         <Conversation
           messages={messages}
+          chatId={chatId}
           scrollToMessageId={scrollToMessageId}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -212,6 +213,29 @@ describe("Conversation recovered turn contracts", () => {
 
     expect(userOwner()?.classList.contains("mb-10")).toBe(true)
     expect(assistantOwner?.classList.contains("mb-10")).toBe(false)
+  })
+
+  it("drops the open editor when the mounted Conversation changes chat", () => {
+    render(undefined, "chat-a")
+    const editing = () =>
+      container
+        ?.querySelector<HTMLElement>(
+          '[data-turn="user"] [data-conversation-screenshot-content]'
+        )
+        ?.classList.contains("mb-10")
+
+    act(() => {
+      container
+        ?.querySelector<HTMLButtonElement>('[data-testid="toggle-edit-user-1"]')
+        ?.click()
+    })
+    expect(editing()).toBe(true)
+
+    render(undefined, "chat-b")
+    expect(editing()).toBe(false)
+
+    render(undefined, "chat-a")
+    expect(editing()).toBe(false)
   })
 
   it("uses the exact assistant containment guard and deep-link sentinels", () => {
@@ -1084,9 +1108,9 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
       '[data-turn-id="assistant-turn:optimistic-user"]'
     )
     expect(streamingAssistant).toBe(pendingAssistant)
-    expect(
-      streamingAssistant?.closest("[data-turn-id-container]")
-    ).toBe(pendingAssistantWrapper)
+    expect(streamingAssistant?.closest("[data-turn-id-container]")).toBe(
+      pendingAssistantWrapper
+    )
 
     await act(async () => {
       const writer = lifecycle.getStreamWriter()

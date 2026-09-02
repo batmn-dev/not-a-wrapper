@@ -301,14 +301,19 @@ function UserMessageEditor({
         className="m-2 max-h-[25dvh] overflow-auto"
         onCopy={(event) => event.stopPropagation()}
       >
+        {/* While the edit request is in flight the editor is inert: readOnly
+            keeps focus in place but drops typing, and the key handler drops
+            Escape/submit so a cancel cannot race the pending completion. */}
         <AutosizeTextarea
           ref={focusEditor}
           aria-label="Edit message"
+          aria-busy={isSavingEdit || undefined}
+          readOnly={isSavingEdit}
           className="m-0 w-full resize-none border-0 bg-transparent focus:ring-0 focus-visible:ring-0"
           value={editInput}
           onChange={(event) => onChange(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing) return
+            if (isSavingEdit || event.nativeEvent.isComposing) return
             if (
               event.key === "Enter" &&
               (event.metaKey || event.ctrlKey) &&
@@ -330,12 +335,18 @@ function UserMessageEditor({
         ) : null}
       </div>
       <div className="flex flex-wrap justify-end gap-2 px-2 pt-2">
-        <Button type="button" variant="secondary" onClick={onCancel}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onCancel}
+          disabled={isSavingEdit}
+        >
           <div className="flex items-center justify-center">Cancel</div>
         </Button>
         <Button
           type="button"
           onClick={onSave}
+          aria-busy={isSavingEdit || undefined}
           disabled={isSavingEdit || !editInput.trim()}
         >
           <div className="flex items-center justify-center">Send</div>
@@ -383,8 +394,13 @@ export function MessageUser({
   const [editInput, setEditInput] = useState(children)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  // Each editor open/close starts a new session. A pending save captures its
+  // session and only settles the editor it started from, so a completion that
+  // lands after the editor was closed and reopened never discards the new draft.
+  const editSessionRef = useRef(0)
 
   const handleEditCancel = () => {
+    editSessionRef.current += 1
     onEditingChange(false)
     setEditInput(children)
     setEditError(null)
@@ -399,26 +415,34 @@ export function MessageUser({
       return
     }
 
+    const editSession = editSessionRef.current
     setIsSavingEdit(true)
     setEditError(null)
+    let failure: string | null = null
     try {
       const result = await onEdit(id, editInput)
       if (result && !result.ok) {
-        setEditError(result.message || "The edit was not submitted.")
-        return
+        failure = result.message || "The edit was not submitted."
       }
-      onEditingChange(false)
     } catch {
-      setEditError("Failed to submit the edit. Please try again.")
-    } finally {
-      setIsSavingEdit(false)
+      failure = "Failed to submit the edit. Please try again."
     }
+    if (editSession !== editSessionRef.current) return
+
+    setIsSavingEdit(false)
+    if (failure) {
+      setEditError(failure)
+      return
+    }
+    onEditingChange(false)
   }
 
   const handleEditStart = () => {
+    editSessionRef.current += 1
     onEditingChange(true)
     setEditInput(children)
     setEditError(null)
+    setIsSavingEdit(false)
   }
 
   if (isEditing) {

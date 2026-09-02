@@ -401,6 +401,44 @@ describe("MessageUser edits", () => {
     )
   })
 
+  it("keeps the editor inert while the edit request is pending", async () => {
+    let settle: (() => void) | undefined
+    const onEdit = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          settle = () => resolve({ ok: true })
+        })
+    )
+    renderEditableMessage({ onEdit })
+
+    openEditor()
+    updateTextarea("Edited text")
+    await clickSend()
+
+    const textarea = container?.querySelector<HTMLTextAreaElement>("textarea")
+    const buttons = [...(container?.querySelectorAll("button") ?? [])]
+    const cancelButton = buttons.find((b) => b.textContent === "Cancel")
+    const sendButton = buttons.find((b) => b.textContent === "Send")
+    expect(textarea?.readOnly).toBe(true)
+    expect(textarea?.getAttribute("aria-busy")).toBe("true")
+    expect(cancelButton?.disabled).toBe(true)
+    expect(sendButton?.disabled).toBe(true)
+    expect(sendButton?.getAttribute("aria-busy")).toBe("true")
+
+    act(() => {
+      textarea?.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "Escape" })
+      )
+    })
+    expect(container?.querySelector("textarea")).toBeTruthy()
+    expect(onEdit).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      settle?.()
+    })
+    expect(container?.querySelector("textarea")).toBeNull()
+  })
+
   it("cancels edit without submitting and restores original content", () => {
     const onEdit = vi.fn()
     renderEditableMessage({ onEdit })
