@@ -409,7 +409,7 @@ describe("MessageUser edits", () => {
     )
   })
 
-  it("keeps the editor inert while the edit request is pending", async () => {
+  it("drops a second Send while the edit request is pending, without locking the editor", async () => {
     let settle: (() => void) | undefined
     const onEdit = vi.fn(
       () =>
@@ -422,24 +422,12 @@ describe("MessageUser edits", () => {
     openEditor()
     updateTextarea("Edited text")
     await clickSend()
+    await clickSend()
 
     const textarea = container?.querySelector<HTMLTextAreaElement>("textarea")
-    const buttons = [...(container?.querySelectorAll("button") ?? [])]
-    const cancelButton = buttons.find((b) => b.textContent === "Cancel")
-    const sendButton = buttons.find((b) => b.textContent === "Send")
-    expect(textarea?.readOnly).toBe(true)
-    expect(textarea?.getAttribute("aria-busy")).toBe("true")
-    expect(cancelButton?.disabled).toBe(true)
-    expect(sendButton?.disabled).toBe(true)
-    expect(sendButton?.getAttribute("aria-busy")).toBe("true")
-
-    act(() => {
-      textarea?.dispatchEvent(
-        new KeyboardEvent("keydown", { bubbles: true, key: "Escape" })
-      )
-    })
-    expect(container?.querySelector("textarea")).toBeTruthy()
     expect(onEdit).toHaveBeenCalledOnce()
+    expect(textarea?.readOnly).toBe(false)
+    expect(textarea?.hasAttribute("aria-busy")).toBe(false)
 
     await act(async () => {
       settle?.()
@@ -474,8 +462,40 @@ describe("MessageUser edits", () => {
 
     const textarea = container?.querySelector<HTMLTextAreaElement>("textarea")
     expect(textarea?.value).toBe("Second draft")
-    expect(textarea?.readOnly).toBe(false)
     expect(onEdit).toHaveBeenCalledOnce()
+  })
+
+  it("keeps a newer save's guard when an older save settles after reopen", async () => {
+    const settlers: Array<() => void> = []
+    const onEdit = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          settlers.push(() => resolve({ ok: true }))
+        })
+    )
+    const parent = renderEditableMessage({ onEdit })
+
+    openEditor()
+    updateTextarea("First draft")
+    await clickSend()
+    act(() => {
+      parent.setEditing(false)
+    })
+    openEditor()
+    updateTextarea("Second draft")
+    await clickSend()
+
+    // Save A settles while save B is pending; a third Send must still be dropped.
+    await act(async () => {
+      settlers[0]?.()
+    })
+    await clickSend()
+    expect(onEdit).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      settlers[1]?.()
+    })
+    expect(container?.querySelector("textarea")).toBeNull()
   })
 
   it("cancels edit without submitting and restores original content", () => {
