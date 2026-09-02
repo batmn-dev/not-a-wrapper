@@ -8,6 +8,7 @@ import { NawIcon } from "@/components/icons/naw"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { APP_NAME } from "@/lib/config"
 import { useUser } from "@/lib/user-store/provider"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { DialogPublish } from "./dialog-publish"
 import { HeaderSidebarTrigger } from "./header-sidebar-trigger"
@@ -31,7 +32,15 @@ export function Header({
   return (
     <header
       id="page-header"
-      className="h-header-height data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent data-[fixed-header=less-than-xl]:@w-xl/main:shadow-none max-md:bg-background pointer-events-none sticky top-0 z-20 flex shrink-0 items-center justify-between bg-transparent p-2 shadow-none transition-none select-none [view-transition-name:var(--vt-page-header)] *:pointer-events-auto max-md:[box-shadow:var(--sharp-edge-top-shadow-placeholder)] max-md:group-data-scroll-from-top/scroll-root:[box-shadow:var(--sharp-edge-top-shadow)] pointer-coarse:p-2.5"
+      className={cn(
+        "draggable no-draggable-children h-header-height touch:p-2.5 pointer-events-none sticky top-0 z-20 flex items-center justify-between p-2 transition-none select-none [view-transition-name:var(--vt-page-header)] *:pointer-events-auto motion-safe:transition-none",
+        fixedHeader === "never"
+          ? "bg-transparent shadow-none"
+          : "bg-background [box-shadow:var(--sharp-edge-top-shadow-placeholder)] group-data-scroll-from-top/scroll-root:[box-shadow:var(--sharp-edge-top-shadow)]",
+        "data-[fixed-header=less-than-md]:md:bg-transparent data-[fixed-header=less-than-md]:md:[box-shadow:none]!",
+        "data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent data-[fixed-header=less-than-xl]:@w-xl/main:[box-shadow:none]!",
+        "data-[fixed-header=less-than-xxl]:@w-2xl/main:bg-transparent data-[fixed-header=less-than-xxl]:@w-2xl/main:[box-shadow:none]!"
+      )}
       data-fixed-header={fixedHeader}
     >
       <div className="flex shrink-0 items-center gap-2">

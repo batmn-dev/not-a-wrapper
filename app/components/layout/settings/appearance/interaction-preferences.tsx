@@ -17,6 +17,7 @@ export function InteractionPreferences() {
     setShowConversationPreviews,
     setWebSearchEnabled,
     setStreamingPresentation,
+    setShowGenerationStats,
   } = useUserPreferences()
 
   return (
@@ -32,6 +33,7 @@ export function InteractionPreferences() {
           </FieldDescription>
         </FieldContent>
         <Switch
+          aria-label="Smooth text streaming"
           checked={preferences.streamingPresentation !== "quick"}
           onCheckedChange={(enabled) =>
             setStreamingPresentation(enabled ? "smooth" : "quick")
@@ -46,6 +48,7 @@ export function InteractionPreferences() {
           </FieldDescription>
         </FieldContent>
         <Switch
+          aria-label="Tool invocations"
           checked={preferences.showToolInvocations}
           onCheckedChange={setShowToolInvocations}
         />
@@ -60,6 +63,7 @@ export function InteractionPreferences() {
           </FieldDescription>
         </FieldContent>
         <Switch
+          aria-label="Conversation previews"
           checked={preferences.showConversationPreviews}
           onCheckedChange={setShowConversationPreviews}
         />
@@ -72,8 +76,23 @@ export function InteractionPreferences() {
           </FieldDescription>
         </FieldContent>
         <Switch
+          aria-label="Web search default"
           checked={preferences.webSearchEnabled}
           onCheckedChange={setWebSearchEnabled}
+        />
+      </Field>
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldTitle className="text-balance">Generation stats</FieldTitle>
+          <FieldDescription className="text-xs text-pretty">
+            Show tokens per second, token counts, and time to first output under
+            each response
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          aria-label="Generation stats"
+          checked={preferences.showGenerationStats}
+          onCheckedChange={setShowGenerationStats}
         />
       </Field>
     </FieldGroup>

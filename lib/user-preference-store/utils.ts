@@ -20,6 +20,8 @@ export type UserPreferences = {
   webSearchEnabled: boolean
   streamingPresentation: StreamingPresentation
   hiddenModels: string[]
+  /** Generation stats line under assistant responses (ADR-0030). Off by default. */
+  showGenerationStats: boolean
 }
 
 export type UserPreferencesApiFormat = {
@@ -29,6 +31,7 @@ export type UserPreferencesApiFormat = {
   web_search_enabled?: boolean
   streaming_presentation?: StreamingPresentation
   hidden_models?: string[]
+  show_generation_stats?: boolean
 }
 
 export const defaultPreferences: UserPreferences = {
@@ -38,6 +41,7 @@ export const defaultPreferences: UserPreferences = {
   webSearchEnabled: true,
   streamingPresentation: "smooth",
   hiddenModels: [],
+  showGenerationStats: false,
 }
 
 /** Anything not exactly "quick" (unset, legacy, corrupted) means smooth. */
@@ -68,6 +72,7 @@ export function convertFromApiFormat(
       apiData.streaming_presentation
     ),
     hiddenModels: normalizeHiddenModels(apiData.hidden_models),
+    showGenerationStats: apiData.show_generation_stats ?? false,
   }
 }
 
@@ -86,5 +91,7 @@ export function convertToApiFormat(
     apiData.streaming_presentation = preferences.streamingPresentation
   if (preferences.hiddenModels !== undefined)
     apiData.hidden_models = preferences.hiddenModels
+  if (preferences.showGenerationStats !== undefined)
+    apiData.show_generation_stats = preferences.showGenerationStats
   return apiData
 }

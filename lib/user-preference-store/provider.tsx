@@ -47,6 +47,7 @@ type UserPreferencesContextType = {
   setShowConversationPreviews: (enabled: boolean) => void
   setWebSearchEnabled: (enabled: boolean) => void
   setStreamingPresentation: (presentation: StreamingPresentation) => void
+  setShowGenerationStats: (enabled: boolean) => void
   toggleModelVisibility: (modelId: string) => void
   isModelHidden: (modelId: string) => boolean
   isLoading: boolean
@@ -167,6 +168,9 @@ export function UserPreferencesProvider({
         ),
         hiddenModels:
           convexPreferences.hiddenModels ?? defaultPreferences.hiddenModels,
+        showGenerationStats:
+          convexPreferences.showGenerationStats ??
+          defaultPreferences.showGenerationStats,
       }
     }
     return defaultPreferences
@@ -261,6 +265,13 @@ export function UserPreferencesProvider({
     [updatePreferences]
   )
 
+  const setShowGenerationStats = useCallback(
+    (enabled: boolean) => {
+      updatePreferences({ showGenerationStats: enabled })
+    },
+    [updatePreferences]
+  )
+
   // Centralized sync for the paint-only decay overlay: one effect keyed on
   // the resolved preference keeps every Markdown consumer on one switch —
   // app load, settings toggle, cross-tab localStorage change, and Convex
@@ -299,6 +310,7 @@ export function UserPreferencesProvider({
         setShowConversationPreviews,
         setWebSearchEnabled,
         setStreamingPresentation,
+        setShowGenerationStats,
         toggleModelVisibility,
         isModelHidden,
         isLoading,

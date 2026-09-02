@@ -1,8 +1,9 @@
-import { Icon } from "@/components/ui/icon"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { Icon } from "@/components/ui/icon"
 import { MessageActions, MessageContent } from "@/components/ui/message"
 import { SystemMessage } from "@/components/ui/system-message"
 import { TooltipMultiline } from "@/components/ui/tooltip"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { deriveAssistantActivityPresentation } from "@/lib/chat-messages/assistant-activity"
 import {
   deriveAssistantTurnPhase,
@@ -10,12 +11,17 @@ import {
   type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
-import { getDurableError, getErrorRecovery } from "@/lib/chat-messages/metadata"
+import { deriveGenerationStatsView } from "@/lib/chat-messages/generation-stats"
+import {
+  getDurableError,
+  getErrorRecovery,
+  getGenerationStats,
+} from "@/lib/chat-messages/metadata"
 import type { RegenerationTurnOverrides } from "@/lib/chat-turn/chat-turn-controller"
 import { getModelInfo } from "@/lib/models"
 import { AFFORDABILITY_RETRY_GENERATION_BUDGET } from "@/lib/openproviders/output-budget"
+import { useUserPreferences } from "@/lib/user-preference-store/provider"
 import { cn } from "@/lib/utils"
-import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { RiCheckLine, RiFileCopyLine, RiLoopRightLine } from "@remixicon/react"
 import { useCallback, useRef } from "react"
 import {
@@ -26,6 +32,7 @@ import {
   useIsActivityPanelTurnOpen,
 } from "./activity/activity-panel-store"
 import { AssistantActivityIndicator } from "./assistant-activity-indicator"
+import { GenerationStatsLine } from "./generation-stats"
 import { MessageActionButton } from "./message-action-button"
 import { QuoteButton } from "./quote-button"
 import { SearchImages } from "./search-images"
@@ -81,6 +88,8 @@ export function MessageAssistant({
   const preservedResponse = hasPreservedResponseContent(view)
   const durableError = getDurableError(view.metadata)
   const errorRecovery = getErrorRecovery(view.metadata)
+  const showGenerationStats =
+    useUserPreferences().preferences.showGenerationStats
 
   // Reasoning + sources live in the Chat-owned Activity panel. Each assistant
   // row with activity keeps its own trigger; only the row currently projected
@@ -190,6 +199,17 @@ export function MessageAssistant({
     status !== "streaming" &&
     status !== "awaiting_approval"
   const showFooterActions = hasContent && copyableStatus
+  // Generation stats (ADR-0030) are stamped for every turn the provider ran,
+  // text or not, so the line mounts the footer on its own; the text actions
+  // (copy, regenerate) stay gated on text. Gate on the derived view, not the
+  // parsed stats: input or step counts alone parse fine but render nothing,
+  // and would otherwise leave an empty response-actions gap.
+  const generationStats = getGenerationStats(view.metadata)
+  const showGenerationStatsLine =
+    !turnActive &&
+    showGenerationStats &&
+    deriveGenerationStatsView(generationStats).kind !== "none"
+  const showFooter = showFooterActions || showGenerationStatsLine
 
   return (
     <>
@@ -199,9 +219,7 @@ export function MessageAssistant({
           so first content replaces it without a vertical handoff. The action
           row mounts only after the response settles; message parts flow in a
           gap-1 column. */}
-      <div
-        className={cn("flex max-w-full grow flex-col gap-4", className)}
-      >
+      <div className={cn("flex max-w-full grow flex-col gap-4", className)}>
         {isBareThinkingStatus ? null : (
           <AssistantActivityIndicator
             presentation={activityPresentation}
@@ -284,8 +302,8 @@ export function MessageAssistant({
             before producing content renders as a first-class stub with a
             retry (regeneration) affordance instead of vanishing behind a
             toast. Retry re-runs the turn against the same user message. The
-            banner hosts Retry exactly when the text footer (which carries the
-            regenerate action) is absent — gate on text, not on preserved
+            banner hosts Retry exactly when the footer's text actions (which
+            carry regenerate) are absent — gate on text, not on preserved
             content, so tool-only turns keep a retry control. */}
               {status === "aborted" && (
                 <SystemMessage
@@ -354,7 +372,7 @@ export function MessageAssistant({
         ) : null}
       </div>
 
-      {showFooterActions && (
+      {showFooter && (
         <div className="relative z-0 flex min-h-[46px] justify-start">
           <MessageActions
             aria-label="Response actions"
@@ -374,37 +392,41 @@ export function MessageAssistant({
             {/* Branch nav lives on the user message (the turn anchor); see
                     conversation.tsx + message-user.tsx. Assistant messages
                     intentionally render no branch control. */}
-            <MessageActionButton
-              label="Copy response"
-              tooltip={copied ? "Copied!" : "Copy Response"}
-              onClick={copyToClipboard}
-              icon={
-                copied ? (
-                  <Icon icon={RiCheckLine} slotSize={20} />
-                ) : (
-                  <Icon icon={RiFileCopyLine} slotSize={20} />
-                )
-              }
-            />
-            {canRegenerate ? (
-              <MessageActionButton
-                label={`Try again with ${retryModelName}`}
-                tooltip={
-                  <TooltipMultiline>
-                    <span className="font-medium">Try again...</span>
-                    <span className="text-[var(--text-tertiary)]">
-                      Using {retryModelName}
-                    </span>
-                  </TooltipMultiline>
-                }
-                disabledReason={
-                  retryDisabled
-                    ? "Wait for the current response to finish."
-                    : undefined
-                }
-                onClick={() => onReload?.(messageId)}
-                icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
-              />
+            {showFooterActions ? (
+              <>
+                <MessageActionButton
+                  label="Copy response"
+                  tooltip={copied ? "Copied!" : "Copy Response"}
+                  onClick={copyToClipboard}
+                  icon={
+                    copied ? (
+                      <Icon icon={RiCheckLine} slotSize={20} />
+                    ) : (
+                      <Icon icon={RiFileCopyLine} slotSize={20} />
+                    )
+                  }
+                />
+                {canRegenerate ? (
+                  <MessageActionButton
+                    label={`Try again with ${retryModelName}`}
+                    tooltip={
+                      <TooltipMultiline>
+                        <span className="font-medium">Try again...</span>
+                        <span className="text-[var(--text-tertiary)]">
+                          Using {retryModelName}
+                        </span>
+                      </TooltipMultiline>
+                    }
+                    disabledReason={
+                      retryDisabled
+                        ? "Wait for the current response to finish."
+                        : undefined
+                    }
+                    onClick={() => onReload?.(messageId)}
+                    icon={<Icon icon={RiLoopRightLine} slotSize={20} />}
+                  />
+                ) : null}
+              </>
             ) : null}
             {/* Trailing sources badge (reference: last child of the
                     response-actions row). Settled turns only — while the turn
@@ -419,6 +441,12 @@ export function MessageAssistant({
                 onOpen={handleSourcesBadgeOpen}
                 controlsId={panelId}
               />
+            )}
+            {/* Generation stats (ADR-0030): settled turns only, behind the
+                    preference; guests and pre-feature messages have no
+                    persisted stats, so they show no gap. */}
+            {showGenerationStatsLine && (
+              <GenerationStatsLine stats={generationStats} />
             )}
           </MessageActions>
         </div>

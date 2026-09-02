@@ -18,14 +18,14 @@ import * as React from "react"
  * `sidebar-geometry.test.ts`. Do not reintroduce a parallel menu system here.
  *
  * Widths are owned by `app/globals.css` (`--sidebar-width`,
- * `--sidebar-width-icon`), not by TS constants, so the frame and the app's
+ * `--sidebar-rail-width`), not by TS constants, so the single frame and its
  * collapsed rail derive from one source.
  */
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_KEYBOARD_SHORTCUT = "s"
-const SIDEBAR_CONTAINER_ID = "sidebar-container"
+const SIDEBAR_CONTAINER_ID = "stage-slideover-sidebar"
 
 function getSidebarStateFromCookie(): boolean | undefined {
   if (typeof document === "undefined") return undefined
@@ -63,11 +63,9 @@ function SidebarProvider({
   defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
-  className,
-  style,
   children,
-  ...props
-}: React.ComponentProps<"div"> & {
+}: {
+  children: React.ReactNode
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -164,18 +162,11 @@ function SidebarProvider({
     ]
   )
 
-  // No TooltipProvider here: the root layout already mounts one (delay 0)
-  // above this provider.
+  // The app layout owns the shell DOM. Keeping the provider transparent lets
+  // the source-shaped h-svh root remain the first layout owner.
   return (
     <SidebarContext.Provider value={contextValue}>
-      <div
-        data-slot="sidebar-wrapper"
-        style={style}
-        className={cn("group/sidebar-wrapper flex min-h-svh w-full", className)}
-        {...props}
-      >
-        {children}
-      </div>
+      {children}
     </SidebarContext.Provider>
   )
 }
@@ -192,27 +183,29 @@ function useSidebarShortcutScope() {
 }
 
 /**
- * The sidebar frame. `collapsible="icon"` renders the desktop shell that
- * animates between `--sidebar-width` and `--sidebar-width-icon`;
+ * The sidebar frame. `collapsible="icon"` renders the single in-flow desktop
+ * shell that animates between `--sidebar-width` and `--sidebar-rail-width`;
  * `collapsible="none"` renders a static full-width column (used by the
  * design-system registry chrome). Mobile presentation is owned by the
  * consumer (the app renders its own Sheet drawer); this frame renders
- * `hidden md:block` and has no mobile branch.
+ * `max-md:hidden` and has no mobile branch.
  */
 function Sidebar({
   collapsible = "icon",
   className,
+  style,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
   collapsible?: "icon" | "none"
 }) {
-  const { state } = useSidebar()
+  const { open } = useSidebar()
 
   if (collapsible === "none") {
     return (
       <div
         data-slot="sidebar"
+        style={style}
         className={cn(
           "bg-sidebar text-sidebar-foreground flex h-full w-(--sidebar-width) flex-col",
           className
@@ -226,37 +219,27 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block"
-      data-state={state}
-      data-collapsible={state === "collapsed" ? collapsible : ""}
+      id={SIDEBAR_CONTAINER_ID}
+      className={cn(
+        "border-sidebar-border bg-sidebar text-sidebar-foreground relative z-21 h-full shrink-0 overflow-hidden border-r max-md:hidden print:hidden",
+        "motion-safe:transition-[width] motion-safe:duration-[450ms] motion-safe:ease-[linear(0,0.126,0.3555,0.5713,0.7361,0.8485,0.9191,0.9603,0.9828,0.9941,0.9992,1.0011,1.0015,1.0013,1.001,1.0007,1.0004,1.0002,1.0001)]",
+        "stage-sidebar-pure-surface",
+        className
+      )}
+      data-state={open ? "open" : "closed"}
       data-slot="sidebar"
+      style={{
+        ...style,
+        width: open ? "var(--sidebar-width)" : "var(--sidebar-rail-width)",
+      }}
+      {...props}
     >
-      {/* The gap and fixed container must use identical motion so both width
-          owners stay in lockstep. */}
       <div
-        data-slot="sidebar-gap"
-        className={cn(
-          "relative w-(--sidebar-width) bg-transparent motion-safe:transition-[width] motion-safe:duration-[450ms] motion-safe:ease-[linear(0,0.126,0.3555,0.5713,0.7361,0.8485,0.9191,0.9603,0.9828,0.9941,0.9992,1.0011,1.0015,1.0013,1.001,1.0007,1.0004,1.0002,1.0001)]",
-          "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
-        )}
-      />
-      <div
-        id={SIDEBAR_CONTAINER_ID}
-        data-slot="sidebar-container"
-        className={cn(
-          "fixed inset-y-0 left-0 z-10 hidden h-svh w-(--sidebar-width) overflow-hidden motion-safe:transition-[left,right,width,background-color] motion-safe:duration-[450ms] motion-safe:ease-[linear(0,0.126,0.3555,0.5713,0.7361,0.8485,0.9191,0.9603,0.9828,0.9941,0.9992,1.0011,1.0015,1.0013,1.001,1.0007,1.0004,1.0002,1.0001)] md:flex",
-          "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
-          className
-        )}
-        {...props}
+        data-sidebar="sidebar"
+        data-slot="sidebar-inner"
+        className="relative flex h-full flex-col overflow-hidden"
       >
-        <div
-          data-sidebar="sidebar"
-          data-slot="sidebar-inner"
-          className="flex h-full w-full flex-col"
-        >
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   )

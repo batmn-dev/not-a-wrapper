@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 /**
- * The collapsed rail and the expanded panel are separate layers that crossfade;
- * their leading icons only stay put because both derive placement from the same
- * geometry tokens. These tests pin that derivation so an axis-coupled "inner"
- * padding token (the original 1px drift) cannot come back unnoticed.
+ * The single in-flow sidebar owner crossfades its collapsed and expanded
+ * layers. Their leading icons only stay put because both derive placement from
+ * the same geometry tokens. These tests pin that derivation so an axis-coupled
+ * "inner" padding token (the original 1px drift) cannot come back unnoticed.
  */
 
 const css = readFileSync(
@@ -57,9 +57,8 @@ describe("sidebar leading-icon placement contract", () => {
   })
 
   it("keeps the collapsed frame width equal to the rail width", () => {
-    // The ui/sidebar frame animates to --sidebar-width-icon while the app
-    // renders its collapsed rail at --sidebar-rail-width inside it. Widths are
-    // CSS-owned (no TS constants), so this equality is the whole contract.
+    // The source-shaped owner animates directly to --sidebar-rail-width.
+    // --sidebar-width-icon remains the shared design-system alias.
     expect(resolvePx("--sidebar-width-icon")).toBe(
       resolvePx("--sidebar-rail-width")
     )

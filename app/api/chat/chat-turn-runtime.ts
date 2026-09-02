@@ -2,11 +2,14 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { TitleTerminalUsageEvidence } from "@/convex/domain/usage_accounting"
 import type { ChatAdmissionProofPayload } from "@/convex/lib/chatAdmissionProof"
+import type { RunTimingReceipt } from "@/convex/lib/runTimingReceipt"
 import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
 } from "@/lib/chat-messages/chat-turn-contract"
+import type { GenerationStats } from "@/lib/chat-messages/generation-stats"
 import {
+  getGenerationStats,
   getReasoningDurationMs,
   getWorkDurationMs,
 } from "@/lib/chat-messages/metadata"
@@ -38,6 +41,7 @@ import {
   type BraintrustChatMetadata,
   type BraintrustTraceSpan,
 } from "@/lib/observability/braintrust"
+import { resolveBuildId } from "@/lib/observability/build-identity"
 import {
   classifyChatError,
   getToolDimensionForError,
@@ -113,6 +117,7 @@ import {
   type TerminalUsageFacts,
   type TitleUsageForSettlement,
 } from "./durable-turn-runtime"
+import { createGenerationTimingTracker } from "./generation-timing"
 import { lowerForeignHostedToolParts } from "./hosted-tool-lowering"
 import {
   createPostHogToolCallSink,
@@ -198,6 +203,12 @@ export type ChatTurnInput = {
    * runtime's construction clock.
    */
   requestReceivedAtMs?: number
+  /**
+   * The same instant on `performance.now()` — the monotonic anchor for the
+   * run timing receipt's `prepareMs` (ADR-0030), immune to wall-clock steps.
+   * Falls back to the runtime's construction instant.
+   */
+  requestReceivedPerfMs?: number
 }
 
 /**
@@ -248,6 +259,34 @@ type CompletedGenerationStep = {
   readonly usage: { readonly outputTokens: number | undefined }
 }
 
+const round2 = (value: number) => Math.round(value * 100) / 100
+
+/**
+ * Mirrors the AI SDK's own output-chunk definition (the one behind
+ * `timeToFirstOutputMs`): generated text, reasoning, tool input, tool calls,
+ * and files (reasoning files included). Empty deltas and lifecycle/metadata
+ * parts are not output.
+ */
+function isOutputStreamPart(part: {
+  type: string
+  text?: string
+  delta?: string
+}) {
+  switch (part.type) {
+    case "text-delta":
+    case "reasoning-delta":
+      return (part.text?.length ?? 0) > 0
+    case "tool-input-delta":
+      return (part.delta?.length ?? 0) > 0
+    case "tool-call":
+    case "file":
+    case "reasoning-file":
+      return true
+    default:
+      return false
+  }
+}
+
 /** Null means the provider omitted trustworthy output usage, so another
  * spend-bearing model step must fail closed. */
 function completedOutputTokens(
@@ -290,6 +329,8 @@ type PreparedTurn = {
   validatedMessages: MessageAISDK[]
   initialWorkDurationMs: number
   initialReasoningDurationMs: number | undefined
+  /** The reused assistant message's Generation stats on an approval continuation. */
+  initialGenerationStats: GenerationStats | undefined
   modelMessages: ModelMessage[]
   providerOptions: ReturnType<typeof shapeRequest>["providerOptions"]
   requestHeaders: ReturnType<typeof shapeRequest>["headers"]
@@ -455,6 +496,7 @@ export function createChatTurnRuntime(args: {
   // No-op unless the route sampled this request (rate 0 short-circuits).
   const perf = input.perf ?? createChatPerfServerSession(null, { rate: 0 })
   const requestReceivedAtMs = input.requestReceivedAtMs ?? turnStartedAtMs
+  const requestReceivedPerfMs = input.requestReceivedPerfMs ?? performance.now()
 
   // Lifecycle guard — the runtime is one-shot. `prepare()` and `toResponse()`
   // may each run at most once, in order, so a repeated call can never open a
@@ -815,6 +857,9 @@ export function createChatTurnRuntime(args: {
     const initialReasoningDurationMs = getReasoningDurationMs(
       continuationBaseMetadata
     )
+    // Generation stats accumulate across the continuation the same way
+    // (ADR-0030); the run timing receipt does not — it is per run.
+    const initialGenerationStats = getGenerationStats(continuationBaseMetadata)
 
     const textFileModelInput = generationInput
       ? {
@@ -1097,6 +1142,7 @@ export function createChatTurnRuntime(args: {
       validatedMessages,
       initialWorkDurationMs,
       initialReasoningDurationMs,
+      initialGenerationStats,
       modelMessages,
       providerOptions,
       requestHeaders,
@@ -1143,6 +1189,7 @@ export function createChatTurnRuntime(args: {
       validatedMessages,
       initialWorkDurationMs,
       initialReasoningDurationMs,
+      initialGenerationStats,
       modelMessages,
       providerOptions,
       requestHeaders,
@@ -1185,6 +1232,8 @@ export function createChatTurnRuntime(args: {
     ])
 
     let streamStartMs = 0
+    // Monotonic twin of streamStartMs for the receipt's prepare segment.
+    let streamStartPerfMs = 0
     let workDuration: WorkDurationTracker | null = null
     const closeWorkDuration = () => workDuration?.close()
     const currentWorkDurationMs = () =>
@@ -1196,8 +1245,24 @@ export function createChatTurnRuntime(args: {
       Date.now,
       initialReasoningDurationMs
     )
-    let firstChunkLatencyMs: number | null = null
+    // Provider timing has ONE source: the SDK's per-step performance, read in
+    // onStepEnd (ADR-0030). The chunk callback below runs AFTER every
+    // experimental_transform, so it may only observe liveness, never time.
+    const timing = createGenerationTimingTracker({
+      initialStats: initialGenerationStats,
+    })
+    // Monotonic anchors on the SDK's own clock (performance.now): the first
+    // provider call's start, and the first/last output part released to the
+    // response stream (post-transform, observed in the UI-stream conversion).
+    let firstCallStartPerfMs: number | null = null
+    let firstOutputReleasedPerfMs: number | null = null
+    let lastOutputReleasedPerfMs: number | null = null
+    let sawProviderChunk = false
     let firstTextDeltaLatencyMs: number | null = null
+    // Diagnostics only (stall/abort signals): post-transform, but known the
+    // moment a chunk is released — unlike the SDK figure, which lands only
+    // when the first step ends and is therefore null for a mid-step stall.
+    let firstReleasedChunkLatencyMs: number | null = null
     let lastChunkAtMs: number | null = null
     let lastProgressAtMs = 0
     let observedToolCalls = 0
@@ -1255,9 +1320,45 @@ export function createChatTurnRuntime(args: {
       }
     }
 
+    /**
+     * The run timing receipt as far as this turn can observe it (ADR-0030).
+     * Called at every terminal hand-off; absent fields were unobserved. The
+     * durable runtime adds `settlementMs` on the settle path.
+     */
+    const buildTimingReceipt = (): RunTimingReceipt => {
+      const receipt: RunTimingReceipt = {
+        ...(providerStreamStarted
+          ? { prepareMs: round2(streamStartPerfMs - requestReceivedPerfMs) }
+          : {}),
+        ...timing.providerSegments(),
+      }
+      const firstOutputOffsetMs = timing.firstOutputOffsetMs()
+      if (
+        firstOutputOffsetMs !== undefined &&
+        firstCallStartPerfMs !== null &&
+        firstOutputReleasedPerfMs !== null
+      ) {
+        receipt.firstWriteDelayMs = round2(
+          firstOutputReleasedPerfMs -
+            (firstCallStartPerfMs + firstOutputOffsetMs)
+        )
+      }
+      if (
+        firstOutputReleasedPerfMs !== null &&
+        lastOutputReleasedPerfMs !== null
+      ) {
+        receipt.wireStreamMs = round2(
+          lastOutputReleasedPerfMs - firstOutputReleasedPerfMs
+        )
+      }
+      const buildId = resolveBuildId()
+      if (buildId) receipt.buildId = buildId
+      return receipt
+    }
+
     const getStreamPhase = (): ChatStreamPhase => {
       if (awaitingPostToolContinuation) return "post_tool_continue"
-      if (firstChunkLatencyMs !== null) return "post_first_chunk"
+      if (sawProviderChunk) return "post_first_chunk"
       if (stepCounter > 0 || observedToolCalls > 0) return "unknown"
       return "pre_first_chunk"
     }
@@ -1288,7 +1389,8 @@ export function createChatTurnRuntime(args: {
           messageCount: validatedMessages.length,
           chatVersion: normalizedChatVersion,
           elapsedMs: providerStreamStarted ? now - streamStartMs : 0,
-          firstTokenLatencyMs: firstChunkLatencyMs,
+          firstTokenLatencyMs: timing.firstOutputOffsetMs() ?? null,
+          firstReleasedChunkLatencyMs,
           timeSinceLastChunkMs:
             lastChunkAtMs === null ? null : now - lastChunkAtMs,
           timeSinceLastProgressMs: providerStreamStarted
@@ -1408,6 +1510,7 @@ export function createChatTurnRuntime(args: {
     // Exact assistant-work start: durable authorization is committed and the
     // next operation begins provider consumption.
     streamStartMs = Date.now()
+    streamStartPerfMs = performance.now()
     lastProgressAtMs = streamStartMs
     workDuration = createWorkDurationTracker({
       initialDurationMs: initialWorkDurationMs,
@@ -1451,6 +1554,18 @@ export function createChatTurnRuntime(args: {
           isEnabled: true,
           functionId: "api.chat.streamText",
         },
+        // Fires immediately before each provider call ATTEMPT — the anchor
+        // the SDK's own `timeToFirstOutputMs` is measured from, re-taken per
+        // retry (the SDK retries the whole call, notify included, so a 429
+        // backoff moves this anchor too). Keep the latest attempt's until the
+        // first step ends: that is the one the step's figures are relative
+        // to, and it places the first output chunk on this process's clock
+        // for the receipt's first-write delay without the retry gap inside.
+        onLanguageModelCallStart: () => {
+          if (stepCounter === 0 && firstOutputReleasedPerfMs === null) {
+            firstCallStartPerfMs = performance.now()
+          }
+        },
 
         // Compose the Tool runtime's step gate with the remaining provider
         // output allowance. AI SDK maxOutputTokens is per model call, so each
@@ -1474,11 +1589,25 @@ export function createChatTurnRuntime(args: {
             : undefined,
 
         // Per-step structured tracing: tool name, duration, token usage, success.
-        onStepEnd: async ({ toolCalls, toolResults, usage, finishReason }) => {
+        onStepEnd: async (step) => {
+          const { toolCalls, toolResults, usage, finishReason } = step
           stepCounter++
           observedToolCalls += toolCalls.length
           lastProgressAtMs = Date.now()
           lastStepFinishReason = finishReason ?? null
+
+          // The provider-timing source (ADR-0030): SDK step performance +
+          // usage feed both the Generation stats and the run timing receipt.
+          timing.recordStep(step)
+          if (
+            stepCounter === 1 &&
+            step.performance.timeToFirstOutputMs !== undefined
+          ) {
+            perf.record(
+              "provider_first_output",
+              step.performance.timeToFirstOutputMs
+            )
+          }
 
           // Durable persistence of the step's tool invocations AND its token
           // usage — EVERY step, tool calls or not (ADR-0021): the per-step
@@ -1542,11 +1671,11 @@ export function createChatTurnRuntime(args: {
           lastProgressAtMs = now
           resolvePostToolContinuation()
           lifecycle.stream.onChunk(chunk)
-          if (firstChunkLatencyMs === null) {
-            firstChunkLatencyMs = now - streamStartMs
-            // First provider event of ANY type — reasoning, source, and tool
-            // chunks satisfy this as readily as text.
-            perf.record("provider_first_event", firstChunkLatencyMs)
+          // Liveness only — this callback sits downstream of the smoothing
+          // transform, so any clock here would measure our own pacing.
+          sawProviderChunk = true
+          if (firstReleasedChunkLatencyMs === null) {
+            firstReleasedChunkLatencyMs = now - streamStartMs
           }
           if (firstTextDeltaLatencyMs === null && chunk.type === "text-delta") {
             firstTextDeltaLatencyMs = now - streamStartMs
@@ -1578,7 +1707,8 @@ export function createChatTurnRuntime(args: {
           // computed `errorMessage` for its telemetry below — pass the string.
           lifecycle.stream.noteStreamError(
             { message: errorMessage, recovery: publicError.recovery },
-            currentWorkDurationMs()
+            currentWorkDurationMs(),
+            buildTimingReceipt()
           )
           logBraintrustTraceMetadata(braintrustSpan, {
             ...braintrustMetadata,
@@ -1647,7 +1777,8 @@ export function createChatTurnRuntime(args: {
                 kind: "started-without-usage",
               },
               title: titleAttempt.current,
-            }
+            },
+            buildTimingReceipt()
           )
         },
 
@@ -1738,6 +1869,7 @@ export function createChatTurnRuntime(args: {
           })
 
           const totalLatencyMs = Date.now() - streamStartMs
+          const firstTokenLatencyMs = timing.firstOutputOffsetMs() ?? null
           logBraintrustTraceMetadata(braintrustSpan, {
             ...braintrustMetadata,
             finishReason: finishReason ?? null,
@@ -1747,9 +1879,9 @@ export function createChatTurnRuntime(args: {
             timeoutToolCalls,
             budgetDeniedToolCalls,
             firstTokenLatencyBucket:
-              firstChunkLatencyMs === null
+              firstTokenLatencyMs === null
                 ? null
-                : bucketLatencyMs(firstChunkLatencyMs),
+                : bucketLatencyMs(firstTokenLatencyMs),
             totalLatencyBucket: bucketLatencyMs(totalLatencyMs),
             usage: {
               inputTokens: usage?.inputTokens ?? null,
@@ -1765,10 +1897,10 @@ export function createChatTurnRuntime(args: {
             "chat_total_latency_bucket",
             bucketLatencyMs(totalLatencyMs)
           )
-          if (firstChunkLatencyMs !== null) {
+          if (firstTokenLatencyMs !== null) {
             Sentry.setTag(
               "chat_first_token_latency_bucket",
-              bucketLatencyMs(firstChunkLatencyMs)
+              bucketLatencyMs(firstTokenLatencyMs)
             )
           }
           Sentry.setContext("chat_response", {
@@ -1779,7 +1911,7 @@ export function createChatTurnRuntime(args: {
             failedToolCalls,
             timeoutToolCalls,
             budgetDeniedToolCalls,
-            firstTokenLatencyMs: firstChunkLatencyMs,
+            firstTokenLatencyMs,
             totalLatencyMs,
             reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
             workDurationMs: currentWorkDurationMs(),
@@ -1801,7 +1933,7 @@ export function createChatTurnRuntime(args: {
                 requestId,
                 chatId,
                 totalLatencyMs,
-                firstTokenLatencyMs: firstChunkLatencyMs,
+                firstTokenLatencyMs,
                 thresholdMs: slowRequestThresholdMs,
                 totalToolCalls,
                 failedToolCalls,
@@ -2032,6 +2164,25 @@ export function createChatTurnRuntime(args: {
       sendReasoning: true,
       sendSources: true,
       messageMetadata: ({ part }) => {
+        // Every stream part passes here, post-transform and in SDK order:
+        // the receipt's released-output anchors (first-write delay, wire
+        // stream window) are observed at this seam, not at the HTTP tap,
+        // which only runs when the response consumer pulls. The window ends
+        // at the released finish part, not the last output chunk, so it spans
+        // the same tail (last delta → provider finish event) the SDK's
+        // per-step response time does; otherwise pacing overhead reads
+        // negative by exactly that tail.
+        if (isOutputStreamPart(part)) {
+          const now = performance.now()
+          if (firstOutputReleasedPerfMs === null)
+            firstOutputReleasedPerfMs = now
+          lastOutputReleasedPerfMs = now
+        } else if (
+          part.type === "finish" &&
+          firstOutputReleasedPerfMs !== null
+        ) {
+          lastOutputReleasedPerfMs = performance.now()
+        }
         if (part.type === "start") {
           return {
             ...buildStartToolInvocationStreamMetadata(toolMetadataByName),
@@ -2056,6 +2207,8 @@ export function createChatTurnRuntime(args: {
             toolMetadataByCallId,
             reasoningDurationMs: reasoningActivity.getDurationMs() ?? null,
             workDurationMs: currentWorkDurationMs(),
+            // Every step has ended by the time the finish part is converted.
+            generationStats: timing.stats(),
           })
         }
         return undefined
@@ -2080,8 +2233,21 @@ export function createChatTurnRuntime(args: {
             finishReason,
             titleUsage,
             terminalFacts: { title: titleAttempt.current },
+            timingReceipt: buildTimingReceipt(),
           })
         } finally {
+          // Mirror the receipt's durations into the sampled perf log (guest
+          // turns included) so the benchmark harness can gate the segments
+          // this server owns. Settlement keeps its own span.
+          if (perf.sampled) {
+            const fields: Record<string, number> = {}
+            for (const [key, value] of Object.entries(buildTimingReceipt())) {
+              if (key !== "buildId" && typeof value === "number") {
+                fields[key] = value
+              }
+            }
+            perf.event("run_timing_receipt", fields)
+          }
           // Settlement owns request-scoped teardown (see the factory-level
           // note): the stream is truly over here — reload or not — so MCP
           // clients and analytics flushes release now, not at after() time.

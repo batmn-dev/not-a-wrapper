@@ -131,7 +131,7 @@ describe("event schema allow-list", () => {
       "model_config",
       "history_adaptation",
       "provider_request_started",
-      "provider_first_event",
+      "provider_first_output",
       "provider_first_text_delta",
       "server_first_stream_write",
       "response_stream_closed",

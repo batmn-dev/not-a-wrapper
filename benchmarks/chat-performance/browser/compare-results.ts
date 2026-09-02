@@ -13,7 +13,11 @@
  * or threshold breach.
  */
 import { existsSync, readFileSync } from "node:fs"
-import type { BenchmarkResultFile, ScenarioResult } from "./result-schema"
+import type {
+  BenchmarkResultFile,
+  MetricSummary,
+  ScenarioResult,
+} from "./result-schema"
 
 type Threshold = {
   /** p50 may regress by this fraction of the baseline… */
@@ -30,6 +34,13 @@ const GATES: Record<string, Threshold> = {
   sendToFirstVisibleTextMs: { relative: 0.35, absoluteFloor: 150 },
   totalBlockingTimeMs: { relative: 0.5, absoluteFloor: 100 },
   markdownProjectionMaxMs: { relative: 0.5, absoluteFloor: 20 },
+  // Run timing receipt segments this server owns (ADR-0030). The provider
+  // segments never gate: the deterministic script fixes them, and the harness
+  // correctness-checks the receipt against that script instead.
+  prepareMs: { relative: 0.35, absoluteFloor: 40 },
+  firstWriteDelayMs: { relative: 0.5, absoluteFloor: 20 },
+  pacingOverheadMs: { relative: 0.5, absoluteFloor: 50 },
+  settlementTotalMs: { relative: 0.5, absoluteFloor: 100 },
   stopToTerminalMs: { relative: 0.5, absoluteFloor: 20 },
 }
 
@@ -40,6 +51,17 @@ function fail(message: string): never {
 
 function scenarioKey(scenario: ScenarioResult): string {
   return `${scenario.scenario}/${scenario.action}/${scenario.viewport}/x${scenario.cpuThrottle}`
+}
+
+/**
+ * The p50 to gate on, or undefined when the metric is absent. A summary with
+ * no samples (`n` 0) is absent, never a zero: the harness summarizes an empty
+ * list when no run carried the timing receipt or server span, so gating on
+ * its 0 would pass a run that measured nothing.
+ */
+function gatedP50(summary: MetricSummary | undefined): number | undefined {
+  if (!summary || summary.n === 0) return undefined
+  return summary.p50
 }
 
 const [baselinePath, currentPath] = process.argv.slice(2)
@@ -95,14 +117,14 @@ const missingCurrentP50s = [...baselineByKey].flatMap(([key, base]) => {
   return Object.keys(GATES)
     .filter(
       (metric) =>
-        base.metrics[metric]?.p50 !== undefined &&
-        scenario.metrics[metric]?.p50 === undefined
+        gatedP50(base.metrics[metric]) !== undefined &&
+        gatedP50(scenario.metrics[metric]) === undefined
     )
     .map((metric) => `${key} ${metric}`)
 })
 if (missingCurrentP50s.length > 0) {
   fail(
-    `baseline metric p50(s) missing from current results: ${missingCurrentP50s.join(", ")}`
+    `baseline metric p50(s) missing or unsampled in current results: ${missingCurrentP50s.join(", ")}`
   )
 }
 const breaches: string[] = []
@@ -117,9 +139,16 @@ for (const scenario of current.scenarios) {
     continue
   }
   for (const [metric, threshold] of Object.entries(GATES)) {
-    const basedP50 = base.metrics[metric]?.p50
-    const currentP50 = scenario.metrics[metric]?.p50
-    if (basedP50 === undefined || currentP50 === undefined) continue
+    const basedP50 = gatedP50(base.metrics[metric])
+    const currentP50 = gatedP50(scenario.metrics[metric])
+    if (basedP50 === undefined || currentP50 === undefined) {
+      if (currentP50 !== undefined) {
+        console.log(
+          `[compare-results] ${scenarioKey(scenario)} ${metric}: no baseline samples — skipped (regenerate the baseline to gate it)`
+        )
+      }
+      continue
+    }
     if (basedP50 === 0 && currentP50 === 0) continue
     compared++
     const allowed = Math.max(

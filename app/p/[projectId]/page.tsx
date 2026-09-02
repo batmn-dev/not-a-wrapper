@@ -72,7 +72,7 @@ export default async function Page({ params }: Props) {
           the shell's pre-<main> header slot after a first send (ADR-0017). */}
       <ChatChromeProvider
         initialAppHeader={false}
-        initialFixedHeader="always"
+        initialFixedHeader="less-than-xl"
       >
         <LayoutApp header={<ChatChromeHeader />}>
           {/* The project surface IS the Chat surface: the first turn allocates

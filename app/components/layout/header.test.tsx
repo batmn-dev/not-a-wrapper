@@ -65,13 +65,32 @@ describe("Header", () => {
     expect(header?.getAttribute("data-fixed-header")).toBe("always")
     expect(header?.className).toContain("h-header-height")
     expect(header?.className).toContain("sticky")
+    expect(header?.className).toContain("bg-background")
+  })
+
+  it("restores the responsive background and under-scroll edge", () => {
+    act(() => root.render(<Header hasSidebar fixedHeader="less-than-xl" />))
+
+    const header = container.querySelector("#page-header")
+    expect(header?.getAttribute("data-fixed-header")).toBe("less-than-xl")
+    expect(header?.className).toContain("bg-background")
+    expect(header?.className).toContain(
+      "group-data-scroll-from-top/scroll-root:[box-shadow:var(--sharp-edge-top-shadow)]"
+    )
+    expect(header?.className).toContain(
+      "data-[fixed-header=less-than-xl]:@w-xl/main:bg-transparent"
+    )
+    expect(header?.className).toContain(
+      "data-[fixed-header=less-than-xl]:@w-xl/main:[box-shadow:none]!"
+    )
   })
 
   it("supports transparent headers outside the chat route contract", () => {
     act(() => root.render(<Header hasSidebar fixedHeader="never" />))
 
-    expect(
-      container.querySelector("#page-header")?.getAttribute("data-fixed-header")
-    ).toBe("never")
+    const header = container.querySelector("#page-header")
+    expect(header?.getAttribute("data-fixed-header")).toBe("never")
+    expect(header?.className).toContain("bg-transparent")
+    expect(header?.className).toContain("shadow-none")
   })
 })

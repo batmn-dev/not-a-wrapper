@@ -88,31 +88,46 @@ vi.mock("@/components/ui/thinking-bar", () => ({
 vi.mock("./message", () => ({
   Message: ({
     model,
+    onEditingChange,
     onReload,
   }: {
     model: {
       id: string
+      kind: "assistant" | "user" | "unsupported"
       text: string
+      isEditing?: boolean
       status?: string
       finishReason?: string
       retryDisabled?: boolean
       view?: { reasoning?: { phase?: string } }
     }
+    onEditingChange?: (messageId: string, isEditing: boolean) => void
     onReload?: (messageId: string) => void
   }) => (
-    <button
-      data-can-reload={Boolean(onReload)}
-      data-finish-reason={model.finishReason}
-      data-reasoning-phase={model.view?.reasoning?.phase}
-      data-retry-disabled={Boolean(model.retryDisabled)}
-      data-status={model.status}
-      data-testid={`message-${model.id}`}
-      disabled={model.retryDisabled}
-      onClick={() => onReload?.(model.id)}
-      type="button"
-    >
-      {model.text}
-    </button>
+    <>
+      <button
+        data-can-reload={Boolean(onReload)}
+        data-finish-reason={model.finishReason}
+        data-reasoning-phase={model.view?.reasoning?.phase}
+        data-retry-disabled={Boolean(model.retryDisabled)}
+        data-status={model.status}
+        data-testid={`message-${model.id}`}
+        disabled={model.retryDisabled}
+        onClick={() => onReload?.(model.id)}
+        type="button"
+      >
+        {model.text}
+      </button>
+      {model.kind === "user" ? (
+        <button
+          data-testid={`toggle-edit-${model.id}`}
+          onClick={() => onEditingChange?.(model.id, !Boolean(model.isEditing))}
+          type="button"
+        >
+          Toggle edit
+        </button>
+      ) : null}
+    </>
   ),
 }))
 
@@ -146,7 +161,7 @@ describe("Conversation recovered turn contracts", () => {
     vi.unstubAllGlobals()
   })
 
-  function render(scrollToMessageId?: string) {
+  function render(scrollToMessageId?: string, chatId?: string) {
     if (!container) {
       container = document.createElement("div")
       document.body.append(container)
@@ -156,6 +171,7 @@ describe("Conversation recovered turn contracts", () => {
       root?.render(
         <Conversation
           messages={messages}
+          chatId={chatId}
           scrollToMessageId={scrollToMessageId}
           onEdit={vi.fn()}
           onReload={vi.fn()}
@@ -173,6 +189,53 @@ describe("Conversation recovered turn contracts", () => {
     ).toContain(
       "keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))]"
     )
+  })
+
+  it("puts the edit-only 40px separation on the user turn-message owner", () => {
+    render()
+
+    const userOwner = () =>
+      container?.querySelector<HTMLElement>(
+        '[data-turn="user"] [data-conversation-screenshot-content]'
+      )
+    const assistantOwner = container?.querySelector<HTMLElement>(
+      '[data-turn="assistant"] [data-conversation-screenshot-content]'
+    )
+
+    expect(userOwner()?.classList.contains("mb-10")).toBe(false)
+    expect(assistantOwner?.classList.contains("mb-10")).toBe(false)
+
+    act(() => {
+      container
+        ?.querySelector<HTMLButtonElement>('[data-testid="toggle-edit-user-1"]')
+        ?.click()
+    })
+
+    expect(userOwner()?.classList.contains("mb-10")).toBe(true)
+    expect(assistantOwner?.classList.contains("mb-10")).toBe(false)
+  })
+
+  it("drops the open editor when the mounted Conversation changes chat", () => {
+    render(undefined, "chat-a")
+    const editing = () =>
+      container
+        ?.querySelector<HTMLElement>(
+          '[data-turn="user"] [data-conversation-screenshot-content]'
+        )
+        ?.classList.contains("mb-10")
+
+    act(() => {
+      container
+        ?.querySelector<HTMLButtonElement>('[data-testid="toggle-edit-user-1"]')
+        ?.click()
+    })
+    expect(editing()).toBe(true)
+
+    render(undefined, "chat-b")
+    expect(editing()).toBe(false)
+
+    render(undefined, "chat-a")
+    expect(editing()).toBe(false)
   })
 
   it("uses the exact assistant containment guard and deep-link sentinels", () => {
@@ -1045,9 +1108,9 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
       '[data-turn-id="assistant-turn:optimistic-user"]'
     )
     expect(streamingAssistant).toBe(pendingAssistant)
-    expect(
-      streamingAssistant?.closest("[data-turn-id-container]")
-    ).toBe(pendingAssistantWrapper)
+    expect(streamingAssistant?.closest("[data-turn-id-container]")).toBe(
+      pendingAssistantWrapper
+    )
 
     await act(async () => {
       const writer = lifecycle.getStreamWriter()

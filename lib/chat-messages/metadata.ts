@@ -27,6 +27,10 @@
  */
 
 import { isChatErrorRecovery, type ChatErrorRecovery } from "@/lib/chat-errors"
+import {
+  parseGenerationStats,
+  type GenerationStats,
+} from "@/lib/chat-messages/generation-stats"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import { isModelReasoningEffort } from "@/lib/models/types"
 import {
@@ -156,6 +160,17 @@ export function getReasoningDurationMs(metadata: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : undefined
+}
+
+/**
+ * Read the Generation stats (ADR-0030) off a message's metadata. Stamped by the
+ * chat turn runtime at finish; malformed values are dropped, never coerced.
+ */
+export function getGenerationStats(
+  metadata: unknown
+): GenerationStats | undefined {
+  if (!isRecord(metadata)) return undefined
+  return parseGenerationStats(metadata.generationStats)
 }
 
 /** Read the server-persisted total assistant work duration (ms). */
@@ -346,21 +361,23 @@ export function adoptServerOwned(
     return !metadataValueEquals(localRecord[key], serverRecord[key])
   })
   // Blob-owned keys: persisted inside the validated metadata blob rather than
-  // as top-level message fields (terminal durations and applied turn policy).
-  // Adopt them when the durable snapshot has a
-  // value, but never clear a fresher live value merely because an
-  // intermediate server snapshot has not landed it yet.
+  // as top-level message fields (terminal durations, applied turn policy, and
+  // generation stats). Adopt them when the durable snapshot has a value, but
+  // never clear a fresher live value merely because an intermediate server
+  // snapshot has not landed it yet. Compared structurally: every snapshot
+  // materializes `generationStats` fresh, so identity would read as a change.
   const persistedStreamKeys = [
     "reasoningDurationMs",
     "workDurationMs",
     "reasoningEffort",
     "generationBudget",
+    "generationStats",
   ] as const
   const persistedStreamMetadataChanged = persistedStreamKeys.some(
     (key) =>
       serverRecord &&
       Object.prototype.hasOwnProperty.call(serverRecord, key) &&
-      !Object.is(localRecord?.[key], serverRecord[key])
+      !metadataValueEquals(localRecord?.[key], serverRecord[key])
   )
 
   if (

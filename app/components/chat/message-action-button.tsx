@@ -13,6 +13,7 @@ type MessageActionButtonProps = {
   disabledReason?: ReactNode
   side?: "top" | "bottom" | "left" | "right"
   size?: "default" | "branch"
+  testId?: string
 }
 
 /** Shared message-footer action with tooltip and disabled-reason handling. */
@@ -25,6 +26,7 @@ export function MessageActionButton({
   disabledReason,
   side = "bottom",
   size = "default",
+  testId,
 }: MessageActionButtonProps) {
   return (
     <MessageAction tooltip={disabledReason ?? tooltip ?? label} side={side}>
@@ -40,6 +42,7 @@ export function MessageActionButton({
         )}
         aria-label={label}
         aria-disabled={disabledReason ? true : undefined}
+        data-testid={testId}
         onClick={disabledReason ? undefined : onClick}
         disabled={disabled}
         type="button"

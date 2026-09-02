@@ -8,6 +8,7 @@ describe("turnRowModelsEqual", () => {
       kind: "user",
       id: "user-1",
       text: "hello",
+      isEditing: false,
       attachments: [{ name: "a.txt", contentType: "text/plain", url: "/a" }],
       branch: {
         messageId: "user-1",
@@ -18,6 +19,12 @@ describe("turnRowModelsEqual", () => {
     }
 
     expect(turnRowModelsEqual(base, structuredClone(base))).toBe(true)
+    expect(
+      turnRowModelsEqual(base, {
+        ...structuredClone(base),
+        isEditing: true,
+      })
+    ).toBe(false)
     expect(
       turnRowModelsEqual(base, {
         ...structuredClone(base),

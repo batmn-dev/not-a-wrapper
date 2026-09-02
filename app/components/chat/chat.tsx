@@ -8,6 +8,7 @@ import { Conversation } from "@/app/components/chat/conversation"
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { useGlobalPromptFocus } from "@/app/hooks/use-global-prompt-focus"
 import type { Id } from "@/convex/_generated/dataModel"
+import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
@@ -17,7 +18,6 @@ import {
   usePublishActiveChatStatus,
 } from "@/lib/chat-store/status/sidebar-chat-status"
 import type { Chats } from "@/lib/chat-store/types"
-import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
@@ -419,13 +419,10 @@ function ChatInner({
     >
       <div
         id="thread"
-        // `@container/thread` scopes cqw units to the SCROLL COLUMN (unlike
-        // `@container/main`, which deliberately spans the activity dock — see
-        // layout-app.tsx). The markdown table breakout (globals.css
-        // `.markdown-table-container`) measures 100cqw against it, so tables
-        // bleed to the thread edge and never under the docked panel. The named
-        // `/main` tier queries pass through untouched.
-        className="group/thread @container/thread flex min-h-full flex-1 flex-col"
+        // LayoutApp makes #main the nearest `@container/main`, matching the
+        // reference's FloatingContent branch. Both named tiers and 100cqw table
+        // breakout therefore use the conversation width after the docked panel.
+        className="group/thread flex min-h-full flex-1 flex-col"
         // The thread exposes its context-keep fraction as an
         // inline knob (theirs is React-set the same way; `.threadScrollVars`
         // consumes it with the same 1/3 fallback).

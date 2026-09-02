@@ -71,6 +71,10 @@ const WORKER_OPS: {
   // settlement digest, not the (revoked) run grant — see chatRuntimeWorker.
   finalizeTerminalUsage: (ctx, args) =>
     ctx.runMutation(internal.chatRuntimeWorker.finalizeTerminalUsage, args),
+  // Receipt attach after a Stop/supersession: authenticated against the
+  // run's receipt-attach digest, not the (revoked) run grant.
+  attachRunTimingReceipt: (ctx, args) =>
+    ctx.runMutation(internal.chatRuntimeWorker.attachRunTimingReceipt, args),
 }
 
 function jsonResponse(

@@ -39,28 +39,34 @@ export function LayoutApp({
     <HistorySearchProvider>
       <ProjectPinningProvider>
         <ActivityPanelHostProvider>
-          <div className="flex h-svh w-full overflow-hidden">
-            {hasSidebar && <AppSidebar />}
-            <div className="side-pane-shell-host relative flex min-w-0 flex-1">
-              <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
-                <ScrollRoot>
-                  <Fragment key="app-header">
-                    {header === undefined ? (
-                      <Header hasSidebar={hasSidebar} fixedHeader="always" />
-                    ) : (
-                      header
-                    )}
-                  </Fragment>
-                  <MainContent id="main" className="min-h-0 flex-1">
-                    {children}
-                  </MainContent>
-                </ScrollRoot>
+          <div className="flex h-svh w-screen flex-col pt-[env(safe-area-inset-top,0px)]">
+            <div className="relative z-0 flex min-h-0 w-full flex-1">
+              <div className="relative flex min-h-0 w-full min-w-0 flex-1">
+                {hasSidebar && <AppSidebar />}
+                <div className="side-pane-shell-host relative flex min-h-0 min-w-0 flex-1">
+                  <div className="@container/main relative flex min-w-0 flex-1 -translate-y-[calc(env(safe-area-inset-bottom,0px)/2)] flex-col pt-[calc(env(safe-area-inset-bottom,0px)/2)]">
+                    <ScrollRoot>
+                      <Fragment key="app-header">
+                        {header === undefined ? (
+                          <Header
+                            hasSidebar={hasSidebar}
+                            fixedHeader="less-than-xl"
+                          />
+                        ) : (
+                          header
+                        )}
+                      </Fragment>
+                      <MainContent
+                        id="main"
+                        className="@container/main min-h-0 min-w-0 flex-1 self-stretch"
+                      >
+                        {children}
+                      </MainContent>
+                    </ScrollRoot>
+                  </div>
+                  <ActivityPanelDockSlot />
+                </div>
               </div>
-              {/* Activity panel docked track — a flex sibling of the scroll column,
-                so opening it narrows the source-parity `@container/main` column
-                without moving the scroll/composer machinery. Collapsed to w-0
-                when closed / below lg. */}
-              <ActivityPanelDockSlot />
             </div>
           </div>
         </ActivityPanelHostProvider>

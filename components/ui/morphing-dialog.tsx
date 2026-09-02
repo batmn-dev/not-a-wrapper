@@ -279,6 +279,7 @@ function MorphingDialogTitle({
 
   return (
     <motion.div
+      id={`motion-ui-morphing-dialog-title-${uniqueId}`}
       layoutId={`dialog-title-container-${uniqueId}`}
       className={className}
       style={style}
@@ -345,7 +346,7 @@ function MorphingDialogDescription({
       initial="initial"
       animate="animate"
       exit="exit"
-      id={`dialog-description-${uniqueId}`}
+      id={`motion-ui-morphing-dialog-description-${uniqueId}`}
     >
       {children}
     </motion.div>

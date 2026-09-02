@@ -42,6 +42,35 @@ const vToolInvocationDisplayMetadata = v.object({
   openWorld: v.optional(v.boolean()),
 })
 
+/**
+ * Generation stats (ADR-0030): the user-facing per-message record, mirrored
+ * from `lib/chat-messages/generation-stats.ts`. Every field optional; absent
+ * means the provider or runtime never observed it.
+ */
+export const vGenerationStats = v.object({
+  timeToFirstTokenMs: v.optional(v.number()),
+  outputStreamMs: v.optional(v.number()),
+  outputTokens: v.optional(v.number()),
+  reasoningTokens: v.optional(v.number()),
+  inputTokens: v.optional(v.number()),
+  cachedInputTokens: v.optional(v.number()),
+  stepCount: v.optional(v.number()),
+  providerToolCalls: v.optional(v.number()),
+})
+
+const GENERATION_STATS_DURATION_KEYS = [
+  "timeToFirstTokenMs",
+  "outputStreamMs",
+] as const
+const GENERATION_STATS_COUNT_KEYS = [
+  "outputTokens",
+  "reasoningTokens",
+  "inputTokens",
+  "cachedInputTokens",
+  "stepCount",
+  "providerToolCalls",
+] as const
+
 export const vToolInvocationStreamMetadata = v.object({
   reasoningDurationMs: v.optional(v.number()),
   // Optional while production may contain rows written before work timing.
@@ -50,6 +79,8 @@ export const vToolInvocationStreamMetadata = v.object({
   reasoningEffort: v.optional(vReasoningEffort),
   // Applied total generation allowance (ADR-0028), including reasoning.
   generationBudget: v.optional(v.number()),
+  // Stamped at finish (ADR-0030); persisted by the projector below.
+  generationStats: v.optional(vGenerationStats),
   toolMetadataByName: v.optional(
     v.record(v.string(), vToolInvocationDisplayMetadata)
   ),
@@ -121,6 +152,28 @@ function projectDisplayMetadata(raw: unknown): DisplayMetadata | undefined {
   return display as DisplayMetadata
 }
 
+function optionalCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined
+}
+
+function projectGenerationStats(
+  raw: unknown
+): Infer<typeof vGenerationStats> | undefined {
+  if (!isRecord(raw)) return undefined
+  const stats: Record<string, unknown> = {}
+  for (const key of GENERATION_STATS_DURATION_KEYS) {
+    setIfDefined(stats, key, optionalDurationMs(raw[key]))
+  }
+  for (const key of GENERATION_STATS_COUNT_KEYS) {
+    setIfDefined(stats, key, optionalCount(raw[key]))
+  }
+  return Object.keys(stats).length > 0
+    ? (stats as Infer<typeof vGenerationStats>)
+    : undefined
+}
+
 function projectDisplayRecord(
   raw: unknown
 ): Record<string, DisplayMetadata> | undefined {
@@ -173,6 +226,11 @@ export function projectPersistedMessageMetadata(
       raw.generationBudget > 0
       ? raw.generationBudget
       : undefined
+  )
+  setIfDefined(
+    result,
+    "generationStats",
+    projectGenerationStats(raw.generationStats)
   )
   setIfDefined(
     result,

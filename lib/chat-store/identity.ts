@@ -81,6 +81,14 @@ export function isOptimisticMessageId(
   return typeof id === "string" && id.startsWith(OPTIMISTIC_ID_PREFIX)
 }
 
+export function isOptimisticEditMessageId(
+  id: string | null | undefined
+): id is OptimisticEditMessageId {
+  return (
+    typeof id === "string" && id.startsWith(OPTIMISTIC_EDIT_MESSAGE_ID_PREFIX)
+  )
+}
+
 export function isGuestUserId(
   id: string | null | undefined
 ): id is GuestUserId {

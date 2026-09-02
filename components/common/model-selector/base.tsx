@@ -470,7 +470,6 @@ function ModelSelectorRows({
           className={className}
           aria-label={`Show legacy models for ${row.provider.providerName}`}
           onPointerDown={(event) => event.preventDefault()}
-          onMouseMove={(event) => event.preventBaseUIHandler()}
           onClick={(event) => {
             event.preventBaseUIHandler()
             onShowLegacy(row.provider.providerId, event.currentTarget)

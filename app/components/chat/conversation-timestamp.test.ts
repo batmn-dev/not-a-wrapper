@@ -1,4 +1,5 @@
 import { projectSelectedPath } from "@/lib/chat-store/turns/selected-path"
+import { createOptimisticEditMessageId } from "@/lib/chat-store/identity"
 import type { ChatTurnMessage } from "@/lib/chat-turn/chat-turn-controller"
 import { describe, expect, it } from "vitest"
 import {
@@ -33,6 +34,84 @@ describe("deriveConversationTimestampHeaders", () => {
 
     expect(exactlyOneHour).toBeUndefined()
     expect(oneMillisecondBeyond?.kind).toBe("full")
+  })
+
+  it("shows a fresh optimistic edit immediately", () => {
+    const [header] = deriveConversationTimestampHeaders(
+      [
+        {
+          id: createOptimisticEditMessageId(() => "replacement"),
+          role: "user",
+          createdAt: now,
+        },
+      ],
+      now
+    )
+
+    expect(header).toEqual({ kind: "full", date: now })
+  })
+
+  it("shows the selected edited user branch without treating response regeneration as an edit", () => {
+    const userSiblings = [
+      { messageId: "user-original" },
+      { messageId: "user-edited" },
+    ]
+    const assistantSiblings = [
+      { messageId: "assistant-original" },
+      { messageId: "assistant-regenerated" },
+    ]
+    const edited = deriveConversationTimestampHeaders(
+      [
+        {
+          id: "user-edited",
+          role: "user",
+          createdAt: now,
+          metadata: {
+            branch: {
+              messageId: "user-edited",
+              currentIndex: 1,
+              total: 2,
+              siblings: userSiblings,
+            },
+          },
+        },
+      ],
+      now
+    )
+    const originalWithRegeneratedResponse = deriveConversationTimestampHeaders(
+      [
+        {
+          id: "user-original",
+          role: "user",
+          createdAt: now,
+          metadata: {
+            branch: {
+              messageId: "user-original",
+              currentIndex: 0,
+              total: 2,
+              siblings: userSiblings,
+            },
+          },
+        },
+        {
+          id: "assistant-regenerated",
+          role: "assistant",
+          createdAt: now,
+          metadata: {
+            branch: {
+              messageId: "assistant-regenerated",
+              currentIndex: 1,
+              total: 2,
+              siblings: assistantSiblings,
+            },
+          },
+        },
+      ],
+      now
+    )
+
+    expect(edited[0]).toEqual({ kind: "full", date: now })
+    expect(originalWithRegeneratedResponse).toEqual([undefined, undefined])
   })
 
   it("uses a strict one-hour assistant-to-user gap", () => {

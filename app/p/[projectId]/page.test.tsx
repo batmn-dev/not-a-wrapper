@@ -36,11 +36,18 @@ vi.mock("@/app/components/chat/chat-chrome-host", () => ({
   ChatChromeProvider: ({
     children,
     initialAppHeader,
+    initialFixedHeader,
   }: {
     children: React.ReactNode
     initialAppHeader: boolean
+    initialFixedHeader: string
   }) => (
-    <div data-initial-app-header={String(initialAppHeader)}>{children}</div>
+    <div
+      data-initial-app-header={String(initialAppHeader)}
+      data-initial-fixed-header={initialFixedHeader}
+    >
+      {children}
+    </div>
   ),
   ChatChromeHeader: () => <div data-chat-chrome-header="" />,
 }))
@@ -86,6 +93,7 @@ describe("project page", () => {
     expect(html).toContain('data-project-id="project-123456"')
     expect(html).toContain("Authorized project")
     expect(html).toContain('data-initial-app-header="false"')
+    expect(html).toContain('data-initial-fixed-header="less-than-xl"')
     expect(renderToStaticMarkup(pageMocks.layoutHeader)).toContain(
       "data-chat-chrome-header"
     )

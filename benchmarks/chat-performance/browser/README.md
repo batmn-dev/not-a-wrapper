@@ -36,8 +36,9 @@ optimistic paint / dispatch / first chunk / first visible text, stream
 duration, stop → terminal), responsiveness (long tasks, TBT, rAF gaps),
 rendering cost (projection advances, Shiki), publication accounting
 (callbacks vs publications vs coalesced), DOM/heap growth, and the sampled
-server spans. Aggregates are p50/p75/p95/max — treat p95 as indicative only
-at the default sample size.
+server spans. Aggregates are n/p50/p75/p95/max — treat p95 as indicative only
+at the default sample size. `n` 0 means no run produced the metric; the
+percentiles are then 0 and `compare-results.ts` treats the metric as absent.
 
 **Correctness gates every number**: the captured SSE stream is folded and
 hash-compared against the scenario oracle (prefix rule for stopped streams,

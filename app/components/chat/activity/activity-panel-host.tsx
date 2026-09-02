@@ -11,8 +11,8 @@ import {
 } from "react"
 
 /**
- * Bridges the Chat-owned `ActivityPanel` to a slot rendered by `LayoutApp`
- * without moving the scroll column.
+ * Bridges the Chat-owned `ActivityPanel` to the full-height FloatingContent
+ * slot rendered beside LayoutApp's conversation scroll column.
  *
  * The bridge shares the slot's DOM element rather than a React node: `Chat`
  * portals the docked shell into that element, so the docked subtree stays in
@@ -71,6 +71,7 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
   return (
     <div
       ref={ref}
+      data-stage-thread-flyout=""
       data-slot="activity-panel-dock"
       data-testid="stage-thread-flyout"
       data-state="closed"
@@ -80,7 +81,7 @@ export function ActivityPanelDockSlot({ className }: { className?: string }) {
         // `max-lg:transition-none` keeps the lg-boundary snap instant; `motion-reduce`
         // disables it (the hook also unmounts immediately under reduced motion, so no
         // transitionend is awaited).
-        "relative w-0 shrink-0 overflow-hidden transition-[width] duration-[520ms] ease-[linear(0,0.0377,0.1243,0.2318,0.3434,0.4497,0.5459,0.6299,0.7017,0.7619,0.8117,0.8523,0.8853,0.9118,0.9329,0.9497,0.963,0.9735,0.9817,0.9881,0.9931,0.997,1)] motion-reduce:transition-none max-lg:w-0! max-lg:transition-none",
+        "bg-background relative z-1 w-0 shrink-0 overflow-x-hidden transition-[width] duration-[520ms] ease-[linear(0,0.0377,0.1243,0.2318,0.3434,0.4497,0.5459,0.6299,0.7017,0.7619,0.8117,0.8523,0.8853,0.9118,0.9329,0.9497,0.963,0.9735,0.9817,0.9881,0.9931,0.997,1)] motion-reduce:transition-none max-lg:w-0! max-lg:transition-none",
         "data-[expanded]:w-[var(--activity-panel-width)]",
         className
       )}

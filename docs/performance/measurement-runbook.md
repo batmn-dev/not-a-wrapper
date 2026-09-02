@@ -23,6 +23,34 @@ Interpret results using:
 - `docs/performance/2026-08-27-system-performance-baseline.md` for the pinned
   runner class, fixture hashes, and comparison baseline.
 
+## Reading run timing receipts (production or dev)
+
+Every durable generation run carries a **Run timing receipt** (ADR-0030,
+metric dictionary group 13). To ask "did build X slow prepare for route Y",
+summarize completed runs in a window, grouped by model, route, and build:
+
+```bash
+# Last 7 days, computed at run time; change the day count to widen the window.
+bunx convex run runTiming:timingSummary "{\"sinceMs\": $(( $(date +%s) * 1000 - 7*24*60*60*1000 ))}"
+```
+
+`sinceMs` is optional and defaults to the last 24 hours. Keep the window
+recent: the query returns at most `"limit"` runs, newest first, so a window
+holding more completed runs than the limit silently drops the oldest ones.
+`scannedRuns` equal to the limit means the window was capped. Optional
+filters: `"model"`, `"buildId"` (the server build identifier stamped on the
+run: the short commit SHA, or the Sentry release when the SHA is unavailable),
+`"limit"` (default 2000, max 5000); filters apply within the returned window
+(the newest `limit` completed runs), so when `scannedRuns` equals the limit a
+filtered summary can omit older matches: narrow `sinceMs` or raise `limit`.
+`matchedRuns` counts the runs the filters kept. The result lists n, p50,
+and max per receipt segment plus the derived `serverTimeToFirstOutputMs` and
+`pacingOverheadMs`; `p95` appears only from 20 samples up (the dictionary's
+non-metrics rule). Add `--prod` to read the production deployment. Compare
+two builds side by side by running it twice with each `buildId`; local runs
+carry no build id. Stopped runs carry the partial receipt their worker
+attached after the Stop; runs the reaper closed carry none.
+
 ## Manual measurement
 
 Use an authenticated Chrome session only when the deterministic harness does

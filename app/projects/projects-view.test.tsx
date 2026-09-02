@@ -86,11 +86,37 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DialogHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  DialogClose: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DialogCloseButton: () => <button type="button" aria-label="Close" />,
+  DialogHeader: ({
+    children,
+    title,
+  }: {
+    children?: React.ReactNode
+    title?: React.ReactNode
+  }) => (
+    <div>
+      {title ? <h2>{title}</h2> : null}
+      {children}
+    </div>
   ),
-  DialogFooter: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  DialogFooter: ({
+    children,
+    footerContent,
+    primaryButton,
+    secondaryButton,
+  }: {
+    children?: React.ReactNode
+    footerContent?: React.ReactNode
+    primaryButton?: React.ReactNode
+    secondaryButton?: React.ReactNode
+  }) => (
+    <div>
+      {footerContent}
+      {secondaryButton}
+      {children}
+      {primaryButton}
+    </div>
   ),
   DialogTitle: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -333,9 +359,26 @@ describe("ProjectsView essential behavior", () => {
     )!
     await act(async () => void click(newButton))
     const nameInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Project name"]'
+      'input[placeholder="Copenhagen Trip"]'
     )!
+    const createButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Create project"
+    )!
+
+    expect(createButton.disabled).toBe(true)
+    expect(createButton.className.split(" ")).toContain(
+      "disabled:bg-primary/50"
+    )
+    await act(async () => setInputValue(nameInput, "P".repeat(51)))
+    expect(nameInput.getAttribute("aria-invalid")).toBe("true")
+    expect(
+      leafWithText("Project names cannot be longer than 50 characters.")
+    ).toBeTruthy()
+    expect(createButton.disabled).toBe(true)
+
     await act(async () => setInputValue(nameInput, "My project"))
+    expect(nameInput.hasAttribute("aria-invalid")).toBe(false)
+    expect(createButton.disabled).toBe(false)
     await act(async () => {
       nameInput
         .closest("form")

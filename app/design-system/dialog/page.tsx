@@ -12,10 +12,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import type { Metadata } from "next"
@@ -25,10 +23,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 
@@ -38,19 +34,19 @@ export function DialogDefault() {
       <DialogTrigger render={<Button variant="outline" />}>
         Edit profile
       </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit profile</DialogTitle>
-          <DialogDescription>
-            Make changes to your profile here. Click save when you are done.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
-          <DialogClose render={<Button />}>Save changes</DialogClose>
-        </DialogFooter>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader
+          title="Edit profile"
+          description="Make changes to your profile here. Click save when you are done."
+        />
+        <DialogFooter
+          secondaryButton={
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          }
+          primaryButton={
+            <DialogClose render={<Button />}>Save changes</DialogClose>
+          }
+        />
       </DialogContent>
     </Dialog>
   )
@@ -87,13 +83,42 @@ const apiRows = [
     prop: "DialogContent showCloseButton",
     type: "boolean",
     defaultValue: "true",
-    description: "Renders the ghost close button in the top-right corner.",
+    description:
+      "Renders the ghost close button in the top-right corner unless a titled DialogHeader owns the close control.",
   },
   {
-    prop: "DialogFooter showCloseButton",
+    prop: "DialogContent size",
+    type: '"normal" | "large" | "xlarge" | "fullscreen"',
+    defaultValue: '"normal"',
+    description: "Uses a shared responsive modal width or the full container.",
+  },
+  {
+    prop: "DialogHeader title / description",
+    type: "ReactNode",
+    defaultValue: "—",
+    description:
+      "Builds the title region and owns the close affordance; DialogContent's default close stays suppressed while a titled header is mounted.",
+  },
+  {
+    prop: "DialogHeader hideCloseButton",
     type: "boolean",
     defaultValue: "false",
-    description: "Appends an outline Close button after the footer children.",
+    description:
+      "Hides the titled header's close button. The header still owns the control, so no fallback close appears.",
+  },
+  {
+    prop: "DialogCloseButton",
+    type: "DialogPrimitive.Close props",
+    defaultValue: "—",
+    description:
+      "Provides the shared 36px close affordance. Never auto-focuses unless autoFocus is passed.",
+  },
+  {
+    prop: "DialogFooter button slots",
+    type: "ReactNode",
+    defaultValue: "—",
+    description:
+      "Places footer content and secondary/primary actions. Exclusive with children and showCloseButton, which belong to the plain children footer.",
   },
 ] as const
 
@@ -124,20 +149,21 @@ export default function DialogPage() {
             <DialogTrigger render={<Button variant="outline" />}>
               Edit profile
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Edit profile</DialogTitle>
-                <DialogDescription>
-                  Make changes to your profile here. Click save when you are
-                  done.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>
-                  Cancel
-                </DialogClose>
-                <DialogClose render={<Button />}>Save changes</DialogClose>
-              </DialogFooter>
+            <DialogContent showCloseButton={false}>
+              <DialogHeader
+                title="Edit profile"
+                description="Make changes to your profile here. Click save when you are done."
+              />
+              <DialogFooter
+                secondaryButton={
+                  <DialogClose render={<Button variant="outline" />}>
+                    Cancel
+                  </DialogClose>
+                }
+                primaryButton={
+                  <DialogClose render={<Button />}>Save changes</DialogClose>
+                }
+              />
             </DialogContent>
           </Dialog>
         </ComponentPreview>

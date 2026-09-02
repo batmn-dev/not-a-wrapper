@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   createLocalChatId,
   createOptimisticChatId,
+  createOptimisticEditMessageId,
   getChatPersistenceMode,
   getMessagePersistenceMode,
+  isOptimisticEditMessageId,
 } from "./identity"
 
 describe("chat identity helpers", () => {
@@ -43,5 +45,15 @@ describe("chat identity helpers", () => {
     expect(
       getMessagePersistenceMode("jh7f4n2k9p8q6r3s5t1v0wxyz", options)
     ).toBe("localOnly")
+  })
+
+  it("distinguishes optimistic edits from ordinary optimistic messages", () => {
+    expect(
+      isOptimisticEditMessageId(
+        createOptimisticEditMessageId(() => "replacement")
+      )
+    ).toBe(true)
+    expect(isOptimisticEditMessageId("optimistic-new-message")).toBe(false)
+    expect(isOptimisticEditMessageId("message-server-owned")).toBe(false)
   })
 })

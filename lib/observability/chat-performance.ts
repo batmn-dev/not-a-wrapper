@@ -96,9 +96,13 @@ export const CHAT_PERF_SPAN_NAMES = [
   "provider_request_started",
   "server_first_stream_write",
   "response_stream_closed",
-  // Provider-anchored: measured from the `streamText` call. Kept separate
-  // because reasoning/source/tool events can precede the first text delta.
-  "provider_first_event",
+  // Provider-anchored (ADR-0030): the AI SDK's step-0 `timeToFirstOutputMs`,
+  // sampled upstream of every transform — the same figure the run timing
+  // receipt stores. Replaced `provider_first_event`, which the chunk callback
+  // measured AFTER smoothing.
+  "provider_first_output",
+  // Transport: first text delta RELEASED to the response pipeline (measured
+  // post-transform in the chunk callback, so smoothing holdback is inside it).
   "provider_first_text_delta",
   // Whole-settlement duration (drain + final flush + terminal write).
   "settlement_total",
@@ -241,6 +245,19 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
     op: oneOf(...DURABLE_WORKER_WRITE_OPS),
     durationMs: REQUIRED_NUMBER,
     ok: BOOLEAN,
+    correlationId: CORRELATION,
+  },
+  // The run timing receipt (ADR-0030) as the turn observed it, mirrored once
+  // per sampled turn (guest turns included) so the benchmark harness can gate
+  // the segments this server owns without a Convex read. Durations only; the
+  // build id stays on the run row, and settlement keeps its own span.
+  run_timing_receipt: {
+    prepareMs: NUMBER,
+    providerFirstOutputMs: NUMBER,
+    firstWriteDelayMs: NUMBER,
+    modelResponseMs: NUMBER,
+    toolExecutionMs: NUMBER,
+    wireStreamMs: NUMBER,
     correlationId: CORRELATION,
   },
 }

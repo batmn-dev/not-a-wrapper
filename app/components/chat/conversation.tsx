@@ -19,6 +19,7 @@ import { UIMessage as MessageType } from "@ai-sdk/react"
 import {
   Fragment,
   useCallback,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react"
@@ -110,6 +111,7 @@ function TurnRow({
   beforeTurn,
   contentVisibility = false,
   centerIntersectionObserver,
+  isEditing = false,
   hasDisplayableContent = true,
   onCenterIntersectionChange,
   scrollOnSubmit = false,
@@ -123,6 +125,7 @@ function TurnRow({
   beforeTurn?: ReactNode
   contentVisibility?: boolean
   centerIntersectionObserver: TurnIntersectionObserver
+  isEditing?: boolean
   hasDisplayableContent?: boolean
   onCenterIntersectionChange?: (turnId: string, intersecting: boolean) => void
   scrollOnSubmit?: boolean
@@ -196,7 +199,12 @@ function TurnRow({
         >
           <div
             data-conversation-screenshot-content=""
-            className={`group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col focus-visible:outline-hidden ${THREAD_MAXWIDTH_VARS} ${dataTurn === "assistant" ? "agent-turn" : ""}`}
+            className={cn(
+              "group/turn-messages relative mx-auto flex w-full max-w-[var(--thread-content-max-width,40rem)] min-w-0 flex-1 flex-col focus-visible:outline-hidden",
+              THREAD_MAXWIDTH_VARS,
+              dataTurn === "assistant" && "agent-turn",
+              dataTurn === "user" && isEditing && "mb-10"
+            )}
           >
             {children}
           </div>
@@ -361,12 +369,35 @@ export function Conversation({
   scrollToMessageId,
   onCenterIntersectionChange,
 }: ConversationProps) {
+  // Chat stays mounted across route commits (ADR-0013), so the open editor is
+  // scoped to the chat it was opened in and dropped at the chat boundary
+  // (render-time reset, same idiom as turn-context's effort store).
+  const [editingState, setEditingState] = useState<{
+    chatId: string | null
+    messageId: string
+  } | null>(null)
+  if (editingState !== null && editingState.chatId !== chatId) {
+    setEditingState(null)
+  }
+  const editingMessageId = editingState?.messageId ?? null
   const contentVisibilitySupported = useContentVisibilitySupport()
   const scrollTarget = resolveConversationScrollTarget(
     messages,
     scrollToMessageId
   )
   const observation = useConversationTurnObservation()
+  const handleEditingChange = useCallback(
+    (messageId: string, isEditing: boolean) => {
+      setEditingState((current) =>
+        isEditing
+          ? { chatId, messageId }
+          : current?.messageId === messageId
+            ? null
+            : current
+      )
+    },
+    [chatId]
+  )
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
 
@@ -562,6 +593,7 @@ export function Conversation({
               kind: "user",
               id: message.id,
               text: getMessageText(message),
+              isEditing: editingMessageId === message.id,
               attachments: getMessageAttachments(message),
               branch: turnBranch,
               isDurableChat,
@@ -579,6 +611,7 @@ export function Conversation({
             <Message
               model={rowModel}
               onEdit={onEdit}
+              onEditingChange={handleEditingChange}
               onReload={onReload}
               onSelectBranch={onSelectBranch}
               onQuote={onQuote}
@@ -601,6 +634,7 @@ export function Conversation({
                 dataTurn={message.role}
                 dataTurnId={rowTurnId}
                 dataTestId={`conversation-turn-${index + 1}`}
+                isEditing={rowModel.kind === "user" && rowModel.isEditing}
                 centerIntersectionObserver={
                   observation.centerIntersectionObserver
                 }

@@ -80,6 +80,20 @@ const apiRows = [
     defaultValue: "false",
     description: "Prevents interaction with the button.",
   },
+  {
+    prop: "disabledVariant",
+    type: '"default" | "muted"',
+    defaultValue: '"default"',
+    description:
+      "Optionally adds a translucent primary fill before the shared disabled dimming.",
+  },
+  {
+    prop: "loading",
+    type: "boolean",
+    defaultValue: "false",
+    description:
+      "Keeps the label visible, appends progress, and disables activation.",
+  },
 ] as const
 
 export const metadata: Metadata = {

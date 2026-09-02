@@ -93,7 +93,7 @@ export const SidebarMenuItem = forwardRef<
     baseClassName,
     hasTrailing && "justify-between",
     isActive &&
-      "bg-sidebar-row text-foreground hover:bg-sidebar-row group-data-[collapsible=icon]:bg-transparent",
+      "bg-sidebar-row text-foreground hover:bg-sidebar-row",
     className
   )
 

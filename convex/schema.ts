@@ -3,6 +3,7 @@ import { v } from "convex/values"
 import { vGenerationRunStatus, vMessageStatus } from "./domain/message_contract"
 import { vToolInvocationStreamMetadata } from "./lib/messageMetadata"
 import { vReasoningEffort } from "./lib/reasoningEffort"
+import { vRunTimingReceipt } from "./lib/runTimingReceipt"
 import {
   vLedgerEntryType,
   vPricingSnapshot,
@@ -297,12 +298,24 @@ export default defineSchema({
     // and returns a typed conflict.
     continuationRunId: v.optional(v.id("generationRuns")),
     continuedFromRunId: v.optional(v.id("generationRuns")),
+    // Run timing receipt (ADR-0030): where this run's time went, stamped by
+    // every terminal write. Absent fields were unobserved, never zero.
+    timingReceipt: v.optional(vRunTimingReceipt),
+    // Receipt-attach capability (ADR-0030): an absorbing terminal that revokes
+    // the grant WITHOUT carrying a receipt (user Stop, supersession) copies
+    // the grant digest here for a bounded window, so the stopped worker's
+    // `attachRunTimingReceipt` can still land its receipt. Single-use.
+    timingReceiptGrantDigest: v.optional(v.string()),
+    timingReceiptGrantExpiresAt: v.optional(v.number()),
   })
     .index("by_chat", ["chatId"])
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
     .index("by_chat_updated", ["chatId", "updatedAt"])
-    .index("by_status_lease_expires", ["status", "leaseExpiresAt"]),
+    .index("by_status_lease_expires", ["status", "leaseExpiresAt"])
+    // Windowed receipt summaries (runTiming.timingSummary) range over
+    // completed runs by completion time.
+    .index("by_status_completed", ["status", "completedAt"]),
 
   // Durable cursors for bounded reconciliation scans. The versioned name is
   // part of the query contract: changing a scan's index/range starts a new
@@ -417,6 +430,8 @@ export default defineSchema({
     webSearchEnabled: v.optional(v.boolean()),
     streamingPresentation: v.optional(v.string()),
     hiddenModels: v.optional(v.array(v.string())),
+    // Generation stats line under assistant responses (ADR-0030); off unless set.
+    showGenerationStats: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   userKeys: defineTable({

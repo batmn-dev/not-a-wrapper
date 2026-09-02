@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest"
 
 function scenario(
   name = "text-only",
-  metrics: Record<string, { p50: number }> = {}
+  metrics: Record<string, { p50: number; n?: number }> = {}
 ) {
   return {
     scenario: name,
@@ -69,7 +69,19 @@ describe("browser benchmark comparison", () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain(
-      "baseline metric p50(s) missing from current results: text-only/complete/desktop/x1 sendToFirstVisibleTextMs"
+      "baseline metric p50(s) missing or unsampled in current results: text-only/complete/desktop/x1 sendToFirstVisibleTextMs"
+    )
+  })
+
+  it("rejects an unsampled current gate (n 0) instead of reading its p50 as 0", () => {
+    const result = compare(
+      [scenario("text-only", { prepareMs: { p50: 44, n: 5 } })],
+      [scenario("text-only", { prepareMs: { p50: 0, n: 0 } })]
+    )
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(
+      "missing or unsampled in current results: text-only/complete/desktop/x1 prepareMs"
     )
   })
 

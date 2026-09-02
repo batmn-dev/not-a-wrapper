@@ -22,6 +22,7 @@ import {
   buildDeterministicPartScript,
   deterministicScenarioText,
 } from "@/app/api/chat/deterministic-provider"
+import { pacingOverheadMs } from "@/convex/lib/runTimingReceipt"
 import { execSync, spawn, type ChildProcess } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import os from "node:os"
@@ -164,6 +165,13 @@ async function readMarks(page: Page): Promise<CollectedMark[]> {
           > | null) ?? null,
       }))
   )
+}
+
+/** The send's correlation id, carried by the `chat_send_intent` mark detail. */
+function correlationIdOf(marks: CollectedMark[]): string | undefined {
+  const sendIntent = marks.find((mark) => mark.name === "chat_send_intent")
+  const id = sendIntent?.detail?.correlationId
+  return typeof id === "string" ? id : undefined
 }
 
 async function waitForMark(
@@ -432,6 +440,7 @@ async function runScenarioOnce(
     }
 
     let reloadedMidStream = false
+    let preReloadCorrelationId: string | undefined
     // Durable sends occasionally lose live-stream adoption after the hard
     // navigation to /c/<chatId>: the turn runs and settles server-side and
     // content renders from the 750 ms snapshots, but the local stream marks
@@ -472,6 +481,11 @@ async function runScenarioOnce(
       if (await awaitFirstVisible()) {
         // Let a couple of 750 ms snapshot beats land before the cut.
         await page.waitForTimeout(2000)
+        // The reload discards this document's marks; keep the send's
+        // correlation id so the server-span, receipt, and durable-write
+        // joins still find the run. (The /c/<chatId> hop is a pushState,
+        // so marks survive it.)
+        preReloadCorrelationId = correlationIdOf(await readMarks(page))
         await page.reload({ waitUntil: "domcontentloaded" })
         reloadedMidStream = true
       }
@@ -620,18 +634,47 @@ async function runScenarioOnce(
       }
     }
 
-    const sendIntent = marks.find((mark) => mark.name === "chat_send_intent")
-    const correlationId =
-      typeof sendIntent?.detail?.correlationId === "string"
-        ? (sendIntent.detail.correlationId as string)
-        : undefined
+    const correlationId = preReloadCorrelationId ?? correlationIdOf(marks)
     const serverSpans = correlationId
       ? collectServerSpans(correlationId)
+      : undefined
+    const timingReceipt = correlationId
+      ? collectTimingReceipt(correlationId)
       : undefined
     const durableWrites =
       config.auth && correlationId
         ? collectDurableWrites(correlationId)
         : undefined
+
+    // Provider segments of the run timing receipt are a correctness check,
+    // never a gate (ADR-0030): the deterministic script fixes when the first
+    // output chunk and the finish arrive, so the SDK-sourced figures must
+    // agree with it or the run's timings are invalid.
+    if (
+      correctnessOk &&
+      timingReceipt &&
+      config.action === "complete" &&
+      config.expectedOutcome === "finish"
+    ) {
+      const scripted = scriptedProviderTiming(config)
+      const firstOutputDelta = Math.abs(
+        (timingReceipt.providerFirstOutputMs ?? Number.NaN) -
+          scripted.firstOutputMs
+      )
+      const responseDelta = Math.abs(
+        (timingReceipt.modelResponseMs ?? Number.NaN) - scripted.totalMs
+      )
+      if (
+        !(firstOutputDelta <= RECEIPT_FIRST_OUTPUT_TOLERANCE_MS) ||
+        !(
+          responseDelta <=
+          scripted.totalMs * 0.1 + RECEIPT_RESPONSE_TOLERANCE_MS
+        )
+      ) {
+        correctnessOk = false
+        detail = `timing receipt disagrees with the script (first output ${timingReceipt.providerFirstOutputMs}ms vs ${scripted.firstOutputMs}ms; response ${timingReceipt.modelResponseMs}ms vs ${scripted.totalMs}ms)`
+      }
+    }
 
     // Cross-tab freshness (second-tab runs): each accepted/deduped snapshot
     // checkpoint's harness-clock stamp matched to the first tab-2 rendered
@@ -733,6 +776,7 @@ async function runScenarioOnce(
       jsHeapUsedBeforeBytes: heapBefore,
       jsHeapUsedAfterBytes: heapAfter,
       serverSpans,
+      timingReceipt,
       durableWrites,
       snapshotToSecondTabMedianMs,
       snapshotToSecondTabMaxMs,
@@ -783,6 +827,59 @@ function collectServerSpans(
     }
   }
   return Object.keys(spans).length > 0 ? spans : undefined
+}
+
+const RECEIPT_FIRST_OUTPUT_TOLERANCE_MS = 75
+const RECEIPT_RESPONSE_TOLERANCE_MS = 150
+
+/**
+ * When the deterministic script schedules its first output chunk and its
+ * last part, relative to the provider call — the oracle for the receipt's
+ * provider segments. Mirrors the SDK's output-chunk definition.
+ */
+function scriptedProviderTiming(config: BrowserScenarioConfig): {
+  firstOutputMs: number
+  totalMs: number
+} {
+  let elapsedMs = 0
+  let firstOutputMs: number | undefined
+  for (const timed of buildDeterministicPartScript({
+    scenario: config.scenario,
+    chunksPerSecond: config.chunksPerSecond,
+    shape: config.shape,
+  })) {
+    elapsedMs += timed.delayMs
+    const part = timed.part
+    // Mirrors the SDK's isOutputChunk exactly (the runtime keeps its own copy).
+    const isOutput =
+      ((part.type === "text-delta" ||
+        part.type === "reasoning-delta" ||
+        part.type === "tool-input-delta") &&
+        part.delta.length > 0) ||
+      part.type === "tool-call" ||
+      part.type === "file" ||
+      part.type === "reasoning-file"
+    if (firstOutputMs === undefined && isOutput) firstOutputMs = elapsedMs
+  }
+  return { firstOutputMs: firstOutputMs ?? 0, totalMs: elapsedMs }
+}
+
+/** The sampled `run_timing_receipt` mirror for one turn (ADR-0030). */
+function collectTimingReceipt(
+  correlationId: string
+): RunMetrics["timingReceipt"] {
+  for (const line of serverPerfLines) {
+    if (line.correlationId !== correlationId) continue
+    if (line.event !== "run_timing_receipt") continue
+    const receipt: Record<string, number> = {}
+    for (const [key, value] of Object.entries(line)) {
+      if (typeof value === "number" && key !== "receivedAt") {
+        receipt[key] = value
+      }
+    }
+    return Object.keys(receipt).length > 0 ? receipt : undefined
+  }
+  return undefined
 }
 
 function collectDurableWrites(
@@ -1018,6 +1115,27 @@ async function main() {
         ),
         snapshotWriteCount: summarize(
           numeric((run) => run.durableWrites?.snapshotCount)
+        ),
+        // Run timing receipt segments (ADR-0030). Only the segments this
+        // server owns gate; the provider ones are correctness-checked against
+        // the deterministic script and reported for reference.
+        prepareMs: summarize(numeric((run) => run.timingReceipt?.prepareMs)),
+        firstWriteDelayMs: summarize(
+          numeric((run) => run.timingReceipt?.firstWriteDelayMs)
+        ),
+        pacingOverheadMs: summarize(
+          numeric((run) =>
+            run.timingReceipt ? pacingOverheadMs(run.timingReceipt) : undefined
+          )
+        ),
+        settlementTotalMs: summarize(
+          numeric((run) => run.serverSpans?.settlement_total)
+        ),
+        providerFirstOutputMs: summarize(
+          numeric((run) => run.timingReceipt?.providerFirstOutputMs)
+        ),
+        modelResponseMs: summarize(
+          numeric((run) => run.timingReceipt?.modelResponseMs)
         ),
       },
       runs,
