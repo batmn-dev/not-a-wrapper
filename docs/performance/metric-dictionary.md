@@ -253,8 +253,10 @@ The harness gates `prepareMs`, `firstWriteDelayMs`, `pacingOverheadMs`, and
 rather than reading as 0); the provider segments are
 checked against the deterministic script's scheduled delays and invalidate the run when
 they disagree. `timingSummary` reports p50/max per segment and withholds p95 under 20
-samples, per the non-metrics rule below; its `model`/`buildId` filters apply before the
-scan limit.
+samples, per the non-metrics rule below; its `model`/`buildId` filters apply within the
+returned window (the newest `limit` completed runs), so when `scannedRuns` equals the
+limit a filtered summary can omit older matches: narrow `sinceMs` or raise `limit`.
+`matchedRuns` counts the runs the filters kept.
 
 **Generation stats (user-facing, message-level — same provider figures):** time to first
 output = `providerFirstOutputMs` of the first run's first step (persisted on the message as
