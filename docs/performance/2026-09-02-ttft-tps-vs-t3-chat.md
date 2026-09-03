@@ -7,35 +7,35 @@ rows are in `2026-09-02-ttft-tps-vs-t3-runs.tsv` next to this file.
 
 ## Matrix as run
 
-| Model | Ours | T3 Chat |
-|---|---|---|
-| GPT-5.6 Luna | effort **Off** (the menu's "none") | reasoning **Instant** (lowest of Instant/Low/Medium/High) |
+| Model            | Ours                                                                                | T3 Chat                                                                                                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GPT-5.6 Luna     | effort **Off** (the menu's "none")                                                  | reasoning **Instant** (lowest of Instant/Low/Medium/High)                                                                                                                               |
 | Claude Haiku 4.5 | as-is: fixed 5,000-token thinking budget, effort menu inert (label reads "Minimal") | T3 has no separate reasoning variant; it exposes the same Instant/Low/Medium/High control. Primary cell = **Low** (reasoning on, lowest). One extra cell at **Instant** (plain) for P1. |
-| GLM-5.3 | effort **Low**, routes via OpenRouter | reasoning **Low** (only Low/High offered). Provider not shown in the composer; stream part ids are `gen-…` OpenRouter generation ids for every T3 model. |
+| GLM-5.3          | effort **Low**, routes via OpenRouter                                               | reasoning **Low** (only Low/High offered). Provider not shown in the composer; stream part ids are `gen-…` OpenRouter generation ids for every T3 model.                                |
 
 Runs: ours 3 per cell (27 turns). T3 3 per cell for Luna and Haiku P1/P2,
 then 1 per cell for Haiku P3 and all GLM cells at the user's request
 (19 counted turns: 9 Luna, 7 Haiku, 3 GLM; plus 3 Haiku-Instant and one
-uncounted Luna P1 pilot). Fresh chat per turn, web search off,
-no attachments, no custom instructions. Turns ran 23:39–00:40 UTC (ours) and
+uncounted Luna P1 pilot). Fresh chat per turn, web search off in
+intent but on in fact (see Follow-up), no attachments, no custom instructions. Turns ran 23:39–00:40 UTC (ours) and
 00:36–00:59 UTC (T3); interleaving was lost, see Method.
 
 ## Results (median per cell)
 
 TTFT columns are not comparable with each other; the last column is.
 
-| Cell | Ours TTFT ms (server, ADR-0030) | Ours tok/s | Ours out tokens | T3 "Time-to-First" s | T3 tok/sec | T3 tokens | Send → first text chunk at client, ms: ours / T3 |
-|---|---|---|---|---|---|---|---|
-| Luna P1 | 1138 | 95.0 | 86 | 0.006 | 33.2 | 114 | **3817 / 2974** (T3 n=1) |
-| Luna P2 | 673 | 75.7 | 246 | 0.004 | 48.7 | 246 | **1926 / 2780** (T3 n=2) |
-| Luna P3 | 496 | 96.8 | 145 | 0.003 | 41.6 | 141 | **1326 / 2682** |
-| Haiku P1 | 3331 | 177.4 | 411 (≈200 reasoning) | 0.003 | 73.0 | 399 | **4148 / 4899** |
-| Haiku P2 | 2741 | 116.7 | 410 (≈120 reasoning) | 0.005 | 63.7 | 378 | **3819 / 3717** |
-| Haiku P3 | 3266 | 579.7 (see anomaly) | 506 (≈300 reasoning) | 0.074 (n=1) | 107.9 | 583 | **4154 / 5612** |
-| Haiku P1, T3 at Instant | | | | 0.003 | 41.1 | 157 | — / 3071 |
-| GLM P1 | 10135 (see anomaly) | 167.8 | 127 | 0.007 (n=1) | 72.2 | 193 | **11153 / 1685** |
-| GLM P2 | 1167 | 132.2 | 255 | 0.003 (n=1) | 49.9 | 253 | **2132 / 3049** |
-| GLM P3 | 1375 | 151.3 | 177 | 0.003 (n=1) | 64.7 | 173 | **2624 / 1551** |
+| Cell                    | Ours TTFT ms (server, ADR-0030) | Ours tok/s          | Ours out tokens      | T3 "Time-to-First" s | T3 tok/sec | T3 tokens | Send → first text chunk at client, ms: ours / T3 |
+| ----------------------- | ------------------------------- | ------------------- | -------------------- | -------------------- | ---------- | --------- | ------------------------------------------------ |
+| Luna P1                 | 1138                            | 95.0                | 86                   | 0.006                | 33.2       | 114       | **3817 / 2974** (T3 n=1)                         |
+| Luna P2                 | 673                             | 75.7                | 246                  | 0.004                | 48.7       | 246       | **1926 / 2780** (T3 n=2)                         |
+| Luna P3                 | 496                             | 96.8                | 145                  | 0.003                | 41.6       | 141       | **1326 / 2682**                                  |
+| Haiku P1                | 3331                            | 177.4               | 411 (≈200 reasoning) | 0.003                | 73.0       | 399       | **4148 / 4899**                                  |
+| Haiku P2                | 2741                            | 116.7               | 410 (≈120 reasoning) | 0.005                | 63.7       | 378       | **3819 / 3717**                                  |
+| Haiku P3                | 3266                            | 579.7 (see anomaly) | 506 (≈300 reasoning) | 0.074 (n=1)          | 107.9      | 583       | **4154 / 5612**                                  |
+| Haiku P1, T3 at Instant |                                 |                     |                      | 0.003                | 41.1       | 157       | — / 3071                                         |
+| GLM P1                  | 10135 (see anomaly)             | 167.8               | 127                  | 0.007 (n=1)          | 72.2       | 193       | **11153 / 1685**                                 |
+| GLM P2                  | 1167                            | 132.2               | 255                  | 0.003 (n=1)          | 49.9       | 253       | **2132 / 3049**                                  |
+| GLM P3                  | 1375                            | 151.3               | 177                  | 0.003 (n=1)          | 64.7       | 173       | **2624 / 1551**                                  |
 
 Per-run values (ours; T3) for the comparable column, ms. Three T3 Luna runs
 were timed only at DOM first-text-visible (no fetch tee fired); they are
@@ -79,12 +79,12 @@ Read-outs:
 Both apps stream the AI SDK UI protocol (`start`, `start-step`,
 `text-start`, `text-delta`). Measured in the page from the send click:
 
-| Segment | Ours | T3 |
-|---|---|---|
-| Click → `/api/chat` request leaves | 0.32–0.75 s (a `/api/rate-limits` call comes first) | ~0.9 s (event + server-version + three serverFn + tRPC calls first) |
-| Request → response headers (`start`) | 0.5–2.3 s | 0.0–0.9 s |
-| Headers → `start-step` (provider dispatch waits on this) | 0.2–1.1 s, up to 3.2 s | 0.9–2.5 s |
-| `start-step` → first `text-delta` (≈ provider TTFT) | Luna 0.01–0.2 s after start-step; Haiku/GLM see the table | Luna 0.02 s; Haiku 1.5–2.8 s of reasoning deltas first |
+| Segment                                                  | Ours                                                      | T3                                                                  |
+| -------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| Click → `/api/chat` request leaves                       | 0.32–0.75 s (a `/api/rate-limits` call comes first)       | ~0.9 s (event + server-version + three serverFn + tRPC calls first) |
+| Request → response headers (`start`)                     | 0.5–2.3 s                                                 | 0.0–0.9 s                                                           |
+| Headers → `start-step` (provider dispatch waits on this) | 0.2–1.1 s, up to 3.2 s                                    | 0.9–2.5 s                                                           |
+| `start-step` → first `text-delta` (≈ provider TTFT)      | Luna 0.01–0.2 s after start-step; Haiku/GLM see the table | Luna 0.02 s; Haiku 1.5–2.8 s of reasoning deltas first              |
 
 So our pre-provider overhead (rate-limit round trip + admission + Convex
 first-turn creation before headers) is 0.9–2.8 s from click to headers
@@ -101,8 +101,11 @@ leaves instead.
    repeat of ~10.1 s across Anthropic and OpenRouter looks like a timeout or
    fallback, not model latency. It also breaks the stats line: a 47–257 ms
    window turns tok/s into 300–4,272. T3's GLM never showed it (n=3).
-2. **The OpenAI route ships a 4,480-token system prompt** (4,412 cached).
-   Haiku sees 1,026 and GLM 552. Luna TTFT carries that prefill every turn.
+2. **Every Luna turn bills 4,480 input tokens** (4,412 cached); Haiku sees
+   1,026 and GLM 552. Attributed at the time to a system prompt on the OpenAI
+   route; that was wrong. The tokens are OpenAI's hosted `web_search` tool,
+   declared on every run because the account's web-search preference
+   defaulted to on. See Follow-up.
 3. **Server prep before the stream headers is 0.5–2.3 s** and varies run to
    run. The range is `client_headers_ms` minus `client_req_ms` over 26 of our
    27 counted runs; it excludes GLM P3 run 2 (2.7 s), the anomaly-1 burst run
@@ -152,3 +155,52 @@ leaves instead.
   timestamp is the click.
 - **Smooth text streaming** stayed on in our app (default). It sits after the
   point where both the server stats and the chunk metric are measured.
+
+## Follow-up (2026-09-02): finding 2 was the hosted web-search tool
+
+Measured the same day on a local dev server against the same providers, with
+the request body captured at the provider `fetch` (PR #166, closed without
+merging; its branch holds the capture harness and a wire-level test).
+
+- A search-off OpenAI request carries the 7-token default prompt (`You are a
+helpful AI assistant`) and the user text: 310–400 bytes, no `tools`, no
+  `include`. Nothing we send accounts for the gap.
+- OpenAI bills the hosted `web_search` tool's hidden instruction block as
+  input on every turn the tool is declared, whether or not the model calls
+  it. Search-on GPT-5 Mini reads 4,480 / 4,477 / 4,490 for P1 / P2 / P3,
+  byte-identical to the production Luna figures; search-off reads
+  44 / 41 / 54.
+- The tool was declared on every benchmark turn because `webSearchEnabled`
+  defaults to on and the benchmark account had never set it (the prod
+  `userPreferences` row has no `webSearchEnabled`; all 30 benchmark assistant
+  messages carry `toolMetadataByName: ["web_search"]`). The composer gives no
+  visible sign that search is on; the only indicator is the checkmark inside
+  the "+" menu. "Web search off" in the matrix above was therefore not off.
+- Haiku's 1,026 and GLM's 552 are the same tool's smaller server-side cost
+  on those providers. The Haiku "effort menu inert, fixed 5,000-token
+  thinking budget" row is `searchThinkingDowngrade` firing because search was
+  on. The prod Haiku rows also ran through OpenRouter
+  (`provider: "openrouter"`), not the Anthropic route.
+
+| Prompt              | Search on (prod benchmark) | Search off (local dev) |
+| ------------------- | -------------------------- | ---------------------- |
+| Luna P1             | 4,480 (4,412 cached)       | 44                     |
+| GPT-5 Mini P1       | 4,480                      | 44                     |
+| GPT-5 Mini P2       | 4,477                      | 41                     |
+| GPT-5 Mini P3       | 4,490                      | 54                     |
+| Claude Haiku 4.5 P1 | 1,026                      | 72                     |
+| GLM-5.3 P1          | 552                        | 47                     |
+
+Decision: web search stays on by default. The 4.4K is the price of the hosted
+tool and is not reducible from our side (`searchContextSize` changes the
+retrieved content, not the tool prompt). It is real prefill on every
+search-on OpenAI turn, though 4,412 of it is a cache read after the first
+turn; search-off turns are too small to cache at all (OpenAI's minimum is
+1,024 tokens).
+
+Protocol correction for any rerun: set the account's web-search preference
+off explicitly (Settings → Web search default, or the "+" menu) before a
+"search off" cell, and confirm on the stored message that
+`toolMetadataByName` is empty; a search-off Luna P1 turn should read about
+44 input tokens. Search-on figures are the product's real numbers and should
+be reported as the search-on cell, not as a defect.
