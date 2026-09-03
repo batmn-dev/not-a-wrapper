@@ -111,11 +111,35 @@ describe("ChatSessionProvider route identity", () => {
 
     click("reset")
 
-    // replaceState, not a second push: the refused turn leaves no orphan entry.
+    // replaceState, not a second push: the pushed entry is rewritten to the
+    // origin URL, so no entry names the abandoned chat.
     expect(window.location.pathname).toBe("/p/project-1")
     expect(window.history.length).toBe(historyLength)
     expect(probe().textContent).toBe("new-chat")
     expect(probe().dataset.chatIdHandoff).toBe("false")
+  })
+
+  it("rolls back after Next observed the pushed pathname and masks its lag", () => {
+    renderSession()
+    click("commit")
+
+    // Next caught up with the push: the handoff cleared, the pathname is the
+    // pushed route. A refusal arriving now must still restore the origin.
+    navigationMocks.pathname = "/c/chat-minted"
+    renderSession()
+    expect(probe().dataset.chatIdHandoff).toBe("false")
+
+    click("reset")
+
+    expect(window.location.pathname).toBe("/")
+    // Next still reports the pushed pathname for a render; the session
+    // already presents the origin so no consumer resolves the abandoned id.
+    expect(probe().textContent).toBe("new-chat")
+    expect(probe().dataset.newChat).toBe("true")
+
+    navigationMocks.pathname = "/"
+    renderSession()
+    expect(probe().textContent).toBe("new-chat")
   })
 
   it("drops a pending handoff if navigation returns to its source", () => {

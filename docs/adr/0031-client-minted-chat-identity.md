@@ -72,11 +72,17 @@ resolves the id against the caller's own store and renders not-found
 `ChatSessionProvider` is the only History API caller. `commitChatIdentity(id)`
 pushes `/c/<id>` synchronously and records the shallow handoff so the mounted
 Chat surface is reused (the ADR-0012/0013 no-remount guarantee holds);
-`resetChatIdentity()` clears the identity and restores the origin route with
-`replaceState`, but only while the browser is still on the pushed entry — a
-user who already pressed Back keeps the history they made. Re-committing
-while a handoff is pending replaces the entry in place (the one-time re-mint
-below). The provider emits `thread_route_committed` at the commit.
+`resetChatIdentity()` clears the identity and rewrites the pushed entry to
+the origin route with `replaceState`, but only while the browser is still on
+that entry — a user who already pressed Back keeps the history they made.
+The rewritten entry duplicates the origin URL (Back from it is a no-op step);
+no entry ever names a chat that does not exist. The pending commit is
+tracked separately from the handoff (which clears as soon as Next observes
+the pushed pathname), and after a rollback the provider presents the origin
+route until Next's `usePathname` catches up, so no consumer resolves the
+abandoned id in that gap. Re-committing while the pushed entry is current
+replaces it in place (the one-time re-mint below). The provider emits
+`thread_route_committed` at the commit.
 
 In `runSendTurn`, a turn that starts without a chat calls
 `firstTurn.begin()` BEFORE the optimistic user row is inserted, so the route,

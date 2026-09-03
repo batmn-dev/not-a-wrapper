@@ -59,25 +59,48 @@ export function ChatSessionProvider({
 }: {
   children: React.ReactNode
 }) {
-  const pathname = usePathname()
+  const nextPathname = usePathname()
+
+  const [shallowHandoff, setShallowHandoff] = useState<ShallowHandoff | null>(
+    null
+  )
+  // A rolled-back commit: the pushed entry was replaced with the origin route,
+  // but Next's pathname may still report the pushed one for a render or two.
+  // Until it catches up, the origin route is the effective pathname so the
+  // surface never resolves a chat id that was just abandoned.
+  const [restoredRoute, setRestoredRoute] = useState<{
+    stalePathname: string
+    pathname: string
+  } | null>(null)
+  const isRestoring = Boolean(
+    restoredRoute &&
+      nextPathname === restoredRoute.stalePathname &&
+      typeof window !== "undefined" &&
+      window.location.pathname === restoredRoute.pathname
+  )
+  if (restoredRoute && !isRestoring) {
+    setRestoredRoute(null)
+  }
+  const pathname =
+    isRestoring && restoredRoute ? restoredRoute.pathname : nextPathname
+
   const pathnameChatId = useMemo(() => {
     if (!pathname?.startsWith("/c/")) return null
     const segments = pathname.split("/").filter(Boolean)
     return segments[0] === "c" ? (segments[1] ?? null) : null
   }, [pathname])
 
-  const [shallowHandoff, setShallowHandoff] = useState<ShallowHandoff | null>(
-    null
-  )
-  // Latest-value mirrors so the commit/reset commands read the live handoff
-  // and pathname at call time: turn runners call them after awaits, from
-  // closures older than the render that recorded the handoff.
-  const handoffRef = useRef<ShallowHandoff | null>(null)
+  // The pending first-turn commit, from `commitChatIdentity` until the
+  // creation lands or `resetChatIdentity` rolls it back. Independent of the
+  // handoff state (which clears as soon as Next observes the pushed
+  // pathname), because the rollback must still know the origin route. Refs,
+  // not state: turn runners call the commands after awaits, from closures
+  // older than the render that recorded them.
+  const pendingCommitRef = useRef<ShallowHandoff | null>(null)
   const pathnameRef = useRef(pathname)
   useLayoutEffect(() => {
-    handoffRef.current = shallowHandoff
     pathnameRef.current = pathname
-  }, [shallowHandoff, pathname])
+  }, [pathname])
 
   const isHandoffPending = Boolean(
     shallowHandoff &&
@@ -106,11 +129,11 @@ export function ChatSessionProvider({
   // shallow commit deliberately preserves the mounted chat surface.
   const commitChatIdentity = useCallback((nextChatId: string) => {
     const targetPathname = `/c/${nextChatId}`
-    const current = handoffRef.current
+    const current = pendingCommitRef.current
+    // Re-committing while the pushed entry is still current (the one-time
+    // re-mint after a server id conflict) replaces it instead of pushing.
     const pending =
-      current &&
-      current.fromPathname === pathnameRef.current &&
-      window.location.pathname === current.targetPathname
+      current && window.location.pathname === current.targetPathname
         ? current
         : null
     if (pending) {
@@ -124,19 +147,24 @@ export function ChatSessionProvider({
       targetPathname,
       chatId: nextChatId,
     }
-    handoffRef.current = next
+    pendingCommitRef.current = next
+    setRestoredRoute(null)
     setShallowHandoff(next)
   }, [])
 
   const resetChatIdentity = useCallback(() => {
-    const current = handoffRef.current
+    const current = pendingCommitRef.current
+    pendingCommitRef.current = null
     if (!current) return
     // Only the pushed entry is replaced; if the user already navigated away
     // (Back mid-send), history is left exactly as they made it.
     if (window.location.pathname === current.targetPathname) {
       window.history.replaceState(null, "", current.fromPathname)
+      setRestoredRoute({
+        stalePathname: current.targetPathname,
+        pathname: current.fromPathname,
+      })
     }
-    handoffRef.current = null
     setShallowHandoff(null)
   }, [])
 
