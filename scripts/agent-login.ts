@@ -13,13 +13,15 @@
  * Requires PERF_AUTH_PASSWORD (and optionally PERF_AUTH_EMAIL) in the env, and
  * the app running at --base-url. The storageState carries a session cookie —
  * it is written under playwright/.auth (gitignored), never committed.
+ *
+ * Non-loopback --base-url must be https and allowlisted via AGENT_AUTH_ORIGIN.
  */
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { parseArgs } from "node:util"
 import { ensurePerfAuthUser } from "@/benchmarks/chat-performance/browser/ensure-auth-user"
-import { chromium } from "playwright"
 import { getAgentCredentials, signInWithPassword } from "./lib/agent-auth"
+import { launchChrome } from "./lib/launch-chrome"
 
 const DEFAULT_OUT = "playwright/.auth/user.json"
 
@@ -36,10 +38,7 @@ async function main(): Promise<void> {
 
   await ensurePerfAuthUser()
 
-  const browser = await chromium.launch({
-    channel: "chrome",
-    args: ["--no-sandbox"],
-  })
+  const browser = await launchChrome()
   try {
     const context = await browser.newContext()
     const page = await context.newPage()
@@ -53,4 +52,7 @@ async function main(): Promise<void> {
   }
 }
 
-void main()
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})

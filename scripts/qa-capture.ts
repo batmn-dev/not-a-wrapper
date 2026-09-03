@@ -20,7 +20,7 @@
  *   --name <name>          Required. Artifact base name (extension added if missing).
  *   --viewport <WxH>       Default 1280x800.
  *   --wait-for <selector>  Wait for this selector before capturing.
- *   --wait-ms <n>          Extra settle time. Default 1500 (screenshot).
+ *   --wait-ms <n>          Extra settle time after load. Default 1500.
  *   --duration-ms <n>      Recording length for video. Default 5000.
  *   --full-page            Screenshot the full scrollable page.
  *   --out-dir <dir>        Default /opt/cursor/artifacts.
@@ -37,11 +37,12 @@ import os from "node:os"
 import path from "node:path"
 import { parseArgs } from "node:util"
 import { ensurePerfAuthUser } from "@/benchmarks/chat-performance/browser/ensure-auth-user"
-import { chromium, type Browser, type Page } from "playwright"
+import type { Page } from "playwright"
 import { signInWithPassword } from "./lib/agent-auth"
+import { launchChrome } from "./lib/launch-chrome"
 
 const DEFAULT_OUT_DIR = "/opt/cursor/artifacts"
-const SYSTEM_CHROME = "/usr/local/bin/google-chrome"
+const DEFAULT_WAIT_MS = 1500
 
 type Viewport = { width: number; height: number }
 
@@ -62,21 +63,6 @@ function withExtension(name: string, extension: `.${string}`): string {
   const base = path.basename(name.trim())
   if (!base) fail("--name must not be empty")
   return base.endsWith(extension) ? base : `${base}${extension}`
-}
-
-/**
- * Prefers the installed Chrome (present in the Cloud Agent image, and the
- * channel the perf harness standardizes on); falls back to its explicit path.
- */
-async function launchChrome(): Promise<Browser> {
-  try {
-    return await chromium.launch({ channel: "chrome", args: ["--no-sandbox"] })
-  } catch {
-    return await chromium.launch({
-      executablePath: SYSTEM_CHROME,
-      args: ["--no-sandbox"],
-    })
-  }
 }
 
 type CommonOptions = {
@@ -135,7 +121,7 @@ async function captureScreenshot(
 }
 
 async function captureVideo(
-  options: CommonOptions & { durationMs: number }
+  options: CommonOptions & { durationMs: number; waitMs: number }
 ): Promise<string> {
   const target = path.join(options.outDir, withExtension(options.name, ".webm"))
   const browser = await launchChrome()
@@ -156,7 +142,7 @@ async function captureVideo(
       waitUntil: "domcontentloaded",
       timeout: 45_000,
     })
-    await settle(page, options.waitFor, 0)
+    await settle(page, options.waitFor, options.waitMs)
     await page.waitForTimeout(options.durationMs)
     const video = page.video()
     await context.close()
@@ -212,16 +198,20 @@ async function main(): Promise<void> {
       ? await captureScreenshot({
           ...common,
           fullPage: values["full-page"] ?? false,
-          waitMs: values["wait-ms"] ? Number(values["wait-ms"]) : 1500,
+          waitMs: values["wait-ms"] ? Number(values["wait-ms"]) : DEFAULT_WAIT_MS,
         })
       : await captureVideo({
           ...common,
           durationMs: values["duration-ms"]
             ? Number(values["duration-ms"])
             : 5000,
+          waitMs: values["wait-ms"] ? Number(values["wait-ms"]) : DEFAULT_WAIT_MS,
         })
 
   console.log(`qa-capture: wrote ${written}`)
 }
 
-void main()
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
