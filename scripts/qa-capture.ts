@@ -24,6 +24,10 @@
  *   --duration-ms <n>      Recording length for video. Default 5000.
  *   --full-page            Screenshot the full scrollable page.
  *   --out-dir <dir>        Default /opt/cursor/artifacts.
+ *   --auth                 Log in via /auth/login before capturing (needs
+ *                          PERF_AUTH_PASSWORD; see scripts/lib/agent-auth.ts).
+ *   --storage-state <file> Load a saved session instead of logging in
+ *                          (e.g. the file written by `bun run agent:login`).
  *
  * Capturing the real app needs it running (bun run dev) with the usual
  * secrets; any reachable URL works for pure UI capture.
@@ -32,7 +36,8 @@ import { mkdir, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { parseArgs } from "node:util"
-import { chromium, type Browser } from "playwright"
+import { chromium, type Browser, type Page } from "playwright"
+import { signInWithPassword } from "./lib/agent-auth"
 
 const DEFAULT_OUT_DIR = "/opt/cursor/artifacts"
 const SYSTEM_CHROME = "/usr/local/bin/google-chrome"
@@ -79,15 +84,24 @@ type CommonOptions = {
   viewport: Viewport
   waitFor?: string
   outDir: string
+  auth: boolean
+  storageState?: string
 }
 
 async function settle(
-  page: import("playwright").Page,
+  page: Page,
   waitFor: string | undefined,
   waitMs: number
 ): Promise<void> {
   if (waitFor) await page.waitForSelector(waitFor, { timeout: 30_000 })
   if (waitMs > 0) await page.waitForTimeout(waitMs)
+}
+
+/** Interactive login when --auth is set and no saved session is loaded. */
+async function maybeSignIn(page: Page, options: CommonOptions): Promise<void> {
+  if (options.auth && !options.storageState) {
+    await signInWithPassword(page, new URL(options.url).origin)
+  }
 }
 
 async function captureScreenshot(
@@ -96,8 +110,18 @@ async function captureScreenshot(
   const target = path.join(options.outDir, withExtension(options.name, ".png"))
   const browser = await launchChrome()
   try {
-    const page = await browser.newPage({ viewport: options.viewport })
-    await page.goto(options.url, { waitUntil: "networkidle", timeout: 45_000 })
+    const context = await browser.newContext({
+      viewport: options.viewport,
+      ...(options.storageState ? { storageState: options.storageState } : {}),
+    })
+    const page = await context.newPage()
+    await maybeSignIn(page, options)
+    // domcontentloaded, not networkidle: the app holds a live Convex
+    // WebSocket, so the network never goes idle. settle() gates readiness.
+    await page.goto(options.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    })
     await settle(page, options.waitFor, options.waitMs)
     await page.screenshot({ path: target, fullPage: options.fullPage })
   } finally {
@@ -119,9 +143,15 @@ async function captureVideo(
     const context = await browser.newContext({
       viewport: options.viewport,
       recordVideo: { dir: scratch, size: options.viewport },
+      ...(options.storageState ? { storageState: options.storageState } : {}),
     })
     const page = await context.newPage()
-    await page.goto(options.url, { waitUntil: "networkidle", timeout: 45_000 })
+    await maybeSignIn(page, options)
+    // domcontentloaded, not networkidle (live Convex WebSocket never idles).
+    await page.goto(options.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    })
     await settle(page, options.waitFor, 0)
     await page.waitForTimeout(options.durationMs)
     const video = page.video()
@@ -148,6 +178,8 @@ async function main(): Promise<void> {
       "duration-ms": { type: "string" },
       "full-page": { type: "boolean", default: false },
       "out-dir": { type: "string", default: DEFAULT_OUT_DIR },
+      auth: { type: "boolean", default: false },
+      "storage-state": { type: "string" },
     },
   })
 
@@ -167,6 +199,8 @@ async function main(): Promise<void> {
     viewport: parseViewport(values.viewport),
     waitFor: values["wait-for"],
     outDir,
+    auth: values.auth ?? false,
+    storageState: values["storage-state"],
   }
 
   const written =
