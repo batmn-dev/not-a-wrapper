@@ -95,6 +95,9 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Don't let `next dev`/`next build` append its agent-rules block to our
+  // curated AGENTS.md; that file is hand-maintained and source-of-truth.
+  agentRules: false,
   // Default unchanged (.next). The chat-performance browser harness builds
   // into an isolated dir (NEXT_DIST_DIR=.next-perf) so a perf production
   // build/serve never touches the dev server's .next.
