@@ -5,7 +5,6 @@ import {
   type GenerationPresentation,
   type LocalTransportStatus,
 } from "@/lib/chat-runs/run-presentation"
-import { getMessagePersistenceMode } from "@/lib/chat-store/identity"
 import { noteChatPerfStopIntent } from "@/lib/observability/chat-performance-client"
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 
@@ -28,6 +27,8 @@ type ControllerState = {
 
 type GenerationPresentationControllerArgs = {
   chatId: string | null
+  /** Durable (signed-in) chats stop through the run; guests stop locally. */
+  isAuthenticated: boolean
   localStatus: LocalTransportStatus
   isSubmitting: boolean
   localAssistantMessageId: string | null
@@ -72,6 +73,7 @@ function initialControllerState(chatId: string | null): ControllerState {
  */
 export function useGenerationPresentationController({
   chatId,
+  isAuthenticated,
   localStatus,
   isSubmitting,
   localAssistantMessageId,
@@ -198,7 +200,7 @@ export function useGenerationPresentationController({
     // Record Stop before persistence branching or deferred-stop work.
     noteChatPerfStopIntent()
     localStopIntentRef.current = true
-    if (!chatId || getMessagePersistenceMode(chatId) !== "server") {
+    if (!chatId || !isAuthenticated) {
       void stopLocal()
       return
     }
@@ -228,6 +230,7 @@ export function useGenerationPresentationController({
     if (localStopIssued) void stopLocal()
   }, [
     chatId,
+    isAuthenticated,
     fireDurableStop,
     localStatus,
     presentation.stopTargetRunId,

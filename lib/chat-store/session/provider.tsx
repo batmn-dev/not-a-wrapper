@@ -1,20 +1,35 @@
 "use client"
 
+import { markChatPerfThreadRouteCommitted } from "@/lib/observability/chat-performance-client"
 import { usePathname } from "next/navigation"
 import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 
 type ChatSessionContextValue = {
   chatId: string | null
   isNewChatSurface: boolean
-  /** The first turn is adopting its newly created durable chat id. */
+  /** The first turn is adopting its client-minted chat id before Next has
+   * observed the pushed pathname. */
   isChatIdHandoff: boolean
-  navigateToChat: (chatId: string) => void
+  /**
+   * Send sets the active chat identity; the route follows synchronously
+   * (`/c/<chatId>` via pushState) before any request leaves (ADR-0031).
+   * Re-committing while a handoff is pending replaces the pushed entry
+   * (the one-time re-mint after a server-side id conflict).
+   */
+  commitChatIdentity: (chatId: string) => void
+  /**
+   * Pre-commit rollback: clears the identity and restores the origin route
+   * with replaceState, so a refused first turn leaves no orphan entry.
+   */
+  resetChatIdentity: () => void
   selectedModelOverride: string | null
   setSelectedModelOverride: (modelId: string) => void
   clearSelectedModelOverride: (expectedModelId: string) => void
@@ -24,13 +39,20 @@ const ChatSessionContext = createContext<ChatSessionContextValue>({
   chatId: null,
   isNewChatSurface: false,
   isChatIdHandoff: false,
-  navigateToChat: () => undefined,
+  commitChatIdentity: () => undefined,
+  resetChatIdentity: () => undefined,
   selectedModelOverride: null,
   setSelectedModelOverride: () => undefined,
   clearSelectedModelOverride: () => undefined,
 })
 
 export const useChatSession = () => useContext(ChatSessionContext)
+
+type ShallowHandoff = {
+  fromPathname: string
+  targetPathname: string
+  chatId: string
+}
 
 export function ChatSessionProvider({
   children,
@@ -44,11 +66,19 @@ export function ChatSessionProvider({
     return segments[0] === "c" ? (segments[1] ?? null) : null
   }, [pathname])
 
-  const [shallowHandoff, setShallowHandoff] = useState<{
-    fromPathname: string
-    targetPathname: string
-    chatId: string
-  } | null>(null)
+  const [shallowHandoff, setShallowHandoff] = useState<ShallowHandoff | null>(
+    null
+  )
+  // Latest-value mirrors so the commit/reset commands read the live handoff
+  // and pathname at call time: turn runners call them after awaits, from
+  // closures older than the render that recorded the handoff.
+  const handoffRef = useRef<ShallowHandoff | null>(null)
+  const pathnameRef = useRef(pathname)
+  useLayoutEffect(() => {
+    handoffRef.current = shallowHandoff
+    pathnameRef.current = pathname
+  }, [shallowHandoff, pathname])
+
   const isHandoffPending = Boolean(
     shallowHandoff &&
       shallowHandoff.fromPathname === pathname &&
@@ -70,22 +100,45 @@ export function ChatSessionProvider({
   const isNewChatSurface = pathname === "/" && chatId === null
   const isChatIdHandoff = isHandoffPending
 
-  // First-turn navigation deliberately preserves the mounted chat surface.
-  // Keep that shallow handoff beside the pathname parser so every consumer
-  // observes one route identity through this provider instead of mixing
-  // `useParams`, `usePathname`, and direct History API calls.
-  const navigateToChat = useCallback(
-    (nextChatId: string) => {
-      const targetPathname = `/c/${nextChatId}`
+  // The route is a derived view of session state: this provider is the only
+  // History API caller, so every consumer observes one route identity instead
+  // of mixing `useParams`, `usePathname`, and direct pushState calls. The
+  // shallow commit deliberately preserves the mounted chat surface.
+  const commitChatIdentity = useCallback((nextChatId: string) => {
+    const targetPathname = `/c/${nextChatId}`
+    const current = handoffRef.current
+    const pending =
+      current &&
+      current.fromPathname === pathnameRef.current &&
+      window.location.pathname === current.targetPathname
+        ? current
+        : null
+    if (pending) {
+      window.history.replaceState(null, "", targetPathname)
+    } else {
       window.history.pushState(null, "", targetPathname)
-      setShallowHandoff({
-        fromPathname: pathname,
-        targetPathname,
-        chatId: nextChatId,
-      })
-    },
-    [pathname]
-  )
+    }
+    markChatPerfThreadRouteCommitted()
+    const next = {
+      fromPathname: pending?.fromPathname ?? pathnameRef.current,
+      targetPathname,
+      chatId: nextChatId,
+    }
+    handoffRef.current = next
+    setShallowHandoff(next)
+  }, [])
+
+  const resetChatIdentity = useCallback(() => {
+    const current = handoffRef.current
+    if (!current) return
+    // Only the pushed entry is replaced; if the user already navigated away
+    // (Back mid-send), history is left exactly as they made it.
+    if (window.location.pathname === current.targetPathname) {
+      window.history.replaceState(null, "", current.fromPathname)
+    }
+    handoffRef.current = null
+    setShallowHandoff(null)
+  }, [])
 
   const [modelSelection, setModelSelection] = useState<{
     chatId: string | null
@@ -126,7 +179,8 @@ export function ChatSessionProvider({
       chatId,
       isNewChatSurface,
       isChatIdHandoff,
-      navigateToChat,
+      commitChatIdentity,
+      resetChatIdentity,
       selectedModelOverride,
       setSelectedModelOverride,
       clearSelectedModelOverride,
@@ -135,7 +189,8 @@ export function ChatSessionProvider({
       chatId,
       isNewChatSurface,
       isChatIdHandoff,
-      navigateToChat,
+      commitChatIdentity,
+      resetChatIdentity,
       selectedModelOverride,
       setSelectedModelOverride,
       clearSelectedModelOverride,

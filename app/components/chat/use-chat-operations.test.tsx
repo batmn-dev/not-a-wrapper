@@ -1,7 +1,10 @@
 /** @vitest-environment jsdom */
 
 import { checkRateLimits } from "@/lib/api"
-import type { FirstTurnChat } from "@/lib/chat-store/chats/provider"
+import type {
+  FirstTurnChat,
+  FirstTurnChatResult,
+} from "@/lib/chat-store/chats/provider"
 import { GUEST_CHAT_STORAGE_KEY } from "@/lib/chat-store/identity"
 import type { Chats } from "@/lib/chat-store/types"
 import { act, useEffect } from "react"
@@ -152,63 +155,77 @@ describe("useChatOperations", () => {
     }
   }
 
-  it("creates and navigates to a fresh guest local chat instead of reusing stale guestChatId", async () => {
-    localStorage.setItem(GUEST_CHAT_STORAGE_KEY, "local-stale")
-    const createFirstTurnChat = vi
-      .fn()
-      .mockResolvedValue(localFirstTurn("local-fresh"))
-    const navigateToChat = vi.fn()
-
-    const { operations } = renderOperations({
-      isAuthenticated: false,
+  function baseProps(
+    overrides: Partial<ChatOperationsProps> = {}
+  ): ChatOperationsProps {
+    const minted = ["chat-minted", "chat-reminted"]
+    return {
+      isAuthenticated: true,
       chatId: null,
       selectedModel: "openai/gpt-5-mini",
       systemPrompt: "system",
-      createFirstTurnChat,
-      navigateToChat,
+      createFirstTurnChat: vi.fn(),
+      commitChatIdentity: vi.fn(),
+      resetChatIdentity: vi.fn(),
       setHasDialogAuth: vi.fn(),
-    })
+      createChatId: () => minted.shift() ?? "chat-overflow",
+      ...overrides,
+    }
+  }
+
+  it("commits the minted identity at begin and creates the guest chat under it", async () => {
+    localStorage.setItem(GUEST_CHAT_STORAGE_KEY, "stale-guest-chat")
+    const createFirstTurnChat = vi
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockResolvedValue(localFirstTurn("chat-minted"))
+    const props = baseProps({ isAuthenticated: false, createFirstTurnChat })
+    const { operations } = renderOperations(props)
+
+    // Synchronous: the route commits before any creation is awaited.
+    expect(operations().beginFirstTurn()).toBe("chat-minted")
+    expect(props.commitChatIdentity).toHaveBeenCalledWith("chat-minted")
+    expect(createFirstTurnChat).not.toHaveBeenCalled()
 
     const ensured = await operations().ensureChatExists(turnArgs())
 
-    expect(ensured).toEqual({ chatId: "local-fresh" })
+    expect(ensured).toEqual({ chatId: "chat-minted" })
     expect(createFirstTurnChat).toHaveBeenCalledWith({
+      publicId: "chat-minted",
       model: "openai/gpt-5-mini",
       systemPrompt: "system",
       guestUserId: "guest_1",
       message: { clientMessageId: "optimistic-1", text: "Question" },
       attachmentIds: [],
     })
-    expect(localStorage.getItem(GUEST_CHAT_STORAGE_KEY)).toBe("local-fresh")
-    expect(navigateToChat).toHaveBeenCalledWith("local-fresh")
+    expect(localStorage.getItem(GUEST_CHAT_STORAGE_KEY)).toBe("chat-minted")
+    // Committed: a later rollback is a no-op (ADR-0012 keeps the chat).
+    operations().rollbackFirstTurn()
+    expect(props.resetChatIdentity).not.toHaveBeenCalled()
   })
 
-  it("commits a durable first turn atomically and surfaces the persisted message facts", async () => {
-    const createFirstTurnChat = vi.fn().mockResolvedValue({
-      kind: "durable",
-      chat: chatRow("chat-project"),
-      userMessageId: "msg_first",
-      attachments: [
-        {
-          name: "notes.pdf",
-          contentType: "application/pdf",
-          url: "https://files.test/notes.pdf",
-          attachmentId: "attachment-1",
-        },
-      ],
-    } satisfies FirstTurnChat)
-    const navigateToChat = vi.fn()
+  it("creates a durable first turn under the committed id even after the chatId prop caught up", async () => {
+    const createFirstTurnChat = vi
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockResolvedValue({
+        kind: "durable",
+        chat: chatRow("chat-minted"),
+        userMessageId: "msg_first",
+        attachments: [
+          {
+            name: "notes.pdf",
+            contentType: "application/pdf",
+            url: "https://files.test/notes.pdf",
+            attachmentId: "attachment-1",
+          },
+        ],
+      })
+    const props = baseProps({ projectId: "project-1", createFirstTurnChat })
+    const { operations, rerender } = renderOperations(props)
 
-    const { operations } = renderOperations({
-      isAuthenticated: true,
-      chatId: null,
-      selectedModel: "openai/gpt-5-mini",
-      systemPrompt: "system",
-      projectId: "project-1",
-      createFirstTurnChat,
-      navigateToChat,
-      setHasDialogAuth: vi.fn(),
-    })
+    operations().beginFirstTurn()
+    // The session commit re-renders the surface with the new id before the
+    // rate-limit read resolves; creation must still happen.
+    rerender({ ...props, chatId: "chat-minted" })
 
     const ensured = await operations().ensureChatExists(
       turnArgs({
@@ -219,7 +236,7 @@ describe("useChatOperations", () => {
     )
 
     expect(ensured).toEqual({
-      chatId: "chat-project",
+      chatId: "chat-minted",
       firstTurn: {
         userMessageId: "msg_first",
         clientMessageId: "optimistic-1",
@@ -230,69 +247,79 @@ describe("useChatOperations", () => {
       },
     })
     expect(createFirstTurnChat).toHaveBeenCalledWith({
+      publicId: "chat-minted",
       model: "openai/gpt-5-mini",
       systemPrompt: "system",
       projectId: "project-1",
       message: { clientMessageId: "optimistic-1", text: "Read this" },
       attachmentIds: ["attachment-1"],
     })
-    // Navigation only after the atomic commit — a failed creation must leave
-    // the onboarding route (and no chat) behind.
-    expect(navigateToChat).toHaveBeenCalledWith("chat-project")
   })
 
-  it("navigates nowhere and returns null when the atomic creation fails", async () => {
-    const createFirstTurnChat = vi.fn().mockResolvedValue(undefined)
-    const navigateToChat = vi.fn()
-
-    const { operations } = renderOperations({
-      isAuthenticated: true,
-      chatId: null,
-      selectedModel: "openai/gpt-5-mini",
-      systemPrompt: "system",
-      createFirstTurnChat,
-      navigateToChat,
-      setHasDialogAuth: vi.fn(),
+  it("rolls the identity back when creation fails before the commit lands", async () => {
+    const props = baseProps({
+      createFirstTurnChat: vi.fn().mockResolvedValue(undefined),
     })
+    const { operations } = renderOperations(props)
 
+    operations().beginFirstTurn()
     await expect(
       operations().ensureChatExists(turnArgs({ userId: "user-1" }))
     ).resolves.toBeNull()
-    expect(navigateToChat).not.toHaveBeenCalled()
+
+    operations().rollbackFirstTurn()
+    expect(props.resetChatIdentity).toHaveBeenCalledOnce()
+    // The allocation is gone: the next Send mints afresh.
+    expect(operations().beginFirstTurn()).toBe("chat-reminted")
+  })
+
+  it("re-mints exactly once on a server id conflict, re-committing the route in place", async () => {
+    const createFirstTurnChat = vi
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockResolvedValueOnce({ kind: "conflict" })
+      .mockResolvedValueOnce({ kind: "conflict" })
+    const props = baseProps({ createFirstTurnChat })
+    const { operations } = renderOperations(props)
+
+    operations().beginFirstTurn()
+    await expect(
+      operations().ensureChatExists(turnArgs({ userId: "user-1" }))
+    ).resolves.toBeNull()
+
+    expect(vi.mocked(props.commitChatIdentity).mock.calls).toEqual([
+      ["chat-minted"],
+      ["chat-reminted"],
+    ])
+    expect(createFirstTurnChat).toHaveBeenCalledTimes(2)
+    expect(createFirstTurnChat).toHaveBeenLastCalledWith(
+      expect.objectContaining({ publicId: "chat-reminted" })
+    )
   })
 
   it("re-presents the committed identity on a same-payload retry until a dispatch is accepted", async () => {
     const createFirstTurnChat = vi
-      .fn()
-      .mockResolvedValue(durableFirstTurn("chat-a", "msg_first"))
-    const baseProps: ChatOperationsProps = {
-      isAuthenticated: true,
-      chatId: null,
-      selectedModel: "openai/gpt-5-mini",
-      systemPrompt: "system",
-      createFirstTurnChat,
-      navigateToChat: vi.fn(),
-      setHasDialogAuth: vi.fn(),
-    }
-    const { operations, rerender } = renderOperations(baseProps)
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockResolvedValue(durableFirstTurn("chat-minted", "msg_first"))
+    const props = baseProps({ createFirstTurnChat })
+    const { operations, rerender } = renderOperations(props)
 
     // Commit succeeds; the dispatch then fails, so confirmDispatched is never
     // called by the runner.
+    operations().beginFirstTurn()
     const first = await operations().ensureChatExists(
       turnArgs({ userId: "user-1" })
     )
     expect(first?.firstTurn?.clientMessageId).toBe("optimistic-1")
 
-    // Retry with the same payload but a freshly allocated optimistic id — and
-    // with the chatId prop already caught up to the pushed route (navigation
-    // precedes dispatch). The ORIGINAL committed identity comes back, so the
-    // dispatch claims the persisted row instead of duplicating it.
-    rerender({ ...baseProps, chatId: "chat-a" })
+    // Retry with the same payload but a freshly allocated optimistic id, with
+    // the chatId prop on the committed route. The ORIGINAL committed identity
+    // comes back, so the dispatch claims the persisted row.
+    rerender({ ...props, chatId: "chat-minted" })
     const retried = await operations().ensureChatExists(
       turnArgs({ userId: "user-1", clientMessageId: "optimistic-2" })
     )
     expect(retried).toEqual({
-      chatId: "chat-a",
+      chatId: "chat-minted",
       firstTurn: {
         userMessageId: "msg_first",
         clientMessageId: "optimistic-1",
@@ -308,7 +335,7 @@ describe("useChatOperations", () => {
       operations().ensureChatExists(
         turnArgs({ userId: "user-1", text: "Different question" })
       )
-    ).resolves.toEqual({ chatId: "chat-a" })
+    ).resolves.toEqual({ chatId: "chat-minted" })
 
     // Acceptance consumes the identity: after confirmDispatched, an identical
     // payload is a genuine new message, not a claim.
@@ -317,70 +344,42 @@ describe("useChatOperations", () => {
       operations().ensureChatExists(
         turnArgs({ userId: "user-1", clientMessageId: "optimistic-3" })
       )
-    ).resolves.toEqual({ chatId: "chat-a" })
+    ).resolves.toEqual({ chatId: "chat-minted" })
   })
 
   it("starts a fresh allocation after Back to the no-chat surface instead of reusing the previous chat", async () => {
     const createFirstTurnChat = vi
-      .fn()
-      .mockResolvedValueOnce(durableFirstTurn("chat-a"))
-      .mockResolvedValueOnce(durableFirstTurn("chat-b"))
-    const navigateToChat = vi.fn()
-    const baseProps: ChatOperationsProps = {
-      isAuthenticated: true,
-      chatId: null,
-      selectedModel: "openai/gpt-5-mini",
-      systemPrompt: "system",
-      projectId: "project-1",
-      createFirstTurnChat,
-      navigateToChat,
-      setHasDialogAuth: vi.fn(),
-    }
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockResolvedValueOnce(durableFirstTurn("chat-minted"))
+      .mockResolvedValueOnce(durableFirstTurn("chat-reminted"))
+    const props = baseProps({ projectId: "project-1", createFirstTurnChat })
+    const { operations, rerender } = renderOperations(props)
 
-    const { operations, rerender } = renderOperations(baseProps)
+    operations().beginFirstTurn()
     await expect(
       operations().ensureChatExists(turnArgs({ userId: "user-1", text: "first" }))
-    ).resolves.toEqual(expect.objectContaining({ chatId: "chat-a" }))
+    ).resolves.toEqual(expect.objectContaining({ chatId: "chat-minted" }))
 
-    // Within the same first turn (chatId prop not yet updated), a retry must
-    // reuse the allocated chat rather than create another one. The retry sees
-    // no firstTurn facts: the message was already persisted by the first
-    // attempt, so the retry dispatches against the existing chat.
-    await expect(
-      operations().ensureChatExists(turnArgs({ userId: "user-1", text: "retry" }))
-    ).resolves.toEqual({ chatId: "chat-a" })
-    expect(createFirstTurnChat).toHaveBeenCalledTimes(1)
-
-    // The shallow pushState hands the mounted surface its chat route, then the
+    // The shallow commit hands the mounted surface its chat route, then the
     // user presses Back to the onboarding route — no remount either way.
-    rerender({ ...baseProps, chatId: "chat-a" })
-    rerender({ ...baseProps, chatId: null })
+    rerender({ ...props, chatId: "chat-minted" })
+    rerender({ ...props, chatId: null })
 
+    expect(operations().beginFirstTurn()).toBe("chat-reminted")
     await expect(
       operations().ensureChatExists(turnArgs({ userId: "user-1", text: "second" }))
-    ).resolves.toEqual(expect.objectContaining({ chatId: "chat-b" }))
+    ).resolves.toEqual(expect.objectContaining({ chatId: "chat-reminted" }))
     expect(createFirstTurnChat).toHaveBeenCalledTimes(2)
-    expect(navigateToChat).toHaveBeenLastCalledWith("chat-b")
   })
 
   it("keeps an already active chat session without creating a new one", async () => {
-    const createFirstTurnChat = vi.fn()
-    const navigateToChat = vi.fn()
-
-    const { operations } = renderOperations({
-      isAuthenticated: false,
-      chatId: "local-active",
-      selectedModel: "openai/gpt-5-mini",
-      systemPrompt: "system",
-      createFirstTurnChat,
-      navigateToChat,
-      setHasDialogAuth: vi.fn(),
-    })
+    const props = baseProps({ isAuthenticated: false, chatId: "chat-active" })
+    const { operations } = renderOperations(props)
 
     await expect(
       operations().ensureChatExists(turnArgs())
-    ).resolves.toEqual({ chatId: "local-active" })
-    expect(createFirstTurnChat).not.toHaveBeenCalled()
-    expect(navigateToChat).not.toHaveBeenCalled()
+    ).resolves.toEqual({ chatId: "chat-active" })
+    expect(props.createFirstTurnChat).not.toHaveBeenCalled()
+    expect(props.commitChatIdentity).not.toHaveBeenCalled()
   })
 })

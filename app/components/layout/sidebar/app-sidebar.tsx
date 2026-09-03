@@ -312,7 +312,6 @@ function useAppSidebarData() {
   const { user } = useUser()
   const isLoggedIn = !!user
   const { currentChatId, isNewChatActive } = deriveSidebarSelection({
-    chats,
     isNewChatSurface,
     sessionChatId: chatId,
   })

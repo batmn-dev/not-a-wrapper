@@ -5,7 +5,7 @@ import { useDeadlineReached } from "@/hooks/use-clock"
 import { useConvexAuth, useMutation } from "convex/react"
 import * as React from "react"
 import { create } from "zustand"
-import { isConvexId, type Chat } from "../types"
+import type { Chat } from "../types"
 
 /**
  * Front-end status for the sidebar chat row's trailing indicator slot. Each
@@ -193,8 +193,8 @@ export function usePublishActiveChatStatus(
  * Gated on Convex auth to skip the common not-authenticated throw; a rarer "user
  * not found" during WorkOS→Convex user-row sync can still reject and is caught.
  * The tracking ref advances ONLY on success, so any failure retries on the next
- * open / run-advance / auth-ready render. No-op for guest / local- / optimistic
- * ids (isConvexId guard) — matching markChatRead's server-side owner no-op.
+ * open / run-advance / auth-ready render. No-op for guests (auth guard) —
+ * matching markChatRead's server-side owner no-op.
  */
 export function useMarkChatReadOnView(
   chatId: string | null,
@@ -208,7 +208,7 @@ export function useMarkChatReadOnView(
   })
 
   React.useEffect(() => {
-    if (!chatId || !isConvexId(chatId) || !isAuthenticated) return
+    if (!chatId || !isAuthenticated) return
     if (typeof lastRunEndedAt !== "number") return
 
     const ended = lastRunEndedAt

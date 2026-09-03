@@ -47,6 +47,8 @@ beforeEach(() => {
 let useChatCore: typeof UseChatCore
 
 const seamMocks = vi.hoisted(() => ({
+  // Persistence is auth-derived (ADR-0031): guest scenarios flip this off.
+  isAuthenticated: true,
   convexMutation: vi.fn(),
   updateTitle: vi.fn(),
   // Stable across renders so detached-finish persistence is observable: a
@@ -86,7 +88,7 @@ vi.mock("./turn-context", () => ({
     handleModelChange: vi.fn(),
     enableSearch: false,
     setEnableSearch: vi.fn(),
-    isAuthenticated: true,
+    isAuthenticated: seamMocks.isAuthenticated,
     systemPrompt: "system prompt",
     isHydrated: true,
     getTurnSnapshot: () => ({
@@ -94,7 +96,7 @@ vi.mock("./turn-context", () => ({
       systemPrompt: "system prompt",
       enableSearch: false,
       reasoningEffort: seamMocks.turnSnapshotReasoningEffort,
-      isAuthenticated: true,
+      isAuthenticated: seamMocks.isAuthenticated,
       isHydrated: true,
     }),
   }),
@@ -323,6 +325,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     seamMocks.turnSnapshotReasoningEffort = undefined
+    seamMocks.isAuthenticated = true
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
       window.setTimeout(() => callback(performance.now()), 16)
     )
@@ -370,6 +373,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
       chatId,
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
+      firstTurn: { begin: () => "chat-1", rollback: () => {} },
       ensureChatExists: vi.fn(async () => ({ chatId: CHAT_ID })),
       bumpChat: vi.fn(),
     })
@@ -545,6 +549,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
   })
 
   it("persists a detached guest stream into its origin chat, not the current one", async () => {
+    seamMocks.isAuthenticated = false
     // The origin-binding contract: after a mounted A→B transition, the
     // detached guest stream's assistant message caches under chat A (the
     // binding's frozen ownerChatId), never under B or via stored-guest-id
@@ -597,6 +602,7 @@ describe("useChatCore × real @ai-sdk/react finalization", () => {
   })
 
   it("still aborts through the Stop button after a detach recreated the instance", async () => {
+    seamMocks.isAuthenticated = false
     // Regression guard for the Stop chain (Stop → req.signal → onAbort): the
     // stop() handed out after a detach must abort the CURRENT instance's
     // stream, and only that stream.

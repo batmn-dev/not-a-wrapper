@@ -1,4 +1,3 @@
-import { isOptimisticChatId } from "../identity"
 import type { Chats } from "../types"
 
 // Optimistic updates layered over the server data (adds, updates, deletes).
@@ -49,13 +48,10 @@ export function applyOptimisticOps(
 
   for (const op of ops) {
     if (op.type === "add") {
-      // Optimistic-id adds always prepend; real-id adds only if not already
-      // present (server data may already carry it).
-      if (
-        isOptimisticChatId(op.chat.id) ||
-        !result.find((c) => c.id === op.chat.id)
-      ) {
-        result = [op.chat, ...result.filter((c) => c.id !== op.chat.id)]
+      // Adds carry the chat's real (client-minted) id: prepend only when the
+      // server data does not already carry it.
+      if (!result.find((c) => c.id === op.chat.id)) {
+        result = [op.chat, ...result]
       }
     } else if (op.type === "update") {
       result = result.map((c) => (c.id === op.id ? { ...c, ...op.changes } : c))

@@ -57,6 +57,14 @@ export function markChatPerfRequestDispatched(): void {
   markChatPerf("request_dispatched", turnFields())
 }
 
+/**
+ * Emitted by the session provider the moment a first turn's `/c/<chatId>`
+ * route is committed (ADR-0031) — synchronous with Send, before creation.
+ */
+export function markChatPerfThreadRouteCommitted(): void {
+  markChatPerf("thread_route_committed", turnFields())
+}
+
 /** First parsed stream chunk / first text-delta observed by the transport. */
 export function markChatPerfFirstStreamChunk(): void {
   markChatPerf("client_first_stream_bytes", turnFields())

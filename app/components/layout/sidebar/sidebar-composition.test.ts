@@ -152,30 +152,9 @@ describe("sidebar grouping composition", () => {
 })
 
 describe("sidebar selection", () => {
-  const existing = chat("existing", {
-    updated_at: "2026-01-01T00:00:00.000Z",
-  })
-  const optimistic = chat("optimistic-first-turn", {
-    updated_at: "2026-01-02T00:00:00.000Z",
-  })
-
-  it("selects the optimistic first-turn row on the new-chat surface", () => {
+  it("keeps the new-chat action selected until the session commits a chat id", () => {
     expect(
       deriveSidebarSelection({
-        chats: [optimistic, existing],
-        isNewChatSurface: true,
-        sessionChatId: null,
-      })
-    ).toEqual({
-      currentChatId: "optimistic-first-turn",
-      isNewChatActive: false,
-    })
-  })
-
-  it("keeps the new-chat action selected before a chat row exists", () => {
-    expect(
-      deriveSidebarSelection({
-        chats: [existing],
         isNewChatSurface: true,
         sessionChatId: null,
       })
@@ -185,23 +164,21 @@ describe("sidebar selection", () => {
     })
   })
 
-  it("keeps route identity authoritative once navigation has a chat id", () => {
+  it("selects the session's chat id, which a first turn commits before its row exists", () => {
     expect(
       deriveSidebarSelection({
-        chats: [optimistic, existing],
         isNewChatSurface: false,
-        sessionChatId: "existing",
+        sessionChatId: "chat-minted",
       })
     ).toEqual({
-      currentChatId: "existing",
+      currentChatId: "chat-minted",
       isNewChatActive: false,
     })
   })
 
-  it("does not project an optimistic row outside the new-chat surface", () => {
+  it("selects nothing on a chat-less route outside the new-chat surface", () => {
     expect(
       deriveSidebarSelection({
-        chats: [optimistic, existing],
         isNewChatSurface: false,
         sessionChatId: null,
       })

@@ -9,7 +9,6 @@ import { markApprovalResolvedLocally } from "@/lib/chat-runs/approval-auto-send-
 import { useChats } from "@/lib/chat-store/chats/provider"
 import {
   createOptimisticMessageId,
-  getMessagePersistenceMode,
   GUEST_CHAT_STORAGE_KEY,
 } from "@/lib/chat-store/identity"
 import { useMessages } from "@/lib/chat-store/messages/provider"
@@ -89,6 +88,8 @@ type UseChatCoreProps = {
   ensureChatExists: (
     args: EnsureChatForTurnArgs
   ) => Promise<EnsuredTurnChat | null>
+  /** First-turn identity commands (ADR-0031), owned by useChatOperations. */
+  firstTurn: { begin: () => string; rollback: () => void }
   bumpChat: (chatId: string) => void
   /** Imperative bridge to the Composer's display, for ?prompt= hydration. */
   setComposerText?: (text: string) => void
@@ -101,6 +102,7 @@ export function useChatCore({
   user,
   checkLimitsAndNotify,
   ensureChatExists,
+  firstTurn,
   bumpChat,
   setComposerText,
 }: UseChatCoreProps) {
@@ -298,7 +300,7 @@ export function useChatCore({
   // closure; the transport restores a paused approval's applied effort.
   // Continuations only exist on durable chats.
   const getFallbackTurnBody = useCallback(() => {
-    if (!chatId || getMessagePersistenceMode(chatId) !== "server") return null
+    if (!chatId || !isAuthenticated) return null
     const snapshot = getTurnSnapshot()
     return buildChatTurnRequestBody({
       chatId,
@@ -308,10 +310,11 @@ export function useChatCore({
       enableSearch: snapshot.enableSearch,
       reasoningEffort: snapshot.reasoningEffort,
     })
-  }, [chatId, getTurnSnapshot, user?.id])
+  }, [chatId, isAuthenticated, getTurnSnapshot, user?.id])
 
   const detachableStream = useDetachableChatStream({
     chatId,
+    isAuthenticated,
     initialMessages,
     streamTimeoutMs: STREAM_TIMEOUT_MS,
     api: API_ROUTE_CHAT,
@@ -379,6 +382,7 @@ export function useChatCore({
   )
   const generationPresentation = useGenerationPresentationController({
     chatId,
+    isAuthenticated,
     localStatus: status,
     isSubmitting,
     localAssistantMessageId,
@@ -498,6 +502,7 @@ export function useChatCore({
     },
     resolveUserId: () => getOrCreateGuestUserId(user),
     checkLimitsAndNotify,
+    firstTurn,
     ensureChatExists,
     setPreviousChatId,
     cleanupOptimisticAttachments: () => undefined,
@@ -725,8 +730,7 @@ export function useChatCore({
       return
     }
 
-    const isServerPersisted = getMessagePersistenceMode(chatId) === "server"
-    if (!isServerPersisted) {
+    if (!isAuthenticated) {
       // Guest/local chats have no server selected path to project.
       if (initialMessages.length > 0) {
         applyMessages((prev) => (prev.length === 0 ? initialMessages : prev))
@@ -748,7 +752,7 @@ export function useChatCore({
     if (next !== messagesRef.current) {
       applyMessages(next)
     }
-  }, [chatId, initialMessages, status])
+  }, [chatId, isAuthenticated, initialMessages, status])
 
   // Shared prompt links hydrate without auto-submitting.
   useEffect(() => {

@@ -2,7 +2,6 @@ import {
   isEmptyAssistantMessage,
   isTerminalOutcomeStub,
 } from "@/convex/domain/message_visibility"
-import { getMessagePersistenceMode } from "@/lib/chat-store/identity"
 import {
   cacheMessages,
   getCachedMessages,
@@ -32,13 +31,13 @@ export type PendingEdit = {
   chatId: string
 }
 
+/** Durable persistence is a property of the caller's auth, never the id's
+ * shape (ADR-0031): a signed-in user's chat is route-persisted by Convex. */
 export function routePersistsChatMessages(
   chatId: string | null,
   isAuthenticated: boolean
 ) {
-  return Boolean(
-    chatId && isAuthenticated && getMessagePersistenceMode(chatId) === "server"
-  )
+  return Boolean(chatId && isAuthenticated)
 }
 
 export type ChatTurnStoreAdapters = {

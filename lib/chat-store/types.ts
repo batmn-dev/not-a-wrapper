@@ -1,10 +1,11 @@
-import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { Doc } from "@/convex/_generated/dataModel"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 
 export type ConvexChat = Doc<"chats">
 
 /** App-facing chat shape; snake_case is retained for existing consumers. */
 export type Chat = {
+  /** The client-minted publicId (ADR-0031) — never a Convex `_id`. */
   id: string
   user_id: string
   title: string | null
@@ -45,7 +46,7 @@ export type Chats = Chat
 
 export function convexChatToChat(convexChat: ConvexChat): Chat {
   return {
-    id: convexChat._id,
+    id: convexChat.publicId,
     user_id: convexChat.userId,
     title: convexChat.title ?? null,
     title_source: convexChat.titleSource,
@@ -68,8 +69,4 @@ export function convexChatToChat(convexChat: ConvexChat): Chat {
     last_run_status: convexChat.lastRunStatus ?? null,
     last_read_at: convexChat.lastReadAt ?? null,
   }
-}
-
-export function isConvexId(id: string): id is Id<"chats"> {
-  return id.length > 20 && !id.includes("-")
 }

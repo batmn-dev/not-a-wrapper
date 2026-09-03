@@ -12,18 +12,27 @@ vi.mock("next/navigation", () => ({
 }))
 
 function SessionProbe() {
-  const { chatId, isNewChatSurface, isChatIdHandoff, navigateToChat } =
-    useChatSession()
+  const {
+    chatId,
+    isNewChatSurface,
+    isChatIdHandoff,
+    commitChatIdentity,
+    resetChatIdentity,
+  } = useChatSession()
 
   return (
-    <button
-      type="button"
-      data-new-chat={String(isNewChatSurface)}
-      data-chat-id-handoff={String(isChatIdHandoff)}
-      onClick={() => navigateToChat("chat-durable")}
-    >
-      {chatId ?? "new-chat"}
-    </button>
+    <div>
+      <button
+        type="button"
+        data-testid="commit"
+        data-new-chat={String(isNewChatSurface)}
+        data-chat-id-handoff={String(isChatIdHandoff)}
+        onClick={() => commitChatIdentity("chat-minted")}
+      >
+        {chatId ?? "new-chat"}
+      </button>
+      <button type="button" data-testid="reset" onClick={resetChatIdentity} />
+    </div>
   )
 }
 
@@ -62,48 +71,63 @@ describe("ChatSessionProvider route identity", () => {
     })
   }
 
-  it("owns the shallow new-chat to durable-chat handoff", () => {
-    renderSession()
-    expect(container?.textContent).toBe("new-chat")
-    expect(container?.querySelector("button")?.dataset.newChat).toBe("true")
-    expect(container?.querySelector("button")?.dataset.chatIdHandoff).toBe(
-      "false"
-    )
-
+  const probe = () => container!.querySelector<HTMLButtonElement>("[data-testid=commit]")!
+  const click = (testId: string) =>
     act(() => {
-      container?.querySelector("button")?.click()
+      container?.querySelector<HTMLButtonElement>(`[data-testid=${testId}]`)?.click()
     })
 
-    expect(window.location.pathname).toBe("/c/chat-durable")
-    // Next's pathname transition has not committed yet, but session identity
-    // already crossed the handoff with no blank selected-chat interval.
-    expect(container?.textContent).toBe("chat-durable")
-    expect(container?.querySelector("button")?.dataset.newChat).toBe("false")
-    expect(container?.querySelector("button")?.dataset.chatIdHandoff).toBe(
-      "true"
-    )
+  it("commits the route synchronously when the identity is set", () => {
+    renderSession()
+    expect(probe().textContent).toBe("new-chat")
+    expect(probe().dataset.newChat).toBe("true")
 
-    navigationMocks.pathname = "/c/chat-durable"
+    const historyLength = window.history.length
+    click("commit")
+
+    // The route is a derived view of session state: pushed before Next has
+    // observed the pathname, with no blank selected-chat interval.
+    expect(window.location.pathname).toBe("/c/chat-minted")
+    expect(window.history.length).toBe(historyLength + 1)
+    expect(probe().textContent).toBe("chat-minted")
+    expect(probe().dataset.newChat).toBe("false")
+    expect(probe().dataset.chatIdHandoff).toBe("true")
+
+    navigationMocks.pathname = "/c/chat-minted"
     renderSession()
 
-    expect(container?.textContent).toBe("chat-durable")
-    expect(container?.querySelector("button")?.dataset.chatIdHandoff).toBe(
-      "false"
-    )
+    expect(probe().textContent).toBe("chat-minted")
+    expect(probe().dataset.chatIdHandoff).toBe("false")
+  })
+
+  it("restores the origin route in place on rollback and clears the handoff", () => {
+    window.history.replaceState(null, "", "/p/project-1")
+    navigationMocks.pathname = "/p/project-1"
+    renderSession()
+
+    click("commit")
+    expect(window.location.pathname).toBe("/c/chat-minted")
+    const historyLength = window.history.length
+
+    click("reset")
+
+    // replaceState, not a second push: the refused turn leaves no orphan entry.
+    expect(window.location.pathname).toBe("/p/project-1")
+    expect(window.history.length).toBe(historyLength)
+    expect(probe().textContent).toBe("new-chat")
+    expect(probe().dataset.chatIdHandoff).toBe("false")
   })
 
   it("drops a pending handoff if navigation returns to its source", () => {
     renderSession()
 
-    act(() => {
-      container?.querySelector("button")?.click()
-    })
-    expect(container?.textContent).toBe("chat-durable")
+    click("commit")
+    expect(probe().textContent).toBe("chat-minted")
 
     window.history.replaceState(null, "", "/")
     renderSession()
 
-    expect(container?.textContent).toBe("new-chat")
-    expect(container?.querySelector("button")?.dataset.newChat).toBe("true")
+    expect(probe().textContent).toBe("new-chat")
+    expect(probe().dataset.newChat).toBe("true")
   })
 })

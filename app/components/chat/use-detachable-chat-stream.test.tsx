@@ -130,6 +130,7 @@ describe("detachable chat stream lifecycle", () => {
       const [chatId, setChatIdState] = useState(initialChatId)
       const stream = useDetachableChatStream({
         chatId,
+        isAuthenticated: false,
         initialMessages: [],
         streamTimeoutMs: 120_000,
         api: "/api/chat",

@@ -1,24 +1,8 @@
-import { getAuthenticatedWorkosSession } from "@/lib/auth/workos"
-import { isLocalChatId } from "@/lib/chat-store/identity"
-import { redirect } from "next/navigation"
-
-type Props = {
-  params: Promise<{ chatId: string }>
-}
-
 // The Chat surface is mounted by the persistent (chat)/layout.tsx — see its
-// header comment (adoption-loss fix). This segment keeps only the server
-// duty: direct loads of a durable chat require a WorkOS session.
-export default async function Page({ params }: Props) {
-  const { chatId } = await params
-
-  if (!isLocalChatId(chatId)) {
-    const authSession = await getAuthenticatedWorkosSession()
-
-    if (!authSession) {
-      redirect("/")
-    }
-  }
-
+// header comment (adoption-loss fix). Chat identity is client-minted and the
+// same for guests and signed-in users (ADR-0031), so this segment cannot tell
+// a guest's local chat from a durable one; the mounted Chat resolves the id
+// against the caller's own store and renders not-found when nothing answers.
+export default function Page() {
   return null
 }

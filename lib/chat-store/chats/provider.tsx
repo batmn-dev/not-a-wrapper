@@ -14,6 +14,7 @@ import {
 import type { Attachment } from "@/lib/file-handling"
 import { resolveModelId } from "@/lib/models/model-id-migration"
 import { useConvexAuth, useMutation } from "convex/react"
+import { ConvexError } from "convex/values"
 import {
   createContext,
   useCallback,
@@ -24,11 +25,7 @@ import {
   useSyncExternalStore,
 } from "react"
 import { getDefaultModelForUser, SYSTEM_PROMPT_DEFAULT } from "../../config"
-import {
-  createLocalChatId,
-  createOptimisticChatId,
-  isLocalChatId,
-} from "../identity"
+import { CHAT_PUBLIC_ID_CONFLICT_CODE } from "../identity"
 import { clearMessagesCache } from "../messages/api"
 import { convexChatToChat, type Chats } from "../types"
 import {
@@ -116,6 +113,9 @@ function ConvexAuthReadySignal({
 }
 
 export type CreateFirstTurnChatInput = {
+  /** The client-minted chat identity, already committed to the session
+   * (ADR-0031). Guests and signed-in users share the scheme. */
+  publicId: string
   model?: string
   systemPrompt?: string
   projectId?: string
@@ -145,6 +145,21 @@ export type FirstTurnChat =
       attachments: Attachment[]
     }
 
+/**
+ * `conflict`: the server refused the publicId (typed
+ * CHAT_PUBLIC_ID_CONFLICT_CODE) — the caller re-mints once. `undefined`: the
+ * creation failed and was already reported.
+ */
+export type FirstTurnChatResult = FirstTurnChat | { kind: "conflict" } | undefined
+
+function isChatPublicIdConflict(error: unknown): boolean {
+  return (
+    error instanceof ConvexError &&
+    (error.data as { code?: string } | null)?.code ===
+      CHAT_PUBLIC_ID_CONFLICT_CODE
+  )
+}
+
 type ChatsContextType = {
   chats: Chats[]
   isLoading: boolean
@@ -164,7 +179,7 @@ type ChatsContextType = {
   ) => Promise<boolean>
   createFirstTurnChat: (
     input: CreateFirstTurnChatInput
-  ) => Promise<FirstTurnChat | undefined>
+  ) => Promise<FirstTurnChatResult>
   resetChats: () => Promise<void>
   getChatById: (id: string) => Chats | undefined
   updateChatModel: (id: string, model: string) => Promise<void>
@@ -281,7 +296,7 @@ export function ChatsProvider({
         updated_at: new Date().toISOString(),
       }
 
-      if (isLocalChatId(id)) {
+      if (!userId) {
         await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
@@ -289,7 +304,7 @@ export function ChatsProvider({
       setOptimisticOps((prev) => [...prev, { type: "update", id, changes }])
 
       try {
-        await updateTitleMutation({ chatId: id as Id<"chats">, title })
+        await updateTitleMutation({ chatId: id, title })
         removeOp(
           (op) =>
             op.type === "update" && op.id === id && op.changes.title === title
@@ -302,15 +317,15 @@ export function ChatsProvider({
         toast({ title: "Failed to update title", status: "error" })
       }
     },
-    [updateTitleMutation, removeOp]
+    [updateTitleMutation, removeOp, userId]
   )
 
   const applyGeneratedTitle = useCallback(
     async (id: string, title: string, generation: number) => {
-      if (!isLocalChatId(id)) {
+      if (userId) {
         try {
           return await applyGeneratedTitleMutation({
-            chatId: id as Id<"chats">,
+            chatId: id,
             title,
             generation,
           })
@@ -337,12 +352,12 @@ export function ChatsProvider({
         }
       })
     },
-    [applyGeneratedTitleMutation]
+    [applyGeneratedTitleMutation, userId]
   )
 
   const deleteChat = useCallback(
     async (id: string, currentChatId?: string, redirect?: () => void) => {
-      if (isLocalChatId(id)) {
+      if (!userId) {
         await deleteCachedChat(id)
         await clearMessagesCache(id)
         if (id === currentChatId && redirect) redirect()
@@ -352,7 +367,7 @@ export function ChatsProvider({
       setOptimisticOps((prev) => [...prev, { type: "delete", id }])
 
       try {
-        await deleteChatMutation({ chatId: id as Id<"chats"> })
+        await deleteChatMutation({ chatId: id })
         if (id === currentChatId && redirect) redirect()
         return true
       } catch (error) {
@@ -364,18 +379,19 @@ export function ChatsProvider({
         return false
       }
     },
-    [deleteChatMutation, removeOp]
+    [deleteChatMutation, removeOp, userId]
   )
 
   const createFirstTurnChat = useCallback(
     async ({
+      publicId,
       model,
       systemPrompt,
       projectId,
       guestUserId,
       message,
       attachmentIds,
-    }: CreateFirstTurnChatInput): Promise<FirstTurnChat | undefined> => {
+    }: CreateFirstTurnChatInput): Promise<FirstTurnChatResult> => {
       // The server-seeded app user is the durable-intent fact. It becomes
       // available before Convex finishes confirming the JWT, so never use the
       // transient Convex readiness boolean to downgrade that user to a guest.
@@ -401,9 +417,8 @@ export function ChatsProvider({
           return
         }
 
-        const localChatId = createLocalChatId()
         const localChat: Chats = {
-          id: localChatId,
+          id: publicId,
           title: CHAT_TITLE_PLACEHOLDER,
           title_source: "provisional",
           title_generation: INITIAL_CHAT_TITLE_GENERATION,
@@ -433,9 +448,10 @@ export function ChatsProvider({
         }
       }
 
-      const optimisticId = createOptimisticChatId()
+      // The sidebar row carries the committed id from the start (ADR-0031):
+      // no optimistic placeholder id, no swap once the server answers.
       const optimisticChat: Chats = {
-        id: optimisticId,
+        id: publicId,
         title: CHAT_TITLE_PLACEHOLDER,
         title_source: "provisional",
         title_generation: INITIAL_CHAT_TITLE_GENERATION,
@@ -460,6 +476,7 @@ export function ChatsProvider({
         // message in one Convex transaction, so a failure leaves NO chat behind
         // (the empty-chat abandonment class). See chats.createWithFirstTurn.
         const created = await createFirstTurnMutation({
+          publicId,
           title: CHAT_TITLE_PLACEHOLDER,
           model: normalizedModel,
           systemPrompt: systemPrompt || SYSTEM_PROMPT_DEFAULT,
@@ -468,30 +485,19 @@ export function ChatsProvider({
           attachmentIds: attachmentIds as Id<"chatAttachments">[],
         })
 
-        const newChat: Chats = {
-          ...optimisticChat,
-          id: created.chatId,
-        }
-
-        setOptimisticOps((prev) => {
-          const filtered = prev.filter(
-            (op) => !(op.type === "add" && op.chat.id === optimisticId)
-          )
-          return [...filtered, { type: "add", chat: newChat }]
-        })
-
         setTimeout(() => {
-          removeOp((op) => op.type === "add" && op.chat.id === created.chatId)
+          removeOp((op) => op.type === "add" && op.chat.id === publicId)
         }, 1000)
 
         return {
           kind: "durable",
-          chat: newChat,
+          chat: optimisticChat,
           userMessageId: created.userMessageId,
           attachments: created.attachments,
         }
-      } catch {
-        removeOp((op) => op.type === "add" && op.chat.id === optimisticId)
+      } catch (error) {
+        removeOp((op) => op.type === "add" && op.chat.id === publicId)
+        if (isChatPublicIdConflict(error)) return { kind: "conflict" }
         toast({ title: "Failed to create chat", status: "error" })
         return undefined
       }
@@ -526,7 +532,7 @@ export function ChatsProvider({
         updated_at: new Date().toISOString(),
       }
 
-      if (isLocalChatId(id)) {
+      if (!userId) {
         await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
@@ -535,7 +541,7 @@ export function ChatsProvider({
 
       try {
         await updateModelMutation({
-          chatId: id as Id<"chats">,
+          chatId: id,
           model: normalizedModel,
         })
         removeOp(
@@ -554,13 +560,13 @@ export function ChatsProvider({
         throw error
       }
     },
-    [updateModelMutation, removeOp]
+    [updateModelMutation, removeOp, userId]
   )
 
   const bumpChat = useCallback(
     async (id: string) => {
       const changes = { updated_at: new Date().toISOString() }
-      if (isLocalChatId(id)) {
+      if (!userId) {
         await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
@@ -576,7 +582,7 @@ export function ChatsProvider({
         )
       }, 100)
     },
-    [removeOp]
+    [removeOp, userId]
   )
 
   const togglePinned = useCallback(
@@ -588,7 +594,7 @@ export function ChatsProvider({
         updated_at: now,
       }
 
-      if (isLocalChatId(id)) {
+      if (!userId) {
         await updateCachedChat(id, (chat) => ({ ...chat, ...changes }))
         return
       }
@@ -596,7 +602,7 @@ export function ChatsProvider({
       setOptimisticOps((prev) => [...prev, { type: "update", id, changes }])
 
       try {
-        await togglePinMutation({ chatId: id as Id<"chats">, pinned })
+        await togglePinMutation({ chatId: id, pinned })
         removeOp(
           (op) =>
             op.type === "update" && op.id === id && op.changes.pinned === pinned
@@ -609,7 +615,7 @@ export function ChatsProvider({
         toast({ title: "Failed to update pin", status: "error" })
       }
     },
-    [togglePinMutation, removeOp]
+    [togglePinMutation, removeOp, userId]
   )
 
   const pinnedChats = useMemo(

@@ -4,6 +4,7 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { SelectedRunProjection } from "@/convex/messages"
+import { useUser } from "@/lib/user-store/provider"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
@@ -76,22 +77,26 @@ export function useMessages() {
 
 export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const { chatId } = useChatSession()
+  // Persistence is a property of the caller, not the id (ADR-0031): the
+  // server-seeded app user marks a durable chat; a guest reads IndexedDB.
+  const { user } = useUser()
+  const isAuthenticated = Boolean(user?.id)
   const messagePersistenceMode = chatId
-    ? getMessagePersistenceMode(chatId)
+    ? getMessagePersistenceMode(isAuthenticated)
     : null
 
-  const isValidConvexId = messagePersistenceMode === "server"
+  const isDurableChat = chatId !== null && messagePersistenceMode === "server"
 
   // The path and run state subscribe separately so run-only writes do not
   // re-deliver the full message path. Both queries use the same chatId and
   // Convex client, so their values are delivered from one transition.
   const pathQuery = usePerUserQuery(
     api.messages.getSelectedPath,
-    isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
+    isDurableChat ? { chatId } : "skip"
   )
   const runStateQuery = usePerUserQuery(
     api.messages.getSelectedRunState,
-    isValidConvexId ? { chatId: chatId as Id<"chats"> } : "skip"
+    isDurableChat ? { chatId } : "skip"
   )
   const canSubscribeToMessages = pathQuery.isAuthReady
   const isMessagesLoading = pathQuery.isLoading || runStateQuery.isLoading
@@ -138,7 +143,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     })
   }, [canSubscribeToMessages, convexMessages])
 
-  const isLoading = isValidConvexId && isMessagesLoading
+  const isLoading = isDurableChat && isMessagesLoading
 
   const subscribeToCachedMessages = useCallback(
     (listener: () => void) => {
@@ -264,7 +269,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
 
   const selectMessageBranch = useCallback(
     async (messageId: string) => {
-      if (!chatId || getMessagePersistenceMode(chatId) !== "server") return
+      if (!chatId || !isAuthenticated) return
 
       // Do NOT wipe optimistic state here. Clearing it blanked the thread until
       // the Convex query round-tripped. The selected path is owned by the
@@ -273,7 +278,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       // seam (use-chat-core) swaps the live turn array to it — no blank.
       try {
         await selectBranchMutation({
-          chatId: chatId as Id<"chats">,
+          chatId,
           messageId: messageId as Id<"messages">,
         })
       } catch (error) {
@@ -281,7 +286,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         toast({ title: "Failed to switch branch", status: "error" })
       }
     },
-    [chatId, selectBranchMutation]
+    [chatId, isAuthenticated, selectBranchMutation]
   )
 
   // Callers may replace only optimistic rows; server rows remain query-owned.

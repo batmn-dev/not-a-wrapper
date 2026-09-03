@@ -2,7 +2,6 @@
 
 import { Icon } from "@/components/ui/icon"
 import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
@@ -66,7 +65,7 @@ export function ChatActionsMenu({
     try {
       await sharePublishedChat({
         chatId: chat.id,
-        publish: () => makePublicMutation({ chatId: chat.id as Id<"chats"> }),
+        publish: () => makePublicMutation({ chatId: chat.id }),
         openFallback: () => startTransition(() => setIsShareDrawerOpen(true)),
       })
     } catch (error) {

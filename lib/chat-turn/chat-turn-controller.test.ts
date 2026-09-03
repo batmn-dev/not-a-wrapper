@@ -94,6 +94,15 @@ function createHarness() {
       events.push("checkLimitsAndNotify")
       return true
     }),
+    firstTurn: {
+      begin: vi.fn(() => {
+        events.push("firstTurn.begin")
+        return "chat-1"
+      }),
+      rollback: vi.fn(() => {
+        events.push("firstTurn.rollback")
+      }),
+    },
     ensureChatExists: vi.fn(async () => {
       events.push("ensureChatExists")
       return { chatId: "chat-1" }
