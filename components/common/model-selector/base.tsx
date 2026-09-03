@@ -780,6 +780,12 @@ export function ModelSelector({
         return
       }
 
+      if (settled) {
+        // The held row kept the surface open; the answer closes it.
+        setDrawerOpen(false)
+        setDropdownOpen(false)
+        resetModelList()
+      }
       setIsProDialogOpen(true)
       return
     }
