@@ -12,17 +12,23 @@ vi.mock("@/lib/convex/use-per-user-query", () => ({
     isLoading: true,
   }),
 }))
+const userState = vi.hoisted(() => ({
+  user: null as { id: string; favorite_models: string[] } | null,
+}))
 vi.mock("@/lib/user-store/provider", () => ({
-  useUser: () => ({ user: null }),
+  useUser: () => ({ user: userState.user }),
 }))
 
 const GEMMA = "openrouter:google/gemma-4-26b-a4b-it:free"
+const BYOK_ONLY = "gpt-5.6-sol"
 const seen: Array<string | null> = []
+let byokOnlyAccessible: boolean | undefined
 
 function Probe() {
-  const { lastUsedModel } = useModel()
+  const { lastUsedModel, models } = useModel()
   useEffect(() => {
     seen.push(lastUsedModel)
+    byokOnlyAccessible = models.find((m) => m.id === BYOK_ONLY)?.accessible
   })
   return null
 }
@@ -62,6 +68,7 @@ describe("ModelProvider shell hint seeding", () => {
     act(() => root?.unmount())
     root = null
     seen.length = 0
+    userState.user = null
     window.localStorage.clear()
     document.cookie = "composer_shell=; Max-Age=0; Path=/"
   })
@@ -85,5 +92,16 @@ describe("ModelProvider shell hint seeding", () => {
     expect(decodeURIComponent(document.cookie)).toBe(
       'composer_shell={"m":"gpt-5-mini"}'
     )
+  })
+
+  it("keeps a signed-in device's key-backed last-used model presentable while key status loads", () => {
+    window.localStorage.setItem("lastUsedModel", BYOK_ONLY)
+    mount({ modelId: BYOK_ONLY })
+    expect(byokOnlyAccessible).toBe(false)
+
+    act(() => root?.unmount())
+    userState.user = { id: "u1", favorite_models: [] }
+    mount({ modelId: BYOK_ONLY })
+    expect(byokOnlyAccessible).toBe(true)
   })
 })

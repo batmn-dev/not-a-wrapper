@@ -52,7 +52,12 @@ Options for the device memory:
   anything else is dropped. Selectability for the auth state remains the
   resolver's job (`resolvePreferredModelId`), so an inaccessible hint yields
   the real default, never an invalid label. Guests and users with no memory
-  get the real default on the server too.
+  get the real default on the server too. One presentation exception: key
+  status (`userKeys.getProviderStatus`) is a client read that lands after the
+  user document, so until it does a signed-in device's last-used model keeps
+  the accessibility it had when it was chosen; a key-backed selection thus
+  paints in the shell instead of the default, and a stale one still drops to
+  the default once status arrives. Admission never reads this flag.
 - **One source of truth.** Device memory is the live `useSyncExternalStore`
   snapshot for both values (`ModelProvider.lastUsedModel`, the Turn context's
   stored effort); the hint is only their server snapshot. The server render

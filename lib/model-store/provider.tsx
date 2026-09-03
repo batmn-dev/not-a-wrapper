@@ -171,7 +171,9 @@ export function ModelProvider({
     }
   }, [])
 
-  const { data: providers } = usePerUserQuery(api.userKeys.getProviderStatus)
+  const { data: providers, isLoading: keyStatusLoading } = usePerUserQuery(
+    api.userKeys.getProviderStatus
+  )
 
   const userKeyStatus = useMemo<UserKeyStatus>(() => {
     if (!providers) return DEFAULT_KEY_STATUS
@@ -196,13 +198,20 @@ export function ModelProvider({
       const hasRouteKey = model.routes.some(
         (route) => userKeyStatus[route.providerId] === true
       )
+      // Key status lands after the Convex user read. Until then a signed-in
+      // device's last-used model keeps the accessibility it had when it was
+      // chosen, so a key-backed selection renders in the shell (ADR-0032)
+      // instead of the default and flipping back; a stale one still drops to
+      // the default once status arrives.
+      const keyStatusPending =
+        keyStatusLoading && !!user && model.id === lastUsedModel
 
       return {
         ...model,
-        accessible: hasRouteKey,
+        accessible: hasRouteKey || keyStatusPending,
       }
     })
-  }, [rawModels, userKeyStatus])
+  }, [rawModels, userKeyStatus, keyStatusLoading, user, lastUsedModel])
 
   return (
     <ModelContext.Provider

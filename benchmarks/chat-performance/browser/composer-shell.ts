@@ -22,6 +22,8 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { existsSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { getModelInfo } from "@/lib/models"
+import { getModelDisplayName } from "@/lib/models/presentation"
 import { chromium, type Browser, type BrowserContext } from "playwright"
 import {
   ensurePerfAuthUser,
@@ -137,6 +139,14 @@ type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>
  */
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 6000)
 
+/** The selector search that surfaces `SHELL_MODEL_ID`: its display name. */
+function shellModelSearch(): string {
+  const model = getModelInfo(SHELL_MODEL_ID)
+  if (!model)
+    throw new Error(`SHELL_MODEL_ID ${SHELL_MODEL_ID} is not in the catalog`)
+  return getModelDisplayName(model)
+}
+
 /** Save the fixture selection through the composer's own controls. */
 async function saveFixtureSelection(
   browser: Browser,
@@ -149,7 +159,7 @@ async function saveFixtureSelection(
     await page.goto(`${baseUrl}/`, { waitUntil: "load" })
     await page.waitForTimeout(SETTLE_MS)
     await page.locator(MODEL_TRIGGER).click()
-    await page.getByPlaceholder("Search models...").fill("Gemma")
+    await page.getByPlaceholder("Search models...").fill(shellModelSearch())
     await page
       .locator(`[data-model-selector-row="model:${SHELL_MODEL_ID}"]`)
       .click()
