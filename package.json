@@ -22,6 +22,7 @@
     "env:check": "node scripts/validate-env.mjs .env.local",
     "start": "next start",
     "lint": "eslint .",
+    "qa:capture": "bun scripts/qa-capture.ts",
     "smoke:openrouter": "bun scripts/smoke-openrouter.ts",
     "catalog:openrouter": "bun scripts/generate-openrouter-catalog.ts",
     "catalog:openrouter:refresh": "bun scripts/generate-openrouter-catalog.ts --fetch",
