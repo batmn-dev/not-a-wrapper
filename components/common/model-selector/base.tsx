@@ -673,7 +673,7 @@ export function ModelSelector({
   variant = "default",
 }: ModelSelectorProps) {
   const isComposerVariant = variant === "composer"
-  const { models } = useModel()
+  const { models, keyStatusLoading } = useModel()
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
@@ -736,6 +736,10 @@ export function ModelSelector({
     if (disabled) return
 
     if (isLocked) {
+      // Key status is a client read that lands after first paint; until it
+      // does a key-backed model only looks locked, so the click waits for the
+      // real answer instead of opening the Pro dialog on a guess.
+      if (isUserAuthenticated && keyStatusLoading) return
       setSelectedProModel(modelId)
       if (!isUserAuthenticated) {
         setDrawerOpen(false)

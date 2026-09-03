@@ -70,7 +70,11 @@ Options for the device memory:
   Convex). The server shell and the client resolve the same list.
 - **Last-used is not gated on favorites.** `useSessionModel` passes
   `lastUsedModel` from the first render; only the favorite fallback waits for
-  `modelPrefsHydrated`.
+  `modelPrefsHydrated`, which now also waits for key status, so the Turn
+  context's auto-submit gate never dispatches a `?autoSubmit=1` turn on a
+  provisional selection. The model selector likewise ignores a click on a
+  key-backed model until key status has answered instead of opening the Pro
+  dialog on a guess.
 
 ## Consequences
 
@@ -78,6 +82,9 @@ Options for the device memory:
   in the server HTML; the sampling harness
   (`benchmarks/chat-performance/browser/composer-shell.ts`) counts zero label
   changes and zero composer layout shift after the change.
+- A key-backed (BYOK-only) saved model paints in the shell as well: the
+  last-used model keeps its accessibility until key status lands, and a
+  stale selection drops to the default afterwards, as before.
 - First load after deploy on a device with existing `localStorage` memory
   still flips once (no cookie yet); the hydration re-sync writes it, and
   every later load is seeded.

@@ -5,6 +5,7 @@ import { useChats } from "@/lib/chat-store/chats/provider"
 import { useWarmSelectedConversation } from "@/lib/chat-store/messages/warm"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
+import { markChatNavigationIntent } from "@/lib/observability/chat-performance-client"
 import { RiChat3Line, RiChatSmile2Fill } from "@remixicon/react"
 import { useCallback } from "react"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
@@ -63,6 +64,11 @@ export function SidebarItem({
       renameValue={chat.title || ""}
       renameLabel="Chat title"
       onRename={(next) => updateTitle(chat.id, next)}
+      // Chat-switch responsiveness anchor: the navigation intent, marked
+      // before Next.js routing commits (content-free no-op unless
+      // instrumentation is enabled). Chat rows only: a project route commits
+      // with no chat and must never arm the thread paint pair.
+      onNavigate={markChatNavigationIntent}
       onWarm={warmChat}
       leadingIcon={presentation.kind === "pinned" ? RiChat3Line : undefined}
       activeLeadingIcon={

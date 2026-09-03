@@ -5,7 +5,6 @@ import { InlineRenameInput } from "@/components/ui/inline-rename-input"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useInlineRename } from "@/hooks/use-inline-rename"
-import { markChatNavigationIntent } from "@/lib/observability/chat-performance-client"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react"
@@ -38,6 +37,8 @@ type SidebarRowProps = {
    * hover, so they get nothing here) and again at click, before routing.
    */
   onWarm?: () => void
+  /** Fires at click, before routing; chat rows mark their navigation intent here. */
+  onNavigate?: () => void
   /** Optional leading glyph, rendered through the shared slot in every state. */
   leadingIcon?: IconProps["icon"]
   /** Optional active-state glyph swap; the shared slot keeps its geometry fixed. */
@@ -68,6 +69,7 @@ export function SidebarRow({
   renameLabel,
   onRename,
   onWarm,
+  onNavigate,
   leadingIcon,
   activeLeadingIcon,
   trailing,
@@ -101,10 +103,7 @@ export function SidebarRow({
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
-      // Chat-switch responsiveness anchor: the user's navigation
-      // intent, marked before Next.js routing commits. Content-free no-op
-      // unless instrumentation is enabled.
-      markChatNavigationIntent()
+      onNavigate?.()
       // Warm at intent so the subscription runs alongside the route's RSC
       // round-trip instead of after the commit (covers touch, which never
       // hovered).
@@ -112,7 +111,7 @@ export function SidebarRow({
       onWarm?.()
       if (isMobile) setOpenMobile(false)
     },
-    [cancelWarm, isMobile, onWarm, setOpenMobile]
+    [cancelWarm, isMobile, onNavigate, onWarm, setOpenMobile]
   )
 
   // Hover, selected, and menu-open use one translucent token. Editing pins it.

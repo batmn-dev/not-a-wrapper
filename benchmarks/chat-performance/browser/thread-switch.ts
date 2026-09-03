@@ -16,7 +16,8 @@ import type { Browser, BrowserContext, CDPSession, Page } from "playwright"
 import {
   readHeap,
   readMarks,
-  waitForAnyMark,
+  tryWaitForMark,
+  waitForMark,
   type CollectedMark,
 } from "./marks"
 import {
@@ -24,6 +25,7 @@ import {
   summarize,
   type ThreadSwitchPassResult,
   type ThreadSwitchResult,
+  type ThreadSwitchSample,
 } from "./result-schema"
 
 const ROW_SELECTOR = 'a[data-sidebar-item="true"][href^="/c/"]'
@@ -42,16 +44,7 @@ export type ThreadSwitchOptions = {
   log: (message: string) => void
 }
 
-type SwitchSample = {
-  navToPaintedMs: number | undefined
-  intentToCommitMs: number | undefined
-  commitToFirstContentMs: number | undefined
-  firstContentToPaintedMs: number | undefined
-  cache: "hit" | "miss" | undefined
-  querySetAdds: number
-  ok: boolean
-  detail?: string
-}
+type SwitchSample = ThreadSwitchSample
 
 type PassAccumulator = {
   kind: ThreadSwitchPassResult["kind"]
@@ -120,11 +113,11 @@ async function createChat(page: Page, baseUrl: string) {
   await page.keyboard.type(CREATE_DIRECTIVE)
   await page.locator('[data-testid="send-button"]').click()
   await page.waitForURL(/\/c\//, { timeout: 30_000 })
-  await waitForAnyMark(
-    page,
-    ["stream_terminal", "durable_settlement_receipt"],
-    60_000
-  )
+  await waitForMark(page, "stream_terminal", 60_000)
+  // Settlement lands after the terminal; wait for it like the durable suite
+  // does (bounded, since the receipt mark is not guaranteed on every path)
+  // so the fixture's durable write is complete before it is switched to.
+  await tryWaitForMark(page, "durable_settlement_receipt", 15_000)
   await page.waitForTimeout(1_000)
 }
 
@@ -233,6 +226,7 @@ function summarizePass(pass: PassAccumulator): ThreadSwitchPassResult {
   return {
     kind: pass.kind,
     switches: pass.samples.length,
+    samples: pass.samples,
     navToThreadPaintedMs: summarize(numeric((sample) => sample.navToPaintedMs)),
     intentToRouteCommitMs: summarize(
       numeric((sample) => sample.intentToCommitMs)
@@ -257,6 +251,11 @@ export async function runThreadSwitch(
   options: ThreadSwitchOptions
 ): Promise<ThreadSwitchResult> {
   const { log } = options
+  if (options.chatCount < 2) {
+    // A same-row click is not a navigation, so the visited pass needs a
+    // second chat to switch to.
+    throw new Error("thread-switch needs THREAD_SWITCH_CHATS >= 2")
+  }
   const context: BrowserContext = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     storageState: authState,

@@ -4,6 +4,9 @@
  */
 import type { CDPSession, Page } from "playwright"
 
+/** A mark did not appear in time; every other failure propagates. */
+export class MarkTimeoutError extends Error {}
+
 export type CollectedMark = {
   name: string
   startTime: number
@@ -49,7 +52,7 @@ export async function waitForMark(
         .map((entry) => entry.name.slice("chat-perf:".length))
     )
     .catch(() => ["<marks unreadable>"])
-  throw new Error(
+  throw new MarkTimeoutError(
     `timed out waiting for mark ${name} (${timeoutMs}ms) at ${page.url()}; ` +
       `marks seen: ${[...new Set(seen)].join(", ") || "none"}`
   )
@@ -72,12 +75,15 @@ export async function waitForAnyMark(
     }
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  throw new Error(
+  throw new MarkTimeoutError(
     `timed out waiting for any of [${names.join(", ")}] (${timeoutMs}ms) at ${page.url()}`
   )
 }
 
-/** Like waitForMark but resolves false on timeout instead of throwing. */
+/**
+ * Like waitForMark but resolves false on timeout instead of throwing; a
+ * closed page or lost execution context still throws.
+ */
 export async function tryWaitForMark(
   page: Page,
   name: string,
@@ -86,8 +92,9 @@ export async function tryWaitForMark(
   try {
     await waitForMark(page, name, timeoutMs)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    if (error instanceof MarkTimeoutError) return false
+    throw error
   }
 }
 

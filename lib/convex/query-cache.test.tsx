@@ -29,14 +29,22 @@ vi.mock("convex/react", async (importOriginal) => ({
 }))
 
 /** One entry per `onUpdate` — each is a subscription the fake client opened. */
-const subscriptions: Array<{ unsubscribe: Mock<() => void> }> = []
+const subscriptions: Array<{ unsubscribe: Mock<() => void>; open: boolean }> =
+  []
 const fakeClient = {
   watchQuery: () => ({
-    localQueryResult: () => "delivered",
+    // A local value exists only while some subscription holds the query
+    // open, like a real client: a cold consumer's own subscription starts
+    // after its first commit, so only a warmed entry can serve that commit.
+    localQueryResult: () =>
+      subscriptions.some((entry) => entry.open) ? "delivered" : undefined,
     onUpdate: () => {
-      const unsubscribe = vi.fn()
-      subscriptions.push({ unsubscribe })
-      return unsubscribe
+      const entry = { unsubscribe: vi.fn(), open: true }
+      entry.unsubscribe.mockImplementation(() => {
+        entry.open = false
+      })
+      subscriptions.push(entry)
+      return entry.unsubscribe
     },
     journal: () => undefined,
   }),
@@ -55,9 +63,14 @@ function Warmer() {
   return null
 }
 
+/** The value each Consumer commit rendered, in order. */
+const commits: string[] = []
 function Consumer() {
   const { data } = usePerUserQuery(testQuery, { chatId: "c1" })
-  return <div data-testid="consumer" data-data={data ?? ""} />
+  useEffect(() => {
+    commits.push(data ?? "")
+  })
+  return null
 }
 
 describe("warm client query cache", () => {
@@ -75,6 +88,7 @@ describe("warm client query cache", () => {
     container.remove()
     vi.useRealTimers()
     subscriptions.length = 0
+    commits.length = 0
   })
 
   function render(withConsumer: boolean) {
@@ -102,14 +116,10 @@ describe("warm client query cache", () => {
 
     // The consumer joins the warmed entry (same key, so the cache opens no
     // second watch; the one extra subscription is the core hook's own) and
-    // renders delivered data on its first commit.
+    // renders delivered data on its FIRST commit.
     render(true)
     expect(subscriptions).toHaveLength(2)
-    expect(
-      container
-        .querySelector('[data-testid="consumer"]')
-        ?.getAttribute("data-data")
-    ).toBe("delivered")
+    expect(commits[0]).toBe("delivered")
 
     // Leaving parks the cache's subscription; only the TTL releases it.
     render(false)
@@ -122,5 +132,10 @@ describe("warm client query cache", () => {
       vi.advanceTimersByTime(1)
     })
     expect(subscriptions[0].unsubscribe).toHaveBeenCalledTimes(1)
+
+    // Cold: with nothing parked, the same consumer's first commit is empty.
+    commits.length = 0
+    render(true)
+    expect(commits[0]).toBe("")
   })
 })

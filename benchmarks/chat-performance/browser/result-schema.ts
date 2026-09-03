@@ -99,9 +99,23 @@ export type ScenarioResult = {
   runs: RunMetrics[]
 }
 
+/** One switch's observations (ms; undefined = not measurable on that switch). */
+export type ThreadSwitchSample = {
+  navToPaintedMs: number | undefined
+  intentToCommitMs: number | undefined
+  commitToFirstContentMs: number | undefined
+  firstContentToPaintedMs: number | undefined
+  cache: "hit" | "miss" | undefined
+  querySetAdds: number
+  ok: boolean
+  detail?: string
+}
+
 export type ThreadSwitchPassResult = {
   kind: "unvisited-click" | "unvisited-hover" | "visited"
   switches: number
+  /** The raw per-switch observations behind the summaries below. */
+  samples: ThreadSwitchSample[]
   /** `chat_navigation_intent` → `nav_to_thread_painted` per switch. */
   navToThreadPaintedMs: MetricSummary
   /** `chat_navigation_intent` → `chat_route_state_committed` per switch. */

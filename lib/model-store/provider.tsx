@@ -49,6 +49,8 @@ const DEFAULT_KEY_STATUS: UserKeyStatus = {
 
 const LAST_USED_MODEL_STORAGE_KEY = "lastUsedModel"
 const LAST_USED_MODEL_CHANGE_EVENT = "last-used-model-change"
+/** In-tab fallback so a selection survives when storage is unavailable. */
+let memoryLastUsedModel: string | null = null
 
 type ModelContextType = {
   /** One entry per visible logical model (ADR-0020). */
@@ -62,6 +64,11 @@ type ModelContextType = {
    */
   shellHint: ComposerShellHint | null
   modelPrefsHydrated: boolean
+  /**
+   * `userKeys.getProviderStatus` has not delivered yet: key-backed models
+   * only look locked, so surfaces that would act on that must wait.
+   */
+  keyStatusLoading: boolean
   setLastUsedModel: (model: string) => void
 }
 
@@ -85,13 +92,16 @@ function normalizeFavoriteModels(value: unknown): string[] {
  * snapshot half; strings compare by value so no caching is needed.
  */
 function readStoredLastUsedModel(): string | null {
+  let cached: string | null = null
   try {
-    const cached = window.localStorage.getItem(LAST_USED_MODEL_STORAGE_KEY)
-    const resolved = cached ? resolveModelSelection(cached).modelId : null
-    return resolved && isLogicalModelId(resolved) ? resolved : null
+    cached = window.localStorage.getItem(LAST_USED_MODEL_STORAGE_KEY)
   } catch {
-    return null
+    // Storage unavailable: the in-tab memory below still holds the selection.
   }
+  const resolved = cached
+    ? resolveModelSelection(cached).modelId
+    : memoryLastUsedModel
+  return resolved && isLogicalModelId(resolved) ? resolved : null
 }
 
 /** Cross-tab writes arrive via 'storage'; same-tab writes via the event. */
@@ -144,16 +154,27 @@ export function ModelProvider({
     () => false
   )
 
+  const { data: providers, isLoading: keyStatusLoading } = usePerUserQuery(
+    api.userKeys.getProviderStatus
+  )
+
   const favoriteModels = useMemo(
     () => normalizeFavoriteModels(user?.favorite_models),
     [user?.favorite_models]
   )
+  // Selection inputs that arrive after mount: device memory (hydration), the
+  // favorites on the Convex user document, and key status (a key-backed
+  // last-used or favorite model resolves provisionally until it lands). The
+  // Turn context's auto-submit gate reads this, so a `?autoSubmit=1` turn
+  // never dispatches on a provisional selection.
   const modelPrefsHydrated =
-    isHydrated && (!user || user.favorite_models !== null)
+    isHydrated &&
+    (!user || (user.favorite_models !== null && !keyStatusLoading))
 
   const setLastUsedModel = useCallback((model: string) => {
     const resolvedModel = resolveModelSelection(model).modelId
     if (!isLogicalModelId(resolvedModel)) return
+    memoryLastUsedModel = resolvedModel
     try {
       window.localStorage.setItem(LAST_USED_MODEL_STORAGE_KEY, resolvedModel)
     } catch {}
@@ -170,10 +191,6 @@ export function ModelProvider({
       writeComposerShellHintCookie(live)
     }
   }, [])
-
-  const { data: providers, isLoading: keyStatusLoading } = usePerUserQuery(
-    api.userKeys.getProviderStatus
-  )
 
   const userKeyStatus = useMemo<UserKeyStatus>(() => {
     if (!providers) return DEFAULT_KEY_STATUS
@@ -222,6 +239,7 @@ export function ModelProvider({
         lastUsedModel,
         shellHint,
         modelPrefsHydrated,
+        keyStatusLoading,
         setLastUsedModel,
       }}
     >
