@@ -727,6 +727,11 @@ async function runScenarioOnce(
         "chat_send_intent",
         "optimistic_message_painted"
       ),
+      sendToThreadRouteCommittedMs: diff(
+        marks,
+        "chat_send_intent",
+        "thread_route_committed"
+      ),
       sendToRequestDispatchedMs: diff(
         marks,
         "chat_send_intent",
@@ -1061,6 +1066,9 @@ async function main() {
         sendToOptimisticPaintMs: summarize(
           numeric((run) => run.sendToOptimisticPaintMs)
         ),
+        sendToThreadRouteCommittedMs: summarize(
+          numeric((run) => run.sendToThreadRouteCommittedMs)
+        ),
         sendToRequestDispatchedMs: summarize(
           numeric((run) => run.sendToRequestDispatchedMs)
         ),
@@ -1143,6 +1151,8 @@ async function main() {
     const first = results.at(-1)
     log(
       `  ${config.id}: correctness=${correctnessOk ? "OK" : "FAILED"} ` +
+        `sendToRouteCommitted p50=${first?.metrics.sendToThreadRouteCommittedMs?.p50}ms ` +
+        `sendToOptimisticPaint p50=${first?.metrics.sendToOptimisticPaintMs?.p50}ms ` +
         `sendToFirstVisible p50=${first?.metrics.sendToFirstVisibleTextMs?.p50}ms ` +
         `longTaskMax p95=${first?.metrics.longTaskMaxMs?.p95}ms`
     )
