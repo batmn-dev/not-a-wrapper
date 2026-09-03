@@ -54,6 +54,12 @@ sentry_tmp_dir="$(mktemp -d)"
 sentry_pages_file="${sentry_tmp_dir}/pages.jsonl"
 trap 'rm -rf "${sentry_tmp_dir}"' EXIT
 
+# The token goes to curl through a private file, never through argv or the
+# environment, so it cannot be read from the process list.
+sentry_auth_header_file="${sentry_tmp_dir}/auth-header.txt"
+(umask 077 && printf 'Authorization: Bearer %s\n' "${SENTRY_AUTH_TOKEN}" >"${sentry_auth_header_file}")
+unset SENTRY_AUTH_TOKEN
+
 if [[ ! "${sentry_org}" =~ ^[A-Za-z0-9_-]+$ ]]; then
   echo "Error: SENTRY_ORG contains invalid characters." >&2
   exit 2
@@ -91,7 +97,7 @@ while true; do
     --retry-delay 1
     --dump-header "${headers_file}"
     --output "${body_file}"
-    --header "Authorization: Bearer ${SENTRY_AUTH_TOKEN}"
+    --header "@${sentry_auth_header_file}"
     --header "Accept: application/json"
     --get
     --data-urlencode "query=is:unresolved"
