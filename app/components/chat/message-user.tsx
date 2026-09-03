@@ -416,7 +416,11 @@ export function MessageUser({
     } catch {
       failure = "Failed to submit the edit. Please try again."
     } finally {
-      saveInFlightRef.current = false
+      // Only the save that still owns the session clears the guard: an older
+      // save settling after cancel-and-reopen must not unlock a newer one.
+      if (editSession === editSessionRef.current) {
+        saveInFlightRef.current = false
+      }
     }
     if (editSession !== editSessionRef.current) return
 

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
 import { undo } from "prosemirror-history"
 import { EditorState, TextSelection } from "prosemirror-state"
+import { describe, expect, it } from "vitest"
 import {
   createPromptInputDocument,
   createPromptInputPlugins,
@@ -576,16 +576,105 @@ describe("PromptInput structured document", () => {
 
   it("repairs missing cursor targets in one appended transaction", () => {
     const state = createEditorState()
-    const withoutBoundaries = state.tr
-      .delete(3, 4)
-      .delete(1, 2)
+    const withoutBoundaries = state.tr.delete(3, 4).delete(1, 2)
     const result = state.applyTransaction(withoutBoundaries).state
     const paragraph = result.doc.firstChild
 
-    expect(paragraph?.firstChild?.type.name).toBe(
-      "composerEntityCursorTarget"
-    )
+    expect(paragraph?.firstChild?.type.name).toBe("composerEntityCursorTarget")
     expect(paragraph?.child(1).type.name).toBe("composerEntity")
     expect(paragraph?.childCount).toBe(2)
+  })
+
+  it("keeps entity editing compatible when Array.toSorted is unavailable", () => {
+    const toSortedDescriptor = Object.getOwnPropertyDescriptor(
+      Array.prototype,
+      "toSorted"
+    )
+    Object.defineProperty(Array.prototype, "toSorted", {
+      configurable: true,
+      value: undefined,
+    })
+
+    const lockedEntity: PromptInputEntity = {
+      ...webSearchEntity,
+      id: "locked-web-search",
+      label: "Web search always on",
+      removable: false,
+    }
+    const connectorEntity: PromptInputEntity = {
+      id: "connector:github",
+      kind: "tool",
+      label: "GitHub",
+      iconUrl: "/icons/github.png",
+    }
+
+    try {
+      let deletionState = EditorState.create({
+        doc: createPromptInputDocument("draft", [
+          webSearchEntity,
+          lockedEntity,
+          connectorEntity,
+        ]),
+        plugins: createPromptInputPlugins(() => "Ask anything"),
+        schema: promptInputSchema,
+      })
+      deletionState = deletionState.apply(
+        deletionState.tr.setSelection(
+          TextSelection.create(
+            deletionState.doc,
+            1,
+            deletionState.doc.content.size - 1
+          )
+        )
+      )
+      const dispatch = (
+        transaction: Parameters<typeof deletionState.apply>[0]
+      ) => {
+        deletionState = deletionState.apply(transaction)
+      }
+
+      expect(deleteComposerEntityBackward(deletionState, dispatch)).toBe(true)
+      expect(readPromptInputEntities(deletionState.doc)).toEqual([lockedEntity])
+
+      const orderedEntities = [webSearchEntity, connectorEntity]
+      const normalizationState = EditorState.create({
+        doc: createPromptInputDocument("", orderedEntities),
+        plugins: createPromptInputPlugins(() => "Ask anything"),
+        schema: promptInputSchema,
+      })
+      const cursorTargetPositions: number[] = []
+      normalizationState.doc.descendants((node, pos) => {
+        if (node.type === promptInputSchema.nodes.composerEntityCursorTarget) {
+          cursorTargetPositions.push(pos)
+        }
+      })
+      const withoutCursorTargets = cursorTargetPositions
+        .slice()
+        .sort((left, right) => right - left)
+        .reduce(
+          (transaction, pos) => transaction.delete(pos, pos + 1),
+          normalizationState.tr
+        )
+      const normalized =
+        normalizationState.applyTransaction(withoutCursorTargets).state
+
+      expect(readPromptInputEntities(normalized.doc)).toEqual(orderedEntities)
+      expect(
+        normalized.doc.firstChild?.content.content.map((node) => node.type.name)
+      ).toEqual([
+        "composerEntityCursorTarget",
+        "composerEntity",
+        "text",
+        "composerEntityCursorTarget",
+        "composerEntity",
+        "text",
+      ])
+    } finally {
+      if (toSortedDescriptor) {
+        Object.defineProperty(Array.prototype, "toSorted", toSortedDescriptor)
+      } else {
+        Reflect.deleteProperty(Array.prototype, "toSorted")
+      }
+    }
   })
 })

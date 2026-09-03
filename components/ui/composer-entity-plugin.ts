@@ -89,7 +89,9 @@ function getEntityDeletionRange(
 
 function mergeDeletionRanges(ranges: readonly DeletionRange[]) {
   const merged: DeletionRange[] = []
-  for (const range of ranges.toSorted((left, right) => left.from - right.from)) {
+  for (const range of ranges
+    .slice()
+    .sort((left, right) => left.from - right.from)) {
     const previous = merged[merged.length - 1]
     if (previous && range.from <= previous.to) {
       previous.to = Math.max(previous.to, range.to)
@@ -166,9 +168,9 @@ function deleteSelectedComposerEntities(
 
   if (dispatch && ranges.length > 0) {
     const transaction = state.tr
-    for (const range of ranges.toSorted(
-      (left, right) => right.from - left.from
-    )) {
+    for (const range of ranges
+      .slice()
+      .sort((left, right) => right.from - left.from)) {
       transaction.delete(range.from, range.to)
     }
     dispatch(transaction.scrollIntoView())
@@ -200,9 +202,7 @@ function deleteComposerEntityForward(
   if (!state.selection.empty) return false
 
   const target = state.selection.$from.nodeAfter
-  if (
-    target?.type !== promptInputSchema.nodes.composerEntityCursorTarget
-  ) {
+  if (target?.type !== promptInputSchema.nodes.composerEntityCursorTarget) {
     return false
   }
   const entityPos = state.selection.from + target.nodeSize
@@ -235,16 +235,18 @@ function normalizeComposerEntityStructure(
   newState.doc.forEach((paragraph, paragraphOffset) => {
     paragraph.forEach((node, childOffset, index) => {
       const pos = paragraphOffset + 1 + childOffset
-      if (
-        node.type === promptInputSchema.nodes.composerEntityCursorTarget
-      ) {
+      if (node.type === promptInputSchema.nodes.composerEntityCursorTarget) {
         const entity =
           index + 1 < paragraph.childCount ? paragraph.child(index + 1) : null
         if (
           entity?.type !== promptInputSchema.nodes.composerEntity ||
           entity.attrs.id !== node.attrs.entityId
         ) {
-          operations.push({ kind: "delete", from: pos, to: pos + node.nodeSize })
+          operations.push({
+            kind: "delete",
+            from: pos,
+            to: pos + node.nodeSize,
+          })
         }
         return
       }
@@ -263,13 +265,12 @@ function normalizeComposerEntityStructure(
           }),
         })
       }
-
     })
   })
 
   if (operations.length === 0) return null
   const transaction = newState.tr
-  for (const operation of operations.toSorted((left, right) => {
+  for (const operation of operations.slice().sort((left, right) => {
     const leftPos = left.kind === "delete" ? left.from : left.pos
     const rightPos = right.kind === "delete" ? right.from : right.pos
     return rightPos - leftPos

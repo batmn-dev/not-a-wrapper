@@ -2,11 +2,7 @@ import { paginationOptsValidator, type PaginationOptions } from "convex/server"
 import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
-import {
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server"
+import { query, type MutationCtx, type QueryCtx } from "./_generated/server"
 import { closeSupersededGenerationsForChat } from "./chatRuntime"
 import { ensureChatDeletionJob } from "./domain/chat_deletion"
 import {
@@ -28,7 +24,6 @@ import {
   authenticatedMutation,
   maybeAuthQuery,
   ownedChatMutation,
-  ownedProjectQuery,
   readableChatQuery,
 } from "./lib/authedFunctions"
 
@@ -169,8 +164,8 @@ export async function getRecentWindowForCurrentUserHandler(
  * `by_project` index. Lets a project view show its full chat history rather than
  * only those chats that happen to be in the bounded sidebar window — see
  * docs/adr/0005-bounded-chat-list-window.md. Ownership is enforced by
- * the ownedProjectQuery builder (ctx.project); the link accessor re-checks
- * each chat so a corrupted cross-owner link can never ship another user's chat.
+ * the caller-scoped handler below; the link accessor re-checks each chat so a
+ * corrupted cross-owner link can never ship another user's chat.
  */
 type ProjectChatDirectoryCtx = Pick<QueryCtx, "db">
 
@@ -203,9 +198,31 @@ export async function getProjectChatDirectoryForProject(
   return directory
 }
 
-export const getProjectChatsForCurrentUser = ownedProjectQuery({
-  args: {},
-  handler: async (ctx) => getProjectChatDirectoryForProject(ctx, ctx.project),
+export async function getProjectChatsForCurrentUserHandler(
+  ctx: MaybeUserChatQueryCtx,
+  projectId: Id<"projects">
+) {
+  // Reactive reads may rerun after deletion but before the route unsubscribes.
+  // Collapse every unreadable root to the same empty result without reading
+  // children.
+  if (!ctx.user) return []
+
+  const project = await ctx.db.get(projectId)
+  if (
+    !project ||
+    project.userId !== ctx.user._id ||
+    project.deletingAt !== undefined
+  ) {
+    return []
+  }
+
+  return await getProjectChatDirectoryForProject(ctx, project)
+}
+
+export const getProjectChatsForCurrentUser = maybeAuthQuery({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, { projectId }) =>
+    getProjectChatsForCurrentUserHandler(ctx, projectId),
 })
 
 /**
@@ -564,13 +581,9 @@ export async function removeChatForOwner(
     updatedAt: now,
   })
   const job = await ensureChatDeletionJob(ctx, ctx.chat, ctx.user)
-  await ctx.scheduler.runAfter(
-    0,
-    internal.deletionCleanup.runDeletionBatch,
-    {
-      jobId: job._id,
-    }
-  )
+  await ctx.scheduler.runAfter(0, internal.deletionCleanup.runDeletionBatch, {
+    jobId: job._id,
+  })
   await recordKnownProjectActivity(ctx, project ?? undefined, now)
 }
 

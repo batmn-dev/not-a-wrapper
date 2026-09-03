@@ -465,6 +465,39 @@ describe("MessageUser edits", () => {
     expect(onEdit).toHaveBeenCalledOnce()
   })
 
+  it("keeps a newer save's guard when an older save settles after reopen", async () => {
+    const settlers: Array<() => void> = []
+    const onEdit = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          settlers.push(() => resolve({ ok: true }))
+        })
+    )
+    const parent = renderEditableMessage({ onEdit })
+
+    openEditor()
+    updateTextarea("First draft")
+    await clickSend()
+    act(() => {
+      parent.setEditing(false)
+    })
+    openEditor()
+    updateTextarea("Second draft")
+    await clickSend()
+
+    // Save A settles while save B is pending; a third Send must still be dropped.
+    await act(async () => {
+      settlers[0]?.()
+    })
+    await clickSend()
+    expect(onEdit).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      settlers[1]?.()
+    })
+    expect(container?.querySelector("textarea")).toBeNull()
+  })
+
   it("cancels edit without submitting and restores original content", () => {
     const onEdit = vi.fn()
     renderEditableMessage({ onEdit })
