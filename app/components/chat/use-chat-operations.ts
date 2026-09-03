@@ -178,7 +178,13 @@ export function useChatOperations({
       created = await createWithId(activeChatId)
     }
 
-    if (!created || created.kind === "conflict") return null
+    // A second conflict is a plain failure, reported in place like any other
+    // refused creation (the first conflict was swallowed by the re-mint).
+    if (created?.kind === "conflict") {
+      toast({ title: "Failed to create chat", status: "error" })
+      return null
+    }
+    if (!created) return null
     if (created.kind === "local") {
       allocationRef.current = { chatId: activeChatId, committed: true }
       localStorage.setItem(GUEST_CHAT_STORAGE_KEY, activeChatId)

@@ -1526,7 +1526,7 @@ export function createConvexDurableTurn(args: {
       const generation = await fetchMutation(
         api.chatRuntime.prepareGeneration,
         {
-          chatId: chatId as Id<"chats">,
+          chatId,
           requestId,
           model,
           provider,

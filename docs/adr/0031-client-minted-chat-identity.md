@@ -69,14 +69,22 @@ resolves the id against the caller's own store and renders not-found
 
 ### 3. The route is a derived view of session state
 
-`ChatSessionProvider` is the only History API caller. `commitChatIdentity(id)`
-pushes `/c/<id>` synchronously and records the shallow handoff so the mounted
-Chat surface is reused (the ADR-0012/0013 no-remount guarantee holds);
-`resetChatIdentity()` clears the identity and rewrites the pushed entry to
-the origin route with `replaceState`, but only while the browser is still on
-that entry — a user who already pressed Back keeps the history they made.
-The rewritten entry duplicates the origin URL (Back from it is a no-op step);
-no entry ever names a chat that does not exist. The pending commit is
+`ChatSessionProvider` is the only code that writes the route's pathname
+through the History API (the one other `history.replaceState` in the app,
+`use-chat-core`'s `?prompt=`/`autoSubmit` scrub, rewrites only the current
+entry's search string). `commitChatIdentity(id)` pushes `/c/<id>`
+synchronously and records the shallow handoff so the mounted Chat surface is
+reused (the ADR-0012/0013 no-remount guarantee holds); `resetChatIdentity()`
+clears the identity and rewrites the pushed entry to the origin route with
+`replaceState`, but only while the browser is still on that entry — a user
+who already pressed Back keeps the history they made. The rewritten entry
+duplicates the origin URL, so Back from it lands on the same origin URL (a
+no-op step) and no entry ever names a chat that does not exist. That
+duplicate is kept deliberately: removing it needs `history.back()`, which is
+asynchronous (its `popstate` arrives after the rollback, so the surface would
+briefly disagree with the URL) and wrong if the user navigated during the
+in-flight send; a same-URL entry costs one extra Back press and nothing
+else. The pending commit is
 tracked separately from the handoff (which clears as soon as Next observes
 the pushed pathname), and after a rollback the provider presents the origin
 route until Next's `usePathname` catches up, so no consumer resolves the
