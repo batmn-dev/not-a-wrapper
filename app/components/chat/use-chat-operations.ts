@@ -213,11 +213,11 @@ export function useChatOperations({
     }
     return {
       chatId: activeChatId,
+      confirmDispatched: () => confirmFirstTurnDispatched(activeChatId),
       firstTurn: {
         userMessageId: created.userMessageId,
         clientMessageId,
         attachments: created.attachments,
-        confirmDispatched: () => confirmFirstTurnDispatched(activeChatId),
       },
     }
   }
@@ -229,27 +229,37 @@ export function useChatOperations({
     const allocation = allocationRef.current
     const committed = allocation?.committedTurn
 
-    // Same-payload retry of a committed-but-not-yet-dispatched first turn:
-    // re-present the committed identity so the dispatch claims the persisted
-    // row instead of duplicating it. Once a dispatch is accepted,
-    // confirmDispatched drops the committed turn, so a later identical payload
-    // becomes a normal new message.
-    if (
-      allocation &&
-      committed &&
-      (chatId === null || chatId === allocation.chatId) &&
-      committed.text === text &&
-      isSameAttachmentSet(committed.attachmentIds, attachmentIds)
-    ) {
-      return {
-        chatId: allocation.chatId,
-        firstTurn: {
-          userMessageId: committed.userMessageId,
-          clientMessageId: committed.clientMessageId,
-          attachments: committed.attachments,
-          confirmDispatched: () => confirmFirstTurnDispatched(allocation.chatId),
-        },
+    // A committed-but-not-yet-dispatched first turn is a retry token held
+    // until a dispatch on this chat is ACCEPTED (confirmDispatched): a
+    // same-payload retry re-presents the committed identity so the dispatch
+    // claims the persisted row instead of duplicating it; a different payload
+    // appends as a normal turn and, once accepted, retires the token so a
+    // later identical payload is a genuine new message. A refused dispatch of
+    // either kind keeps the token, so the original payload can still claim
+    // its row.
+    const heldFirstTurn =
+      allocation && committed && (chatId === null || chatId === allocation.chatId)
+        ? {
+            chatId: allocation.chatId,
+            confirmDispatched: () =>
+              confirmFirstTurnDispatched(allocation.chatId),
+          }
+        : null
+    if (heldFirstTurn && committed) {
+      if (
+        committed.text === text &&
+        isSameAttachmentSet(committed.attachmentIds, attachmentIds)
+      ) {
+        return {
+          ...heldFirstTurn,
+          firstTurn: {
+            userMessageId: committed.userMessageId,
+            clientMessageId: committed.clientMessageId,
+            attachments: committed.attachments,
+          },
+        }
       }
+      return heldFirstTurn
     }
 
     // The identity was committed at Send (beginFirstTurn); creation lands
@@ -273,18 +283,6 @@ export function useChatOperations({
         toast({ title: errorMessage, status: "error" })
         return null
       }
-    }
-
-    // A different payload appends to the allocated chat as a normal turn and
-    // retires the first turn's retry token: the persisted first message is
-    // followed by this turn, so a later identical payload is a genuine new
-    // message, never a stale claim of the first row.
-    if (
-      allocation &&
-      committed &&
-      (chatId === null || chatId === allocation.chatId)
-    ) {
-      allocationRef.current = { chatId: allocation.chatId, committed: true }
     }
 
     if (chatId) return { chatId }

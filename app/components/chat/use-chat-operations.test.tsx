@@ -243,8 +243,8 @@ describe("useChatOperations", () => {
         attachments: [
           expect.objectContaining({ attachmentId: "attachment-1" }),
         ],
-        confirmDispatched: expect.any(Function),
       },
+      confirmDispatched: expect.any(Function),
     })
     expect(createFirstTurnChat).toHaveBeenCalledWith({
       publicId: "chat-minted",
@@ -324,14 +324,14 @@ describe("useChatOperations", () => {
         userMessageId: "msg_first",
         clientMessageId: "optimistic-1",
         attachments: [],
-        confirmDispatched: expect.any(Function),
       },
+      confirmDispatched: expect.any(Function),
     })
     expect(createFirstTurnChat).toHaveBeenCalledTimes(1)
 
     // Acceptance consumes the identity: after confirmDispatched, an identical
     // payload is a genuine new message, not a claim.
-    retried?.firstTurn?.confirmDispatched?.()
+    retried?.confirmDispatched?.()
     await expect(
       operations().ensureChatExists(
         turnArgs({ userId: "user-1", clientMessageId: "optimistic-3" })
@@ -339,7 +339,7 @@ describe("useChatOperations", () => {
     ).resolves.toEqual({ chatId: "chat-minted" })
   })
 
-  it("retires the first-turn retry token once a different payload appends to the chat", async () => {
+  it("retires the first-turn retry token only once a different payload is accepted", async () => {
     const createFirstTurnChat = vi
       .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
       .mockResolvedValue(durableFirstTurn("chat-minted", "msg_first"))
@@ -351,18 +351,28 @@ describe("useChatOperations", () => {
     rerender({ ...props, chatId: "chat-minted" })
 
     // A different payload never claims the committed row — it appends to the
-    // allocated chat as a normal turn...
+    // allocated chat as a normal turn, carrying the acceptance hook.
+    const different = await operations().ensureChatExists(
+      turnArgs({ userId: "user-1", text: "Different question" })
+    )
+    expect(different).toEqual({
+      chatId: "chat-minted",
+      confirmDispatched: expect.any(Function),
+    })
+    // Refused before acceptance: the token is still held, so the original
+    // payload still claims its persisted row instead of duplicating it.
+    const original = await operations().ensureChatExists(
+      turnArgs({ userId: "user-1", clientMessageId: "optimistic-3" })
+    )
+    expect(original?.firstTurn?.clientMessageId).toBe("optimistic-1")
+
+    // Accepted: the persisted first message is followed by a real turn, so the
+    // original text is a genuine new message afterwards — never a one-message
+    // selected-path claim against a longer conversation.
+    different?.confirmDispatched?.()
     await expect(
       operations().ensureChatExists(
-        turnArgs({ userId: "user-1", text: "Different question" })
-      )
-    ).resolves.toEqual({ chatId: "chat-minted" })
-    // ...after which the original text is a genuine new message, not a claim
-    // that would carry a one-message selected-path token against a longer
-    // conversation.
-    await expect(
-      operations().ensureChatExists(
-        turnArgs({ userId: "user-1", clientMessageId: "optimistic-3" })
+        turnArgs({ userId: "user-1", clientMessageId: "optimistic-4" })
       )
     ).resolves.toEqual({ chatId: "chat-minted" })
   })

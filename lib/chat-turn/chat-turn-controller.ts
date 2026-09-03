@@ -96,14 +96,16 @@ export type EnsureChatForTurnArgs = {
  */
 export type EnsuredTurnChat = {
   chatId: string
+  /** Called by the send runner once THIS dispatch is accepted, present while
+   * the chat still holds a committed, not-yet-dispatched first turn. The
+   * provider then retires that retry token — whether this turn claimed the
+   * row or appended after it — so a LATER identical payload becomes a genuine
+   * new message instead of a claim. A refused dispatch keeps the token. */
+  confirmDispatched?: () => void
   firstTurn?: {
     userMessageId: string
     clientMessageId: string
     attachments: UploadedAttachment[]
-    /** Called by the send runner once the dispatch is accepted. The provider
-     * then stops re-presenting the committed identity, so a LATER identical
-     * payload becomes a genuine new message instead of a claim. */
-    confirmDispatched?: () => void
   }
 }
 
@@ -467,7 +469,7 @@ async function runSendTurn(
       if (keepOptimistic) return
       keepOptimistic = true
       try {
-        ensured.firstTurn?.confirmDispatched?.()
+        ensured.confirmDispatched?.()
       } catch (error) {
         adapters.reportError(
           "Failed to consume accepted first-turn identity:",

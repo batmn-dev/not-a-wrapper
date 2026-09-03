@@ -130,9 +130,12 @@ Two allocation rules keep that retry token honest: Back to the no-chat
 surface while creation is in flight invalidates the allocation, and a
 creation that lands afterwards neither resurrects it nor dispatches for the
 chat the user left (the chat keeps its first message; the next Send mints
-afresh); and a different payload appended to the allocated chat retires the
-token, so a later identical payload is a genuine new message rather than a
-one-message selected-path claim against a longer conversation.
+afresh); and the token is retired only when a dispatch on that chat is
+ACCEPTED (`confirmDispatched`), whether that dispatch claimed the row or
+appended a different payload after it, so a later identical payload is a
+genuine new message rather than a one-message selected-path claim against a
+longer conversation, while a refused dispatch of either kind keeps the token
+for the original payload to claim its row.
 
 ### 6. No remount, no clobber
 

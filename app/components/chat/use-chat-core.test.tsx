@@ -477,8 +477,8 @@ describe("useChatCore prompt query handling", () => {
           userMessageId: "message_user_1",
           clientMessageId: "stopped-before-dispatch",
           attachments: [],
-          confirmDispatched,
         },
+        confirmDispatched,
       })
       await expect(submitted).resolves.toBe(true)
     })
