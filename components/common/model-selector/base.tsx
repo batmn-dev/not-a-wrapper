@@ -678,6 +678,8 @@ export function ModelSelector({
   useEffect(() => {
     latestModels.current = models
   }, [models])
+  /** The one held click awaiting key status; any later click supersedes it. */
+  const heldLockedModelId = useRef<string | null>(null)
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
@@ -742,13 +744,16 @@ export function ModelSelector({
     { settled = false }: { settled?: boolean } = {}
   ) => {
     if (disabled) return
+    if (settled && heldLockedModelId.current !== modelId) return
+    heldLockedModelId.current = null
 
     if (isLocked) {
       // Key status is a client read that lands after first paint; until it
       // does a key-backed model only looks locked, so the click is held and
       // re-run against the real answer instead of opening the Pro dialog on
-      // a guess.
+      // a guess. A later click supersedes the held one.
       if (isUserAuthenticated && keyStatusLoading && !settled) {
+        heldLockedModelId.current = modelId
         void whenKeyStatusReady().then(() => {
           const model = latestModels.current.find((m) => m.id === modelId)
           handleSelect(modelId, !model?.accessible, { settled: true })

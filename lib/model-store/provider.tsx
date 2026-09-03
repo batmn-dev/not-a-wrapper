@@ -112,10 +112,19 @@ function readStoredLastUsedModel(): string | null {
 
 /** Cross-tab writes arrive via 'storage'; same-tab writes via the event. */
 function subscribeToStoredLastUsedModel(onChange: () => void): () => void {
-  window.addEventListener("storage", onChange)
+  const onStorage = (event: StorageEvent) => {
+    // Another tab's write, removal, or clear is the truth for the in-tab
+    // fallback too, so an unavailable-storage read cannot resurrect it.
+    if (event.key === null) memoryLastUsedModel = null
+    else if (event.key === LAST_USED_MODEL_STORAGE_KEY) {
+      memoryLastUsedModel = event.newValue
+    }
+    onChange()
+  }
+  window.addEventListener("storage", onStorage)
   window.addEventListener(LAST_USED_MODEL_CHANGE_EVENT, onChange)
   return () => {
-    window.removeEventListener("storage", onChange)
+    window.removeEventListener("storage", onStorage)
     window.removeEventListener(LAST_USED_MODEL_CHANGE_EVENT, onChange)
   }
 }
