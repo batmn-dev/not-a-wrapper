@@ -329,14 +329,6 @@ describe("useChatOperations", () => {
     })
     expect(createFirstTurnChat).toHaveBeenCalledTimes(1)
 
-    // A different payload never claims the committed row — it appends to the
-    // allocated chat as a normal turn.
-    await expect(
-      operations().ensureChatExists(
-        turnArgs({ userId: "user-1", text: "Different question" })
-      )
-    ).resolves.toEqual({ chatId: "chat-minted" })
-
     // Acceptance consumes the identity: after confirmDispatched, an identical
     // payload is a genuine new message, not a claim.
     retried?.firstTurn?.confirmDispatched?.()
@@ -345,6 +337,66 @@ describe("useChatOperations", () => {
         turnArgs({ userId: "user-1", clientMessageId: "optimistic-3" })
       )
     ).resolves.toEqual({ chatId: "chat-minted" })
+  })
+
+  it("retires the first-turn retry token once a different payload appends to the chat", async () => {
+    const createFirstTurnChat = vi
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockResolvedValue(durableFirstTurn("chat-minted", "msg_first"))
+    const props = baseProps({ createFirstTurnChat })
+    const { operations, rerender } = renderOperations(props)
+
+    operations().beginFirstTurn()
+    await operations().ensureChatExists(turnArgs({ userId: "user-1" }))
+    rerender({ ...props, chatId: "chat-minted" })
+
+    // A different payload never claims the committed row — it appends to the
+    // allocated chat as a normal turn...
+    await expect(
+      operations().ensureChatExists(
+        turnArgs({ userId: "user-1", text: "Different question" })
+      )
+    ).resolves.toEqual({ chatId: "chat-minted" })
+    // ...after which the original text is a genuine new message, not a claim
+    // that would carry a one-message selected-path token against a longer
+    // conversation.
+    await expect(
+      operations().ensureChatExists(
+        turnArgs({ userId: "user-1", clientMessageId: "optimistic-3" })
+      )
+    ).resolves.toEqual({ chatId: "chat-minted" })
+  })
+
+  it("neither resurrects nor dispatches an allocation that Back invalidated while creation was in flight", async () => {
+    let resolveCreation: (result: FirstTurnChatResult) => void = () => undefined
+    const createFirstTurnChat = vi
+      .fn<(input: unknown) => Promise<FirstTurnChatResult>>()
+      .mockImplementation(
+        () =>
+          new Promise<FirstTurnChatResult>((resolve) => {
+            resolveCreation = resolve
+          })
+      )
+    const props = baseProps({ createFirstTurnChat })
+    const { operations, rerender } = renderOperations(props)
+
+    operations().beginFirstTurn()
+    const pending = operations().ensureChatExists(
+      turnArgs({ userId: "user-1" })
+    )
+    // The route committed, then the user pressed Back to onboarding before
+    // Convex answered.
+    rerender({ ...props, chatId: "chat-minted" })
+    rerender({ ...props, chatId: null })
+    resolveCreation(durableFirstTurn("chat-minted"))
+
+    // No dispatch for the chat the user left, and no rollback either: the
+    // chat exists with its first message (ADR-0012).
+    await expect(pending).resolves.toBeNull()
+    operations().rollbackFirstTurn()
+    expect(props.resetChatIdentity).not.toHaveBeenCalled()
+    // The next Send mints afresh instead of appending to the left chat.
+    expect(operations().beginFirstTurn()).toBe("chat-reminted")
   })
 
   it("starts a fresh allocation after Back to the no-chat surface instead of reusing the previous chat", async () => {

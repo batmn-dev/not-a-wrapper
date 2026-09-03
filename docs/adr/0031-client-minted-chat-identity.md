@@ -126,6 +126,14 @@ chat at its route with the error in place, exactly as ADR-0012 allows, and a
 same-payload retry re-presents the committed turn. A user Stop is never a
 failure and never restores the draft.
 
+Two allocation rules keep that retry token honest: Back to the no-chat
+surface while creation is in flight invalidates the allocation, and a
+creation that lands afterwards neither resurrects it nor dispatches for the
+chat the user left (the chat keeps its first message; the next Send mints
+afresh); and a different payload appended to the allocated chat retires the
+token, so a later identical payload is a genuine new message rather than a
+one-message selected-path claim against a longer conversation.
+
 ### 6. No remount, no clobber
 
 The Chat surface is layout-owned and the commit is shallow, so nothing

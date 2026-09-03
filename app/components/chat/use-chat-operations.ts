@@ -166,16 +166,24 @@ export function useChatOperations({
         attachmentIds,
       })
 
-    let activeChatId = allocation.chatId
-    let created = await createWithId(activeChatId)
+    // Back to the no-chat surface while creation is in flight invalidates the
+    // allocation (the effect above nulls it). A creation that lands afterwards
+    // must neither resurrect it nor dispatch for a chat the user already
+    // left; the committed chat simply keeps its first message.
+    let active = allocation
+    const isInvalidated = () => allocationRef.current !== active
+
+    let created = await createWithId(active.chatId)
+    if (isInvalidated()) return null
 
     // Another holder of the minted id (typed server conflict): re-mint
     // exactly once, re-committing the route in place, then retry.
     if (created?.kind === "conflict") {
-      activeChatId = createChatId()
-      allocationRef.current = { chatId: activeChatId, committed: false }
-      commitChatIdentity(activeChatId)
-      created = await createWithId(activeChatId)
+      active = { chatId: createChatId(), committed: false }
+      allocationRef.current = active
+      commitChatIdentity(active.chatId)
+      created = await createWithId(active.chatId)
+      if (isInvalidated()) return null
     }
 
     // A second conflict is a plain failure, reported in place like any other
@@ -185,6 +193,7 @@ export function useChatOperations({
       return null
     }
     if (!created) return null
+    const activeChatId = active.chatId
     if (created.kind === "local") {
       allocationRef.current = { chatId: activeChatId, committed: true }
       localStorage.setItem(GUEST_CHAT_STORAGE_KEY, activeChatId)
@@ -266,9 +275,20 @@ export function useChatOperations({
       }
     }
 
+    // A different payload appends to the allocated chat as a normal turn and
+    // retires the first turn's retry token: the persisted first message is
+    // followed by this turn, so a later identical payload is a genuine new
+    // message, never a stale claim of the first row.
+    if (
+      allocation &&
+      committed &&
+      (chatId === null || chatId === allocation.chatId)
+    ) {
+      allocationRef.current = { chatId: allocation.chatId, committed: true }
+    }
+
     if (chatId) return { chatId }
-    // A different payload while the prop lags appends to the allocated chat as
-    // a normal turn.
+    // The prop still lags the committed identity.
     if (allocation) return { chatId: allocation.chatId }
 
     // No identity was committed for this send (the surface returned to
