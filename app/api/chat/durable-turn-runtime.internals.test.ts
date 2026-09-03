@@ -30,34 +30,15 @@ function createDeferred<T>() {
 // Both stateful internals are credential-free since ADR-0011 — they receive a
 // worker-wire-backed persister and never see a token or transport.
 describe("durable turn runtime internals", () => {
-  it("only enables Convex durability for authenticated Convex chats", () => {
+  it("only enables Convex durability for authenticated callers with a token", () => {
     expect(
-      isDurableConvexChat({
-        isAuthenticated: true,
-        convexToken: "token",
-        chatId: "chat_123",
-      })
+      isDurableConvexChat({ isAuthenticated: true, convexToken: "token" })
     ).toBe(true)
     expect(
-      isDurableConvexChat({
-        isAuthenticated: true,
-        convexToken: "token",
-        chatId: "local-123",
-      })
+      isDurableConvexChat({ isAuthenticated: true, convexToken: undefined })
     ).toBe(false)
     expect(
-      isDurableConvexChat({
-        isAuthenticated: true,
-        convexToken: "token",
-        chatId: "optimistic-123",
-      })
-    ).toBe(false)
-    expect(
-      isDurableConvexChat({
-        isAuthenticated: false,
-        convexToken: "token",
-        chatId: "chat_123",
-      })
+      isDurableConvexChat({ isAuthenticated: false, convexToken: "token" })
     ).toBe(false)
   })
 

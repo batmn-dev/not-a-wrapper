@@ -28,7 +28,6 @@ import type {
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
-import { isServerChatId } from "@/lib/chat-store/identity"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import type { ChatPerfServerSession } from "@/lib/observability/chat-performance"
 import type { ToolSource } from "@/lib/tools/types"
@@ -486,16 +485,16 @@ export type ApprovalResponseForPersistence = {
   reason?: string
 }
 
+/**
+ * Durable persistence is a property of the caller's auth (ADR-0031): a
+ * signed-in caller with a Convex token runs the durable runtime; the chat id
+ * itself carries no persistence class (guests mint the same shape).
+ */
 export function isDurableConvexChat(options: {
   isAuthenticated: boolean
   convexToken?: string
-  chatId: string
 }): boolean {
-  return Boolean(
-    options.isAuthenticated &&
-    options.convexToken &&
-    isServerChatId(options.chatId)
-  )
+  return Boolean(options.isAuthenticated && options.convexToken)
 }
 
 export function extractTextFromParts(parts: UIMessage["parts"]) {
@@ -1600,12 +1599,12 @@ export function createConvexDurableTurn(args: {
             code: "GENERATION_INPUT_CHANGED",
           })
         }
-        // `isServerChatId` only rules out local/optimistic prefixes, so a
-        // crafted or corrupted id reaches the durable contract here and Convex
-        // rejects it with argument validation. That is a request-shape fault:
-        // map it to the route's 400 instead of a 500 that leaks Convex error
-        // internals. Everything else (concurrency guards, transient failures)
-        // passes through unchanged.
+        // The wire contract only checks the id's UUID shape, so a crafted
+        // request can still reach the durable contract with arguments Convex
+        // rejects at validation. That is a request-shape fault: map it to the
+        // route's 400 instead of a 500 that leaks Convex error internals.
+        // Everything else (concurrency guards, transient failures) passes
+        // through unchanged.
         const invalidRequest = toInvalidDurableRequestError(error)
         if (invalidRequest) {
           warnDurable("durable_prepare_argument_rejected", {
@@ -2183,7 +2182,6 @@ export function createDurableTurnRuntime(args: {
     isDurableConvexChat({
       isAuthenticated: input.isAuthenticated,
       convexToken: input.convexToken,
-      chatId: input.chatId,
     }) &&
     input.convexToken
   ) {

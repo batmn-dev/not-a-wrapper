@@ -65,7 +65,7 @@ function makeRequest(): Request {
       messages: [
         { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
       ],
-      chatId: "chat-1",
+      chatId: "3f2c6c1e-8b0d-4a3f-9a6e-1c2b3d4e5f60",
       model: "test-model",
     }),
   })
@@ -194,7 +194,7 @@ describe("/api/chat route", () => {
       token: "convex-token",
       messages: canonicalMessages,
       requestId: expect.any(String),
-      chatId: "chat-1",
+      chatId: "3f2c6c1e-8b0d-4a3f-9a6e-1c2b3d4e5f60",
       systemPrompt: undefined,
       enableSearch: false,
       keySettingsPromise: expect.any(Promise),

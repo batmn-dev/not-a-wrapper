@@ -34,7 +34,7 @@ export function createToolCallLogSink(options: {
     void fetchMutation(
       api.toolCallLog.log,
       {
-        chatId: chatId as Id<"chats">,
+        chatId,
         ...(outcome.mcpServer && {
           serverId: outcome.mcpServer.serverId as Id<"mcpServers">,
         }),

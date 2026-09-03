@@ -228,7 +228,6 @@ export async function POST(req: Request) {
           const preflight = isDurableConvexChat({
             isAuthenticated,
             convexToken,
-            chatId,
           })
             ? perf.span("attachment_resolution", () =>
                 preflightDurableGenerationInput({

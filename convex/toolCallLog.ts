@@ -1,6 +1,6 @@
 import { v } from "convex/values"
 import { redactSecretsInString } from "../lib/observability/secret-patterns"
-import { isChatActive } from "./lib/auth"
+import { findChatByPublicId, isChatActive } from "./lib/auth"
 import { authenticatedMutation } from "./lib/authedFunctions"
 
 const MAX_PREVIEW_LENGTH = 500
@@ -24,7 +24,8 @@ function preparePreviewForPersistence(
  */
 export const log = authenticatedMutation({
   args: {
-    chatId: v.optional(v.id("chats")),
+    // Client-minted publicId (ADR-0031), resolved to the owned chat below.
+    chatId: v.optional(v.string()),
     serverId: v.optional(v.id("mcpServers")),
     toolName: v.string(),
     toolCallId: v.string(),
@@ -60,8 +61,10 @@ export const log = authenticatedMutation({
     stateMutationKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const chat = args.chatId
+      ? await findChatByPublicId(ctx, args.chatId)
+      : null
     if (args.chatId) {
-      const chat = await ctx.db.get(args.chatId)
       if (
         !chat ||
         chat.userId !== ctx.user._id ||
@@ -73,7 +76,7 @@ export const log = authenticatedMutation({
 
     return await ctx.db.insert("toolCallLog", {
       userId: ctx.user._id,
-      chatId: args.chatId,
+      chatId: chat?._id,
       serverId: args.serverId,
       toolName: args.toolName,
       toolCallId: args.toolCallId,

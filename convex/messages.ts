@@ -21,10 +21,11 @@ import {
 import { isVisibleChatMessage } from "./domain/message_visibility"
 import { recordChatActivity } from "./domain/project_activity"
 import {
+  findChatByPublicId,
   isChatActive,
   requireOwnedChat,
 } from "./lib/auth"
-import { readableChatQuery } from "./lib/authedFunctions"
+import { ownedChatMutation, readableChatQuery } from "./lib/authedFunctions"
 
 function withBranchMetadata(
   selectedMessages: Doc<"messages">[],
@@ -90,12 +91,12 @@ async function listMessagesByChatOrder(
 
 export async function getPublicForChatHandler(
   ctx: QueryCtx,
-  { chatId }: { chatId: Id<"chats"> }
+  { chatId }: { chatId: string }
 ) {
-  const chat = await ctx.db.get(chatId)
+  const chat = await findChatByPublicId(ctx, chatId)
   if (!chat || !chat.public || !(await isChatActive(ctx, chat))) return []
 
-  const messages = await listMessagesByChatOrder(ctx, chatId)
+  const messages = await listMessagesByChatOrder(ctx, chat._id)
   return stripRunLinkageForViewer(
     getVisibleSelectedMessages(messages).filter(
       (message) => message.status !== "awaiting_approval"
@@ -287,7 +288,7 @@ export const getSelectedRunState = readableChatQuery({
  * For public share pages
  */
 export const getPublicForChat = query({
-  args: { chatId: v.id("chats") },
+  args: { chatId: v.string() },
   handler: getPublicForChatHandler,
 })
 
@@ -318,10 +319,8 @@ export async function selectBranchForChat(
   return targetMessage._id
 }
 
-export const selectBranch = mutation({
-  args: {
-    chatId: v.id("chats"),
-    messageId: v.id("messages"),
-  },
-  handler: selectBranchForChat,
+export const selectBranch = ownedChatMutation({
+  args: { messageId: v.id("messages") },
+  handler: async (ctx, { messageId }) =>
+    selectBranchForChat(ctx, { chatId: ctx.chat._id, messageId }),
 })

@@ -82,6 +82,7 @@ function chat(
 ): Doc<"chats"> {
   return {
     _id: asId<"chats">(id),
+    publicId: `${id}-public`,
     _creationTime: 1,
     userId: asId<"users">("user-1"),
     title: id,

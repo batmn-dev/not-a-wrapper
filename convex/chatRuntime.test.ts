@@ -355,6 +355,7 @@ function createOwnerFixture() {
   const chat: Doc<"chats"> = {
     _id: chatId,
     _creationTime: 1,
+    publicId: "chat-1-public",
     userId,
     public: false,
     pinned: false,
@@ -640,7 +641,7 @@ describe("prepareGenerationForChat", () => {
     })
 
     const admission = {
-      chatId,
+      chatId: chat.publicId,
       requestId: "request_route_receipt",
       model: "claude-sonnet-5",
       provider: "openrouter",

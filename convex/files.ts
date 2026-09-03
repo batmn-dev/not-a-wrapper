@@ -340,12 +340,18 @@ export async function bindStagedAttachmentsToChat(
     })
   }
 
-  return attachments.map((attachment) => ({
-    name: attachment!.fileName ?? "File",
-    contentType: attachment!.fileType ?? "application/octet-stream",
-    url: attachment!.fileUrl,
-    attachmentId: attachment!._id,
-  }))
+  return attachments.map((attachment) => describeBoundAttachment(attachment!))
+}
+
+export function describeBoundAttachment(
+  attachment: Doc<"chatAttachments">
+): BoundAttachmentDescriptor {
+  return {
+    name: attachment.fileName ?? "File",
+    contentType: attachment.fileType ?? "application/octet-stream",
+    url: attachment.fileUrl,
+    attachmentId: attachment._id,
+  }
 }
 
 /**

@@ -37,6 +37,7 @@ function chat(
   return {
     _id: asId<"chats">(id),
     _creationTime: 10,
+    publicId: `${id}-public`,
     userId: asId<"users">("user-1"),
     projectId,
     title: id,

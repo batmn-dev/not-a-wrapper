@@ -328,7 +328,7 @@ describe("validateAndResolveChatCredential", () => {
       token: "convex-token",
       messages: textMessages,
       requestId: "req-42",
-      chatId: "j57abc123", // server chat id (no local-/optimistic prefix)
+      chatId: "j57abc123", // client-minted chat id
       systemPrompt: "be brief",
       enableSearch: true,
     })

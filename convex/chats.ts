@@ -1,5 +1,9 @@
 import { paginationOptsValidator, type PaginationOptions } from "convex/server"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
+import {
+  CHAT_PUBLIC_ID_CONFLICT_CODE,
+  isChatPublicId,
+} from "../lib/chat-store/identity"
 import { internal } from "./_generated/api"
 import type { Doc, Id } from "./_generated/dataModel"
 import { query, type MutationCtx, type QueryCtx } from "./_generated/server"
@@ -14,9 +18,14 @@ import {
   patchChatActivity,
   recordKnownProjectActivity,
 } from "./domain/project_activity"
-import { bindStagedAttachmentsToChat } from "./files"
+import {
+  bindStagedAttachmentsToChat,
+  describeBoundAttachment,
+  type BoundAttachmentDescriptor,
+} from "./files"
 import {
   filterActiveChats,
+  findChatByPublicId,
   isChatActive,
   requireOwnedProject,
 } from "./lib/auth"
@@ -311,6 +320,8 @@ export const getById = readableChatQuery({
 })
 
 type NewChatArgs = {
+  /** Client-minted chat identity (ADR-0031). */
+  publicId: string
   title?: string
   model?: string
   systemPrompt?: string
@@ -333,6 +344,7 @@ async function insertChatForUser(
     : undefined
 
   const chatId = await ctx.db.insert("chats", {
+    publicId: args.publicId,
     userId: user._id,
     title: args.title ?? "New chat",
     titleSource: "provisional",
@@ -352,6 +364,49 @@ type CreateWithFirstTurnArgs = NewChatArgs & {
   attachmentIds: Id<"chatAttachments">[]
 }
 
+/** The client-facing receipt: the chat is named by its publicId, never `_id`. */
+type FirstTurnChatReceipt = {
+  chatId: string
+  userMessageId: Id<"messages">
+  attachments: BoundAttachmentDescriptor[]
+}
+
+async function findExistingFirstTurn(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  args: CreateWithFirstTurnArgs
+): Promise<FirstTurnChatReceipt | null> {
+  const existing = await findChatByPublicId(ctx, args.publicId)
+  if (!existing) return null
+
+  const firstUserMessage =
+    existing.userId === user._id
+      ? await ctx.db
+          .query("messages")
+          .withIndex("by_chat_order", (q) => q.eq("chatId", existing._id))
+          .first()
+      : null
+  if (
+    !firstUserMessage ||
+    firstUserMessage.clientMessageId !== args.message.clientMessageId
+  ) {
+    throw new ConvexError({
+      code: CHAT_PUBLIC_ID_CONFLICT_CODE,
+      message: "Chat id is already taken",
+    })
+  }
+
+  const attachments = await ctx.db
+    .query("chatAttachments")
+    .withIndex("by_chat", (q) => q.eq("chatId", existing._id))
+    .collect()
+  return {
+    chatId: existing.publicId,
+    userMessageId: firstUserMessage._id,
+    attachments: attachments.map(describeBoundAttachment),
+  }
+}
+
 /**
  * Atomic first-turn creation: create the chat (optionally inside an owned
  * project), bind the complete staged-attachment set, and persist the initial
@@ -362,6 +417,11 @@ type CreateWithFirstTurnArgs = NewChatArgs & {
  * finds this row by clientMessageId, adopts the run's provenance stamp, and
  * selects it instead of inserting a duplicate.
  *
+ * `publicId` is the idempotency key (ADR-0031): a retry that lands after the
+ * first attempt committed (same user, same first clientMessageId) returns the
+ * existing chat; any other holder of the id is a typed conflict. The
+ * transaction is the collision guard.
+ *
  * The message row is written through the Message branch writer with no
  * provenance stamp — no generation request exists yet (see
  * message_branch_writes.ts WriteUserMessageInput).
@@ -370,7 +430,13 @@ export async function createChatWithFirstTurnForUser(
   ctx: MutationCtx,
   user: Doc<"users">,
   args: CreateWithFirstTurnArgs
-) {
+): Promise<FirstTurnChatReceipt> {
+  if (!isChatPublicId(args.publicId)) {
+    throw new Error("Invalid chat id")
+  }
+  const existing = await findExistingFirstTurn(ctx, user, args)
+  if (existing) return existing
+
   const now = Date.now()
   const { chatId, project } = await insertChatForUser(ctx, user, args, now)
 
@@ -406,11 +472,16 @@ export async function createChatWithFirstTurnForUser(
 
   await recordKnownProjectActivity(ctx, project, now)
 
-  return { chatId, userMessageId: userMessage._id, attachments }
+  return {
+    chatId: args.publicId,
+    userMessageId: userMessage._id,
+    attachments,
+  }
 }
 
 export const createWithFirstTurn = authenticatedMutation({
   args: {
+    publicId: v.string(),
     title: v.optional(v.string()),
     model: v.optional(v.string()),
     systemPrompt: v.optional(v.string()),
@@ -505,9 +576,9 @@ export const makePublic = ownedChatMutation({
  */
 export async function getPublicByIdHandler(
   ctx: Pick<QueryCtx, "db">,
-  { chatId }: { chatId: Id<"chats"> }
+  { chatId }: { chatId: string }
 ) {
-  const chat = await ctx.db.get(chatId)
+  const chat = await findChatByPublicId(ctx, chatId)
   if (!chat) return null
 
   if (!chat.public) return null
@@ -518,7 +589,7 @@ export async function getPublicByIdHandler(
 }
 
 export const getPublicById = query({
-  args: { chatId: v.id("chats") },
+  args: { chatId: v.string() },
   handler: getPublicByIdHandler,
 })
 
@@ -529,10 +600,10 @@ export const getPublicById = query({
 export async function markChatReadForOwner(
   ctx: Pick<MutationCtx, "db">,
   user: Doc<"users">,
-  chatId: Id<"chats">,
+  chatId: string,
   readThroughAt: number
 ): Promise<void> {
-  const chat = await ctx.db.get(chatId)
+  const chat = await findChatByPublicId(ctx, chatId)
   if (!chat || chat.userId !== user._id) return
   if (!(await isChatActive(ctx, chat))) return
   if (typeof chat.lastRunEndedAt !== "number") return
@@ -541,21 +612,21 @@ export async function markChatReadForOwner(
   const safeReadThroughAt = Math.min(readThroughAt, chat.lastRunEndedAt)
   if (safeReadThroughAt <= lastReadAt) return
 
-  await ctx.db.patch(chatId, { lastReadAt: safeReadThroughAt })
+  await ctx.db.patch(chat._id, { lastReadAt: safeReadThroughAt })
 }
 
 /**
  * Stamp the caller's read cursor on a chat they own, clearing its derived
  * unread/error indicator (lastReadAt >= lastRunEndedAt → idle).
  *
- * Deliberately NOT ownedChatMutation: opening a *public* chat you don't own has
- * a valid Convex id, and ownedChatMutation would THROW. Unread/error only exist
- * for chats you own, so a non-owned (or missing) chat is a silent no-op. Guests
- * / local-/optimistic ids never reach here — the client gates on isConvexId and
- * this is an authenticatedMutation.
+ * Deliberately NOT ownedChatMutation: opening a *public* chat you don't own is
+ * a valid read, and ownedChatMutation would THROW. Unread/error only exist for
+ * chats you own, so a non-owned (or missing) chat is a silent no-op. Guests
+ * never reach here — the client gates on auth and this is an
+ * authenticatedMutation.
  */
 export const markChatRead = authenticatedMutation({
-  args: { chatId: v.id("chats"), readThroughAt: v.number() },
+  args: { chatId: v.string(), readThroughAt: v.number() },
   handler: async (ctx, { chatId, readThroughAt }) =>
     markChatReadForOwner(ctx, ctx.user, chatId, readThroughAt),
 })

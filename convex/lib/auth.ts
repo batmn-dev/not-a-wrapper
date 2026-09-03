@@ -128,11 +128,25 @@ export async function requireCurrentUser(
   return user
 }
 
-export async function getAuthorizedChatForRead(
-  ctx: ConvexCtx,
-  chatId: Id<"chats">
+/**
+ * The client-facing chat lookup (ADR-0031): clients only ever name a chat by
+ * its client-minted `publicId`; `_id` never crosses the boundary. Unique by
+ * construction (creation is idempotent on publicId in one transaction).
+ */
+export async function findChatByPublicId(
+  ctx: ChatActivityCtx,
+  publicId: string
 ): Promise<Doc<"chats"> | null> {
-  const chat = await ctx.db.get(chatId)
+  return await ctx.db
+    .query("chats")
+    .withIndex("by_public_id", (q) => q.eq("publicId", publicId))
+    .unique()
+}
+
+async function authorizeChatForRead(
+  ctx: ConvexCtx,
+  chat: Doc<"chats"> | null
+): Promise<Doc<"chats"> | null> {
   if (!chat) return null
   if (!(await isChatActive(ctx, chat))) return null
   if (chat.public) return chat
@@ -143,12 +157,29 @@ export async function getAuthorizedChatForRead(
   return chat
 }
 
-export async function requireOwnedChat(
+export async function getAuthorizedChatForRead(
   ctx: ConvexCtx,
   chatId: Id<"chats">
+): Promise<Doc<"chats"> | null> {
+  return await authorizeChatForRead(ctx, await ctx.db.get(chatId))
+}
+
+/** Boundary read: the owner, or anyone when the chat is public. */
+export async function getReadableChatByPublicId(
+  ctx: ConvexCtx,
+  publicId: string
+): Promise<Doc<"chats"> | null> {
+  return await authorizeChatForRead(ctx, await findChatByPublicId(ctx, publicId))
+}
+
+// Authenticate BEFORE the chat read: an unauthenticated caller never touches
+// the chat row, and the same predicate serves both id shapes.
+async function requireOwnedChatDoc(
+  ctx: ConvexCtx,
+  loadChat: () => Promise<Doc<"chats"> | null>
 ): Promise<AuthenticatedChatOwner> {
   const user = await requireUserForOwnedResource(ctx)
-  const chat = await ctx.db.get(chatId)
+  const chat = await loadChat()
   if (!chat) throw new Error("Chat not found")
 
   if (chat.userId !== user._id) {
@@ -157,6 +188,26 @@ export async function requireOwnedChat(
   if (!(await isChatActive(ctx, chat))) throw new Error("Chat not found")
 
   return { user, chat }
+}
+
+export async function requireOwnedChat(
+  ctx: ConvexCtx,
+  chatId: Id<"chats">
+): Promise<AuthenticatedChatOwner> {
+  return await requireOwnedChatDoc(ctx, () => ctx.db.get(chatId))
+}
+
+/**
+ * Boundary ownership check: resolves a client `publicId` to the owner-verified
+ * chat exactly once, so no handler behind it ever sees an unresolved id.
+ */
+export async function requireOwnedChatByPublicId(
+  ctx: ConvexCtx,
+  publicId: string
+): Promise<AuthenticatedChatOwner> {
+  return await requireOwnedChatDoc(ctx, () =>
+    findChatByPublicId(ctx, publicId)
+  )
 }
 
 async function requireUserForOwnedResource(

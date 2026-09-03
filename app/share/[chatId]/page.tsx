@@ -1,5 +1,5 @@
 import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
+import { isChatPublicId } from "@/lib/chat-store/identity"
 import { APP_DOMAIN } from "@/lib/config"
 import { ConvexHttpClient } from "convex/browser"
 import type { Metadata } from "next"
@@ -18,32 +18,20 @@ function getConvexClient() {
   return new ConvexHttpClient(url)
 }
 
-function toConvexId(chatId: string): Id<"chats"> | null {
-  if (!chatId || chatId.length < 10) return null
-  try {
-    return chatId as Id<"chats">
-  } catch {
-    return null
-  }
-}
-
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ chatId: string }>
 }): Promise<Metadata> {
   const { chatId } = await params
-  const convexId = toConvexId(chatId)
 
   let title = "Shared Chat"
   let description = "A conversation in Not A Wrapper"
 
-  if (convexId) {
+  if (isChatPublicId(chatId)) {
     try {
       const convex = getConvexClient()
-      const chat = await convex.query(api.chats.getPublicById, {
-        chatId: convexId,
-      })
+      const chat = await convex.query(api.chats.getPublicById, { chatId })
       if (chat?.title) {
         title = chat.title
         description = `Read this conversation: ${chat.title}`
@@ -77,23 +65,20 @@ export default async function ShareChat({
   params: Promise<{ chatId: string }>
 }) {
   const { chatId } = await params
-  const convexId = toConvexId(chatId)
 
-  if (!convexId) {
+  if (!isChatPublicId(chatId)) {
     notFound()
   }
 
-  // Wrap in try/catch because toConvexId only does basic length validation—
-  // invalid ID formats will cause Convex to throw
   const convex = getConvexClient()
   let chat, messages
   try {
     ;[chat, messages] = await Promise.all([
-      convex.query(api.chats.getPublicById, { chatId: convexId }),
-      convex.query(api.messages.getPublicForChat, { chatId: convexId }),
+      convex.query(api.chats.getPublicById, { chatId }),
+      convex.query(api.messages.getPublicForChat, { chatId }),
     ])
   } catch {
-    // Invalid Convex ID format or other query error → 404
+    // Query error → 404
     notFound()
   }
 

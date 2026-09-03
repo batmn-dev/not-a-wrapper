@@ -238,6 +238,7 @@ function createChat(
 ): Doc<"chats"> {
   return {
     _creationTime: 1,
+    publicId: `${overrides._id}-public`,
     public: false,
     pinned: true,
     pinnedAt: 1,
@@ -327,6 +328,10 @@ function createCtx({
               return resultApi
             },
             collect: async () => results,
+            unique: async () => {
+              expect(results.length).toBeLessThanOrEqual(1)
+              return results[0] ?? null
+            },
             order: (direction: "asc" | "desc") => {
               results.sort((a, b) => {
                 const comparison = a.updatedAt - b.updatedAt
@@ -419,7 +424,7 @@ describe("getPublicByIdHandler", () => {
     const ctx = createCtx({ user: null, chats: [chat] })
 
     await expect(
-      getPublicByIdHandler(ctx, { chatId: chat._id })
+      getPublicByIdHandler(ctx, { chatId: chat.publicId })
     ).resolves.toBeNull()
   })
 
@@ -439,7 +444,7 @@ describe("getPublicByIdHandler", () => {
     })
 
     await expect(
-      getPublicByIdHandler(ctx, { chatId: chat._id })
+      getPublicByIdHandler(ctx, { chatId: chat.publicId })
     ).resolves.toBeNull()
   })
 })
@@ -688,6 +693,28 @@ describe("markChatReadForOwner", () => {
           chats.find((chat) => chat._id === id) ??
           projects.find((project) => project._id === id) ??
           null,
+        // The boundary lookup: chats by client-minted publicId (ADR-0031).
+        query: (tableName: string) => ({
+          withIndex: (
+            indexName: string,
+            buildQuery: (query: QueryBuilder) => unknown
+          ) => {
+            expect(tableName).toBe("chats")
+            expect(indexName).toBe("by_public_id")
+            let publicId: unknown
+            const query: QueryBuilder = {
+              eq: (_field, value) => {
+                publicId = value
+                return query
+              },
+            }
+            buildQuery(query)
+            return {
+              unique: async () =>
+                chats.find((chat) => chat.publicId === publicId) ?? null,
+            }
+          },
+        }),
         patch: async (id: string, value: Record<string, unknown>) => {
           patches.push({ id, value })
           const chat = chats.find((candidate) => candidate._id === id)
@@ -707,7 +734,7 @@ describe("markChatReadForOwner", () => {
     })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, owner, chat._id, 200)
+    await markChatReadForOwner(ctx, owner, chat.publicId, 200)
 
     expect(patches).toHaveLength(1)
     expect(chat.lastReadAt).toBe(200)
@@ -722,7 +749,7 @@ describe("markChatReadForOwner", () => {
     })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, owner, chat._id, 300)
+    await markChatReadForOwner(ctx, owner, chat.publicId, 300)
 
     expect(patches).toEqual([{ id: chat._id, value: { lastReadAt: 200 } }])
     expect(chat.lastReadAt).toBe(200)
@@ -738,7 +765,7 @@ describe("markChatReadForOwner", () => {
     })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, owner, chat._id, 200)
+    await markChatReadForOwner(ctx, owner, chat.publicId, 200)
 
     expect(patches).toEqual([])
     expect(chat.lastReadAt).toBe(250)
@@ -749,7 +776,7 @@ describe("markChatReadForOwner", () => {
     const chat = createChat({ _id: asId<"chats">("c1"), userId: owner._id })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, owner, chat._id, 200)
+    await markChatReadForOwner(ctx, owner, chat.publicId, 200)
 
     expect(patches).toEqual([])
     expect(chat.lastReadAt).toBeUndefined()
@@ -765,7 +792,7 @@ describe("markChatReadForOwner", () => {
     })
     const { ctx, patches } = createReadWriteCtx([chat])
 
-    await markChatReadForOwner(ctx, viewer, chat._id, 200)
+    await markChatReadForOwner(ctx, viewer, chat.publicId, 200)
 
     expect(patches).toEqual([])
     expect(chat.lastReadAt).toBeUndefined()
@@ -773,12 +800,7 @@ describe("markChatReadForOwner", () => {
 
   it("no-ops for a missing chat", async () => {
     const { ctx, patches } = createReadWriteCtx([])
-    await markChatReadForOwner(
-      ctx,
-      createUser("owner"),
-      asId<"chats">("missing"),
-      200
-    )
+    await markChatReadForOwner(ctx, createUser("owner"), "missing-public", 200)
     expect(patches).toEqual([])
   })
 
@@ -793,7 +815,7 @@ describe("markChatReadForOwner", () => {
     })
     const { ctx, patches } = createReadWriteCtx([chat], [project])
 
-    await markChatReadForOwner(ctx, owner, chat._id, 200)
+    await markChatReadForOwner(ctx, owner, chat.publicId, 200)
 
     expect(patches).toEqual([])
     expect(chat.lastReadAt).toBeUndefined()
@@ -848,40 +870,49 @@ function createFirstTurnHarness(
           else doc[field] = value
         }
       },
-      query: (table: string) => {
-        expect(table).toBe("messages")
-        return {
-          withIndex: (
-            _index: string,
-            build: (query: {
-              eq: (field: string, value: unknown) => unknown
-            }) => unknown
-          ) => {
-            let chatId: unknown
-            const query = {
-              eq: (_field: string, value: unknown) => {
-                chatId = value
-                return query
-              },
-            }
-            build(query)
-            return {
-              collect: async () =>
-                tables.messages
-                  .filter((message) => message.chatId === chatId)
-                  .sort(
-                    (left, right) =>
-                      (left.orderId as number) - (right.orderId as number)
-                  ),
-            }
-          },
-        }
-      },
+      query: (table: keyof typeof tables) => ({
+        withIndex: (
+          _index: string,
+          build: (query: {
+            eq: (field: string, value: unknown) => unknown
+          }) => unknown
+        ) => {
+          const filters = new Map<string, unknown>()
+          const query = {
+            eq: (field: string, value: unknown) => {
+              filters.set(field, value)
+              return query
+            },
+          }
+          build(query)
+          const matches = () =>
+            tables[table]
+              .filter((doc) =>
+                [...filters].every(([field, value]) => doc[field] === value)
+              )
+              .sort(
+                (left, right) =>
+                  ((left.orderId as number) ?? 0) -
+                  ((right.orderId as number) ?? 0)
+              )
+          return {
+            collect: async () => matches(),
+            first: async () => matches()[0] ?? null,
+            unique: async () => {
+              const found = matches()
+              expect(found.length).toBeLessThanOrEqual(1)
+              return found[0] ?? null
+            },
+          }
+        },
+      }),
     },
   } as unknown as MutationCtx
 
   return { ctx, tables }
 }
+
+const PUBLIC_ID = "8d3f2f8e-6b1a-4c0e-9f5d-2a7b1c3d4e5f"
 
 describe("createChatWithFirstTurnForUser", () => {
   const user = createUser("user_1")
@@ -904,6 +935,7 @@ describe("createChatWithFirstTurnForUser", () => {
     const { ctx, tables } = createFirstTurnHarness([stagedAttachment()])
 
     const result = await createChatWithFirstTurnForUser(ctx, user, {
+      publicId: PUBLIC_ID,
       title: "Read this",
       model: "model-1",
       systemPrompt: "system",
@@ -911,9 +943,12 @@ describe("createChatWithFirstTurnForUser", () => {
       attachmentIds: ["att_1" as Id<"chatAttachments">],
     })
 
+    // The receipt names the chat by its client-minted publicId, never `_id`.
+    expect(result.chatId).toBe(PUBLIC_ID)
     expect(tables.chats).toHaveLength(1)
+    const chatRowId = tables.chats[0]?._id
     expect(tables.chats[0]).toMatchObject({
-      _id: result.chatId,
+      publicId: PUBLIC_ID,
       userId: user._id,
       title: "Read this",
       titleSource: "provisional",
@@ -924,7 +959,7 @@ describe("createChatWithFirstTurnForUser", () => {
     })
 
     // The staged row is now chat-bound (no longer sweepable by the TTL job).
-    expect(tables.chatAttachments[0]).toMatchObject({ chatId: result.chatId })
+    expect(tables.chatAttachments[0]).toMatchObject({ chatId: chatRowId })
     expect(tables.chatAttachments[0]?.stagedAt).toBeUndefined()
 
     // One selected, completed user message carrying the server-built file part;
@@ -932,7 +967,7 @@ describe("createChatWithFirstTurnForUser", () => {
     expect(tables.messages).toHaveLength(1)
     expect(tables.messages[0]).toMatchObject({
       _id: result.userMessageId,
-      chatId: result.chatId,
+      chatId: chatRowId,
       role: "user",
       clientMessageId: "optimistic-1",
       content: "Read this",
@@ -965,12 +1000,13 @@ describe("createChatWithFirstTurnForUser", () => {
   it("commits only the current provisional title generation", async () => {
     const { ctx, tables } = createFirstTurnHarness([])
     const result = await createChatWithFirstTurnForUser(ctx, user, {
+      publicId: PUBLIC_ID,
       title: "New chat",
       message: { clientMessageId: "optimistic-1", text: "hello" },
       attachmentIds: [],
     })
     const chat = tables.chats.find(
-      (candidate) => candidate._id === result.chatId
+      (candidate) => candidate.publicId === result.chatId
     )! as Doc<"chats">
 
     await expect(
@@ -1012,6 +1048,7 @@ describe("createChatWithFirstTurnForUser", () => {
 
     await expect(
       createChatWithFirstTurnForUser(ctx, user, {
+        publicId: PUBLIC_ID,
         message: { clientMessageId: "optimistic-1", text: "Read both" },
         attachmentIds: [
           "att_1" as Id<"chatAttachments">,
@@ -1035,6 +1072,7 @@ describe("createChatWithFirstTurnForUser", () => {
 
     await expect(
       createChatWithFirstTurnForUser(ctx, user, {
+        publicId: PUBLIC_ID,
         message: { clientMessageId: "optimistic-1", text: "Read this" },
         attachmentIds: [
           "att_1" as Id<"chatAttachments">,
@@ -1042,6 +1080,68 @@ describe("createChatWithFirstTurnForUser", () => {
         ],
       })
     ).rejects.toThrow("Duplicate attachment reference")
+  })
+
+  // publicId is the idempotency key (ADR-0031): a retry after the first
+  // attempt committed converges; any other holder of the id is a typed conflict.
+  it("returns the existing chat for the same user's same first turn instead of inserting again", async () => {
+    const { ctx, tables } = createFirstTurnHarness([stagedAttachment()])
+    const input = {
+      publicId: PUBLIC_ID,
+      message: { clientMessageId: "optimistic-1", text: "Read this" },
+      attachmentIds: ["att_1" as Id<"chatAttachments">],
+    }
+
+    const first = await createChatWithFirstTurnForUser(ctx, user, input)
+    const retried = await createChatWithFirstTurnForUser(ctx, user, input)
+
+    expect(retried).toEqual(first)
+    expect(tables.chats).toHaveLength(1)
+    expect(tables.messages).toHaveLength(1)
+  })
+
+  it.each([
+    {
+      name: "another user",
+      caller: createUser("user_2"),
+      clientMessageId: "optimistic-1",
+    },
+    {
+      name: "a different first turn",
+      caller: user,
+      clientMessageId: "optimistic-2",
+    },
+  ])(
+    "rejects $name claiming a taken publicId with the typed conflict",
+    async ({ caller, clientMessageId }) => {
+      const { ctx, tables } = createFirstTurnHarness()
+      await createChatWithFirstTurnForUser(ctx, user, {
+        publicId: PUBLIC_ID,
+        message: { clientMessageId: "optimistic-1", text: "hello" },
+        attachmentIds: [],
+      })
+
+      await expect(
+        createChatWithFirstTurnForUser(ctx, caller, {
+          publicId: PUBLIC_ID,
+          message: { clientMessageId, text: "hello" },
+          attachmentIds: [],
+        })
+      ).rejects.toMatchObject({ data: { code: "chat_public_id_conflict" } })
+      expect(tables.chats).toHaveLength(1)
+    }
+  )
+
+  it("rejects a publicId that is not a UUID", async () => {
+    const { ctx } = createFirstTurnHarness()
+
+    await expect(
+      createChatWithFirstTurnForUser(ctx, user, {
+        publicId: "jh7f4n2k9p8q6r3s5t1v0wxyz",
+        message: { clientMessageId: "optimistic-1", text: "hello" },
+        attachmentIds: [],
+      })
+    ).rejects.toThrow("Invalid chat id")
   })
 })
 

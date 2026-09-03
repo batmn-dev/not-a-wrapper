@@ -56,6 +56,9 @@ export default defineSchema({
     .index("by_email", ["email"]),
 
   chats: defineTable({
+    // Client-minted identity (ADR-0031): the route segment and the only chat
+    // id clients ever send or receive. `_id` stays internal (foreign keys).
+    publicId: v.string(),
     userId: v.id("users"),
     title: v.optional(v.string()),
     // Title generation is compare-and-set: a late model result may replace
@@ -99,6 +102,9 @@ export default defineSchema({
     // and write-dead on every surface. Never cleared once set.
     deletingAt: v.optional(v.number()),
   })
+    // The one client-facing lookup; unique by construction (creation is
+    // idempotent on publicId inside one mutation transaction).
+    .index("by_public_id", ["publicId"])
     .index("by_user", ["userId"])
     .index("by_user_pinned", ["userId", "pinned"])
     // Sidebar grouping needs one recency-ordered source that can include both
