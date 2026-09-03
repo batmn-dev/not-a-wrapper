@@ -64,6 +64,12 @@ Keep comparisons controlled:
 - record desktop and representative mobile viewports;
 - record warm or cold cache state;
 - compare identical prompts, provider routes, and stream shapes;
+- confirm the web-search state per account before a "search off" cell: the
+  preference defaults to on, the composer shows no indicator, and a declared
+  hosted `web_search` tool bills ~4.4K hidden input tokens on OpenAI (1,026
+  on Haiku, 552 on GLM) whether or not the model searches; check
+  `toolMetadataByName` on the stored message (see
+  `2026-09-02-ttft-tps-vs-t3-chat.md`, Follow-up);
 - separate foreground HTTP rendering from Convex snapshot/recovery timing.
 
 Client instrumentation is build-time gated by
