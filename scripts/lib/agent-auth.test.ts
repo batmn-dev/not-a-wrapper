@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import {
   DEFAULT_AGENT_EMAIL,
+  assertLandedOnAuthOrigin,
   assertSafeAuthOrigin,
   getAgentCredentials,
 } from "./agent-auth"
@@ -82,5 +83,25 @@ describe("assertSafeAuthOrigin", () => {
     expect(assertSafeAuthOrigin("https://preview.example/chat")).toBe(
       "https://preview.example"
     )
+  })
+})
+
+describe("assertLandedOnAuthOrigin", () => {
+  it("allows the same origin after navigation", () => {
+    expect(() =>
+      assertLandedOnAuthOrigin(
+        "http://localhost:3000/auth/login",
+        "http://localhost:3000"
+      )
+    ).not.toThrow()
+  })
+
+  it("rejects a cross-origin redirect", () => {
+    expect(() =>
+      assertLandedOnAuthOrigin(
+        "https://evil.example/phish",
+        "http://localhost:3000"
+      )
+    ).toThrow("untrusted origin")
   })
 })

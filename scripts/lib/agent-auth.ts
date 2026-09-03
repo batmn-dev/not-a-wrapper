@@ -94,6 +94,19 @@ function allowedRemoteOrigins(): Set<string> {
   return origins
 }
 
+/** Rejects a post-navigation landing page that left the intended origin. */
+export function assertLandedOnAuthOrigin(
+  pageUrl: string,
+  expectedOrigin: string
+): void {
+  const landedOrigin = new URL(pageUrl).origin
+  if (landedOrigin !== expectedOrigin) {
+    throw new Error(
+      `Authentication URL redirected to untrusted origin ${landedOrigin}`
+    )
+  }
+}
+
 /**
  * Signs the page in through the real /auth/login form and resolves once the
  * authenticated app has loaded (redirected away from /auth, composer visible).
@@ -109,6 +122,7 @@ export async function signInWithPassword(
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   })
+  assertLandedOnAuthOrigin(page.url(), origin)
   await page.locator("#email").fill(credentials.email)
   await page.locator("#password").fill(credentials.password)
   await page.locator("#password").press("Enter")
