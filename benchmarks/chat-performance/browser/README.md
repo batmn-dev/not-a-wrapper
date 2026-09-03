@@ -96,6 +96,12 @@ correctness, and pinned fixture payload hashes.
   with short deterministic turns. Correctness: every switch must land on its
   URL, render a message row, and emit the painted mark. The result lands
   under `threadSwitch` in the result file.
+- **Composer shell fidelity** (`composer-shell.ts`, standalone; `PERF_PORT`
+  default 3112): `PERF_AUTH_PASSWORD=... bun run benchmarks/chat-performance/browser/composer-shell.ts`.
+  Signs in, saves a non-default model and effort through the composer, then
+  cold-loads `/` `RUNS` times sampling the model and effort labels every
+  frame from first paint until `load` + `SETTLE_MS`, with the composer-region
+  layout shift and TTFB (ADR-0032). `OUT=file.json` writes the per-run detail.
 - Scenarios needing real tools (the fixture `interleaved` script) are not
   replayed; the deterministic provider covers text/reasoning/code/error/stop
   shapes plus the payload stress variants.

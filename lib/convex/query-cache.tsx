@@ -41,6 +41,9 @@ export const QUERY_CACHE_IDLE_TTL_MS = 120_000
  */
 export const QUERY_CACHE_MAX_IDLE_ENTRIES = 32
 
+/** Registry subscription ids for warms; only uniqueness within the tab matters. */
+let nextWarmId = 0
+
 export function ConvexQueryCache({ children }: { children: ReactNode }) {
   return (
     <ConvexQueryCacheProvider
@@ -96,7 +99,7 @@ export function useWarmPerUserQuery(): <
       ) {
         return
       }
-      const id = crypto.randomUUID()
+      const id = `warm-${nextWarmId++}`
       registry.start(id, key, query, args)
       registry.end(id)
     },
