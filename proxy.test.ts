@@ -15,13 +15,13 @@ describe("AuthKit proxy coverage", () => {
     expect(matches("https://not-a-wrapper.com/config.js")).toBe(true)
   })
 
-  it("leaves Next static assets and the favicon untouched", () => {
+  it("covers the favicon fallback but leaves Next static assets untouched", () => {
     expect(
       matches("https://not-a-wrapper.com/_next/static/chunks/app.js")
     ).toBe(false)
     expect(
       matches("https://not-a-wrapper.com/_next/image?url=%2Fbanner_ocean.jpg")
     ).toBe(false)
-    expect(matches("https://not-a-wrapper.com/favicon.ico")).toBe(false)
+    expect(matches("https://not-a-wrapper.com/favicon.ico")).toBe(true)
   })
 })
