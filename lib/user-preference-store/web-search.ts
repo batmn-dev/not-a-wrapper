@@ -1,5 +1,7 @@
+import { defaultPreferences } from "./utils"
+
 export function resolveWebSearchEnabled(value: boolean | undefined): boolean {
-  return value ?? true
+  return value ?? defaultPreferences.webSearchEnabled
 }
 
 export function persistWebSearchToggle(

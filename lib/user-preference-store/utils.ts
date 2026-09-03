@@ -38,7 +38,10 @@ export const defaultPreferences: UserPreferences = {
   layout: "sidebar",
   showToolInvocations: true,
   showConversationPreviews: true,
-  webSearchEnabled: true,
+  // Off: an optional-search model then declares no hosted search tool, and
+  // the provider charges none of its hidden tool prompt (OpenAI ~4.4K input
+  // tokens per turn). The composer toggle and Settings both persist a choice.
+  webSearchEnabled: false,
   streamingPresentation: "smooth",
   hiddenModels: [],
   showGenerationStats: false,
@@ -67,7 +70,8 @@ export function convertFromApiFormat(
     layout: apiData.layout || "sidebar",
     showToolInvocations: apiData.show_tool_invocations ?? true,
     showConversationPreviews: apiData.show_conversation_previews ?? true,
-    webSearchEnabled: apiData.web_search_enabled ?? true,
+    webSearchEnabled:
+      apiData.web_search_enabled ?? defaultPreferences.webSearchEnabled,
     streamingPresentation: normalizeStreamingPresentation(
       apiData.streaming_presentation
     ),

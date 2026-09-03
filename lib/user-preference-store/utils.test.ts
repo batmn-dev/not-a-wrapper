@@ -7,9 +7,9 @@ import {
 } from "./utils"
 
 describe("user preference webSearchEnabled defaults", () => {
-  it("defaults webSearchEnabled to true when missing", () => {
+  it("defaults webSearchEnabled to false when missing", () => {
     const converted = convertFromApiFormat({})
-    expect(converted.webSearchEnabled).toBe(true)
+    expect(converted.webSearchEnabled).toBe(false)
   })
 
   it("round-trips an explicit disabled preference", () => {
