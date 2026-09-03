@@ -27,6 +27,9 @@ vi.mock("convex/react", () => ({
     isLoading: convexMocks.isAuthLoading,
   }),
   usePaginatedQuery: vi.fn(),
+}))
+// The seam's useQuery is the convex-helpers cached variant (ADR-0031).
+vi.mock("convex-helpers/react/cache", () => ({
   useQuery: (...args: unknown[]) => {
     convexMocks.useQuery(...args)
     return convexMocks.queryValue

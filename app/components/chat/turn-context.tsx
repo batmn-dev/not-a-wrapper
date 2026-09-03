@@ -24,6 +24,7 @@
  */
 import { useChats } from "@/lib/chat-store/chats/provider"
 import type { Chats } from "@/lib/chat-store/types"
+import { writeComposerShellHintCookie } from "@/lib/composer-shell-hint"
 import { SYSTEM_PROMPT_DEFAULT } from "@/lib/config"
 import { useModel as useModelStore } from "@/lib/model-store/provider"
 import { useSessionModel } from "@/lib/model-store/use-session-model"
@@ -154,7 +155,7 @@ export function TurnContextProvider({
     setWebSearchEnabled,
     isLoading: preferencesLoading,
   } = useUserPreferences()
-  const { modelPrefsHydrated, isLoading: modelStoreLoading } = useModelStore()
+  const { modelPrefsHydrated, lastUsedModel, shellHint } = useModelStore()
 
   const { selectedModel, handleModelChange } = useSessionModel({
     currentChat,
@@ -217,13 +218,15 @@ export function TurnContextProvider({
   // Device memory read synchronously during render: a model switch sees the
   // new model's stored level in the SAME render, so a snapshot taken between
   // switch and paint can never carry the previous model's value. The server
-  // snapshot is undefined (hydration-safe — the stored value appears on the
-  // post-hydration re-read); the 'storage' subscription folds in cross-tab
-  // writes, and same-tab writes re-render via the override state.
+  // snapshot is the Composer shell hint's effort when the shell resolved to
+  // the hinted model (ADR-0032), so the server-rendered label already matches
+  // what device memory reads after hydration; React re-renders only if the
+  // live read genuinely differs. The 'storage' subscription folds in
+  // cross-tab writes, and same-tab writes re-render via the override state.
   const storedEffort = useSyncExternalStore(
     subscribeToStoredEffort,
     () => readStoredEffortForModel(selectedModel),
-    () => undefined
+    () => (selectedModel === shellHint?.modelId ? shellHint.effort : undefined)
   )
   const effortCandidate =
     effortOverride === "default"
@@ -241,8 +244,17 @@ export function TurnContextProvider({
         })
       )
       writeStoredEffortForModel(selectedModel, effort)
+      // The shell hint mirrors the last-used model's effort (ADR-0032): keep
+      // it current when this selection is for that model.
+      if (selectedModel === lastUsedModel) {
+        writeComposerShellHintCookie(
+          effort === undefined
+            ? { modelId: selectedModel }
+            : { modelId: selectedModel, effort }
+        )
+      }
     },
-    [chatId, selectedModel, setConversationEfforts]
+    [chatId, lastUsedModel, selectedModel, setConversationEfforts]
   )
   const prefersSearch =
     !preferencesLoading && resolveWebSearchEnabled(preferences.webSearchEnabled)
@@ -258,15 +270,12 @@ export function TurnContextProvider({
 
   const isAuthenticated = !!user?.id
   const systemPrompt = user?.system_prompt || SYSTEM_PROMPT_DEFAULT
-  // Every async-hydrating input a turn snapshot reads: model prefs + catalog
-  // (selectedModel) and user preferences (enableSearch). The user store is
-  // SSR-seeded (systemPrompt has no async gap), and preferencesLoading is
-  // false for guests, so the gate cannot deadlock unauthenticated loads.
-  const isHydrated =
-    modelPrefsHydrated &&
-    !modelStoreLoading &&
-    !preferencesLoading &&
-    !isChatLoading
+  // Every async-hydrating input a turn snapshot reads: model prefs
+  // (selectedModel; the catalog itself is static) and user preferences
+  // (enableSearch). The user store is SSR-seeded (systemPrompt has no async
+  // gap), and preferencesLoading is false for guests, so the gate cannot
+  // deadlock unauthenticated loads.
+  const isHydrated = modelPrefsHydrated && !preferencesLoading && !isChatLoading
 
   const snapshot: TurnSnapshot = {
     selectedModel,

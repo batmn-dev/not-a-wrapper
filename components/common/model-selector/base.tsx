@@ -55,7 +55,7 @@ import {
   RiLockLine,
   RiSearchLine,
 } from "@remixicon/react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { ProModelDialog } from "./pro-dialog"
 
@@ -406,6 +406,7 @@ function ModelSelectorRows({
   canPinModels,
   selectedModelId,
   pinnedModelIds,
+  holdLockedClicks,
   onSelect,
   onTogglePinned,
   onShowLegacy,
@@ -418,6 +419,8 @@ function ModelSelectorRows({
   canPinModels: boolean
   selectedModelId: string | null
   pinnedModelIds: ReadonlySet<string>
+  /** Key status still loading: a locked row's click is held, so the menu stays open. */
+  holdLockedClicks: boolean
   onSelect: (modelId: string, isLocked: boolean) => void
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string, trigger: HTMLElement) => void
@@ -520,6 +523,7 @@ function ModelSelectorRows({
         geometry="custom"
         data-model-selector-row={`model:${model.id}`}
         className={className}
+        closeOnClick={!(isLocked && holdLockedClicks)}
         onClick={() => onSelect(model.id, isLocked)}
       >
         {content}
@@ -533,12 +537,12 @@ function ModelSelectorList({
   others,
   legacyProviders,
   revealedLegacyProviders,
-  isLoading,
   isMobile,
   isUserAuthenticated,
   canPinModels,
   selectedModelId,
   pinnedModelIds,
+  holdLockedClicks,
   onSelect,
   onTogglePinned,
   onShowLegacy,
@@ -547,24 +551,16 @@ function ModelSelectorList({
   others: LogicalModelView[]
   legacyProviders: LegacyProviderOption[]
   revealedLegacyProviders: ReadonlySet<string>
-  isLoading: boolean
   isMobile: boolean
   isUserAuthenticated: boolean
   canPinModels: boolean
   selectedModelId: string | null
   pinnedModelIds: ReadonlySet<string>
+  holdLockedClicks: boolean
   onSelect: (modelId: string, isLocked: boolean) => void
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string, trigger: HTMLElement) => void
 }) {
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <p className="text-muted-foreground mb-2 text-sm">Loading models...</p>
-      </div>
-    )
-  }
-
   if (
     favorites.length === 0 &&
     others.length === 0 &&
@@ -591,6 +587,7 @@ function ModelSelectorList({
     canPinModels,
     selectedModelId,
     pinnedModelIds,
+    holdLockedClicks,
     onSelect,
     onTogglePinned,
     onShowLegacy,
@@ -683,7 +680,13 @@ export function ModelSelector({
   variant = "default",
 }: ModelSelectorProps) {
   const isComposerVariant = variant === "composer"
-  const { models, isLoading: isLoadingModels } = useModel()
+  const { models, keyStatusLoading, whenKeyStatusReady } = useModel()
+  const latestModels = useRef(models)
+  useEffect(() => {
+    latestModels.current = models
+  }, [models])
+  /** The one held click awaiting key status; any later click supersedes it. */
+  const heldLockedModelId = useRef<string | null>(null)
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
@@ -700,12 +703,15 @@ export function ModelSelector({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectionCommittedRef = useRef(false)
 
+  // Dismissing either surface cancels a click held for key status.
   const setDrawerOpen = (open: boolean) => {
+    if (!open) heldLockedModelId.current = null
     setIsDrawerOpen(open)
     onOpenChange?.(open)
   }
 
   const setDropdownOpen = (open: boolean) => {
+    if (!open) heldLockedModelId.current = null
     setIsDropdownOpen(open)
     onOpenChange?.(open)
   }
@@ -742,10 +748,29 @@ export function ModelSelector({
     }
   )
 
-  const handleSelect = (modelId: string, isLocked: boolean) => {
+  const handleSelect = (
+    modelId: string,
+    isLocked: boolean,
+    { settled = false }: { settled?: boolean } = {}
+  ) => {
     if (disabled) return
+    if (settled && heldLockedModelId.current !== modelId) return
+    heldLockedModelId.current = null
 
     if (isLocked) {
+      // Key status is a client read that lands after first paint; until it
+      // does a key-backed model only looks locked, so the click is held (the
+      // row does not close the menu) and re-run against the real answer
+      // instead of opening the Pro dialog on a guess. A later click or a
+      // dismissal supersedes the held one.
+      if (isUserAuthenticated && keyStatusLoading && !settled) {
+        heldLockedModelId.current = modelId
+        void whenKeyStatusReady().then(() => {
+          const model = latestModels.current.find((m) => m.id === modelId)
+          handleSelect(modelId, !model?.accessible, { settled: true })
+        })
+        return
+      }
       setSelectedProModel(modelId)
       if (!isUserAuthenticated) {
         setDrawerOpen(false)
@@ -755,6 +780,12 @@ export function ModelSelector({
         return
       }
 
+      if (settled) {
+        // The held row kept the surface open; the answer closes it.
+        setDrawerOpen(false)
+        setDropdownOpen(false)
+        resetModelList()
+      }
       setIsProDialogOpen(true)
       return
     }
@@ -871,7 +902,7 @@ export function ModelSelector({
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
         className
       )}
-      disabled={disabled || isLoadingModels}
+      disabled={disabled}
       aria-label={`Select model, current model ${currentModelFullName}`}
     >
       {isComposerVariant && currentModel ? (
@@ -972,12 +1003,12 @@ export function ModelSelector({
                 others={others}
                 legacyProviders={legacyProviders}
                 revealedLegacyProviders={effectiveRevealedLegacyProviders}
-                isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
                 canPinModels={isUserAuthenticated && !disabled}
                 selectedModelId={normalizedSelectedModelId}
                 pinnedModelIds={pinnedModelIds}
+                holdLockedClicks={isUserAuthenticated && keyStatusLoading}
                 onSelect={handleSelect}
                 onTogglePinned={handleTogglePinned}
                 onShowLegacy={handleShowLegacy}
@@ -1086,12 +1117,12 @@ export function ModelSelector({
                 others={others}
                 legacyProviders={legacyProviders}
                 revealedLegacyProviders={effectiveRevealedLegacyProviders}
-                isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}
                 canPinModels={isUserAuthenticated && !disabled}
                 selectedModelId={normalizedSelectedModelId}
                 pinnedModelIds={pinnedModelIds}
+                holdLockedClicks={isUserAuthenticated && keyStatusLoading}
                 onSelect={handleSelect}
                 onTogglePinned={handleTogglePinned}
                 onShowLegacy={handleShowLegacy}

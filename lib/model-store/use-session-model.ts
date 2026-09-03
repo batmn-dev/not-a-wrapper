@@ -45,15 +45,17 @@ export function useSessionModel({
   } = useChatSession()
 
   // Calculate the effective model based on priority: chat model > accessible
-  // last used > accessible favorite > tier default.
+  // last used > accessible favorite > tier default. Last-used is known from
+  // the first render (the Composer shell hint seeds it, ADR-0032); only the
+  // favorite fallback waits for the Convex user read, so a seeded shell never
+  // regresses to a favorite or the tier default while favorites load.
   const getEffectiveModel = useCallback(() => {
-    const hydratedLastUsedModel = modelPrefsHydrated ? lastUsedModel : null
     const firstFavoriteModel = modelPrefsHydrated ? favoriteModels[0] : null
     return resolvePreferredModelId({
       models,
       isAuthenticated: !!user?.id,
       currentModelId: currentChat?.model,
-      preferredModelIds: [hydratedLastUsedModel, firstFavoriteModel],
+      preferredModelIds: [lastUsedModel, firstFavoriteModel],
     })
   }, [
     currentChat?.model,

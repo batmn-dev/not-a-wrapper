@@ -13,20 +13,22 @@
  *   1. NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf \
  *        bun run build:next
  *   2. bun run bench:browser            # spawns `next start` on PERF_PORT
- * Env: SUITE=standard|smoke (default standard), RUNS (default 10),
- *      WARMUPS (default 2), PERF_PORT (default 3111), BASE_URL (reuse a
- *      running perf server instead of spawning; server-span join unavailable),
- *      PW_CHANNEL (e.g. "chrome" to use installed Chrome).
+ * Env: SUITE=standard|smoke|durable|thread-switch (default standard),
+ *      RUNS (default 10), WARMUPS (default 2), PERF_PORT (default 3111),
+ *      BASE_URL (reuse a running perf server instead of spawning; server-span
+ *      join unavailable), PW_CHANNEL (e.g. "chrome" to use installed Chrome).
+ *      thread-switch knobs: THREAD_SWITCH_CHATS (8), THREAD_SWITCH_COUNT (50),
+ *      THREAD_SWITCH_DOCUMENTS (5), THREAD_SWITCH_HOVER_MS (250).
  */
+import { execSync, spawn, type ChildProcess } from "node:child_process"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import {
   buildDeterministicPartScript,
   deterministicScenarioText,
 } from "@/app/api/chat/deterministic-provider"
 import { pacingOverheadMs } from "@/convex/lib/runTimingReceipt"
-import { execSync, spawn, type ChildProcess } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import os from "node:os"
-import path from "node:path"
 import {
   chromium,
   type Browser,
@@ -37,6 +39,19 @@ import {
 } from "playwright"
 import { hashValue } from "../fixtures"
 import {
+  ensurePerfAuthUser,
+  getPerfAuthPassword,
+  PERF_AUTH_EMAIL,
+} from "./ensure-auth-user"
+import {
+  readHeap,
+  readMarks,
+  tryWaitForMark,
+  waitForAnyMark,
+  waitForMark,
+  type CollectedMark,
+} from "./marks"
+import {
   round2,
   summarize,
   type BenchmarkResultFile,
@@ -44,30 +59,23 @@ import {
   type ScenarioResult,
 } from "./result-schema"
 import {
-  ensurePerfAuthUser,
-  getPerfAuthPassword,
-  PERF_AUTH_EMAIL,
-} from "./ensure-auth-user"
-import {
   directiveFor,
   DURABLE_SUITE,
   SMOKE_SUITE,
   STANDARD_SUITE,
   type BrowserScenarioConfig,
 } from "./scenarios"
+import { formatThreadSwitch, runThreadSwitch } from "./thread-switch"
 
 const PERF_PORT = Number(process.env.PERF_PORT ?? 3111)
 const RUNS = Number(process.env.RUNS ?? 10)
 const WARMUPS = Number(process.env.WARMUPS ?? 2)
 const SUITE_NAME = process.env.SUITE ?? "standard"
 const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next-perf"
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..")
-
-type CollectedMark = {
-  name: string
-  startTime: number
-  detail: Record<string, unknown> | null
-}
+const REPO_ROOT = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../../.."
+)
 
 type ServerPerfLine = Record<string, unknown> & {
   event?: string
@@ -110,20 +118,16 @@ function spawnPerfServer(baseUrl: string): void {
     )
   }
   log(`starting perf server on :${PERF_PORT} (dist: ${DIST_DIR})`)
-  serverProcess = spawn(
-    "bunx",
-    ["next", "start", "-p", String(PERF_PORT)],
-    {
-      cwd: REPO_ROOT,
-      env: {
-        ...process.env,
-        NEXT_DIST_DIR: DIST_DIR,
-        CHAT_PERF_DETERMINISTIC_PROVIDER: "1",
-        CHAT_PERF_SAMPLE_RATE: "1",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  )
+  serverProcess = spawn("bunx", ["next", "start", "-p", String(PERF_PORT)], {
+    cwd: REPO_ROOT,
+    env: {
+      ...process.env,
+      NEXT_DIST_DIR: DIST_DIR,
+      CHAT_PERF_DETERMINISTIC_PROVIDER: "1",
+      CHAT_PERF_SAMPLE_RATE: "1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  })
   const capture = (chunk: Buffer) => {
     for (const line of chunk.toString().split("\n")) {
       const trimmed = line.trim()
@@ -150,56 +154,11 @@ function stopPerfServer() {
   serverProcess = null
 }
 
-async function readMarks(page: Page): Promise<CollectedMark[]> {
-  return page.evaluate(() =>
-    performance
-      .getEntriesByType("mark")
-      .filter((entry) => entry.name.startsWith("chat-perf:"))
-      .map((entry) => ({
-        name: entry.name.slice("chat-perf:".length),
-        startTime: entry.startTime,
-        detail:
-          ((entry as PerformanceMark).detail as Record<
-            string,
-            unknown
-          > | null) ?? null,
-      }))
-  )
-}
-
 /** The send's correlation id, carried by the `chat_send_intent` mark detail. */
 function correlationIdOf(marks: CollectedMark[]): string | undefined {
   const sendIntent = marks.find((mark) => mark.name === "chat_send_intent")
   const id = sendIntent?.detail?.correlationId
   return typeof id === "string" ? id : undefined
-}
-
-async function waitForMark(
-  page: Page,
-  name: string,
-  timeoutMs: number
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    const found = await page.evaluate(
-      (markName) => performance.getEntriesByName(markName).length > 0,
-      `chat-perf:${name}`
-    )
-    if (found) return
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  const seen = await page
-    .evaluate(() =>
-      performance
-        .getEntriesByType("mark")
-        .filter((entry) => entry.name.startsWith("chat-perf:"))
-        .map((entry) => entry.name.slice("chat-perf:".length))
-    )
-    .catch(() => ["<marks unreadable>"])
-  throw new Error(
-    `timed out waiting for mark ${name} (${timeoutMs}ms) at ${page.url()}; ` +
-      `marks seen: ${[...new Set(seen)].join(", ") || "none"}`
-  )
 }
 
 /**
@@ -236,42 +195,6 @@ async function clearGuestIdentity(page: Page): Promise<void> {
     )
   })
   await page.reload({ waitUntil: "domcontentloaded" })
-}
-
-/** Waits for the first of several marks; returns the name that appeared. */
-async function waitForAnyMark(
-  page: Page,
-  names: string[],
-  timeoutMs: number
-): Promise<string> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    for (const name of names) {
-      const found = await page.evaluate(
-        (markName) => performance.getEntriesByName(markName).length > 0,
-        `chat-perf:${name}`
-      )
-      if (found) return name
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error(
-    `timed out waiting for any of [${names.join(", ")}] (${timeoutMs}ms) at ${page.url()}`
-  )
-}
-
-/** Like waitForMark but resolves false on timeout instead of throwing. */
-async function tryWaitForMark(
-  page: Page,
-  name: string,
-  timeoutMs: number
-): Promise<boolean> {
-  try {
-    await waitForMark(page, name, timeoutMs)
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -339,8 +262,11 @@ async function readGrowthSamples(
 ): Promise<Array<{ t: number; len: number }>> {
   return page.evaluate(
     () =>
-      (window as unknown as { __perfGrowth?: Array<{ t: number; len: number }> })
-        .__perfGrowth ?? []
+      (
+        window as unknown as {
+          __perfGrowth?: Array<{ t: number; len: number }>
+        }
+      ).__perfGrowth ?? []
   )
 }
 
@@ -806,16 +732,6 @@ async function runScenarioOnce(
   }
 }
 
-async function readHeap(cdp: CDPSession): Promise<number | undefined> {
-  try {
-    const { metrics } = await cdp.send("Performance.getMetrics")
-    const metric = metrics.find((entry) => entry.name === "JSHeapUsedSize")
-    return metric?.value
-  } catch {
-    return undefined
-  }
-}
-
 function collectServerSpans(
   correlationId: string
 ): Record<string, number> | undefined {
@@ -934,6 +850,7 @@ function scenarioTimeoutMs(config: BrowserScenarioConfig): number {
 }
 
 async function main() {
+  const isThreadSwitch = SUITE_NAME === "thread-switch"
   let suite =
     SUITE_NAME === "smoke"
       ? SMOKE_SUITE
@@ -941,11 +858,14 @@ async function main() {
         ? STANDARD_SUITE
         : SUITE_NAME === "durable"
           ? DURABLE_SUITE
-          : fail(`unknown SUITE: ${SUITE_NAME}`)
-  if (process.env.ONLY) {
+          : isThreadSwitch
+            ? []
+            : fail(`unknown SUITE: ${SUITE_NAME}`)
+  if (process.env.ONLY && !isThreadSwitch) {
     const wanted = process.env.ONLY.split(",").map((id) => id.trim())
     suite = suite.filter((config) => wanted.includes(config.id))
-    if (suite.length === 0) fail(`ONLY matched no scenario: ${process.env.ONLY}`)
+    if (suite.length === 0)
+      fail(`ONLY matched no scenario: ${process.env.ONLY}`)
   }
 
   const externalBaseUrl = process.env.BASE_URL
@@ -967,9 +887,27 @@ async function main() {
   const results: ScenarioResult[] = []
   let anyCorrectnessFailure = false
 
-  const authState = suite.some((config) => config.auth)
-    ? await acquireAuthState(browser, baseUrl)
-    : null
+  const authState =
+    isThreadSwitch || suite.some((config) => config.auth)
+      ? await acquireAuthState(browser, baseUrl)
+      : null
+
+  let threadSwitch: BenchmarkResultFile["threadSwitch"]
+  if (isThreadSwitch && authState) {
+    const chatCount = Number(process.env.THREAD_SWITCH_CHATS ?? 8)
+    const switchCount = Number(process.env.THREAD_SWITCH_COUNT ?? 50)
+    log(`thread-switch: ${chatCount} chats, ${switchCount} visited switches`)
+    threadSwitch = await runThreadSwitch(browser, baseUrl, authState, {
+      chatCount,
+      switchCount,
+      hoverMs: Number(process.env.THREAD_SWITCH_HOVER_MS ?? 250),
+      documents: Number(process.env.THREAD_SWITCH_DOCUMENTS ?? 5),
+      heapSampleAt: [10, 25, switchCount],
+      log,
+    })
+    for (const line of formatThreadSwitch(threadSwitch)) log(line)
+    if (!threadSwitch.correctnessOk) anyCorrectnessFailure = true
+  }
 
   for (const config of suite) {
     const viewport =
@@ -1041,12 +979,8 @@ async function main() {
     }
     if (!correctnessOk) anyCorrectnessFailure = true
 
-    const numeric = (
-      pick: (run: RunMetrics) => number | undefined
-    ): number[] =>
-      runs
-        .map(pick)
-        .filter((value): value is number => Number.isFinite(value))
+    const numeric = (pick: (run: RunMetrics) => number | undefined): number[] =>
+      runs.map(pick).filter((value): value is number => Number.isFinite(value))
     results.push({
       scenario: config.scenario,
       directive: directiveFor(config),
@@ -1173,9 +1107,13 @@ async function main() {
     baseUrl,
     suite: SUITE_NAME,
     scenarios: results,
+    ...(threadSwitch ? { threadSwitch } : {}),
   }
 
-  const resultsDir = path.join(path.dirname(new URL(import.meta.url).pathname), "results")
+  const resultsDir = path.join(
+    path.dirname(new URL(import.meta.url).pathname),
+    "results"
+  )
   mkdirSync(resultsDir, { recursive: true })
   const outPath = path.join(
     resultsDir,
