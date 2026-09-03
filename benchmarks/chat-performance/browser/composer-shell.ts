@@ -159,13 +159,15 @@ async function saveFixtureSelection(
   try {
     await page.goto(`${baseUrl}/`, { waitUntil: "load" })
     await page.waitForTimeout(SETTLE_MS)
-    const model = shellModel()
+    const fixtureModel = shellModel()
     await page.locator(MODEL_TRIGGER).click()
     await page
       .getByPlaceholder("Search models...")
-      .fill(getModelDisplayName(model))
+      .fill(getModelDisplayName(fixtureModel))
     // Rows carry the canonical id, so an alias in SHELL_MODEL_ID still matches.
-    await page.locator(`[data-model-selector-row="model:${model.id}"]`).click()
+    await page
+      .locator(`[data-model-selector-row="model:${fixtureModel.id}"]`)
+      .click()
     await page.locator(EFFORT_TRIGGER).click()
     await page
       .getByRole("menuitemradio", { name: SHELL_EFFORT_LABEL, exact: true })
