@@ -5,11 +5,15 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { ModelProvider, useModel } from "./provider"
 
+const keyStatus = vi.hoisted(() => ({
+  data: undefined as string[] | undefined,
+  isLoading: true,
+}))
 vi.mock("@/lib/convex/use-per-user-query", () => ({
   usePerUserQuery: () => ({
-    data: undefined,
+    data: keyStatus.data,
     isAuthReady: false,
-    isLoading: true,
+    isLoading: keyStatus.isLoading,
   }),
 }))
 const userState = vi.hoisted(() => ({
@@ -69,6 +73,8 @@ describe("ModelProvider shell hint seeding", () => {
     root = null
     seen.length = 0
     userState.user = null
+    keyStatus.data = undefined
+    keyStatus.isLoading = true
     window.localStorage.clear()
     document.cookie = "composer_shell=; Max-Age=0; Path=/"
   })
@@ -103,5 +109,12 @@ describe("ModelProvider shell hint seeding", () => {
     userState.user = { id: "u1", favorite_models: [] }
     mount({ modelId: BYOK_ONLY })
     expect(byokOnlyAccessible).toBe(true)
+
+    // Key status answers with no key: the stale selection drops to locked.
+    act(() => root?.unmount())
+    keyStatus.data = []
+    keyStatus.isLoading = false
+    mount({ modelId: BYOK_ONLY })
+    expect(byokOnlyAccessible).toBe(false)
   })
 })
