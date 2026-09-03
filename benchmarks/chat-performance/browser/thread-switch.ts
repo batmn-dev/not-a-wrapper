@@ -45,6 +45,8 @@ export type ThreadSwitchOptions = {
 type SwitchSample = {
   navToPaintedMs: number | undefined
   intentToCommitMs: number | undefined
+  commitToFirstContentMs: number | undefined
+  firstContentToPaintedMs: number | undefined
   cache: "hit" | "miss" | undefined
   querySetAdds: number
   ok: boolean
@@ -181,6 +183,7 @@ async function switchTo(
   const marks = await readMarks(page)
   const intent = last(marks, "chat_navigation_intent")
   const committed = last(marks, "chat_route_state_committed")
+  const firstContent = last(marks, "first_thread_content_painted")
   const paintedMark = last(marks, "nav_to_thread_painted")
   const cacheDetail = last(marks, "navigation_cache_hit_or_miss")?.detail?.cache
   const urlOk = new URL(page.url()).pathname === href
@@ -199,6 +202,14 @@ async function switchTo(
     intentToCommitMs:
       intent && committed && committed.startTime >= intent.startTime
         ? round2(committed.startTime - intent.startTime)
+        : undefined,
+    commitToFirstContentMs:
+      committed && firstContent && firstContent.startTime >= committed.startTime
+        ? round2(firstContent.startTime - committed.startTime)
+        : undefined,
+    firstContentToPaintedMs:
+      painted && firstContent && paintedMark
+        ? round2(paintedMark.startTime - firstContent.startTime)
         : undefined,
     cache:
       cacheDetail === "hit" || cacheDetail === "miss" ? cacheDetail : undefined,
@@ -225,6 +236,12 @@ function summarizePass(pass: PassAccumulator): ThreadSwitchPassResult {
     navToThreadPaintedMs: summarize(numeric((sample) => sample.navToPaintedMs)),
     intentToRouteCommitMs: summarize(
       numeric((sample) => sample.intentToCommitMs)
+    ),
+    commitToFirstContentMs: summarize(
+      numeric((sample) => sample.commitToFirstContentMs)
+    ),
+    firstContentToPaintedMs: summarize(
+      numeric((sample) => sample.firstContentToPaintedMs)
     ),
     cacheHits: pass.samples.filter((sample) => sample.cache === "hit").length,
     cacheMisses: pass.samples.filter((sample) => sample.cache === "miss")
@@ -356,6 +373,7 @@ export function formatThreadSwitch(result: ThreadSwitchResult): string[] {
     const paint = pass.navToThreadPaintedMs
     lines.push(
       `  ${pass.kind.padEnd(16)} n=${paint.n} navToPainted p50=${paint.p50}ms p95=${paint.p95}ms max=${paint.max}ms ` +
+        `(commit p50=${pass.intentToRouteCommitMs.p50}ms, commit→rows p50=${pass.commitToFirstContentMs.p50}ms, rows→painted p50=${pass.firstContentToPaintedMs.p50}ms) ` +
         `cache hit/miss=${pass.cacheHits}/${pass.cacheMisses} querySetAdds p50=${pass.querySetAddsPerSwitch.p50}`
     )
   }

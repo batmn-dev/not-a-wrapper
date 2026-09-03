@@ -106,6 +106,10 @@ export type ThreadSwitchPassResult = {
   navToThreadPaintedMs: MetricSummary
   /** `chat_navigation_intent` → `chat_route_state_committed` per switch. */
   intentToRouteCommitMs: MetricSummary
+  /** Route commit → the commit that first rendered a message row (0 = same commit). */
+  commitToFirstContentMs: MetricSummary
+  /** First-row commit → the painted mark (two rAFs plus whatever delays them). */
+  firstContentToPaintedMs: MetricSummary
   /** `navigation_cache_hit_or_miss` at the route commit. */
   cacheHits: number
   cacheMisses: number
