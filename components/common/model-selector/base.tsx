@@ -533,7 +533,6 @@ function ModelSelectorList({
   others,
   legacyProviders,
   revealedLegacyProviders,
-  isLoading,
   isMobile,
   isUserAuthenticated,
   canPinModels,
@@ -547,7 +546,6 @@ function ModelSelectorList({
   others: LogicalModelView[]
   legacyProviders: LegacyProviderOption[]
   revealedLegacyProviders: ReadonlySet<string>
-  isLoading: boolean
   isMobile: boolean
   isUserAuthenticated: boolean
   canPinModels: boolean
@@ -557,14 +555,6 @@ function ModelSelectorList({
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string, trigger: HTMLElement) => void
 }) {
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <p className="text-muted-foreground mb-2 text-sm">Loading models...</p>
-      </div>
-    )
-  }
-
   if (
     favorites.length === 0 &&
     others.length === 0 &&
@@ -683,7 +673,7 @@ export function ModelSelector({
   variant = "default",
 }: ModelSelectorProps) {
   const isComposerVariant = variant === "composer"
-  const { models, isLoading: isLoadingModels } = useModel()
+  const { models } = useModel()
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
@@ -871,7 +861,7 @@ export function ModelSelector({
           : "max-w-full justify-between overflow-hidden rounded-lg text-lg",
         className
       )}
-      disabled={disabled || isLoadingModels}
+      disabled={disabled}
       aria-label={`Select model, current model ${currentModelFullName}`}
     >
       {isComposerVariant && currentModel ? (
@@ -972,7 +962,6 @@ export function ModelSelector({
                 others={others}
                 legacyProviders={legacyProviders}
                 revealedLegacyProviders={effectiveRevealedLegacyProviders}
-                isLoading={isLoadingModels}
                 isMobile
                 isUserAuthenticated={isUserAuthenticated}
                 canPinModels={isUserAuthenticated && !disabled}
@@ -1086,7 +1075,6 @@ export function ModelSelector({
                 others={others}
                 legacyProviders={legacyProviders}
                 revealedLegacyProviders={effectiveRevealedLegacyProviders}
-                isLoading={isLoadingModels}
                 isMobile={false}
                 isUserAuthenticated={isUserAuthenticated}
                 canPinModels={isUserAuthenticated && !disabled}

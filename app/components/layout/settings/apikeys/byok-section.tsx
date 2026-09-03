@@ -131,7 +131,7 @@ function ByokProviderDetails({
 }
 
 export function ByokSection() {
-  const { userKeyStatus, refreshAll } = useModel()
+  const { userKeyStatus } = useModel()
 
   return (
     <ProviderKeyPanel
@@ -179,13 +179,8 @@ export function ByokSection() {
           <Icon icon={RiAddLine} slotSize={16} />
         </button>
       }
-      onSaved={async () => {
-        // Key status is reactive; refresh the model catalog after saving.
-        await refreshAll()
-      }}
-      onDeleted={async () => {
-        await refreshAll()
-      }}
+      // Key status is reactive (Convex) and the catalog is static, so no
+      // post-save refresh port is needed.
       renderDetails={(providerId, { hasKey }) =>
         isModelProviderId(providerId) ? (
           <ByokProviderDetails providerId={providerId} hasKey={hasKey} />

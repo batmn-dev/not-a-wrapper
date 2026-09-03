@@ -211,6 +211,11 @@ The deep client module that assembles a **Chat turn** payload: it owns the draft
 _Avoid_: chat-input prop orchestration (the shallow 21-prop interface), parent-owned draft/file state, `quotedText`-style commands modeled as state
 _Status_: implemented 2026-07-03.
 
+**Composer shell hint**:
+The one cookie (`composer_shell`, `lib/composer-shell-hint.ts`, ADR-0032) mirroring the device memory the new-chat **Composer** resolves from — the last-used model and that model's stored effort — so the server-rendered shell paints the saved selection on first paint. `localStorage` stays the source of truth: the cookie is written at the two memory writers (`ModelProvider.setLastUsedModel`, **Turn context** `setReasoningEffort`) and re-synced after hydration only on drift. The root layout reads it off the request beside `getUserAuth()` (no network) and seeds `ModelProvider.lastUsedModel` plus the Turn context's effort server snapshot; `parseComposerShellHint` validates model and effort against the catalog so a stale or forged cookie never paints an invalid label. The model catalog itself is static bundle data (`getVisibleLogicalModelViews()`), not a fetch.
+_Avoid_: a second preference store, reading Convex in the root layout for shell state, an unvalidated cookie value, gating the last-used model on the favorites read, fetching the static catalog
+_Status_: implemented 2026-09-02 (ADR-0032).
+
 **Composer control**:
 The shared secondary-action module inside the **Composer**. It owns the complete input-modality contract: semantic hover and pressed tokens, open-state selectors, the invisible tap target, and the retained Button scale animation. Icon-only and text/model controls are adapters over this module; the send/stop action remains a distinct primary action. Callers own only local geometry such as grid placement or a menu hover bridge — never the interaction class or token state machine.
 _Avoid_: pairing `variant="composer"` with a caller-supplied magic class, duplicating touch/hover/open selectors in Composer callers, treating send as a secondary control

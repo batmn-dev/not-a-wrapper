@@ -14,7 +14,6 @@ import {
 const turnMocks = vi.hoisted(() => ({
   selectedModel: "model-a",
   modelPrefsHydrated: true,
-  modelStoreLoading: false,
   preferencesLoading: false,
   isChatLoading: false,
   searchMode: "optional" as "optional" | "always-on" | "unsupported",
@@ -56,7 +55,8 @@ vi.mock("@/lib/user-preference-store/provider", () => ({
 vi.mock("@/lib/model-store/provider", () => ({
   useModel: () => ({
     modelPrefsHydrated: turnMocks.modelPrefsHydrated,
-    isLoading: turnMocks.modelStoreLoading,
+    lastUsedModel: null,
+    shellHint: null,
   }),
 }))
 
@@ -211,7 +211,6 @@ describe("TurnContextProvider snapshot contract", () => {
 
     turnMocks.selectedModel = "model-a"
     turnMocks.modelPrefsHydrated = false
-    turnMocks.modelStoreLoading = true
     turnMocks.preferencesLoading = true
     turnMocks.isChatLoading = true
     mount()
@@ -221,18 +220,10 @@ describe("TurnContextProvider snapshot contract", () => {
     expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
     expect(seen.at(-1)?.reactiveHydrated).toBe(false)
 
-    // Browser prefs can hydrate before the model catalog settles; this must
-    // still keep auto-submit closed.
-    turnMocks.modelPrefsHydrated = true
-    mount()
-
-    expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)
-    expect(seen.at(-1)?.reactiveHydrated).toBe(false)
-
     // The model side can settle before the user-preference read (enableSearch)
     // resolves — auto-submit must also wait for that.
+    turnMocks.modelPrefsHydrated = true
     turnMocks.selectedModel = "model-b"
-    turnMocks.modelStoreLoading = false
     mount()
 
     expect(seen.at(-1)?.snapshot.isHydrated).toBe(false)

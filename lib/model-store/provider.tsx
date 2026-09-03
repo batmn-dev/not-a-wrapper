@@ -1,14 +1,19 @@
 "use client"
 
 import { api } from "@/convex/_generated/api"
+import {
+  writeComposerShellHintCookie,
+  type ComposerShellHint,
+} from "@/lib/composer-shell-hint"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
-import { fetchClient } from "@/lib/fetch"
+import { getVisibleLogicalModelViews } from "@/lib/models"
 import {
   isLogicalModelId,
   normalizeFavoriteModelIds,
   resolveModelSelection,
   type LogicalModelView,
 } from "@/lib/models/catalog"
+import { readStoredEffortForModel } from "@/lib/reasoning-effort"
 import { useUser } from "@/lib/user-store/provider"
 import {
   createContext,
@@ -16,7 +21,9 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  useSyncExternalStore,
 } from "react"
 
 type UserKeyStatus = {
@@ -40,16 +47,22 @@ const DEFAULT_KEY_STATUS: UserKeyStatus = {
   anthropic: false,
 }
 
+const LAST_USED_MODEL_STORAGE_KEY = "lastUsedModel"
+const LAST_USED_MODEL_CHANGE_EVENT = "last-used-model-change"
+
 type ModelContextType = {
   /** One entry per visible logical model (ADR-0020). */
   models: LogicalModelView[]
   userKeyStatus: UserKeyStatus
   favoriteModels: string[]
   lastUsedModel: string | null
+  /**
+   * The server-render seed (ADR-0032), consulted only by hydration-time
+   * server snapshots; after mount device memory is the live source.
+   */
+  shellHint: ComposerShellHint | null
   modelPrefsHydrated: boolean
   setLastUsedModel: (model: string) => void
-  isLoading: boolean
-  refreshAll: () => Promise<void>
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined)
@@ -66,27 +79,96 @@ function normalizeFavoriteModels(value: unknown): string[] {
   return normalizeFavoriteModelIds(rawFavorites)
 }
 
-export function ModelProvider({ children }: { children: React.ReactNode }) {
-  const [rawModels, setRawModels] = useState<LogicalModelView[]>([])
-  const [lastUsedModel, setLastUsedModelState] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [lastUsedModelHydrated, setLastUsedModelHydrated] = useState(false)
+/**
+ * Device memory for the last explicitly selected model, read as a logical id
+ * (a persisted legacy id resolves on read). Pure: the `useSyncExternalStore`
+ * snapshot half; strings compare by value so no caching is needed.
+ */
+function readStoredLastUsedModel(): string | null {
+  try {
+    const cached = window.localStorage.getItem(LAST_USED_MODEL_STORAGE_KEY)
+    const resolved = cached ? resolveModelSelection(cached).modelId : null
+    return resolved && isLogicalModelId(resolved) ? resolved : null
+  } catch {
+    return null
+  }
+}
+
+/** Cross-tab writes arrive via 'storage'; same-tab writes via the event. */
+function subscribeToStoredLastUsedModel(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange)
+  window.addEventListener(LAST_USED_MODEL_CHANGE_EVENT, onChange)
+  return () => {
+    window.removeEventListener("storage", onChange)
+    window.removeEventListener(LAST_USED_MODEL_CHANGE_EVENT, onChange)
+  }
+}
+
+function subscribeToNothing(): () => void {
+  return () => {}
+}
+
+function toShellHint(modelId: string | null): ComposerShellHint | null {
+  if (!modelId) return null
+  const effort = readStoredEffortForModel(modelId)
+  return effort === undefined ? { modelId } : { modelId, effort }
+}
+
+export function ModelProvider({
+  children,
+  shellHint = null,
+}: {
+  children: React.ReactNode
+  /** The request's Composer shell hint, read by the root layout. */
+  shellHint?: ComposerShellHint | null
+}) {
+  // The catalog is static data already in the bundle (route records compiled
+  // by lib/models/catalog.ts), so the server-rendered shell and the client
+  // resolve the same list; `accessible` below folds in per-route key status.
+  const [rawModels] = useState(() => getVisibleLogicalModelViews())
+  // The seed is per request and fixed for the provider's lifetime.
+  const seedRef = useRef(shellHint)
   const { user } = useUser()
+
+  // Device memory is the live source; the shell hint is the server snapshot,
+  // so the server render and hydration resolve the saved model and React
+  // re-renders after hydration only if device memory genuinely differs.
+  const lastUsedModel = useSyncExternalStore(
+    subscribeToStoredLastUsedModel,
+    readStoredLastUsedModel,
+    useCallback(() => seedRef.current?.modelId ?? null, [])
+  )
+  const isHydrated = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false
+  )
 
   const favoriteModels = useMemo(
     () => normalizeFavoriteModels(user?.favorite_models),
     [user?.favorite_models]
   )
   const modelPrefsHydrated =
-    lastUsedModelHydrated && (!user || user.favorite_models !== null)
+    isHydrated && (!user || user.favorite_models !== null)
 
   const setLastUsedModel = useCallback((model: string) => {
     const resolvedModel = resolveModelSelection(model).modelId
     if (!isLogicalModelId(resolvedModel)) return
-    setLastUsedModelState(resolvedModel)
     try {
-      localStorage.setItem("lastUsedModel", resolvedModel)
+      window.localStorage.setItem(LAST_USED_MODEL_STORAGE_KEY, resolvedModel)
     } catch {}
+    window.dispatchEvent(new Event(LAST_USED_MODEL_CHANGE_EVENT))
+    writeComposerShellHintCookie(toShellHint(resolvedModel))
+  }, [])
+
+  // The cookie mirror catches up once, at mount, when device memory drifted
+  // from the seed this request was rendered with.
+  useEffect(() => {
+    const seed = seedRef.current
+    const live = toShellHint(readStoredLastUsedModel())
+    if (live?.modelId !== seed?.modelId || live?.effort !== seed?.effort) {
+      writeComposerShellHintCookie(live)
+    }
   }, [])
 
   const { data: providers } = usePerUserQuery(api.userKeys.getProviderStatus)
@@ -105,7 +187,7 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
 
   const models = useMemo<LogicalModelView[]>(() => {
     return rawModels.map((model) => {
-      // `accessible` from the server carries the platform half (free-model
+      // `accessible` from the catalog carries the platform half (free-model
       // entitlement); a key for ANY of the model's routes unlocks the rest.
       // Presentation-only — the server route resolver re-derives eligibility
       // and the actual credential at admission.
@@ -122,53 +204,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     })
   }, [rawModels, userKeyStatus])
 
-  const fetchModels = useCallback(async () => {
-    try {
-      const response = await fetchClient("/api/models")
-      if (response.ok) {
-        const data = await response.json()
-        setRawModels(data.models || [])
-      }
-    } catch (error) {
-      console.error("Failed to fetch models:", error)
-    }
-  }, [])
-
-  const refreshAll = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      // User key status and favorites are reactive via Convex.
-      await fetchModels()
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fetchModels])
-
-  // Hydrate the browser-only last-used model after mount.
-  useEffect(() => {
-    try {
-      const cachedLastUsedModel = localStorage.getItem("lastUsedModel")
-      const resolvedLastUsedModel = cachedLastUsedModel
-        ? resolveModelSelection(cachedLastUsedModel).modelId
-        : null
-
-      if (resolvedLastUsedModel && isLogicalModelId(resolvedLastUsedModel)) {
-        setLastUsedModelState(resolvedLastUsedModel)
-        if (resolvedLastUsedModel !== cachedLastUsedModel) {
-          localStorage.setItem("lastUsedModel", resolvedLastUsedModel)
-        }
-      } else if (cachedLastUsedModel) {
-        localStorage.removeItem("lastUsedModel")
-      }
-    } catch {}
-
-    setLastUsedModelHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    void refreshAll()
-  }, [refreshAll])
-
   return (
     <ModelContext.Provider
       value={{
@@ -176,10 +211,9 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
         userKeyStatus,
         favoriteModels,
         lastUsedModel,
+        shellHint,
         modelPrefsHydrated,
         setLastUsedModel,
-        isLoading,
-        refreshAll,
       }}
     >
       {children}
