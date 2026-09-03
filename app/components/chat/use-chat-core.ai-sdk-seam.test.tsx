@@ -47,7 +47,7 @@ beforeEach(() => {
 let useChatCore: typeof UseChatCore
 
 const seamMocks = vi.hoisted(() => ({
-  // Persistence is auth-derived (ADR-0031): guest scenarios flip this off.
+  // Persistence is auth-derived (ADR-0033): guest scenarios flip this off.
   isAuthenticated: true,
   convexMutation: vi.fn(),
   updateTitle: vi.fn(),

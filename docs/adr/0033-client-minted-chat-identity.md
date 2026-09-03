@@ -1,4 +1,4 @@
-# 31. Client-minted chat identity: the thread route commits at Send
+# 33. Client-minted chat identity: the thread route commits at Send
 
 - Status: accepted
 - Date: 2026-09-02

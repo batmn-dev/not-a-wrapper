@@ -11,7 +11,7 @@ export type OptimisticEditMessageId =
 export type GuestUserId = `${typeof GUEST_USER_ID_PREFIX}${string}`
 
 /**
- * Chat identity is client-minted (ADR-0031): one UUID chosen at Send is the
+ * Chat identity is client-minted (ADR-0033): one UUID chosen at Send is the
  * route segment, the value every client-facing Convex function accepts, and
  * the chat document's `publicId`. Guests and signed-in users share the
  * scheme; whether a chat persists locally or durably is a property of the

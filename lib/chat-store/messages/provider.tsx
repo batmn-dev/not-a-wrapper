@@ -77,7 +77,7 @@ export function useMessages() {
 
 export function MessagesProvider({ children }: { children: React.ReactNode }) {
   const { chatId } = useChatSession()
-  // Persistence is a property of the caller, not the id (ADR-0031): the
+  // Persistence is a property of the caller, not the id (ADR-0033): the
   // server-seeded app user marks a durable chat; a guest reads IndexedDB.
   const { user } = useUser()
   const isAuthenticated = Boolean(user?.id)

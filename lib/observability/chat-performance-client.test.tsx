@@ -15,6 +15,7 @@ import {
 import {
   beginChatPerfTurn,
   deriveChatPerfTurnFacts,
+  markChatNavigationIntent,
   noteChatPerfStopIntent,
   useChatNavigationPerfMarks,
   useChatTurnPerfMarks,
@@ -60,19 +61,49 @@ describe("chat navigation performance marks", () => {
     vi.restoreAllMocks()
   })
 
-  function render(chatId: string, selectedRunStatus: string | null) {
+  function render(
+    chatId: string,
+    selectedRunStatus: string | null,
+    totalMessageCount = 0
+  ) {
     act(() => {
       root.render(
         <NavigationPerfHarness
           chatId={chatId}
           isAuthoritativeLoading={false}
           authoritativeMessageCount={0}
-          totalMessageCount={0}
+          totalMessageCount={totalMessageCount}
           selectedRunStatus={selectedRunStatus}
         />
       )
     })
   }
+
+  function navToPaintedMarks() {
+    return markSpy.mock.calls.filter(
+      ([name]) => name === "chat-perf:nav_to_thread_painted"
+    )
+  }
+
+  it("marks nav_to_thread_painted two frames after the first row commit, only after a sidebar intent", () => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(performance.now())
+      return 1
+    })
+    render("chat-a", null, 0)
+    // Back/Forward or a hard load: content without an intent never pairs.
+    render("chat-b", null, 3)
+    expect(navToPaintedMarks()).toHaveLength(0)
+
+    markChatNavigationIntent()
+    // The route commits before the rows arrive (cache miss) ...
+    render("chat-c", null, 0)
+    expect(navToPaintedMarks()).toHaveLength(0)
+    // ... and the first commit with a row paints once, never again.
+    render("chat-c", null, 2)
+    render("chat-c", null, 5)
+    expect(navToPaintedMarks()).toHaveLength(1)
+  })
 
   function settlementMarks() {
     return markSpy.mock.calls.filter(
@@ -235,7 +266,11 @@ describe("deriveChatPerfTurnFacts", () => {
   it("ignores a prior turn's settled assistant text (current-turn boundary)", () => {
     const facts = deriveChatPerfTurnFacts([
       { id: "u1", role: "user", parts: [{ type: "text", text: "q1" }] },
-      { id: "a1", role: "assistant", parts: [{ type: "text", text: "old answer" }] },
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [{ type: "text", text: "old answer" }],
+      },
       { id: "u2", role: "user", parts: [{ type: "text", text: "q2" }] },
     ])
     expect(facts).toEqual({

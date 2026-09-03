@@ -320,7 +320,7 @@ export const getById = readableChatQuery({
 })
 
 type NewChatArgs = {
-  /** Client-minted chat identity (ADR-0031). */
+  /** Client-minted chat identity (ADR-0033). */
   publicId: string
   title?: string
   model?: string
@@ -417,7 +417,7 @@ async function findExistingFirstTurn(
  * finds this row by clientMessageId, adopts the run's provenance stamp, and
  * selects it instead of inserting a duplicate.
  *
- * `publicId` is the idempotency key (ADR-0031): a retry that lands after the
+ * `publicId` is the idempotency key (ADR-0033): a retry that lands after the
  * first attempt committed (same user, same first clientMessageId) returns the
  * existing chat; any other holder of the id is a typed conflict. The
  * transaction is the collision guard.

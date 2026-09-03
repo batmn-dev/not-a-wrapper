@@ -131,7 +131,7 @@ export type ChatTurnAdapters = {
   resolveUserId: () => Promise<string | null>
   checkLimitsAndNotify: (userId: string) => Promise<boolean>
   /**
-   * First-turn identity seam (ADR-0031). `begin` mints the client chat id and
+   * First-turn identity seam (ADR-0033). `begin` mints the client chat id and
    * commits its route synchronously — before the optimistic row paints and
    * before any request leaves; `rollback` restores the origin route when a
    * refusal lands before the atomic creation (which `ensureChatExists` owns).
@@ -334,7 +334,7 @@ async function runSendTurn(
   let finalizeAcceptedTurn: (() => void) | null = null
   // A first turn's chat exists (locally or durably) once ensureChatExists
   // returns it; until then every refusal below rolls the committed identity
-  // back (ADR-0031). After it, nothing rolls back (ADR-0012).
+  // back (ADR-0033). After it, nothing rolls back (ADR-0012).
   let chatCommitted = false
 
   const removeOptimistic = () => {

@@ -166,7 +166,7 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   "composer.keystroke_to_next_paint": { durationMs: REQUIRED_NUMBER },
   "composer.keystroke_to_settled_paint": { durationMs: REQUIRED_NUMBER },
   optimistic_message_painted: { correlationId: CORRELATION },
-  // The session provider committed `/c/<chatId>` for a first turn (ADR-0031):
+  // The session provider committed `/c/<chatId>` for a first turn (ADR-0033):
   // synchronous with Send, before creation is awaited.
   thread_route_committed: { correlationId: CORRELATION },
   request_dispatched: { correlationId: CORRELATION },
@@ -219,6 +219,10 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   chat_navigation_intent: {},
   chat_route_state_committed: {},
   first_thread_content_painted: { messageCount: NUMBER },
+  // Sidebar row click → first message row painted (two rAFs after the commit
+  // that first rendered a row for the destination chat). Anchored on the
+  // preceding `chat_navigation_intent`; hard loads emit no pair.
+  nav_to_thread_painted: {},
   authoritative_thread_content_received: { messageCount: NUMBER },
   navigation_cache_hit_or_miss: { cache: oneOf("hit", "miss") },
   selected_conversation_client: {

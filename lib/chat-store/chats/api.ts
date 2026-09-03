@@ -6,7 +6,7 @@ import {
 import type { Chats } from "../types"
 
 // The guest chat store: IndexedDB holds ONLY guest (signed-out) chats, keyed by
-// the same client-minted chat id a durable chat would carry (ADR-0031).
+// the same client-minted chat id a durable chat would carry (ADR-0033).
 // Whether a chat lives here is a property of the caller's auth state, so this
 // seam never inspects the id's shape.
 

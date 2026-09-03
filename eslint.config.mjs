@@ -93,9 +93,9 @@ const eslintConfig = [
         "error",
         {
           selector:
-            "ImportDeclaration[source.value='convex/react'] > ImportSpecifier[imported.name='useQuery']",
+            "ImportDeclaration[source.value=/^convex\\/react$|^convex-helpers\\/react\\/cache/] > ImportSpecifier[imported.name='useQuery']",
           message:
-            "Do not import useQuery from convex/react directly. Use usePerUserQuery from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate. Add a named public seam there only with a real caller. See ADR-0004.",
+            "Do not import useQuery from convex/react or convex-helpers/react/cache directly. Use usePerUserQuery from @/lib/convex/use-per-user-query, which owns the isConvexAuthenticated subscribe gate and the warm query cache. Add a named public seam there only with a real caller. See ADR-0004 and ADR-0031.",
         },
         {
           selector:

@@ -17,7 +17,7 @@ import type { Attachment } from "@/lib/file-handling"
 import { useEffect, useRef } from "react"
 
 /**
- * The first turn's allocation (ADR-0031). The chat id is minted and committed
+ * The first turn's allocation (ADR-0033). The chat id is minted and committed
  * to the session BEFORE creation; `committed` flips once the local or atomic
  * durable creation has landed. `committedTurn` (durable creations only)
  * retains the atomically persisted turn's full identity so a same-payload

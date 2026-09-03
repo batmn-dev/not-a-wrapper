@@ -344,7 +344,7 @@ function ChatInner({
   // A route whose chat nothing answers for (a made-up id, a reload before the
   // first turn's creation landed, another user's chat) is not found. Decided
   // only after the authoritative reads settle, and never while a first turn
-  // is in flight: the identity commits before the chat exists (ADR-0031), so
+  // is in flight: the identity commits before the chat exists (ADR-0033), so
   // a pending submission or a rendered turn keeps the surface.
   const chatNotFound =
     chatId !== null &&

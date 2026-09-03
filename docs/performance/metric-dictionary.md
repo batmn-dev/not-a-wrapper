@@ -52,15 +52,16 @@ stats** on the assistant message.
 
 ## 1. Perceived latency (browser)
 
-| Metric | Start → End | Layer | Gate? | Status |
-|---|---|---|---|---|
-| `send_to_optimistic_paint` | `chat_send_intent` → `optimistic_message_painted` | browser | yes (deterministic harness) | existing (proxy) |
-| `send_to_thread_route_committed` | `chat_send_intent` → `thread_route_committed` | browser | yes (deterministic harness; first turns only) | ADR-0031: the session provider commits `/c/<chatId>` synchronously at Send, so this is a same-task interval with no Convex round trip inside it |
-| `send_to_request_dispatched` | `chat_send_intent` → `request_dispatched` | browser | yes | existing (true fetch mark since Phase 2 — emitted by the transport immediately before the HTTP request) |
-| `send_to_first_visible_text` | `chat_send_intent` → `first_visible_text` | browser+server+provider | no (includes provider) | existing (proxy) |
-| `input_to_next_paint` | keystroke `event.timeStamp` → next frame (`composer.keystroke_to_next_paint`) | browser | yes | existing |
-| `input_to_settled_paint` | keystroke → second frame (`composer.keystroke_to_settled_paint`) | browser | yes | existing |
-| `stop_to_ui_feedback` | `stop_intent` → stopped-state render | browser | yes | partial (`stop_intent` mark exists; the feedback endpoint is harness-measured — `stream_terminal` with `outcome: "abort"` bounds it from above) |
+| Metric                       | Start → End                                                                                                                                                   | Layer                   | Gate?                               | Status                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `send_to_optimistic_paint`   | `chat_send_intent` → `optimistic_message_painted`                                                                                                             | browser                 | yes (deterministic harness)         | existing (proxy)                                                                                                                                |
+| `send_to_thread_route_committed` | `chat_send_intent` → `thread_route_committed` | browser | yes (deterministic harness; first turns only) | ADR-0033: the session provider commits `/c/<chatId>` synchronously at Send, so this is a same-task interval with no Convex round trip inside it |
+| `send_to_request_dispatched` | `chat_send_intent` → `request_dispatched`                                                                                                                     | browser                 | yes                                 | existing (true fetch mark since Phase 2 — emitted by the transport immediately before the HTTP request)                                         |
+| `send_to_first_visible_text` | `chat_send_intent` → `first_visible_text`                                                                                                                     | browser+server+provider | no (includes provider)              | existing (proxy)                                                                                                                                |
+| `input_to_next_paint`        | keystroke `event.timeStamp` → next frame (`composer.keystroke_to_next_paint`)                                                                                 | browser                 | yes                                 | existing                                                                                                                                        |
+| `input_to_settled_paint`     | keystroke → second frame (`composer.keystroke_to_settled_paint`)                                                                                              | browser                 | yes                                 | existing                                                                                                                                        |
+| `stop_to_ui_feedback`        | `stop_intent` → stopped-state render                                                                                                                          | browser                 | yes                                 | partial (`stop_intent` mark exists; the feedback endpoint is harness-measured — `stream_terminal` with `outcome: "abort"` bounds it from above) |
+| `nav_to_thread_painted`      | `chat_navigation_intent` (sidebar row click) → `nav_to_thread_painted` (two rAFs after the commit that first rendered a message row for the destination chat) | browser                 | yes (harness `SUITE=thread-switch`) | existing (2026-09-02)                                                                                                                           |
 
 Interpretation and limitations:
 
@@ -73,6 +74,10 @@ Interpretation and limitations:
   pre-fetch client work (`chat-turn-controller.ts:371-419`) it used to hide.
 - `send_to_first_visible_text` includes provider latency; report it only decomposed and
   never compare across providers/models as one population.
+- `nav_to_thread_painted` pairs only with a sidebar click (the intent arms the next route
+  commit); hard loads and Back/Forward emit no pair. The harness reports it per
+  population — unvisited (click / hover-then-click) and visited — beside the commit-time
+  `navigation_cache_hit_or_miss` split and the Convex query-set `Add` count per switch.
 - Allowed dimensions: `textLengthBucket` (on `first_visible_text`), scenario, viewport,
   cpuThrottle, warm/cold (harness-supplied, result-file only).
 
@@ -83,23 +88,23 @@ All are durations with `ok`, sampled by `CHAT_PERF_SAMPLE_RATE`, joined by
 where noted, so none are strictly deterministic in production. Under the deterministic
 harness (local Convex, fixed fixtures) they gate with generous ceilings.
 
-| Metric (span name) | Measures | Convex I/O inside? | Status |
-|---|---|---|---|
-| `request_parse` | body `req.json()` + wire-contract validation | no | existing (Phase 2; rejected requests return without a span) |
-| `auth_session` | WorkOS session resolution | no (network: WorkOS) | existing |
-| `usage_admission` | outer admission block: atomic abuse admission ∥ preflight ∥ key-settings prefetch, then credential resolution. The abuse mutation checks and increments in one round-trip before credential resolution; `attachment_resolution` includes its concurrent window | yes (several) | existing |
-| `attachment_resolution` | `planGenerationInput` + trusted-text preflight | yes | existing |
-| `credential_resolution` | approval-route facts, key settings, route resolution, **platform usage reservation** | yes | existing |
-| `usage_reservation` | `reserveAuthorized` mutation alone | yes | existing (baseline 56.6 ms p50 — effectively all of post-prefetch `credential_resolution`) |
-| `model_config` | logical model resolution (pure) | no | existing (Phase 2) |
-| `tool_preparation` | 3-layer tool setup + MCP connect | network: MCP | existing |
-| `durable_prepare` | execution grant + run creation + history load (`prepareGeneration`) | yes | existing |
-| `message_validation` | boundary-1 structural validation | no | existing |
-| `history_adaptation` | provider history adaptation | no | existing (Phase 2; the `_tag:"history_adapt"` log keeps its richer warning fields) |
-| `model_bound_validation` | boundary-2 validation | no | existing |
-| `prepare_total` | whole `turn.prepare()` | yes | existing |
-| `stream_start` | runtime-construction → immediately before `streamText` | no | existing — **anchor caveat**: excludes auth/parse/admission; do not sum with them until re-anchored (map §2.3) |
-| `provider_request_started` | request receipt → `streamText` call | no | existing (Phase 2; the receipt-anchored companion to `stream_start`) |
+| Metric (span name)         | Measures                                                                                                                                                                                                                                                       | Convex I/O inside?   | Status                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `request_parse`            | body `req.json()` + wire-contract validation                                                                                                                                                                                                                   | no                   | existing (Phase 2; rejected requests return without a span)                                                    |
+| `auth_session`             | WorkOS session resolution                                                                                                                                                                                                                                      | no (network: WorkOS) | existing                                                                                                       |
+| `usage_admission`          | outer admission block: atomic abuse admission ∥ preflight ∥ key-settings prefetch, then credential resolution. The abuse mutation checks and increments in one round-trip before credential resolution; `attachment_resolution` includes its concurrent window | yes (several)        | existing                                                                                                       |
+| `attachment_resolution`    | `planGenerationInput` + trusted-text preflight                                                                                                                                                                                                                 | yes                  | existing                                                                                                       |
+| `credential_resolution`    | approval-route facts, key settings, route resolution, **platform usage reservation**                                                                                                                                                                           | yes                  | existing                                                                                                       |
+| `usage_reservation`        | `reserveAuthorized` mutation alone                                                                                                                                                                                                                             | yes                  | existing (baseline 56.6 ms p50 — effectively all of post-prefetch `credential_resolution`)                     |
+| `model_config`             | logical model resolution (pure)                                                                                                                                                                                                                                | no                   | existing (Phase 2)                                                                                             |
+| `tool_preparation`         | 3-layer tool setup + MCP connect                                                                                                                                                                                                                               | network: MCP         | existing                                                                                                       |
+| `durable_prepare`          | execution grant + run creation + history load (`prepareGeneration`)                                                                                                                                                                                            | yes                  | existing                                                                                                       |
+| `message_validation`       | boundary-1 structural validation                                                                                                                                                                                                                               | no                   | existing                                                                                                       |
+| `history_adaptation`       | provider history adaptation                                                                                                                                                                                                                                    | no                   | existing (Phase 2; the `_tag:"history_adapt"` log keeps its richer warning fields)                             |
+| `model_bound_validation`   | boundary-2 validation                                                                                                                                                                                                                                          | no                   | existing                                                                                                       |
+| `prepare_total`            | whole `turn.prepare()`                                                                                                                                                                                                                                         | yes                  | existing                                                                                                       |
+| `stream_start`             | runtime-construction → immediately before `streamText`                                                                                                                                                                                                         | no                   | existing — **anchor caveat**: excludes auth/parse/admission; do not sum with them until re-anchored (map §2.3) |
+| `provider_request_started` | request receipt → `streamText` call                                                                                                                                                                                                                            | no                   | existing (Phase 2; the receipt-anchored companion to `stream_start`)                                           |
 
 Interpretation: `prepare_total` + admission spans + `auth_session` approximate the plan's
 "server preparation excluding provider" (working target 250–300 ms p95). Sub-spans are
@@ -107,11 +112,11 @@ nested, not additive across groups — never sum overlapping spans.
 
 ## 3. Provider latency
 
-| Metric | Start → End | Layer | Gate? | Status |
-|---|---|---|---|---|
-| `provider_invocation_to_first_output` | provider call start → first output chunk (text, reasoning, tool-input delta, tool call, or file) of step 0 | provider | no (correctness-checked against the deterministic script) | existing (ADR-0030: `server_span` `provider_first_output`, sourced from SDK step performance; Braintrust/Sentry buckets read the same figure) |
-| `provider_invocation_to_first_event` | — | — | — | **retired 2026-09-01** (post-transform; see the status note) |
-| `provider_invocation_to_first_text` | — | — | — | **retired 2026-09-01** (renamed: the dictionary entry is now `provider_first_text_delta` in §4; the `server_span` event name was always `provider_first_text_delta`) |
+| Metric                                | Start → End                                                                                                | Layer    | Gate?                                                     | Status                                                                                                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider_invocation_to_first_output` | provider call start → first output chunk (text, reasoning, tool-input delta, tool call, or file) of step 0 | provider | no (correctness-checked against the deterministic script) | existing (ADR-0030: `server_span` `provider_first_output`, sourced from SDK step performance; Braintrust/Sentry buckets read the same figure)                        |
+| `provider_invocation_to_first_event`  | —                                                                                                          | —        | —                                                         | **retired 2026-09-01** (post-transform; see the status note)                                                                                                         |
+| `provider_invocation_to_first_text`   | —                                                                                                          | —        | —                                                         | **retired 2026-09-01** (renamed: the dictionary entry is now `provider_first_text_delta` in §4; the `server_span` event name was always `provider_first_text_delta`) |
 
 Smoke-suite only; labeled by provider+model+route tier; never a population with other
 providers. Dimensions: provider, model, route tier (platform/BYOK), warm/cold credential
@@ -120,90 +125,90 @@ thinking phase is inside this figure.
 
 ## 4. Transport
 
-| Metric | Start → End | Layer | Gate? | Status |
-|---|---|---|---|---|
-| `server_first_stream_write` | request receipt → first chunk enqueued to the response stream | next | no | existing (Phase 2; sampled requests only — the tap is skipped otherwise) |
-| `first_write_to_client_first_bytes` | `server_first_stream_write` → `client_first_stream_bytes` | network | no | proposed (both endpoints now exist; the join is harness-side, cross-machine clocks — report medians only) |
-| `client_first_stream_bytes` | fetch dispatch → first parsed response chunk | browser | no | existing (Phase 2; transport tap reads only the chunk `type` discriminant) |
-| `client_first_text_delta_received` | fetch dispatch → first text-delta chunk | browser | no | existing (Phase 2) |
-| `provider_first_text_delta` | `streamText` call → first text delta RELEASED to the response pipeline (post-transform: smoothing holdback is inside it) | next | no | existing (re-homed from group 3 on 2026-09-01, where the dictionary entry was `provider_invocation_to_first_text`, now retired; the `server_span` event name `provider_first_text_delta` is unchanged, and the meaning was always this) |
+| Metric                              | Start → End                                                                                                              | Layer   | Gate? | Status                                                                                                                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server_first_stream_write`         | request receipt → first chunk enqueued to the response stream                                                            | next    | no    | existing (Phase 2; sampled requests only — the tap is skipped otherwise)                                                                                                                                                                |
+| `first_write_to_client_first_bytes` | `server_first_stream_write` → `client_first_stream_bytes`                                                                | network | no    | proposed (both endpoints now exist; the join is harness-side, cross-machine clocks — report medians only)                                                                                                                               |
+| `client_first_stream_bytes`         | fetch dispatch → first parsed response chunk                                                                             | browser | no    | existing (Phase 2; transport tap reads only the chunk `type` discriminant)                                                                                                                                                              |
+| `client_first_text_delta_received`  | fetch dispatch → first text-delta chunk                                                                                  | browser | no    | existing (Phase 2)                                                                                                                                                                                                                      |
+| `provider_first_text_delta`         | `streamText` call → first text delta RELEASED to the response pipeline (post-transform: smoothing holdback is inside it) | next    | no    | existing (re-homed from group 3 on 2026-09-01, where the dictionary entry was `provider_invocation_to_first_text`, now retired; the `server_span` event name `provider_first_text_delta` is unchanged, and the meaning was always this) |
 
 ## 5. Rendering (browser)
 
-| Metric | Definition | Gate? | Status |
-|---|---|---|---|
-| `delta_to_paint` | text-delta receipt → next painted frame (rAF-chain) | yes (harness) | proposed |
-| `first_text_to_visible` | `client_first_text_delta_received` → `first_visible_text` | yes (harness) | proposed (plan target: <50 ms p95 normal CPU) |
-| `long_task_count` / `longest_task_ms` / `total_blocking_time_ms` | derived from `long_task` marks (`PerformanceObserver("longtask")`, mounted in instrumentation builds by `useChatResponsivenessMarks`) | yes (harness) | existing (marks; aggregates harness-derived) |
-| `raf_gap_p95_ms` | derived from `raf_gap` marks (rAF-interval sampler while streaming, >40 ms gaps) | yes (harness) | existing (marks; aggregates harness-derived) |
-| `markdown_projection_ms` | `markdown_projection_advance` mark per committed advance | yes | existing (Phase 2) |
-| `markdown_projection_anomalies` | count of `markdown_projection_reset` / `_fallback` / `_settle_mismatch` by `reason` | yes (zero-tolerance on settle_mismatch) | existing |
-| `shiki_highlight_ms` / `shiki_invocations` | `shiki_highlight` mark per highlight run (duration includes any lazy grammar/theme load; count = mark count) | yes | existing (Phase 2; a separate grammar-load split stays proposed) |
-| `dom_node_count_start` / `_end` | scenario boundaries | yes (harness) | proposed |
-| `heap_growth_bytes` | CDP, harness-only | no (advisory) | proposed |
+| Metric                                                           | Definition                                                                                                                            | Gate?                                   | Status                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| `delta_to_paint`                                                 | text-delta receipt → next painted frame (rAF-chain)                                                                                   | yes (harness)                           | proposed                                                         |
+| `first_text_to_visible`                                          | `client_first_text_delta_received` → `first_visible_text`                                                                             | yes (harness)                           | proposed (plan target: <50 ms p95 normal CPU)                    |
+| `long_task_count` / `longest_task_ms` / `total_blocking_time_ms` | derived from `long_task` marks (`PerformanceObserver("longtask")`, mounted in instrumentation builds by `useChatResponsivenessMarks`) | yes (harness)                           | existing (marks; aggregates harness-derived)                     |
+| `raf_gap_p95_ms`                                                 | derived from `raf_gap` marks (rAF-interval sampler while streaming, >40 ms gaps)                                                      | yes (harness)                           | existing (marks; aggregates harness-derived)                     |
+| `markdown_projection_ms`                                         | `markdown_projection_advance` mark per committed advance                                                                              | yes                                     | existing (Phase 2)                                               |
+| `markdown_projection_anomalies`                                  | count of `markdown_projection_reset` / `_fallback` / `_settle_mismatch` by `reason`                                                   | yes (zero-tolerance on settle_mismatch) | existing                                                         |
+| `shiki_highlight_ms` / `shiki_invocations`                       | `shiki_highlight` mark per highlight run (duration includes any lazy grammar/theme load; count = mark count)                          | yes                                     | existing (Phase 2; a separate grammar-load split stays proposed) |
+| `dom_node_count_start` / `_end`                                  | scenario boundaries                                                                                                                   | yes (harness)                           | proposed                                                         |
+| `heap_growth_bytes`                                              | CDP, harness-only                                                                                                                     | no (advisory)                           | proposed                                                         |
 
 ## 6. Streaming pipeline accounting
 
-| Metric | Definition | Gate? | Status |
-|---|---|---|---|
-| `stream_chunks_received` | SSE frames observed by the client tap | yes | proposed |
-| `ui_publications` | rAF-coalescer publications per streaming session | yes | existing (Phase 2: `stream_publication_summary` mark — one per session, emitted when the stream leaves `streaming`) |
-| `coalesced_deltas` | SDK message callbacks absorbed without a publication | yes | existing (Phase 2, same summary; "deltas" = SDK message callbacks, not SSE frames) |
-| `react_commits` | React commit count — **profiling builds only**, never normal production | yes (profiling harness) | proposed |
-| `stream_bytes_total` / `stream_chars_total` | bucketed totals per turn | yes | proposed |
+| Metric                                      | Definition                                                              | Gate?                   | Status                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `stream_chunks_received`                    | SSE frames observed by the client tap                                   | yes                     | proposed                                                                                                            |
+| `ui_publications`                           | rAF-coalescer publications per streaming session                        | yes                     | existing (Phase 2: `stream_publication_summary` mark — one per session, emitted when the stream leaves `streaming`) |
+| `coalesced_deltas`                          | SDK message callbacks absorbed without a publication                    | yes                     | existing (Phase 2, same summary; "deltas" = SDK message callbacks, not SSE frames)                                  |
+| `react_commits`                             | React commit count — **profiling builds only**, never normal production | yes (profiling harness) | proposed                                                                                                            |
+| `stream_bytes_total` / `stream_chars_total` | bucketed totals per turn                                                | yes                     | proposed                                                                                                            |
 
 Invariant (plan target): `ui_publications` ≤ one per animation frame during streaming;
 status/error publications are exempt (they bypass the coalescer by design).
 
 ## 7. Markdown / code (deterministic microbenches — existing `bench:chat`)
 
-| Metric | Source | Gate? | Status |
-|---|---|---|---|
-| `branch_projection_ms` (575/1,150-row + named + seeded fixtures) | `branch-projection.bench.ts` | yes — 5 ms p95 for the production path in the controlled weekly benchmark lane | existing |
-| `markdown_projection_replay_ms` (7 payload shapes × 40 updates) | `markdown-projection.bench.ts` | yes (scaling gates exist) | existing |
-| `shiki_full_block_ms` / `shiki_init_ms` | `render-stream.bench.tsx` | yes | existing |
-| `projection_hash` / `correctness_hash` | FNV-1a over outputs (`fixtures.ts:54`) | **blocking** — a hash mismatch invalidates the run's perf numbers | existing (payload hashes pinned in `fixtures.test.ts`, Phase 6, 2026-08-28) |
+| Metric                                                           | Source                                 | Gate?                                                                          | Status                                                                      |
+| ---------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `branch_projection_ms` (575/1,150-row + named + seeded fixtures) | `branch-projection.bench.ts`           | yes — 5 ms p95 for the production path in the controlled weekly benchmark lane | existing                                                                    |
+| `markdown_projection_replay_ms` (7 payload shapes × 40 updates)  | `markdown-projection.bench.ts`         | yes (scaling gates exist)                                                      | existing                                                                    |
+| `shiki_full_block_ms` / `shiki_init_ms`                          | `render-stream.bench.tsx`              | yes                                                                            | existing                                                                    |
+| `projection_hash` / `correctness_hash`                           | FNV-1a over outputs (`fixtures.ts:54`) | **blocking** — a hash mismatch invalidates the run's perf numbers              | existing (payload hashes pinned in `fixtures.test.ts`, Phase 6, 2026-08-28) |
 
 ## 8. Convex durability
 
-| Metric | Definition | Layer | Status |
-|---|---|---|---|
-| `checkpoint.attempt` / `.accepted` / `.deduped` / `.authority_lost` / `.failed` (+ `payloadBytes`) | snapshot write outcomes, Next side | next | existing — `deduped` accepted since Phase 2; invariant: `attempt = accepted + deduped + authority_lost + failed` (source-pinned by test) |
-| `checkpoint.final_flush` / `.settlement_receipt_confirmed` / `.settlement_receipt_degraded` | settlement events | next | existing (counts only) |
-| `snapshot_write_ms` | per worker-wire write duration by `op` (closed 8-op enum) | next | existing (Phase 2: `durable_write` event; sampled requests only, so the untimed fast path keeps its microtask depth) |
-| `final_snapshot_ms` / `terminal_write_ms` | durations inside `settle()` | next | existing via `durable_write` per-op rows (`updateAssistantSnapshot` final flush, `markGenerationRunCompleted`/`markGenerationRunAborted`) |
-| `settlement_total_ms` | whole `settle()` — drain + final flush + terminal write | next | existing (Phase 2: `server_span` `settlement_total`) |
-| `snapshot_mutation_outcomes` | applied/stale/deduped/lost, Convex side (mirror of the Next counters) | convex | existing (Phase 2: sampled `_tag:"chat_perf_convex"` `snapshot_write` lines with `payloadBytesBucket`) |
-| `snapshot_acceptance_ratio` | accepted / attempt per streamed minute | derived | proposed (cost baseline, no target yet) |
+| Metric                                                                                             | Definition                                                            | Layer   | Status                                                                                                                                    |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `checkpoint.attempt` / `.accepted` / `.deduped` / `.authority_lost` / `.failed` (+ `payloadBytes`) | snapshot write outcomes, Next side                                    | next    | existing — `deduped` accepted since Phase 2; invariant: `attempt = accepted + deduped + authority_lost + failed` (source-pinned by test)  |
+| `checkpoint.final_flush` / `.settlement_receipt_confirmed` / `.settlement_receipt_degraded`        | settlement events                                                     | next    | existing (counts only)                                                                                                                    |
+| `snapshot_write_ms`                                                                                | per worker-wire write duration by `op` (closed 8-op enum)             | next    | existing (Phase 2: `durable_write` event; sampled requests only, so the untimed fast path keeps its microtask depth)                      |
+| `final_snapshot_ms` / `terminal_write_ms`                                                          | durations inside `settle()`                                           | next    | existing via `durable_write` per-op rows (`updateAssistantSnapshot` final flush, `markGenerationRunCompleted`/`markGenerationRunAborted`) |
+| `settlement_total_ms`                                                                              | whole `settle()` — drain + final flush + terminal write               | next    | existing (Phase 2: `server_span` `settlement_total`)                                                                                      |
+| `snapshot_mutation_outcomes`                                                                       | applied/stale/deduped/lost, Convex side (mirror of the Next counters) | convex  | existing (Phase 2: sampled `_tag:"chat_perf_convex"` `snapshot_write` lines with `payloadBytesBucket`)                                    |
+| `snapshot_acceptance_ratio`                                                                        | accepted / attempt per streamed minute                                | derived | proposed (cost baseline, no target yet)                                                                                                   |
 
 ## 9. Reactive reads
 
-| Metric | Definition | Layer | Status |
-|---|---|---|---|
-| `selected_conversation_client` (`selectedCount`, `mappingDurationMs`) | client-side mapping cost + row count per subscription update | browser | existing (note: re-runs mapping to time it; flag-gated) |
-| `subscription_updates_per_turn` | count of `getSelectedPath` and `getSelectedRunState` results delivered during one turn | browser | proposed |
-| `reactive_result_bytes_bucket` | serialized result size bucket per update | browser | proposed |
-| `messages_read_bucket` / `selected_count_bucket` / `parts_bytes_bucket` | per-invocation read cost, sampled, Convex side | convex | existing (Phase 2: `_tag:"chat_perf_convex"` `selected_conversation_read`, gated by `CHAT_PERF_CONVEX_SAMPLE_RATE`; line frequency doubles as the re-execution counter) |
-| `query_reexecutions` / `documents_read` / `db_bandwidth` | deployment metrics via Convex dashboard/MCP, recorded per benchmark run | convex | proposed (result-file only, not app logs) |
+| Metric                                                                  | Definition                                                                             | Layer   | Status                                                                                                                                                                  |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selected_conversation_client` (`selectedCount`, `mappingDurationMs`)   | client-side mapping cost + row count per subscription update                           | browser | existing (note: re-runs mapping to time it; flag-gated)                                                                                                                 |
+| `subscription_updates_per_turn`                                         | count of `getSelectedPath` and `getSelectedRunState` results delivered during one turn | browser | proposed                                                                                                                                                                |
+| `reactive_result_bytes_bucket`                                          | serialized result size bucket per update                                               | browser | proposed                                                                                                                                                                |
+| `messages_read_bucket` / `selected_count_bucket` / `parts_bytes_bucket` | per-invocation read cost, sampled, Convex side                                         | convex  | existing (Phase 2: `_tag:"chat_perf_convex"` `selected_conversation_read`, gated by `CHAT_PERF_CONVEX_SAMPLE_RATE`; line frequency doubles as the re-execution counter) |
+| `query_reexecutions` / `documents_read` / `db_bandwidth`                | deployment metrics via Convex dashboard/MCP, recorded per benchmark run                | convex  | proposed (result-file only, not app logs)                                                                                                                               |
 
 ## 10. Cross-client freshness
 
-| Metric | Start → End | Gate? | Status |
-|---|---|---|---|
-| `snapshot_accepted_to_second_tab_render` | Next-side `accepted` counter timestamp → second browser context renders the content | no (harness-measured, target <1.5 s p95) | existing (durable suite: harness-stamped checkpoint lines vs a MutationObserver in tab 2; baseline 44 ms median) |
-| `reload_to_content` | reload navigation start → authoritative thread content rendered | yes (harness) | partial (`chat_navigation_intent` → `first_thread_content_painted` / `authoritative_thread_content_received` marks exist for sidebar nav; reload variant proposed) |
-| `terminal_to_settlement` | `response_stream_closed` → `durable_settlement_receipt` (client observation) | no | existing (durable suite; note the receipt can precede the local stream-close mark by ~10–15 ms — settlement runs server-side in `onEnd` and the Convex projection outruns the SDK status flip) |
-| `detached_binding_gauge` | same-tab back-nav binding events (8-value enum, counts) | n/a | existing |
+| Metric                                   | Start → End                                                                         | Gate?                                    | Status                                                                                                                                                                                         |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `snapshot_accepted_to_second_tab_render` | Next-side `accepted` counter timestamp → second browser context renders the content | no (harness-measured, target <1.5 s p95) | existing (durable suite: harness-stamped checkpoint lines vs a MutationObserver in tab 2; baseline 44 ms median)                                                                               |
+| `reload_to_content`                      | reload navigation start → authoritative thread content rendered                     | yes (harness)                            | partial (`chat_navigation_intent` → `first_thread_content_painted` / `authoritative_thread_content_received` marks exist for sidebar nav; reload variant proposed)                             |
+| `terminal_to_settlement`                 | `response_stream_closed` → `durable_settlement_receipt` (client observation)        | no                                       | existing (durable suite; note the receipt can precede the local stream-close mark by ~10–15 ms — settlement runs server-side in `onEnd` and the Convex projection outruns the SDK status flip) |
+| `detached_binding_gauge`                 | same-tab back-nav binding events (8-value enum, counts)                             | n/a                                      | existing                                                                                                                                                                                       |
 
 ## 11. Correctness (blocking — a failure invalidates all perf numbers from the run)
 
-| Metric | Definition | Status |
-|---|---|---|
+| Metric                                                                              | Definition                                                                | Status                                                                                                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `missing_chunks` / `duplicate_chunks` / `reordered_chunks` / `post_terminal_chunks` | violations detected by the stream folder against the deterministic script | existing at fixture level (`foldStreamScript`); proposed at the production-path level (Phase 3 replays through the real transport) |
-| `correctness_hash` | FNV-1a hash of folded/rendered output vs fixture expectation | existing (fixture); proposed (harness end-to-end) |
-| `snapshot_duplicate_acceptance` | Convex accepts a sequence ≤ `lastSnapshotSequence` | proposed (server rejects today — the metric proves it stays zero) |
-| `settle_mismatch_count` | `markdown_projection_settle_mismatch` occurrences | existing (target: zero) |
-| `stream_terminal.outcome` fidelity | `abort`/`disconnect` reported truthfully | fixed for `abort` in Phase 2 (Stop intent noted per turn); `disconnect` remains unemitted — the client cannot distinguish it today |
+| `correctness_hash`                                                                  | FNV-1a hash of folded/rendered output vs fixture expectation              | existing (fixture); proposed (harness end-to-end)                                                                                  |
+| `snapshot_duplicate_acceptance`                                                     | Convex accepts a sequence ≤ `lastSnapshotSequence`                        | proposed (server rejects today — the metric proves it stays zero)                                                                  |
+| `settle_mismatch_count`                                                             | `markdown_projection_settle_mismatch` occurrences                         | existing (target: zero)                                                                                                            |
+| `stream_terminal.outcome` fidelity                                                  | `abort`/`disconnect` reported truthfully                                  | fixed for `abort` in Phase 2 (Stop intent noted per turn); `disconnect` remains unemitted — the client cannot distinguish it today |
 
 ## 12. Cost proxies (baseline-only, no targets yet)
 
@@ -225,16 +230,16 @@ single-use receipt-attach capability (`attachRunTimingReceipt`, authenticated ag
 the digest the Stop transaction copied onto the run); a run that dies without any
 worker write (reap) has none. Read with `runTiming:timingSummary` (see the runbook).
 
-| Field | Start → End | Owner | Gate? |
-|---|---|---|---|
-| `prepareMs` | HTTP receipt → provider dispatch (`streamText` call) | us | yes |
-| `providerFirstOutputMs` | provider call start → first output chunk, step 0 (SDK); anchored at the call ATTEMPT that succeeded, so SDK retry backoff (default 2 retries) is outside it | provider | no — correctness check |
-| `firstWriteDelayMs` | first output chunk → that chunk released to the response stream; same successful-attempt anchor as above | us | yes |
-| `modelResponseMs` | Σ per-step provider response time (SDK). Provider-executed (hosted) tools — OpenAI `web_search` and the like — run INSIDE it | provider | no |
-| `toolExecutionMs` | Σ per-step CLIENT-side tool execution (SDK); hosted tools contribute nothing | tools | no |
-| `wireStreamMs` | first output chunk released → finish part released to the response stream, observed in the UI-stream conversion (post-transform, in SDK order); ends at the finish so it spans the same last-delta → provider-finish tail as `modelResponseMs` | us + provider | via `pacingOverheadMs` |
-| `settlementMs` | settle start → terminal write dispatch (drain + final flush) | us | via `settlement_total` |
-| `buildId` | short commit identity of the server build | — | dimension |
+| Field                   | Start → End                                                                                                                                                                                                                                    | Owner         | Gate?                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------- |
+| `prepareMs`             | HTTP receipt → provider dispatch (`streamText` call)                                                                                                                                                                                           | us            | yes                    |
+| `providerFirstOutputMs` | provider call start → first output chunk, step 0 (SDK); anchored at the call ATTEMPT that succeeded, so SDK retry backoff (default 2 retries) is outside it                                                                                    | provider      | no — correctness check |
+| `firstWriteDelayMs`     | first output chunk → that chunk released to the response stream; same successful-attempt anchor as above                                                                                                                                       | us            | yes                    |
+| `modelResponseMs`       | Σ per-step provider response time (SDK). Provider-executed (hosted) tools — OpenAI `web_search` and the like — run INSIDE it                                                                                                                   | provider      | no                     |
+| `toolExecutionMs`       | Σ per-step CLIENT-side tool execution (SDK); hosted tools contribute nothing                                                                                                                                                                   | tools         | no                     |
+| `wireStreamMs`          | first output chunk released → finish part released to the response stream, observed in the UI-stream conversion (post-transform, in SDK order); ends at the finish so it spans the same last-delta → provider-finish tail as `modelResponseMs` | us + provider | via `pacingOverheadMs` |
+| `settlementMs`          | settle start → terminal write dispatch (drain + final flush)                                                                                                                                                                                   | us            | via `settlement_total` |
+| `buildId`               | short commit identity of the server build                                                                                                                                                                                                      | —             | dimension              |
 
 Derived at read time, never stored:
 
@@ -243,7 +248,7 @@ Derived at read time, never stored:
   call, or file, so it can precede the first text token. Nothing here is a "time to
   first token"; `provider_first_text_delta` (§4) is the text-specific, post-transform figure.
 - `pacingOverheadMs = wireStreamMs − (modelResponseMs − providerFirstOutputMs) −
-  toolExecutionMs` — what the response pipeline added on top of the provider's own
+toolExecutionMs` — what the response pipeline added on top of the provider's own
   output window. Watch this when touching smoothing or the UI-stream conversion.
   Hosted-tool part conversion is inside it (≈100 ms observed on an OpenAI web-search
   turn versus 1–3 ms on plain turns): compare like with like, never a mixed population.

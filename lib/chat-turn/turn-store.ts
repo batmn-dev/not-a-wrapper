@@ -32,7 +32,7 @@ export type PendingEdit = {
 }
 
 /** Durable persistence is a property of the caller's auth, never the id's
- * shape (ADR-0031): a signed-in user's chat is route-persisted by Convex. */
+ * shape (ADR-0033): a signed-in user's chat is route-persisted by Convex. */
 export function routePersistsChatMessages(
   chatId: string | null,
   isAuthenticated: boolean

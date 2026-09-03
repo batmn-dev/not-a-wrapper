@@ -2290,7 +2290,7 @@ export async function prepareGenerationWithVerifiedAdmission(
       message: "Chat admission proof is invalid or expired",
     })
   }
-  // Boundary resolution (ADR-0031): the proof covered the public id; every
+  // Boundary resolution (ADR-0033): the proof covered the public id; every
   // prepare write below runs against the owner-verified internal id.
   const { chat } = await requireOwnedChatByPublicId(ctx, args.chatId)
   return prepareGenerationForChat(ctx, { ...prepareArgs, chatId: chat._id })
@@ -2298,7 +2298,7 @@ export async function prepareGenerationWithVerifiedAdmission(
 
 export const prepareGeneration = mutation({
   args: {
-    // The client-minted publicId (ADR-0031); resolved to the owned chat below
+    // The client-minted publicId (ADR-0033); resolved to the owned chat below
     // before any prepare work. The admission proof signs this same string.
     chatId: v.string(),
     requestId: v.string(),

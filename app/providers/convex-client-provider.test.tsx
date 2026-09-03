@@ -41,6 +41,12 @@ vi.mock("@workos-inc/authkit-nextjs/components", () => ({
   }),
 }))
 
+// The mocked ConvexProviderWithAuth mounts no client; the cache (ADR-0031)
+// is not under test here.
+vi.mock("@/lib/convex/query-cache", () => ({
+  ConvexQueryCache: ({ children }: { children: React.ReactNode }) => children,
+}))
+
 vi.mock("convex/react", async () => {
   const ReactModule = await import("react")
 

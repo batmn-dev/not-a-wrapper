@@ -486,7 +486,7 @@ export type ApprovalResponseForPersistence = {
 }
 
 /**
- * Durable persistence is a property of the caller's auth (ADR-0031): a
+ * Durable persistence is a property of the caller's auth (ADR-0033): a
  * signed-in caller with a Convex token runs the durable runtime; the chat id
  * itself carries no persistence class (guests mint the same shape).
  */

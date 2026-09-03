@@ -1,12 +1,12 @@
 # 12. Atomic first-turn creation: the first-turn path can never strand a chat without its first user message
 
 - Status: accepted (atomicity); the chat-id and navigation parts are
-  superseded by ADR-0031 (client-minted chat identity: the route commits at
+  superseded by ADR-0033 (client-minted chat identity: the route commits at
   Send, before creation, and the id is the client's `publicId`)
 - Date: 2026-07-18
 - Related: ADR-0006 (Chat turn runtime — intact), ADR-0009/0011 (Durable turn
   runtime/settlement — intact; the generation run still starts via
-  `POST /api/chat`), ADR-0010 (HTTP trust boundary — intact), ADR-0031
+  `POST /api/chat`), ADR-0010 (HTTP trust boundary — intact), ADR-0033
 
 ## Context
 
@@ -76,9 +76,9 @@ Two seam adjustments make that claim exact:
 
 ### 3. Client first-turn path
 
-> Superseded in part by ADR-0031: the chat id is client-minted (`publicId`)
+> Superseded in part by ADR-0033: the chat id is client-minted (`publicId`)
 > and the route commits at Send, BEFORE the atomic mutation is awaited; a
-> refusal before the commit lands rolls the route back. The atomic body and
+> refusal before creation lands rolls the route back. The atomic body and
 > the retry/acceptance rules below are unchanged.
 
 - `ChatsProvider.createNewChat` is replaced by `createFirstTurnChat`

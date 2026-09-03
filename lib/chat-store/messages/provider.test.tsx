@@ -55,7 +55,7 @@ const sessionMocks = vi.hoisted(() => ({
   chatId: "local-thread",
 }))
 
-// Persistence is derived from the server-seeded app user (ADR-0031): null is
+// Persistence is derived from the server-seeded app user (ADR-0033): null is
 // a guest reading IndexedDB; an id is a durable chat read through Convex.
 const userMocks = vi.hoisted(() => ({
   user: null as { id: string } | null,
@@ -78,6 +78,9 @@ vi.mock("convex/react", () => ({
     isLoading: convexMocks.isAuthLoading,
   }),
   useMutation: () => convexMocks.mutationFn,
+}))
+// The seam's useQuery is the convex-helpers cached variant (ADR-0031).
+vi.mock("convex-helpers/react/cache", () => ({
   useQuery: (...args: unknown[]) => {
     convexMocks.useQuery(...args)
     return convexMocks.queryValue

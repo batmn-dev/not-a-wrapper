@@ -96,6 +96,7 @@ after on a fixture with a visited and an unvisited chat, p50/p95 across the
 harness runs, plus Convex subscription count per switch and client memory
 after 50 switches. Expected: a revisited chat paints within one frame of the
 click with no loading state, unvisited chats no slower, memory bounded.
+Remaining (ADR-0031 shipped the cache, hover/click warm, mark and `SUITE=thread-switch`): a revisited switch paints at ~81 ms p50, not within one frame (route commit ~14 ms with rows in it; the rest is post-commit thread-surface work), and reload persistence is unevaluated.
 - **Investigate visibility-gated chat hydration (replicate T3 Chat):** observed
 on 2026-09-02 while benchmarking against t3.chat: their chat client does not
 finish hydrating while `document.visibilityState` is `hidden`. The composer
@@ -113,18 +114,6 @@ Convex subscriptions; then show a tab and measure time from visible to a
 working composer. Expected: near-zero subscriptions and chat JS execution
 while hidden, and a composer that accepts input within 500 ms of becoming
 visible.
-- **Investigate SSR composer shell fidelity (replicate T3 Chat):** t3.chat's
-server-rendered composer looks like the final one before hydration. Ours
-renders "5 Mini / Medium" in the shell and flips to the saved model and
-effort after preferences load, a visible flicker on every cold load. Plan:
-since the root layout already awaits the auth session, read the persisted
-model and effort preference server-side (or a cookie mirror of it) and pass
-it into the shell, or render neutral placeholders when no preference exists.
-Verifiable test: Playwright cold load before and after, sampling the model
-and effort button text every animation frame from first paint until network
-idle and counting label changes, plus CLS of the composer region and TTFB.
-Expected: zero label changes between first paint and hydration, no CLS
-contribution from the composer, and TTFB within 20 ms of the baseline.
 - **Evaluate effort-level naming: API accuracy vs provider-interface parity:**
 the composer's effort menu labels are the wire values spelled out
 (`lib/reasoning-effort.ts`: `none` → "Off", `xhigh` → "Extra High", `max` →

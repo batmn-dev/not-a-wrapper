@@ -71,16 +71,20 @@ vi.mock("../persist", () => ({
   deleteFromIndexedDB: persistMocks.deleteFromIndexedDB,
 }))
 
+// The seam's useQuery is the convex-helpers cached variant (ADR-0031).
+vi.mock("convex-helpers/react/cache", () => ({
+  useQuery: (...args: unknown[]) => {
+    convexMocks.useQuery(...args)
+    return convexMocks.queryValue
+  },
+}))
+
 vi.mock("convex/react", () => ({
   useConvexAuth: () => ({
     isAuthenticated: convexMocks.isAuthenticated,
     isLoading: convexMocks.isLoading,
   }),
   useMutation: () => convexMocks.mutationFn,
-  useQuery: (...args: unknown[]) => {
-    convexMocks.useQuery(...args)
-    return convexMocks.queryValue
-  },
   // The bounded sidebar is the only read path (ADR-0005). Guest tests remain
   // unsubscribed, but the provider still calls the paginated hook, so it must
   // exist.
@@ -463,7 +467,7 @@ describe("ChatsProvider guest local chats", () => {
       message: { clientMessageId: "optimistic-1", text: "Question" },
       attachmentIds: [],
     })
-    // The chat is named by the client-minted id from the start (ADR-0031).
+    // The chat is named by the client-minted id from the start (ADR-0033).
     expect(created).toMatchObject({
       kind: "durable",
       userMessageId: "msg_first",

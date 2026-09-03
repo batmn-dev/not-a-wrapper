@@ -115,7 +115,7 @@ export const optionalAuthMutation = customMutation(
   customCtx(async (ctx) => await getOptionalAuth(ctx))
 )
 
-// Every client-facing `chatId` is the client-minted publicId (ADR-0031); the
+// Every client-facing `chatId` is the client-minted publicId (ADR-0033); the
 // builders below resolve it to the owner-verified document exactly once. The
 // owned builders hand their handlers the resolved internal id as `args.chatId`
 // so nothing behind the boundary ever holds an unresolved public id.

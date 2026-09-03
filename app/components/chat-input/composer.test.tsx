@@ -133,6 +133,8 @@ vi.mock("convex/react", () => ({
   useConvex: () => ({}),
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
   useMutation: () => vi.fn(),
+}))
+vi.mock("convex-helpers/react/cache", () => ({
   useQuery: () => undefined,
 }))
 

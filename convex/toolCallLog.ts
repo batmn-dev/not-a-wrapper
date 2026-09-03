@@ -24,7 +24,7 @@ function preparePreviewForPersistence(
  */
 export const log = authenticatedMutation({
   args: {
-    // Client-minted publicId (ADR-0031), resolved to the owned chat below.
+    // Client-minted publicId (ADR-0033), resolved to the owned chat below.
     chatId: v.optional(v.string()),
     serverId: v.optional(v.id("mcpServers")),
     toolName: v.string(),

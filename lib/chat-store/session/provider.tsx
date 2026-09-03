@@ -20,7 +20,7 @@ type ChatSessionContextValue = {
   isChatIdHandoff: boolean
   /**
    * Send sets the active chat identity; the route follows synchronously
-   * (`/c/<chatId>` via pushState) before any request leaves (ADR-0031).
+   * (`/c/<chatId>` via pushState) before any request leaves (ADR-0033).
    * Re-committing while a handoff is pending replaces the pushed entry
    * (the one-time re-mint after a server-side id conflict).
    */

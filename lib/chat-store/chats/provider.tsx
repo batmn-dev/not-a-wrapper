@@ -114,7 +114,7 @@ function ConvexAuthReadySignal({
 
 export type CreateFirstTurnChatInput = {
   /** The client-minted chat identity, already committed to the session
-   * (ADR-0031). Guests and signed-in users share the scheme. */
+   * (ADR-0033). Guests and signed-in users share the scheme. */
   publicId: string
   model?: string
   systemPrompt?: string
@@ -448,7 +448,7 @@ export function ChatsProvider({
         }
       }
 
-      // The sidebar row carries the committed id from the start (ADR-0031):
+      // The sidebar row carries the committed id from the start (ADR-0033):
       // no optimistic placeholder id, no swap once the server answers.
       const optimisticChat: Chats = {
         id: publicId,

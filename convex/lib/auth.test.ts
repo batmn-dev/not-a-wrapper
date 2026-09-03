@@ -759,7 +759,7 @@ describe("Convex auth helpers", () => {
   })
 })
 
-// The client-facing boundary (ADR-0031): a chat is named by its client-minted
+// The client-facing boundary (ADR-0033): a chat is named by its client-minted
 // publicId and resolved to the owner-verified document exactly once.
 describe("chat publicId boundary", () => {
   const owner = createUser("user_1", "workos_owner")

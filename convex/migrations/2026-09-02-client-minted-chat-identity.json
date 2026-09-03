@@ -2,7 +2,7 @@
   "kind": "convex-schema-contraction",
   "id": "2026-09-02-client-minted-chat-identity",
   "status": "migrate",
-  "description": "ADR-0031 makes chats.publicId a required, client-minted field. Every pre-existing chat row (and every row keyed by a chat) is invalid under the strict schema, so the deployment is wiped rather than migrated: the database is disposable in development and production, and old /c/<convexId> links are intentionally dropped. Each field below is one every row of its table carries, so an expectedCount of 0 states that the table is empty after the wipe. The status stays `migrate` on purpose: the listed fields remain in the schema, and `contracted` would be read by the preflight as a field removal.",
+  "description": "ADR-0033 makes chats.publicId a required, client-minted field. Every pre-existing chat row (and every row keyed by a chat) is invalid under the strict schema, so the deployment is wiped rather than migrated: the database is disposable in development and production, and old /c/<convexId> links are intentionally dropped. Each field below is one every row of its table carries, so an expectedCount of 0 states that the table is empty after the wipe. The status stays `migrate` on purpose: the listed fields remain in the schema, and `contracted` would be read by the preflight as a field removal.",
   "fields": [
     { "table": "chats", "field": "userId", "expectedCount": 0 },
     { "table": "messages", "field": "chatId", "expectedCount": 0 },

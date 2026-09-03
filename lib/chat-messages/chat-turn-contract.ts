@@ -132,7 +132,7 @@ export function parseChatTurnRequest(
   const record: Record<string, unknown> = isRecord(body) ? body : {}
   const { messages, chatId, model } = record
 
-  // The chat id is the client-minted publicId (ADR-0031); its UUID shape is
+  // The chat id is the client-minted publicId (ADR-0033); its UUID shape is
   // the only client-side identity check, so a malformed id is a 400 here and
   // never reaches the durable contract.
   if (

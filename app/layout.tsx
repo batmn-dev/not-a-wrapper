@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ChatsProvider } from "@/lib/chat-store/chats/provider"
 import { ChatSessionProvider } from "@/lib/chat-store/session/provider"
+import { readComposerShellHint } from "@/lib/composer-shell-hint.server"
 import { APP_DOMAIN } from "@/lib/config"
 import { ModelProvider } from "@/lib/model-store/provider"
 import { TanstackQueryProvider } from "@/lib/tanstack-query/tanstack-query-provider"
@@ -52,7 +53,12 @@ export default async function RootLayout({
 }>) {
   const isDev = process.env.NODE_ENV === "development"
   const isOfficialDeployment = process.env.NAW_OFFICIAL === "true"
-  const { initialAuth, userProfile } = await getUserAuth()
+  // Both read the request only (session cookie, shell-hint cookie): no
+  // network before the HTML streams.
+  const [{ initialAuth, userProfile }, composerShellHint] = await Promise.all([
+    getUserAuth(),
+    readComposerShellHint(),
+  ])
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -80,7 +86,7 @@ export default async function RootLayout({
             <TanstackQueryProvider>
               <LayoutClient />
               <UserProvider initialUser={userProfile}>
-                <ModelProvider>
+                <ModelProvider shellHint={composerShellHint}>
                   <ChatsProvider userId={userProfile?.id}>
                     <ChatSessionProvider>
                       <UserPreferencesProvider

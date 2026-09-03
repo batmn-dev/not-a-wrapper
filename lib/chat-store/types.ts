@@ -5,7 +5,7 @@ export type ConvexChat = Doc<"chats">
 
 /** App-facing chat shape; snake_case is retained for existing consumers. */
 export type Chat = {
-  /** The client-minted publicId (ADR-0031) — never a Convex `_id`. */
+  /** The client-minted publicId (ADR-0033) — never a Convex `_id`. */
   id: string
   user_id: string
   title: string | null

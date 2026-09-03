@@ -251,7 +251,7 @@ let attachedBindingCount = 0
 let detachedBindingCount = 0
 
 // Persistence class is a property of the caller's auth, not the id's shape
-// (ADR-0031); the mounted hook publishes it for the gauges below.
+// (ADR-0033); the mounted hook publishes it for the gauges below.
 let bindingPersistenceClass: "durable" | "guest" = "guest"
 
 function classifyBindingChat(

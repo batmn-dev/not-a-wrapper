@@ -56,7 +56,7 @@ export default defineSchema({
     .index("by_email", ["email"]),
 
   chats: defineTable({
-    // Client-minted identity (ADR-0031): the route segment and the only chat
+    // Client-minted identity (ADR-0033): the route segment and the only chat
     // id clients ever send or receive. `_id` stays internal (foreign keys).
     publicId: v.string(),
     userId: v.id("users"),

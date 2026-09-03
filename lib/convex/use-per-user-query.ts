@@ -14,15 +14,25 @@
  * `userKeys.getProviderStatus` did).
  *
  * A `no-restricted-syntax` lint rule bans importing `useQuery` from
- * `convex/react` outside this module. There is currently no public/share-link
- * live client read; introduce a named public seam only when it has a real
- * caller.
+ * `convex/react` or `convex-helpers/react/cache` outside this module. There
+ * is currently no public/share-link live client read; introduce a named
+ * public seam only when it has a real caller.
+ *
+ * `useQuery` here is the convex-helpers cached variant (ADR-0031, mounted by
+ * `lib/convex/query-cache.tsx`): same signature and `"skip"` contract as
+ * `convex/react`'s, but an unmounted query's subscription is parked for a
+ * bounded idle TTL, so a revisited chat renders delivered data on its first
+ * commit. Values still arrive through the core `useQueries` on the single
+ * client, so the ADR-0027 same-transition guarantee holds. The paginated
+ * seam stays on the core hook: the cached `usePaginatedQuery` fixes the
+ * pagination id and page-size semantics differently, and the sidebar window
+ * (ADR-0005) is mounted for the session anyway.
  */
 
+import { useQuery } from "convex-helpers/react/cache"
 import {
   useConvexAuth,
   usePaginatedQuery,
-  useQuery,
   type OptionalRestArgsOrSkip,
   type PaginatedQueryArgs,
   type PaginatedQueryReference,

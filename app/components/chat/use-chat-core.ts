@@ -88,7 +88,7 @@ type UseChatCoreProps = {
   ensureChatExists: (
     args: EnsureChatForTurnArgs
   ) => Promise<EnsuredTurnChat | null>
-  /** First-turn identity commands (ADR-0031), owned by useChatOperations. */
+  /** First-turn identity commands (ADR-0033), owned by useChatOperations. */
   firstTurn: { begin: () => string; rollback: () => void }
   bumpChat: (chatId: string) => void
   /** Imperative bridge to the Composer's display, for ?prompt= hydration. */

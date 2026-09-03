@@ -129,7 +129,7 @@ export async function requireCurrentUser(
 }
 
 /**
- * The client-facing chat lookup (ADR-0031): clients only ever name a chat by
+ * The client-facing chat lookup (ADR-0033): clients only ever name a chat by
  * its client-minted `publicId`; `_id` never crosses the boundary. Unique by
  * construction (creation is idempotent on publicId in one transaction).
  */

@@ -693,7 +693,7 @@ describe("markChatReadForOwner", () => {
           chats.find((chat) => chat._id === id) ??
           projects.find((project) => project._id === id) ??
           null,
-        // The boundary lookup: chats by client-minted publicId (ADR-0031).
+        // The boundary lookup: chats by client-minted publicId (ADR-0033).
         query: (tableName: string) => ({
           withIndex: (
             indexName: string,
@@ -1082,7 +1082,7 @@ describe("createChatWithFirstTurnForUser", () => {
     ).rejects.toThrow("Duplicate attachment reference")
   })
 
-  // publicId is the idempotency key (ADR-0031): a retry after the first
+  // publicId is the idempotency key (ADR-0033): a retry after the first
   // attempt committed converges; any other holder of the id is a typed conflict.
   it("returns the existing chat for the same user's same first turn instead of inserting again", async () => {
     const { ctx, tables } = createFirstTurnHarness([stagedAttachment()])

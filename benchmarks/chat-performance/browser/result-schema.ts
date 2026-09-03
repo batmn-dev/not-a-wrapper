@@ -16,7 +16,7 @@ export type MetricSummary = {
 export type RunMetrics = {
   /** Client-mark-derived intervals (ms). Missing when the mark pair was absent. */
   sendToOptimisticPaintMs?: number
-  /** First turns only: Send → `/c/<chatId>` committed by the session (ADR-0031). */
+  /** First turns only: Send → `/c/<chatId>` committed by the session (ADR-0033). */
   sendToThreadRouteCommittedMs?: number
   sendToRequestDispatchedMs?: number
   dispatchToFirstStreamChunkMs?: number
@@ -101,6 +101,51 @@ export type ScenarioResult = {
   runs: RunMetrics[]
 }
 
+/** One switch's observations (ms; undefined = not measurable on that switch). */
+export type ThreadSwitchSample = {
+  navToPaintedMs: number | undefined
+  intentToCommitMs: number | undefined
+  commitToFirstContentMs: number | undefined
+  firstContentToPaintedMs: number | undefined
+  cache: "hit" | "miss" | undefined
+  querySetAdds: number
+  ok: boolean
+  detail?: string
+}
+
+export type ThreadSwitchPassResult = {
+  kind: "unvisited-click" | "unvisited-hover" | "visited"
+  switches: number
+  /** The raw per-switch observations behind the summaries below. */
+  samples: ThreadSwitchSample[]
+  /** `chat_navigation_intent` → `nav_to_thread_painted` per switch. */
+  navToThreadPaintedMs: MetricSummary
+  /** `chat_navigation_intent` → `chat_route_state_committed` per switch. */
+  intentToRouteCommitMs: MetricSummary
+  /** Route commit → the commit that first rendered a message row (0 = same commit). */
+  commitToFirstContentMs: MetricSummary
+  /** First-row commit → the painted mark (two rAFs plus whatever delays them). */
+  firstContentToPaintedMs: MetricSummary
+  /** `navigation_cache_hit_or_miss` at the route commit. */
+  cacheHits: number
+  cacheMisses: number
+  /** Convex `ModifyQuerySet` `Add` frames sent per switch. */
+  querySetAddsPerSwitch: MetricSummary
+}
+
+/** `SUITE=thread-switch` (see thread-switch.ts). */
+export type ThreadSwitchResult = {
+  chatCount: number
+  switchCount: number
+  hoverMs: number
+  documents: number
+  passes: ThreadSwitchPassResult[]
+  /** Forced-GC JS heap through the visited pass, keyed by switch count. */
+  heapSamples: Array<{ switches: number; jsHeapUsedBytes: number }>
+  correctnessOk: boolean
+  detail?: string
+}
+
 export type BenchmarkResultFile = {
   schemaVersion: 1
   generatedAt: string
@@ -117,6 +162,7 @@ export type BenchmarkResultFile = {
   baseUrl: string
   suite: string
   scenarios: ScenarioResult[]
+  threadSwitch?: ThreadSwitchResult
 }
 
 export function summarize(values: number[]): MetricSummary {
