@@ -69,22 +69,6 @@ expensive platform-funded generations.
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic design system (future):** Define an agent-readable, customizable
 visual system after the product's core interaction patterns stabilize.
-- **Investigate optimistic chat navigation (replicate T3 Chat):** t3.chat
-flips the URL to `/chat/<client-generated uuid>` the moment Send is clicked
-and only then fetches the thread route chunk; no server round trip sits in the
-visible path. Ours waits for `chats.createWithFirstTurn` (ADR-0012) to mint
-the Convex id before `/c/<id>` commits. Plan: instrument the gap with the
-existing harness marks (`chat_send_intent`, `optimistic_message_painted`,
-`request_dispatched`) plus a new `thread_route_committed` mark; then decide
-between client-minted chat ids (keeping ADR-0012 atomicity and the guest
-`local-` id path intact) or keeping server ids but committing the route
-before acceptance returns. Verifiable test: run `SUITE=smoke bun run
-bench:browser` before and after on the pinned fixture and compare p50/p95 of
-`send_to_optimistic_paint` and `send_to_thread_route_committed`; the
-adoption-loss gate (Chat remounts) must stay 0 and a reload mid-stream must
-land on the same chat with the stream re-adopted. Expected: route commit at
-or before the optimistic paint, with no Convex round trip between Send and
-the thread view.
 - **Investigate route-level code splitting of the thread (replicate T3 Chat):**
 t3.chat loads its thread route chunk and read-only bar on demand (Vite,
 134 chunks). Our `/` and `/c/[chatId]` ship byte-identical first-load JS

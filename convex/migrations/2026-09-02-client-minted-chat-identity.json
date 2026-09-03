@@ -1,0 +1,30 @@
+{
+  "kind": "convex-schema-contraction",
+  "id": "2026-09-02-client-minted-chat-identity",
+  "status": "migrate",
+  "description": "ADR-0031 makes chats.publicId a required, client-minted field. Every pre-existing chat row (and every row keyed by a chat) is invalid under the strict schema, so the deployment is wiped rather than migrated: the database is disposable in development and production, and old /c/<convexId> links are intentionally dropped. Each field below is one every row of its table carries, so an expectedCount of 0 states that the table is empty after the wipe.",
+  "fields": [
+    { "table": "chats", "field": "userId", "expectedCount": 0 },
+    { "table": "messages", "field": "chatId", "expectedCount": 0 },
+    { "table": "generationRuns", "field": "chatId", "expectedCount": 0 },
+    { "table": "toolInvocations", "field": "chatId", "expectedCount": 0 },
+    { "table": "toolApprovalRequests", "field": "chatId", "expectedCount": 0 },
+    { "table": "deletionJobs", "field": "userId", "expectedCount": 0 },
+    { "table": "chatAttachments", "field": "userId", "expectedCount": 0 },
+    { "table": "toolCallLog", "field": "userId", "expectedCount": 0 },
+    { "table": "usageReservations", "field": "chatId", "expectedCount": 0 }
+  ],
+  "cleanupFunction": "none: wipe the listed tables with `bunx convex import --table <table> --replace -y --format jsonArray <empty.json>` (an empty `[]` file) on the target deployment before deploying the strict schema; usageLedgerEntries and usageBuckets are user-keyed accounting rows and are left in place (their optional reservationId references dangle by design)",
+  "verifier": "bun run convex:schema-preflight",
+  "rollback": "Redeploy the previous schema (chats without publicId) from origin/main; there is no data to restore because the wipe is intentional.",
+  "notes": {
+    "developmentDeployment": "polite-jackal-630",
+    "developmentWipedAt": "2026-09-02",
+    "productionDeployment": "tidy-clam-680",
+    "productionWipedAt": "TODO(Reviewer/Shipper): fill in the date the production tables were wiped",
+    "productionPreWipeChatsCount": "TODO(Reviewer/Shipper): record the aggregate count before the wipe",
+    "productionPostWipeChatsCount": "TODO(Reviewer/Shipper): must be 0",
+    "productionPostWipeMessagesCount": "TODO(Reviewer/Shipper): must be 0",
+    "documentContentsPolicy": "Only aggregate counts may be queried; no production document contents are printed."
+  }
+}
