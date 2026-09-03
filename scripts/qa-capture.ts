@@ -36,6 +36,7 @@ import { mkdir, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { parseArgs } from "node:util"
+import { ensurePerfAuthUser } from "@/benchmarks/chat-performance/browser/ensure-auth-user"
 import { chromium, type Browser, type Page } from "playwright"
 import { signInWithPassword } from "./lib/agent-auth"
 
@@ -100,6 +101,9 @@ async function settle(
 /** Interactive login when --auth is set and no saved session is loaded. */
 async function maybeSignIn(page: Page, options: CommonOptions): Promise<void> {
   if (options.auth && !options.storageState) {
+    // Same as `agent:login`: create/repair the pre-verified user first so
+    // --auth works on a fresh environment without a prior login run.
+    await ensurePerfAuthUser()
     await signInWithPassword(page, new URL(options.url).origin)
   }
 }
