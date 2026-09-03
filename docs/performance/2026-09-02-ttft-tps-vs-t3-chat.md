@@ -15,7 +15,8 @@ rows are in `2026-09-02-ttft-tps-vs-t3-runs.tsv` next to this file.
 
 Runs: ours 3 per cell (27 turns). T3 3 per cell for Luna and Haiku P1/P2,
 then 1 per cell for Haiku P3 and all GLM cells at the user's request
-(16 counted turns plus 3 Haiku-Instant). Fresh chat per turn, web search off,
+(19 counted turns: 9 Luna, 7 Haiku, 3 GLM; plus 3 Haiku-Instant and one
+uncounted Luna P1 pilot). Fresh chat per turn, web search off,
 no attachments, no custom instructions. Turns ran 23:39–00:40 UTC (ours) and
 00:36–00:59 UTC (T3); interleaving was lost, see Method.
 
@@ -25,8 +26,8 @@ TTFT columns are not comparable with each other; the last column is.
 
 | Cell | Ours TTFT ms (server, ADR-0030) | Ours tok/s | Ours out tokens | T3 "Time-to-First" s | T3 tok/sec | T3 tokens | Send → first text chunk at client, ms: ours / T3 |
 |---|---|---|---|---|---|---|---|
-| Luna P1 | 1138 | 95.0 | 86 | 0.006 | 33.2 | 114 | **3817 / 2974** |
-| Luna P2 | 673 | 75.7 | 246 | 0.004 | 48.7 | 246 | **1926 / 2871** |
+| Luna P1 | 1138 | 95.0 | 86 | 0.006 | 33.2 | 114 | **3817 / 2974** (T3 n=1) |
+| Luna P2 | 673 | 75.7 | 246 | 0.004 | 48.7 | 246 | **1926 / 2780** (T3 n=2) |
 | Luna P3 | 496 | 96.8 | 145 | 0.003 | 41.6 | 141 | **1326 / 2682** |
 | Haiku P1 | 3331 | 177.4 | 411 (≈200 reasoning) | 0.003 | 73.0 | 399 | **4148 / 4899** |
 | Haiku P2 | 2741 | 116.7 | 410 (≈120 reasoning) | 0.005 | 63.7 | 378 | **3819 / 3717** |
@@ -36,10 +37,12 @@ TTFT columns are not comparable with each other; the last column is.
 | GLM P2 | 1167 | 132.2 | 255 | 0.003 (n=1) | 49.9 | 253 | **2132 / 3049** |
 | GLM P3 | 1375 | 151.3 | 177 | 0.003 (n=1) | 64.7 | 173 | **2624 / 1551** |
 
-Per-run values (ours; T3) for the comparable column, ms:
+Per-run values (ours; T3) for the comparable column, ms. Three T3 Luna runs
+were timed only at DOM first-text-visible (no fetch tee fired); they are
+listed separately and excluded from the T3 medians above:
 
-- Luna P1: 3993, 3817, 1731; 2974, 3162, 2273
-- Luna P2: 1926, 1588, 2200; 2688, 2871, 2911
+- Luna P1: 3993, 3817, 1731; 2974 (DOM-only runs: 3162, 2273)
+- Luna P2: 1926, 1588, 2200; 2688, 2871 (DOM-only run: 2911)
 - Luna P3: 1326, 1202, 1423; 2682, 2772, 2565
 - Haiku P1: 4148, 3388, 4567; 4899, 6418, 4314
 - Haiku P2: 3819, 4806, 2879; 3185, 3717, 5622
@@ -51,9 +54,10 @@ Per-run values (ours; T3) for the comparable column, ms:
 Read-outs:
 
 - **Luna, the like-for-like non-reasoning cell:** once the reply is longer
-  than a few lines we reach first text ~0.7–1.4 s sooner than T3 (P2, P3).
-  On the shortest prompt T3 wins by ~0.8 s because two of our three runs spent
-  2.2–2.5 s before the stream headers (see Where the time goes).
+  than a few lines we reach first text ~0.9–1.4 s sooner than T3 (P2, P3).
+  On the shortest prompt T3 wins by ~0.8 s (against its single chunk-timed
+  run) because two of our three runs spent 2.2–2.3 s between the request
+  leaving and the stream headers (see Where the time goes).
 - **Haiku:** roughly even. Both apps stream Anthropic's thinking before the
   text; ours reads 2.6–3.7 s provider TTFT with the fixed 5,000 budget, T3's
   "Low" lands text 0.6–1.5 s later than us on P1/P3 and slightly earlier on P2.
@@ -83,8 +87,9 @@ Both apps stream the AI SDK UI protocol (`start`, `start-step`,
 | `start-step` → first `text-delta` (≈ provider TTFT) | Luna 0.01–0.2 s after start-step; Haiku/GLM see the table | Luna 0.02 s; Haiku 1.5–2.8 s of reasoning deltas first |
 
 So our pre-provider overhead (rate-limit round trip + admission + Convex
-first-turn creation before headers) is 1.0–2.6 s on a cold-ish path and is
-the whole reason T3 wins Luna P1. T3 spends its overhead before the request
+first-turn creation before headers) is 0.9–2.8 s from click to headers
+(`client_headers_ms`, 26 of 27 runs; the GLM P3 run 2 outlier took 3.3 s)
+and is the whole reason T3 wins Luna P1. T3 spends its overhead before the request
 leaves instead.
 
 ## Anomalies worth their own investigation
@@ -99,8 +104,11 @@ leaves instead.
 2. **The OpenAI route ships a 4,480-token system prompt** (4,412 cached).
    Haiku sees 1,026 and GLM 552. Luna TTFT carries that prefill every turn.
 3. **Server prep before the stream headers is 0.5–2.3 s** and varies run to
-   run (Luna P1: 2.5, 2.8, 1.1 s). This is the segment ADR-0030 says we own
-   and may gate.
+   run. The range is `client_headers_ms` minus `client_req_ms` over 26 of our
+   27 counted runs; it excludes GLM P3 run 2 (2.7 s), the anomaly-1 burst run
+   whose note records headers at 3.3 s from click. Luna P1 reads 2.2, 2.3,
+   0.8 s (2.5, 2.8, 1.1 s from the click). This is the segment ADR-0030 says
+   we own and may gate.
 
 ## Method and caveats
 
@@ -113,7 +121,22 @@ leaves instead.
   `text-delta` chunk. It is the same measurement on both apps and excludes
   only the final paint (a DOM observer on our assistant message showed
   30–150 ms after the chunk; T3's accessible article appears ~2 s after its
-  first chunk because it renders streaming text elsewhere first).
+  first chunk because it renders streaming text elsewhere first). Every
+  "Send → first text chunk" number in this document is the chunk event
+  (`client_first_text_ms`). On three T3 Luna runs (P1 runs 1 and 3, P2
+  run 1) the tee did not fire and only the DOM observer recorded a time;
+  those live in `dom_first_text_ms`, are listed separately under the
+  per-run values, and are excluded from the T3 medians, which is why Luna P1
+  is n=1 and Luna P2 is n=2 on the T3 side.
+- **TSV columns.** `ttft_ms`: ours is the SDK provider first-output time
+  from the Generation stats tooltip (ADR-0030); T3 is its "Time-to-First"
+  converted from seconds to ms, a different quantity (see Read-outs).
+  `tok_s`, `out_tokens`, `reasoning` (reasoning tokens; ours only) and
+  `window_ms` (our post-first-output window) come from each app's stats
+  line. `client_req_ms`, `client_headers_ms`, `client_first_text_ms` and
+  `dom_first_text_ms` are page-script timestamps from the send click.
+  Empty cells are measurements that were not taken; qualifiers are in
+  `notes`. Rows marked pilot or extra in `notes` are not counted.
 - **Tab visibility.** The Chrome window sat behind the desktop app for most of
   the session. Our tab hydrated and streamed hidden; T3's client never
   hydrates hidden, so its turns ran only after the tab was shown and were

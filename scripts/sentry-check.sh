@@ -11,7 +11,7 @@ if [[ -z "${SENTRY_AUTH_TOKEN:-}" && -f "${sentry_env_file}" ]]; then
   while IFS= read -r line || [[ -n "${line}" ]]; do
     line="${line%$'\r'}"
     if [[ "${line}" =~ ^[[:space:]]*(export[[:space:]]+)?SENTRY_AUTH_TOKEN[[:space:]]*=(.*)$ ]]; then
-      token_value="${BASH_REMATCH[2]}"
+      token_value="${BASH_REMATCH[2]%%[[:space:]]#*}"
       token_value="${token_value#"${token_value%%[![:space:]]*}"}"
       token_value="${token_value%"${token_value##*[![:space:]]}"}"
 
@@ -43,6 +43,11 @@ fi
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "Error: python3 is required." >&2
+  exit 2
+fi
+
+if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'; then
+  echo "Error: python3 must be 3.9 or newer." >&2
   exit 2
 fi
 
@@ -181,11 +186,21 @@ done
 
 python3 - "${sentry_pages_file}" <<'PY'
 import json
+import re
 import sys
 
 
+# Sentry titles are attacker-influenced; drop C0/C1 control characters so
+# nothing can smuggle escape sequences into the terminal.
+CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def sanitized(value: object) -> str:
+    return " ".join(CONTROL_CHARACTERS.sub("", str(value or "")).split())
+
+
 def truncated(value: object, limit: int) -> str:
-    text = " ".join(str(value or "").split())
+    text = sanitized(value)
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
@@ -225,7 +240,7 @@ for issue in issues:
             truncated(issue.get("title") or "Untitled issue", 80),
             truncated(priority, 10),
             str(event_count),
-            str(issue.get("firstSeen") or "unknown")[:10],
+            sanitized(issue.get("firstSeen") or "unknown")[:10],
         )
     )
 

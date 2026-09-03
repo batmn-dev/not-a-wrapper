@@ -1,53 +1,53 @@
-app	model	prompt	run	at_utc	ttft_ms	tok_s	out_tokens	reasoning	window_ms	client_req_ms	client_headers_ms	client_first_text_ms	notes
-ours	luna	P1	pilot	23:24:13	929	94.0	106	0	1128	-	-	-	pre-instrumentation pilot, not counted
-ours	luna	P1	x	23:37:06	700	84.1	103	0	-	-	-	-	DOM-only instrumentation, extra
-ours	luna	P1	1	23:39:44	1552	95.0	89	0	937	316	2537	3993	
-ours	luna	P1	2	23:48:18	1138	100.1	82	0	819	462	2764	3817	
-ours	luna	P1	3	23:49:54	660	84.2	86	0	1022	373	1148	1731	
-ours	luna	P2	1	23:51:15	673	75.7	239	0	3155	749	1337	1926	
-ours	luna	P2	2	23:52:14	454	74.8	246	0	3288	491	1067	1588	
-t3	luna	P1	pilot	23:25:01	4 (T3 TTF)	31.42	97	-	-	-	-	-	Instant; T3 tab was visible then; no fetch instrumentation
-ours	luna	P2	3	23:53:25	1150	85.3	246	0	2883	374	1145	2200	
-ours	luna	P3	1	23:54:19	496	96.8	144	0	1487	394	919	1326	
-ours	luna	P3	2	23:55:10	442	101.4	146	0	1440	322	854	1202	
-ours	luna	P3	3	23:56:03	523	87.9	145	0	1649	428	962	1423	
-ours	haiku	P1	1	23:57:29	3331	176.9	276	161	650	362	881	4148	input 1026; effort label Minimal (inert)
-ours	haiku	P1	2	23:58:35	2554	177.4	411	224	1054	348	924	3388	
-ours	haiku	P1	3	23:59:47	3736	201.4	422	304	586	373	906	4567	
-ours	haiku	P2	1	00:02:03	2741	94.4	471	174	3146	360	976	3819	
-ours	haiku	P2	2	00:03:32	3661	116.7	401	101	2570	406	985	4806	
-ours	haiku	P2	3	00:05:02	1742	118.2	410	116	2488	409	983	2879	
-ours	haiku	P3	1	00:06:09	2773	579.7	417	268	257	417	970	3666	whole visible text landed in 13 chunks / 257ms window; rate inflated by tiny window
-ours	haiku	P3	2	00:07:17	3266	302.4	506	357	493	391	965	4154	16 chunks total; short window
-ours	haiku	P3	3	00:08:24	10251	4272.2	602	403	47	370	912	11137	entire response arrived in 7 chunks after 10.2s; window 47ms; rate meaningless
-ours	glm	P1	1	00:09:59	1631	96.4	157	0	1629	703	1291	3044	input 552; effort Low
-ours	glm	P1	2	00:11:08	11696	167.8	108	0	643	548	1061	12682	OpenRouter TTFT spike
-ours	glm	P1	3	00:12:15	10135	1606.8	127	0	79	472	1056	11153	entire response in 7 chunks after 10.1s; window 79ms; rate meaningless
-ours	glm	P2	1	00:13:27	1167	105.8	249	0	2354	437	986	2132	
-ours	glm	P2	2	00:14:34	13395	132.2	257	0	1945	390	931	14253	slow TTFT but normal 140-chunk stream
-ours	glm	P2	3	00:17:05	1022	185.6	255	0	1374	401	935	1934	
-ours	glm	P3	1	00:18:16	1283	151.3	177	0	1170	434	992	2210	DOM first text 2352
-t3	luna	P1	1	00:36:58	50 (T3 TTF)	38.19	117	-	-	-	-	DOM 3162	Instant; stream not via fetch; DOM-first-text 3162ms
-ours	glm	P3	2	00:38:35	10104	2888.4	156	0	54	645	3324	13366	entire response in 9 chunks after 10.1s; window 54ms; headers took 3.3s
-ours	glm	P3	3	00:40:02	1375	145.6	177	0	1216	567	1316	2624	
-t3	luna	P1	2	00:46:39	6 (T3 TTF)	29.31	89	-	-	898	1452	2974	Instant; tab visible; DOM first text 2977; OpenRouter gen- ids in stream
-t3	luna	P1	3	00:47:33	6 (T3 TTF)	33.20	114	-	-	-	-	DOM 2273	Instant; visible
-t3	luna	P2	1	00:47:48	42 (T3 TTF)	53.22	257	-	-	-	-	DOM 2911	Instant; visible
-t3	luna	P2	2	00:48:55	4 (T3 TTF)	48.73	246	-	-	-	1126	2688	Instant; body hook; DOM hit 6635 (tab likely hidden again)
-t3	luna	P2	3	00:49:16	3 (T3 TTF)	45.35	246	-	-	-	890	2871	Instant; DOM 6757
-t3	luna	P3	1	00:50:01	3 (T3 TTF)	50.11	139	-	-	-	1786	2682	Instant; visible; article DOM hit 4893
-t3	luna	P3	2	00:50:20	3 (T3 TTF)	41.62	141	-	-	-	1145	2772	Instant
-t3	luna	P3	3	00:50:40	7 (T3 TTF)	40.68	146	-	-	-	884	2565	Instant
-t3	haiku-instant	P1	1	00:52:02	5 (T3 TTF)	37.18	158	-	-	-	962	3370	Haiku 4.5 at Instant (no reasoning)
-t3	haiku-instant	P1	2	00:52:23	3 (T3 TTF)	41.10	157	-	-	-	882	3071	Instant
-t3	haiku-instant	P1	3	00:52:44	3 (T3 TTF)	43.84	152	-	-	-	900	2483	Instant
-t3	haiku	P1	1	00:53:46	15 (T3 TTF)	73.01	399	shown? no	-	-	1134	4899	Haiku 4.5 reasoning Low; reasoning-delta first at 3417; T3 token count appears to include reasoning
-t3	haiku	P1	2	00:54:09	3 (T3 TTF)	73.37	502	-	-	-	1121	6418	Low; reasoning first 3630
-t3	haiku	P1	3	00:54:32	3 (T3 TTF)	56.10	257	-	-	-	907	4314	Low; reasoning first 3419
-t3	haiku	P2	1	00:55:22	4 (T3 TTF)	53.75	353	-	-	-	911	3185	Low; reasoning first 2657
-t3	haiku	P2	2	00:55:47	6 (T3 TTF)	66.00	378	-	-	-	1069	3717	Low; reasoning first 3037
-t3	haiku	P2	3	00:56:12	5 (T3 TTF)	63.70	512	-	-	-	1039	5622	Low; reasoning first 3881
-t3	haiku	P3	1	00:57:01	74 (T3 TTF)	107.86	583	-	-	-	1288	5612	Low; reasoning first 3770; single run per user request
-t3	glm	P1	1	00:58:40	7 (T3 TTF)	72.23	193	-	-	-	937	1685	GLM 5.3 Low (options Low/High); no reasoning deltas; provider not shown
-t3	glm	P2	1	00:59:05	3 (T3 TTF)	49.89	253	-	-	-	905	3049	Low
-t3	glm	P3	1	00:59:30	3 (T3 TTF)	64.72	173	-	-	-	903	1551	Low
+app	model	prompt	run	at_utc	ttft_ms	tok_s	out_tokens	reasoning	window_ms	client_req_ms	client_headers_ms	client_first_text_ms	dom_first_text_ms	notes
+ours	luna	P1	pilot	23:24:13	929	94.0	106	0	1128					pre-instrumentation pilot, not counted
+ours	luna	P1	x	23:37:06	700	84.1	103	0						DOM-only instrumentation, extra
+ours	luna	P1	1	23:39:44	1552	95.0	89	0	937	316	2537	3993		
+ours	luna	P1	2	23:48:18	1138	100.1	82	0	819	462	2764	3817		
+ours	luna	P1	3	23:49:54	660	84.2	86	0	1022	373	1148	1731		
+ours	luna	P2	1	23:51:15	673	75.7	239	0	3155	749	1337	1926		
+ours	luna	P2	2	23:52:14	454	74.8	246	0	3288	491	1067	1588		
+t3	luna	P1	pilot	23:25:01	4	31.42	97							Instant; T3 tab was visible then; no fetch instrumentation
+ours	luna	P2	3	23:53:25	1150	85.3	246	0	2883	374	1145	2200		
+ours	luna	P3	1	23:54:19	496	96.8	144	0	1487	394	919	1326		
+ours	luna	P3	2	23:55:10	442	101.4	146	0	1440	322	854	1202		
+ours	luna	P3	3	23:56:03	523	87.9	145	0	1649	428	962	1423		
+ours	haiku	P1	1	23:57:29	3331	176.9	276	161	650	362	881	4148		input 1026; effort label Minimal (inert)
+ours	haiku	P1	2	23:58:35	2554	177.4	411	224	1054	348	924	3388		
+ours	haiku	P1	3	23:59:47	3736	201.4	422	304	586	373	906	4567		
+ours	haiku	P2	1	00:02:03	2741	94.4	471	174	3146	360	976	3819		
+ours	haiku	P2	2	00:03:32	3661	116.7	401	101	2570	406	985	4806		
+ours	haiku	P2	3	00:05:02	1742	118.2	410	116	2488	409	983	2879		
+ours	haiku	P3	1	00:06:09	2773	579.7	417	268	257	417	970	3666		whole visible text landed in 13 chunks / 257ms window; rate inflated by tiny window
+ours	haiku	P3	2	00:07:17	3266	302.4	506	357	493	391	965	4154		16 chunks total; short window
+ours	haiku	P3	3	00:08:24	10251	4272.2	602	403	47	370	912	11137		entire response arrived in 7 chunks after 10.2s; window 47ms; rate meaningless
+ours	glm	P1	1	00:09:59	1631	96.4	157	0	1629	703	1291	3044		input 552; effort Low
+ours	glm	P1	2	00:11:08	11696	167.8	108	0	643	548	1061	12682		OpenRouter TTFT spike
+ours	glm	P1	3	00:12:15	10135	1606.8	127	0	79	472	1056	11153		entire response in 7 chunks after 10.1s; window 79ms; rate meaningless
+ours	glm	P2	1	00:13:27	1167	105.8	249	0	2354	437	986	2132		
+ours	glm	P2	2	00:14:34	13395	132.2	257	0	1945	390	931	14253		slow TTFT but normal 140-chunk stream
+ours	glm	P2	3	00:17:05	1022	185.6	255	0	1374	401	935	1934		
+ours	glm	P3	1	00:18:16	1283	151.3	177	0	1170	434	992	2210	2352	DOM first text 2352
+t3	luna	P1	1	00:36:58	50	38.19	117						3162	Instant; stream not via fetch; DOM-first-text 3162ms
+ours	glm	P3	2	00:38:35	10104	2888.4	156	0	54	645	3324	13366		entire response in 9 chunks after 10.1s; window 54ms; headers took 3.3s
+ours	glm	P3	3	00:40:02	1375	145.6	177	0	1216	567	1316	2624		
+t3	luna	P1	2	00:46:39	6	29.31	89			898	1452	2974	2977	Instant; tab visible; DOM first text 2977; OpenRouter gen- ids in stream
+t3	luna	P1	3	00:47:33	6	33.20	114						2273	Instant; visible; first text via DOM observer only, no fetch tee
+t3	luna	P2	1	00:47:48	42	53.22	257						2911	Instant; visible; first text via DOM observer only, no fetch tee
+t3	luna	P2	2	00:48:55	4	48.73	246				1126	2688	6635	Instant; body hook; DOM hit 6635 (tab likely hidden again)
+t3	luna	P2	3	00:49:16	3	45.35	246				890	2871	6757	Instant; DOM 6757
+t3	luna	P3	1	00:50:01	3	50.11	139				1786	2682	4893	Instant; visible; article DOM hit 4893
+t3	luna	P3	2	00:50:20	3	41.62	141				1145	2772		Instant
+t3	luna	P3	3	00:50:40	7	40.68	146				884	2565		Instant
+t3	haiku-instant	P1	1	00:52:02	5	37.18	158				962	3370		Haiku 4.5 at Instant (no reasoning)
+t3	haiku-instant	P1	2	00:52:23	3	41.10	157				882	3071		Instant
+t3	haiku-instant	P1	3	00:52:44	3	43.84	152				900	2483		Instant
+t3	haiku	P1	1	00:53:46	15	73.01	399				1134	4899		Haiku 4.5 reasoning Low; reasoning-delta first at 3417; T3 token count appears to include reasoning; reasoning token share not shown by T3
+t3	haiku	P1	2	00:54:09	3	73.37	502				1121	6418		Low; reasoning first 3630
+t3	haiku	P1	3	00:54:32	3	56.10	257				907	4314		Low; reasoning first 3419
+t3	haiku	P2	1	00:55:22	4	53.75	353				911	3185		Low; reasoning first 2657
+t3	haiku	P2	2	00:55:47	6	66.00	378				1069	3717		Low; reasoning first 3037
+t3	haiku	P2	3	00:56:12	5	63.70	512				1039	5622		Low; reasoning first 3881
+t3	haiku	P3	1	00:57:01	74	107.86	583				1288	5612		Low; reasoning first 3770; single run per user request
+t3	glm	P1	1	00:58:40	7	72.23	193				937	1685		GLM 5.3 Low (options Low/High); no reasoning deltas; provider not shown
+t3	glm	P2	1	00:59:05	3	49.89	253				905	3049		Low
+t3	glm	P3	1	00:59:30	3	64.72	173				903	1551		Low

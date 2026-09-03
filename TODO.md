@@ -255,7 +255,8 @@ at or above today's, and Luna P1 median send→first-text-chunk (currently
 control run on main.
 - **0.5–2.3 s before the stream headers (benchmark finding 3):** between the
 client's `/api/chat` request leaving and the `start` chunk arriving we spend
-0.5–2.3 s (Luna P1 runs: 2.5, 2.8, 1.1 s), plus a serial `/api/rate-limits`
+0.5–2.3 s on 26 of 27 runs (Luna P1 runs: 2.2, 2.3, 0.8 s; the one excluded
+GLM P3 burst run took 2.7 s), plus a serial `/api/rate-limits`
 round trip and 0.3–0.7 s of client work before the request even leaves. T3
 Chat spends its overhead before the request instead (~0.9 s) and then returns
 headers in 0.0–0.9 s. This segment is ours under ADR-0030 (the receipt's
@@ -272,4 +273,5 @@ function instance, and add a browser-side span from click to headers to the
 p95 under 1 s in the weekly benchmark gate table, the rate-limit round trip
 gone from the pre-request waterfall, and a same-day A/B rerun of Luna P1
 against main showing the send→first-text-chunk median at or below T3's
-(2.97 s in this session) before merging.
+(2.97 s in this session, from the single T3 Luna P1 run timed at the chunk)
+before merging.

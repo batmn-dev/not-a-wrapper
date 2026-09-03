@@ -120,8 +120,14 @@ cold. No headings, no lists, no bold.") with GPT-5.6 Luna at Instant and:
   send) and the number of React commits (React DevTools hook if present,
   otherwise MutationObserver batches).
 Report delta arrival versus DOM update timing as a table with the median gap
-and the number of DOM updates per delta; a gap that grows with a fixed
-cadence proves pacing, a 1:1 mapping disproves it.
+and the number of DOM updates per delta. Treat the timing shape as supporting
+evidence only: a fixed cadence is consistent with client-side pacing, but
+upstream batching or already-cadenced deltas produce the same shape, and a
+one-to-one delta-to-update mapping argues against an added holdback without
+ruling out every pacing implementation. Mark pacing verified only on source
+evidence (the chunk and symbol from step 1) or a controlled delayed-stream
+experiment (replay or proxy the stream with known delta timing and check
+whether DOM updates track it).
 
 Then send a 60-message thread (or open the longest existing thread) and
 record how many message rows exist in the DOM versus the thread length, and
@@ -158,5 +164,4 @@ Unverified.
 
 - `docs/performance/2026-09-02-ttft-tps-vs-t3-chat.md` and the runs TSV
 - ADR-0016 (streaming renderer), ADR-0030 (run timing receipt)
-- `docs/chatgpt-scroll-architecture-audit.md` for the equivalent ChatGPT read
 - TODO.md "Investigate … (replicate T3 Chat)" items
