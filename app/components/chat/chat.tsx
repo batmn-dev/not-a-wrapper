@@ -458,7 +458,9 @@ function ChatInner({
           className={cn(
             "composer-parent flex flex-1 flex-col focus-visible:outline-0",
             projectOnboarding &&
-              "bg-background w-full [--project-detail-composer-width:48rem] [--project-detail-outer-width:51rem] [&_a]:transition-none [&_button]:transition-none"
+              // This wrapper also contains the shared Composer. Project chrome
+              // must not override interaction styles owned by its descendants.
+              "bg-background w-full [--project-detail-composer-width:48rem] [--project-detail-outer-width:51rem]"
           )}
         >
           {projectOnboarding && project ? (
