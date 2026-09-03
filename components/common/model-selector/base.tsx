@@ -406,6 +406,7 @@ function ModelSelectorRows({
   canPinModels,
   selectedModelId,
   pinnedModelIds,
+  holdLockedClicks,
   onSelect,
   onTogglePinned,
   onShowLegacy,
@@ -418,6 +419,8 @@ function ModelSelectorRows({
   canPinModels: boolean
   selectedModelId: string | null
   pinnedModelIds: ReadonlySet<string>
+  /** Key status still loading: a locked row's click is held, so the menu stays open. */
+  holdLockedClicks: boolean
   onSelect: (modelId: string, isLocked: boolean) => void
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string, trigger: HTMLElement) => void
@@ -520,6 +523,7 @@ function ModelSelectorRows({
         geometry="custom"
         data-model-selector-row={`model:${model.id}`}
         className={className}
+        closeOnClick={!(isLocked && holdLockedClicks)}
         onClick={() => onSelect(model.id, isLocked)}
       >
         {content}
@@ -538,6 +542,7 @@ function ModelSelectorList({
   canPinModels,
   selectedModelId,
   pinnedModelIds,
+  holdLockedClicks,
   onSelect,
   onTogglePinned,
   onShowLegacy,
@@ -551,6 +556,7 @@ function ModelSelectorList({
   canPinModels: boolean
   selectedModelId: string | null
   pinnedModelIds: ReadonlySet<string>
+  holdLockedClicks: boolean
   onSelect: (modelId: string, isLocked: boolean) => void
   onTogglePinned: (modelId: string, trigger: HTMLButtonElement) => void
   onShowLegacy: (providerId: string, trigger: HTMLElement) => void
@@ -581,6 +587,7 @@ function ModelSelectorList({
     canPinModels,
     selectedModelId,
     pinnedModelIds,
+    holdLockedClicks,
     onSelect,
     onTogglePinned,
     onShowLegacy,
@@ -696,12 +703,15 @@ export function ModelSelector({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectionCommittedRef = useRef(false)
 
+  // Dismissing either surface cancels a click held for key status.
   const setDrawerOpen = (open: boolean) => {
+    if (!open) heldLockedModelId.current = null
     setIsDrawerOpen(open)
     onOpenChange?.(open)
   }
 
   const setDropdownOpen = (open: boolean) => {
+    if (!open) heldLockedModelId.current = null
     setIsDropdownOpen(open)
     onOpenChange?.(open)
   }
@@ -749,9 +759,10 @@ export function ModelSelector({
 
     if (isLocked) {
       // Key status is a client read that lands after first paint; until it
-      // does a key-backed model only looks locked, so the click is held and
-      // re-run against the real answer instead of opening the Pro dialog on
-      // a guess. A later click supersedes the held one.
+      // does a key-backed model only looks locked, so the click is held (the
+      // row does not close the menu) and re-run against the real answer
+      // instead of opening the Pro dialog on a guess. A later click or a
+      // dismissal supersedes the held one.
       if (isUserAuthenticated && keyStatusLoading && !settled) {
         heldLockedModelId.current = modelId
         void whenKeyStatusReady().then(() => {
@@ -991,6 +1002,7 @@ export function ModelSelector({
                 canPinModels={isUserAuthenticated && !disabled}
                 selectedModelId={normalizedSelectedModelId}
                 pinnedModelIds={pinnedModelIds}
+                holdLockedClicks={isUserAuthenticated && keyStatusLoading}
                 onSelect={handleSelect}
                 onTogglePinned={handleTogglePinned}
                 onShowLegacy={handleShowLegacy}
@@ -1104,6 +1116,7 @@ export function ModelSelector({
                 canPinModels={isUserAuthenticated && !disabled}
                 selectedModelId={normalizedSelectedModelId}
                 pinnedModelIds={pinnedModelIds}
+                holdLockedClicks={isUserAuthenticated && keyStatusLoading}
                 onSelect={handleSelect}
                 onTogglePinned={handleTogglePinned}
                 onShowLegacy={handleShowLegacy}
