@@ -41,6 +41,8 @@ vi.mock("convex/react", () => ({
     isAuthenticated: providerMocks.convexAuthenticated,
   }),
   useMutation: () => providerMocks.mutation,
+}))
+vi.mock("convex-helpers/react/cache", () => ({
   useQuery: () => providerMocks.convexUser,
 }))
 

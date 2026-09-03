@@ -2,9 +2,11 @@
 
 import { ChatActionsMenu } from "@/app/components/layout/chat-actions-menu"
 import { useChats } from "@/lib/chat-store/chats/provider"
+import { useWarmSelectedConversation } from "@/lib/chat-store/messages/warm"
 import { useSidebarChatStatus } from "@/lib/chat-store/status/sidebar-chat-status"
 import { Chat } from "@/lib/chat-store/types"
 import { RiChat3Line, RiChatSmile2Fill } from "@remixicon/react"
+import { useCallback } from "react"
 import { SidebarChatStatusIndicator } from "./sidebar-item-status"
 import { SidebarRow } from "./sidebar-row"
 import { SidebarRowEndSlot } from "./sidebar-row-actions"
@@ -27,6 +29,11 @@ export function SidebarItem({
   presentation = { kind: "history" },
 }: SidebarItemProps) {
   const { togglePinned, updateTitle } = useChats()
+  const warmSelectedConversation = useWarmSelectedConversation()
+  const warmChat = useCallback(
+    () => warmSelectedConversation(chat.id),
+    [chat.id, warmSelectedConversation]
+  )
   const status = useSidebarChatStatus(chat)
   const displayTitle = chat.title || "Untitled Chat"
   const isProjectPresentation =
@@ -56,6 +63,7 @@ export function SidebarItem({
       renameValue={chat.title || ""}
       renameLabel="Chat title"
       onRename={(next) => updateTitle(chat.id, next)}
+      onWarm={warmChat}
       leadingIcon={presentation.kind === "pinned" ? RiChat3Line : undefined}
       activeLeadingIcon={
         presentation.kind === "pinned" ? RiChatSmile2Fill : undefined

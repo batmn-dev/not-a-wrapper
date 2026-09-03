@@ -1,5 +1,6 @@
 "use client"
 
+import { ConvexQueryCache } from "@/lib/convex/query-cache"
 import { useAccessToken, useAuth } from "@workos-inc/authkit-nextjs/components"
 import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react"
 import { useCallback, type ReactNode } from "react"
@@ -55,7 +56,9 @@ function useAuthFromAuthKit() {
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   return (
     <ConvexProviderWithAuth client={convex} useAuth={useAuthFromAuthKit}>
-      {children}
+      {/* Sign-out is a document navigation (AuthKit redirects to WorkOS),
+          so parked subscriptions never outlive an identity. */}
+      <ConvexQueryCache>{children}</ConvexQueryCache>
     </ConvexProviderWithAuth>
   )
 }

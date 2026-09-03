@@ -8,10 +8,13 @@ import { useInlineRename } from "@/hooks/use-inline-rename"
 import { markChatNavigationIntent } from "@/lib/observability/chat-performance-client"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { useCallback, useMemo, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react"
 import { SidebarLeadingIcon } from "./sidebar-leading-icon"
 
 type SidebarRowInteraction = { kind: "link"; href: string }
+
+/** Hover dwell before warming: long enough to skip pointer sweeps down the list. */
+const WARM_HOVER_DELAY_MS = 100
 
 type SidebarRowProps = {
   interaction: SidebarRowInteraction
@@ -29,6 +32,12 @@ type SidebarRowProps = {
   renameLabel: string
   /** Persist + error handling live here — the shell only owns the edit UX. */
   onRename: (next: string) => void | Promise<void>
+  /**
+   * Warm the destination's data ahead of the route: fires after a mouse
+   * pointer rests on the row for `WARM_HOVER_DELAY_MS` (touch and pen never
+   * hover, so they get nothing here) and again at click, before routing.
+   */
+  onWarm?: () => void
   /** Optional leading glyph, rendered through the shared slot in every state. */
   leadingIcon?: IconProps["icon"]
   /** Optional active-state glyph swap; the shared slot keeps its geometry fixed. */
@@ -58,6 +67,7 @@ export function SidebarRow({
   renameValue,
   renameLabel,
   onRename,
+  onWarm,
   leadingIcon,
   activeLeadingIcon,
   trailing,
@@ -68,6 +78,26 @@ export function SidebarRow({
   const { isEditing, start, containerRef, inputProps, onContainerClick } =
     useInlineRename(renameValue, onRename)
 
+  const warmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelWarm = useCallback(() => {
+    if (warmTimer.current !== null) {
+      clearTimeout(warmTimer.current)
+      warmTimer.current = null
+    }
+  }, [])
+  useEffect(() => cancelWarm, [cancelWarm])
+  const handlePointerEnter = useCallback(
+    (e: React.PointerEvent) => {
+      if (!onWarm || e.pointerType !== "mouse") return
+      cancelWarm()
+      warmTimer.current = setTimeout(() => {
+        warmTimer.current = null
+        onWarm()
+      }, WARM_HOVER_DELAY_MS)
+    },
+    [cancelWarm, onWarm]
+  )
+
   const handleLinkClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
@@ -75,9 +105,14 @@ export function SidebarRow({
       // intent, marked before Next.js routing commits. Content-free no-op
       // unless instrumentation is enabled.
       markChatNavigationIntent()
+      // Warm at intent so the subscription runs alongside the route's RSC
+      // round-trip instead of after the commit (covers touch, which never
+      // hovered).
+      cancelWarm()
+      onWarm?.()
       if (isMobile) setOpenMobile(false)
     },
-    [isMobile, setOpenMobile]
+    [cancelWarm, isMobile, onWarm, setOpenMobile]
   )
 
   // Hover, selected, and menu-open use one translucent token. Editing pins it.
@@ -155,6 +190,8 @@ export function SidebarRow({
       prefetch
       draggable={false}
       onClick={handleLinkClick}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={cancelWarm}
       aria-current={isActive ? "page" : undefined}
       aria-label={ariaLabel}
       data-sidebar-item="true"

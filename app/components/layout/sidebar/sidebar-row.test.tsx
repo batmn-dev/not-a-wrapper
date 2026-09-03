@@ -63,7 +63,7 @@ describe("SidebarRow navigation contract", () => {
     mocks.setOpenMobile.mockReset()
   })
 
-  function renderRow(onAction: () => void) {
+  function renderRow(onAction: () => void, onWarm?: () => void) {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
@@ -77,6 +77,7 @@ describe("SidebarRow navigation contract", () => {
             renameValue="Project One"
             renameLabel="Project title"
             onRename={vi.fn()}
+            onWarm={onWarm}
             leadingIcon={RiFolderLine}
             activeLeadingIcon={RiFolderFill}
             trailing={() => (
@@ -126,6 +127,44 @@ describe("SidebarRow navigation contract", () => {
     act(() => action?.click())
     expect(onAction).toHaveBeenCalledOnce()
     expect(mocks.setOpenMobile).not.toHaveBeenCalled()
+  })
+
+  it("warms after a 100 ms mouse hover (never touch, cancelled on leave) and at click", () => {
+    vi.useFakeTimers()
+    const onWarm = vi.fn()
+    renderRow(vi.fn(), onWarm)
+    const link = container?.querySelector<HTMLAnchorElement>(
+      'a[href="/p/project-1"]'
+    )
+    const pointer = (type: string, pointerType: string) =>
+      act(() =>
+        link?.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerType })
+        )
+      )
+
+    pointer("pointerover", "touch")
+    act(() => vi.advanceTimersByTime(150))
+    expect(onWarm).not.toHaveBeenCalled()
+
+    pointer("pointerover", "mouse")
+    act(() => vi.advanceTimersByTime(50))
+    pointer("pointerout", "mouse")
+    act(() => vi.advanceTimersByTime(100))
+    expect(onWarm).not.toHaveBeenCalled()
+
+    pointer("pointerover", "mouse")
+    act(() => vi.advanceTimersByTime(100))
+    expect(onWarm).toHaveBeenCalledTimes(1)
+
+    link?.addEventListener("click", (event) => event.preventDefault())
+    act(() =>
+      link?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      )
+    )
+    expect(onWarm).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
   })
 
   it("keeps resting and rename states on the shared leading-icon slot", () => {
