@@ -22,6 +22,7 @@ import {
 let currentTurnId: string | undefined
 let pendingHeaderTurnId: string | undefined
 let stopIntentNoted = false
+let navigationIntentPending = false
 
 /**
  * Starts a new instrumented turn: mints a fresh correlation id (never reused
@@ -90,6 +91,18 @@ export function clearArmedChatPerfHeader(turnId: string | undefined): void {
 
 function turnFields(): ChatPerfFields {
   return currentTurnId ? { correlationId: currentTurnId } : {}
+}
+
+/**
+ * The chat-switch anchor: the user's sidebar navigation intent, marked before
+ * Next.js routing commits. Arms `nav_to_thread_painted` for the route commit
+ * that follows, so a hard load or Back/Forward (no intent) never emits the
+ * pair.
+ */
+export function markChatNavigationIntent(): void {
+  if (!isChatPerfClientEnabled()) return
+  navigationIntentPending = true
+  markChatPerf("chat_navigation_intent")
 }
 
 // Turn facts (pure derivation over the live message list)
@@ -238,10 +251,7 @@ type MarkdownProjectionAnomalySource = {
     | "source-diverged"
     | null
   fallbackReason:
-    | "no-safe-restart-boundary"
-    | "tail-misaligned"
-    | "context-divergence"
-    | null
+    "no-safe-restart-boundary" | "tail-misaligned" | "context-divergence" | null
   settleMismatch: boolean
 }
 
@@ -289,6 +299,19 @@ export function useChatNavigationPerfMarks(input: NavigationPerfInput): void {
   const committedChatId = useRef<string | null>(null)
   const paintedForChatId = useRef<string | null>(null)
   const authoritativeForChatId = useRef<string | null>(null)
+  // Armed by the route commit that followed a sidebar click; consumed by the
+  // first commit rendering a message row for that chat. Paint detection is
+  // two rAFs after that commit, the same chain the composer paint marks use.
+  const navToPaintedArmed = useRef(false)
+  const navToPaintedFrame = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (navToPaintedFrame.current !== null) {
+        cancelAnimationFrame(navToPaintedFrame.current)
+      }
+    },
+    []
+  )
   const previousRunState = useRef<{
     chatId: string | null
     status: string | null
@@ -311,6 +334,12 @@ export function useChatNavigationPerfMarks(input: NavigationPerfInput): void {
     committedChatId.current = input.chatId
     paintedForChatId.current = null
     authoritativeForChatId.current = null
+    if (navToPaintedFrame.current !== null) {
+      cancelAnimationFrame(navToPaintedFrame.current)
+      navToPaintedFrame.current = null
+    }
+    navToPaintedArmed.current = navigationIntentPending
+    navigationIntentPending = false
     if (input.chatId === null) return
     markChatPerf("chat_route_state_committed")
     markChatPerf("navigation_cache_hit_or_miss", {
@@ -329,6 +358,15 @@ export function useChatNavigationPerfMarks(input: NavigationPerfInput): void {
       markChatPerf("first_thread_content_painted", {
         messageCount: input.totalMessageCount,
       })
+      if (navToPaintedArmed.current) {
+        navToPaintedArmed.current = false
+        navToPaintedFrame.current = requestAnimationFrame(() => {
+          navToPaintedFrame.current = requestAnimationFrame(() => {
+            navToPaintedFrame.current = null
+            markChatPerf("nav_to_thread_painted")
+          })
+        })
+      }
     }
     if (
       input.authoritativeMessageCount > 0 &&

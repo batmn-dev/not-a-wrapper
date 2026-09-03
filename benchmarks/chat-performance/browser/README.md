@@ -19,10 +19,10 @@ NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf bun run buil
 bun run bench:browser
 ```
 
-Env knobs: `SUITE=standard|smoke` · `RUNS` (default 10) · `WARMUPS` (default
-2) · `PERF_PORT` (default 3111) · `BASE_URL` (reuse an already-running perf
-server; the server-span join is then unavailable) · `PW_CHANNEL=chrome` (use
-installed Chrome instead of a downloaded Chromium).
+Env knobs: `SUITE=standard|smoke|durable|thread-switch` · `RUNS` (default 10)
+· `WARMUPS` (default 2) · `PERF_PORT` (default 3111) · `BASE_URL` (reuse an
+already-running perf server; the server-span join is then unavailable) ·
+`PW_CHANNEL=chrome` (use installed Chrome instead of a downloaded Chromium).
 
 The spawned server runs with `CHAT_PERF_DETERMINISTIC_PROVIDER=1` (the
 server-side gate for the scripted provider — a client message alone can never
@@ -82,6 +82,20 @@ correctness, and pinned fixture payload hashes.
   ~70 s wall clock per run, so trim `RUNS` when iterating; measure the
   Convex side by capturing `bunx convex logs --success --jsonl` around the
   run.
+- **Thread switching: `SUITE=thread-switch`** (`thread-switch.ts`; signed in
+  like the durable suite). Measures `chat_navigation_intent` →
+  `nav_to_thread_painted` per sidebar switch for three populations — chats
+  the document has not opened (plain click, and hover-then-click after
+  `THREAD_SWITCH_HOVER_MS`, default 250) across `THREAD_SWITCH_DOCUMENTS`
+  fresh documents (default 5), then `THREAD_SWITCH_COUNT` (default 50)
+  switches cycling through already-opened chats in one document — beside the
+  commit-time cache hit/miss split, the Convex `ModifyQuerySet` `Add` count
+  per switch (outgoing socket frames), and a forced-GC JS heap sample at 0,
+  10, 25, and the last switch. Fixtures are the harness user's own chats;
+  fewer than `THREAD_SWITCH_CHATS` (default 8) sidebar rows are topped up
+  with short deterministic turns. Correctness: every switch must land on its
+  URL, render a message row, and emit the painted mark. The result lands
+  under `threadSwitch` in the result file.
 - Scenarios needing real tools (the fixture `interleaved` script) are not
   replayed; the deterministic provider covers text/reasoning/code/error/stop
   shapes plus the payload stress variants.

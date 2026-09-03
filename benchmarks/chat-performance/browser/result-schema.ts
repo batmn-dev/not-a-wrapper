@@ -99,6 +99,33 @@ export type ScenarioResult = {
   runs: RunMetrics[]
 }
 
+export type ThreadSwitchPassResult = {
+  kind: "unvisited-click" | "unvisited-hover" | "visited"
+  switches: number
+  /** `chat_navigation_intent` → `nav_to_thread_painted` per switch. */
+  navToThreadPaintedMs: MetricSummary
+  /** `chat_navigation_intent` → `chat_route_state_committed` per switch. */
+  intentToRouteCommitMs: MetricSummary
+  /** `navigation_cache_hit_or_miss` at the route commit. */
+  cacheHits: number
+  cacheMisses: number
+  /** Convex `ModifyQuerySet` `Add` frames sent per switch. */
+  querySetAddsPerSwitch: MetricSummary
+}
+
+/** `SUITE=thread-switch` (see thread-switch.ts). */
+export type ThreadSwitchResult = {
+  chatCount: number
+  switchCount: number
+  hoverMs: number
+  documents: number
+  passes: ThreadSwitchPassResult[]
+  /** Forced-GC JS heap through the visited pass, keyed by switch count. */
+  heapSamples: Array<{ switches: number; jsHeapUsedBytes: number }>
+  correctnessOk: boolean
+  detail?: string
+}
+
 export type BenchmarkResultFile = {
   schemaVersion: 1
   generatedAt: string
@@ -115,6 +142,7 @@ export type BenchmarkResultFile = {
   baseUrl: string
   suite: string
   scenarios: ScenarioResult[]
+  threadSwitch?: ThreadSwitchResult
 }
 
 export function summarize(values: number[]): MetricSummary {
