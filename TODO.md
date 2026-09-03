@@ -69,6 +69,31 @@ expensive platform-funded generations.
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic design system (future):** Define an agent-readable, customizable
 visual system after the product's core interaction patterns stabilize.
+- **Investigate a warm client cache for chats (replicate T3 Chat's local-first
+feel):** t3.chat serves the sidebar and thread switches from a client store,
+so revisiting a thread paints without a loading state. We mount no Convex
+query cache (no `ConvexQueryCacheProvider`, no `preloadQuery`), so every chat
+switch cold-subscribes through `lib/convex/use-per-user-query.ts`. Plan:
+mount the convex-helpers query cache with a bounded TTL, preload the current
+chat's messages on route entry and on sidebar hover, and evaluate persisting
+the thread list across reloads. Verifiable test: add a `nav_to_thread_painted`
+mark (sidebar click to first message row painted) and measure before and
+after on a fixture with a visited and an unvisited chat, p50/p95 across the
+harness runs, plus Convex subscription count per switch and client memory
+after 50 switches. Expected: a revisited chat paints within one frame of the
+click with no loading state, unvisited chats no slower, memory bounded.
+- **Investigate SSR composer shell fidelity (replicate T3 Chat):** t3.chat's
+server-rendered composer looks like the final one before hydration. Ours
+renders "5 Mini / Medium" in the shell and flips to the saved model and
+effort after preferences load, a visible flicker on every cold load. Plan:
+since the root layout already awaits the auth session, read the persisted
+model and effort preference server-side (or a cookie mirror of it) and pass
+it into the shell, or render neutral placeholders when no preference exists.
+Verifiable test: Playwright cold load before and after, sampling the model
+and effort button text every animation frame from first paint until network
+idle and counting label changes, plus CLS of the composer region and TTFB.
+Expected: zero label changes between first paint and hydration, no CLS
+contribution from the composer, and TTFB within 20 ms of the baseline.
 
 
 
