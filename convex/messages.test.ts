@@ -163,6 +163,7 @@ function createOwnerFixture({ publicChat = false } = {}) {
   const chat: Doc<"chats"> = {
     _id: chatId,
     _creationTime: 1,
+    publicId: "chat-1-public",
     userId,
     public: publicChat,
     pinned: false,
@@ -193,7 +194,7 @@ describe("getPublicForChatHandler", () => {
     })
 
     await expect(
-      getPublicForChatHandler(ctx, { chatId })
+      getPublicForChatHandler(ctx, { chatId: chat.publicId })
     ).resolves.toEqual([])
   })
 
@@ -227,7 +228,7 @@ describe("getPublicForChatHandler", () => {
     })
 
     await expect(
-      getPublicForChatHandler(ctx, { chatId })
+      getPublicForChatHandler(ctx, { chatId: chat.publicId })
     ).resolves.toEqual([])
   })
 })
@@ -347,7 +348,7 @@ describe("message branch selection", () => {
     })
 
     await expect(
-      getPublicForChatHandler(ctx, { chatId })
+      getPublicForChatHandler(ctx, { chatId: chat.publicId })
     ).resolves.toMatchObject([
       { _id: "message_user_1" },
       { _id: "message_assistant_old" },

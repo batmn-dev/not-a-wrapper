@@ -118,8 +118,7 @@ export async function attachStagedFilesToChat(
   if (attachmentIds.length === 0) return []
   const { api } = await import("@/convex/_generated/api")
   return await convex.mutation(api.files.attachStagedFiles, {
-    chatId:
-      chatId as unknown as typeof api.files.attachStagedFiles._args.chatId,
+    chatId,
     attachmentIds:
       attachmentIds as unknown as typeof api.files.attachStagedFiles._args.attachmentIds,
   })

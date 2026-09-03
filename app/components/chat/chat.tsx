@@ -22,7 +22,7 @@ import { isRouteDurableChat } from "@/lib/chat-turn/chat-turn-controller"
 import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
-import { useRouter } from "next/navigation"
+import { notFound } from "next/navigation"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
 import {
@@ -102,8 +102,7 @@ function ChatInner({
   isChatLoading: boolean
   project?: ChatProjectContext
 }) {
-  const router = useRouter()
-  const { navigateToChat } = useChatSession()
+  const { commitChatIdentity, resetChatIdentity } = useChatSession()
   const {
     createFirstTurnChat,
     bumpChat,
@@ -141,14 +140,20 @@ function ChatInner({
     composerRef.current?.insertQuote(text)
   }, [])
 
-  const { checkLimitsAndNotify, ensureChatExists } = useChatOperations({
+  const {
+    checkLimitsAndNotify,
+    ensureChatExists,
+    beginFirstTurn,
+    rollbackFirstTurn,
+  } = useChatOperations({
     isAuthenticated,
     chatId,
     selectedModel,
     systemPrompt,
     projectId: project?.id,
     createFirstTurnChat,
-    navigateToChat,
+    commitChatIdentity,
+    resetChatIdentity,
     setHasDialogAuth,
   })
 
@@ -173,6 +178,7 @@ function ChatInner({
     user,
     checkLimitsAndNotify,
     ensureChatExists,
+    firstTurn: { begin: beginFirstTurn, rollback: rollbackFirstTurn },
     bumpChat,
     setComposerText,
   })
@@ -335,35 +341,21 @@ function ChatInner({
     ]
   )
 
-  const hasRedirectedRef = useRef(false)
-
-  // Redirect only after authoritative reads rule out transient chat creation.
-  useEffect(() => {
-    if (
-      chatId &&
-      !isChatsLoading &&
-      !isChatLoading && // wait for the out-of-window getById fallback to resolve
-      !currentChat &&
-      !isSubmitting &&
-      status === "ready" &&
-      messages.length === 0 &&
-      !hasSentFirstMessage && // Don't redirect if we've already sent a message in this session
-      !hasRedirectedRef.current
-    ) {
-      hasRedirectedRef.current = true
-      router.replace("/")
-    }
-  }, [
-    chatId,
-    isChatsLoading,
-    isChatLoading,
-    currentChat,
-    isSubmitting,
-    status,
-    messages.length,
-    hasSentFirstMessage,
-    router,
-  ])
+  // A route whose chat nothing answers for (a made-up id, a reload before the
+  // first turn's creation landed, another user's chat) is not found. Decided
+  // only after the authoritative reads settle, and never while a first turn
+  // is in flight: the identity commits before the chat exists (ADR-0033), so
+  // a pending submission or a rendered turn keeps the surface.
+  const chatNotFound =
+    chatId !== null &&
+    !isChatsLoading &&
+    !isChatLoading && // wait for the out-of-window getById fallback to resolve
+    !currentChat &&
+    !isSubmitting &&
+    status === "ready" &&
+    messages.length === 0 &&
+    !hasSentFirstMessage
+  if (chatNotFound) notFound()
 
   // The single chrome decision (ADR-0017): surface and header derive from one
   // resolver so a client-side flip can never show a thread without its header.

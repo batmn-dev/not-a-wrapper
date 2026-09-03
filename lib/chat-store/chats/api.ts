@@ -1,10 +1,14 @@
-import { isLocalChatId } from "../identity"
 import {
   deleteFromIndexedDB,
   readFromIndexedDB,
   writeToIndexedDB,
 } from "../persist"
 import type { Chats } from "../types"
+
+// The guest chat store: IndexedDB holds ONLY guest (signed-out) chats, keyed by
+// the same client-minted chat id a durable chat would carry (ADR-0033).
+// Whether a chat lives here is a property of the caller's auth state, so this
+// seam never inspects the id's shape.
 
 const emptyChats: Chats[] = []
 
@@ -55,8 +59,7 @@ function isCachedChat(value: unknown): value is Chats {
   return (
     typeof value === "object" &&
     value !== null &&
-    typeof (value as { id?: unknown }).id === "string" &&
-    isLocalChatId((value as { id: string }).id)
+    typeof (value as { id?: unknown }).id === "string"
   )
 }
 
@@ -67,9 +70,7 @@ function emitCachedChatsChange() {
 }
 
 function updateCachedChatsSnapshot(chats: Chats[]) {
-  cachedChatsSnapshot = sortChats(
-    chats.filter((chat) => isLocalChatId(chat.id))
-  )
+  cachedChatsSnapshot = sortChats(chats)
   emitCachedChatsChange()
 }
 
@@ -119,8 +120,6 @@ export async function getCachedChats(): Promise<Chats[]> {
 }
 
 export async function getCachedChat(id: string): Promise<Chats | undefined> {
-  if (!isLocalChatId(id)) return undefined
-
   const cached = cachedChatsSnapshot.find((chat) => chat.id === id)
   if (cached) return cached
 
@@ -129,8 +128,6 @@ export async function getCachedChat(id: string): Promise<Chats | undefined> {
 }
 
 export async function cacheChat(chat: Chats): Promise<void> {
-  if (!isLocalChatId(chat.id)) return
-
   await serializeCachedChatMutation(chat.id, async () => {
     cachedChatsHydrated = true
     updateCachedChatsSnapshot([
@@ -146,8 +143,6 @@ export async function updateCachedChat(
   id: string,
   update: (chat: Chats) => Chats | undefined
 ): Promise<boolean> {
-  if (!isLocalChatId(id)) return false
-
   return await serializeCachedChatMutation(id, async () => {
     const cached = cachedChatsSnapshot.find((chat) => chat.id === id)
     const stored = cached ?? (await readFromIndexedDB<Chats>("chats", id))
@@ -167,8 +162,6 @@ export async function updateCachedChat(
 }
 
 export async function deleteCachedChat(id: string): Promise<void> {
-  if (!isLocalChatId(id)) return
-
   await serializeCachedChatMutation(id, async () => {
     cachedChatsHydrated = true
     updateCachedChatsSnapshot(

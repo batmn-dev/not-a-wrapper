@@ -16,6 +16,8 @@ export type MetricSummary = {
 export type RunMetrics = {
   /** Client-mark-derived intervals (ms). Missing when the mark pair was absent. */
   sendToOptimisticPaintMs?: number
+  /** First turns only: Send → `/c/<chatId>` committed by the session (ADR-0033). */
+  sendToThreadRouteCommittedMs?: number
   sendToRequestDispatchedMs?: number
   dispatchToFirstStreamChunkMs?: number
   firstTextDeltaToFirstVisibleMs?: number

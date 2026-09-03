@@ -7,7 +7,6 @@ import {
   consumeLocallyResolvedApprovals,
   restoreLocallyResolvedApprovals,
 } from "@/lib/chat-runs/approval-auto-send-gate"
-import { LOCAL_CHAT_ID_PREFIX } from "@/lib/chat-store/identity"
 import { isSelectedPathDivergent } from "@/lib/chat-store/turns/selected-path"
 import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 import {
@@ -251,11 +250,15 @@ type DetachableChatStreamOwner = {
 let attachedBindingCount = 0
 let detachedBindingCount = 0
 
+// Persistence class is a property of the caller's auth, not the id's shape
+// (ADR-0033); the mounted hook publishes it for the gauges below.
+let bindingPersistenceClass: "durable" | "guest" = "guest"
+
 function classifyBindingChat(
   chatId: string | null
 ): "durable" | "guest" | "unowned" {
   if (chatId === null) return "unowned"
-  return chatId.startsWith(LOCAL_CHAT_ID_PREFIX) ? "guest" : "durable"
+  return bindingPersistenceClass
 }
 
 function emitBindingGauge(
@@ -580,12 +583,15 @@ export type DetachableChatStream = {
 
 export function useDetachableChatStream({
   chatId,
+  isAuthenticated,
   initialMessages,
   streamTimeoutMs,
   api,
   getFallbackTurnBody,
 }: {
   chatId: string | null
+  /** Durable (signed-in) vs guest persistence for the binding gauges. */
+  isAuthenticated: boolean
   initialMessages: UIMessage[]
   streamTimeoutMs: number
   api: string
@@ -600,6 +606,9 @@ export function useDetachableChatStream({
   useLayoutEffect(() => {
     owner.setFallbackTurnBodyProvider(getFallbackTurnBody ?? null)
   }, [owner, getFallbackTurnBody])
+  useLayoutEffect(() => {
+    bindingPersistenceClass = isAuthenticated ? "durable" : "guest"
+  }, [isAuthenticated])
   const [streamState, setStreamState] = useState(() => ({
     chatId,
     binding: owner.createBinding(initialMessages, chatId),

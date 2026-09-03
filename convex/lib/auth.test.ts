@@ -5,8 +5,10 @@ import {
   filterActiveChats,
   getAuthorizedChatForRead,
   getCurrentUser,
+  getReadableChatByPublicId,
   requireCurrentUser,
   requireOwnedChat,
+  requireOwnedChatByPublicId,
   requireOwnedGenerationRun,
   requireOwnedMcpServer,
   requireOwnedProject,
@@ -44,6 +46,7 @@ function createChat(
   return {
     _id: asId<"chats">(id),
     _creationTime: 1,
+    publicId: `${id}-public`,
     userId,
     public: isPublic,
     pinned: false,
@@ -126,7 +129,7 @@ function createCtx({
           null
         )
       },
-      query: (tableName: "users") => ({
+      query: (tableName: "users" | "chats") => ({
         withIndex: (
           _indexName: string,
           buildQuery: (query: QueryBuilder) => unknown
@@ -140,8 +143,10 @@ function createCtx({
           }
           buildQuery(query)
 
-          const results = users.filter((user) => {
-            const record = user as unknown as Record<string, unknown>
+          const rows: Array<Doc<"users"> | Doc<"chats">> =
+            tableName === "chats" ? chats : users
+          const results = rows.filter((row) => {
+            const record = row as unknown as Record<string, unknown>
             for (const [fieldName, value] of filters) {
               if (record[fieldName] !== value) return false
             }
@@ -150,7 +155,6 @@ function createCtx({
 
           return {
             unique: async () => {
-              expect(tableName).toBe("users")
               expect(results.length).toBeLessThanOrEqual(1)
               return results[0] ?? null
             },
@@ -752,5 +756,58 @@ describe("Convex auth helpers", () => {
         "Run not found"
       )
     })
+  })
+})
+
+// The client-facing boundary (ADR-0033): a chat is named by its client-minted
+// publicId and resolved to the owner-verified document exactly once.
+describe("chat publicId boundary", () => {
+  const owner = createUser("user_1", "workos_owner")
+  const other = createUser("user_2", "workos_other")
+  const chat = createChat("chat_1", owner._id)
+
+  it("resolves the owner's chat by publicId", async () => {
+    const ctx = createCtx({
+      identitySubject: owner.workosUserId,
+      users: [owner, other],
+      chats: [chat],
+    })
+
+    await expect(
+      requireOwnedChatByPublicId(ctx, chat.publicId)
+    ).resolves.toEqual({ user: owner, chat })
+    await expect(getReadableChatByPublicId(ctx, chat.publicId)).resolves.toBe(
+      chat
+    )
+  })
+
+  it("rejects a non-owner and hides the private chat from their reads", async () => {
+    const ctx = createCtx({
+      identitySubject: other.workosUserId,
+      users: [owner, other],
+      chats: [chat],
+    })
+
+    await expect(
+      requireOwnedChatByPublicId(ctx, chat.publicId)
+    ).rejects.toThrow("Not authorized")
+    await expect(
+      getReadableChatByPublicId(ctx, chat.publicId)
+    ).resolves.toBeNull()
+  })
+
+  it("treats an unknown publicId as not found", async () => {
+    const ctx = createCtx({
+      identitySubject: owner.workosUserId,
+      users: [owner],
+      chats: [chat],
+    })
+
+    await expect(
+      requireOwnedChatByPublicId(ctx, "made-up-public")
+    ).rejects.toThrow("Chat not found")
+    await expect(
+      getReadableChatByPublicId(ctx, "made-up-public")
+    ).resolves.toBeNull()
   })
 })

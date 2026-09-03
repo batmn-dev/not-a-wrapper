@@ -145,7 +145,8 @@ function chatEntry({
 }) {
   return {
     chat: {
-      _id: id,
+      _id: `${id}-row`,
+      publicId: id,
       _creationTime: updatedAt - 1,
       userId: "user-1",
       title,

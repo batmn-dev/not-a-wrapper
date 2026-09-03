@@ -2,9 +2,12 @@ import { toast } from "@/components/ui/toast"
 import { checkRateLimits } from "@/lib/api"
 import type {
   CreateFirstTurnChatInput,
-  FirstTurnChat,
+  FirstTurnChatResult,
 } from "@/lib/chat-store/chats/provider"
-import { GUEST_CHAT_STORAGE_KEY } from "@/lib/chat-store/identity"
+import {
+  createChatPublicId,
+  GUEST_CHAT_STORAGE_KEY,
+} from "@/lib/chat-store/identity"
 import type {
   EnsureChatForTurnArgs,
   EnsuredTurnChat,
@@ -14,14 +17,17 @@ import type { Attachment } from "@/lib/file-handling"
 import { useEffect, useRef } from "react"
 
 /**
- * The first turn's allocation, held for the pushState → chatId-prop lag.
- * `committedTurn` (durable creations only) retains the atomically persisted
- * turn's full identity so a same-payload retry re-presents it — the dispatch
- * then claims the persisted row idempotently instead of racing the projection
- * (a `{count: 0}` stale rejection) or appending a duplicate prompt.
+ * The first turn's allocation (ADR-0033). The chat id is minted and committed
+ * to the session BEFORE creation; `committed` flips once the local or atomic
+ * durable creation has landed. `committedTurn` (durable creations only)
+ * retains the atomically persisted turn's full identity so a same-payload
+ * retry re-presents it — the dispatch then claims the persisted row
+ * idempotently instead of racing the projection (a `{count: 0}` stale
+ * rejection) or appending a duplicate prompt.
  */
 type FirstTurnAllocation = {
   chatId: string
+  committed: boolean
   committedTurn?: {
     userMessageId: string
     clientMessageId: string
@@ -48,9 +54,13 @@ type UseChatOperationsProps = {
   projectId?: string
   createFirstTurnChat: (
     input: CreateFirstTurnChatInput
-  ) => Promise<FirstTurnChat | undefined>
-  navigateToChat?: (chatId: string) => void
+  ) => Promise<FirstTurnChatResult>
+  /** Session identity commands (the only History API owner). */
+  commitChatIdentity: (chatId: string) => void
+  resetChatIdentity: () => void
   setHasDialogAuth: (value: boolean) => void
+  /** Identity seam for tests; production mints a UUID. */
+  createChatId?: () => string
 }
 
 export function useChatOperations({
@@ -60,16 +70,16 @@ export function useChatOperations({
   systemPrompt,
   projectId,
   createFirstTurnChat,
-  navigateToChat,
+  commitChatIdentity,
+  resetChatIdentity,
   setHasDialogAuth,
+  createChatId = createChatPublicId,
 }: UseChatOperationsProps) {
-  // A failed first turn may leave the newly allocated route in place. Reuse it
-  // on retry instead of creating another chat from the same mounted composer
-  // closure. The ref only bridges the pushState → chatId-prop lag inside one
-  // first turn: returning to the no-chat surface (Back/Forward to onboarding,
-  // which does NOT remount the mounted Chat) must invalidate it, or the next
-  // first turn would silently append to the previous chat with the URL still
-  // on the onboarding route.
+  // The allocation bridges the identity commit → chatId-prop lag inside one
+  // first turn, and survives a post-commit dispatch failure so a retry reuses
+  // the chat. Returning to the no-chat surface (Back/Forward to onboarding,
+  // which does NOT remount the mounted Chat, or a rollback) must invalidate
+  // it, or the next first turn would silently append to the previous chat.
   const allocationRef = useRef<FirstTurnAllocation | null>(null)
   const previousChatIdRef = useRef(chatId)
   useEffect(() => {
@@ -80,13 +90,39 @@ export function useChatOperations({
     }
   }, [chatId])
 
+  /**
+   * Mint the first turn's identity and commit its route synchronously, before
+   * the optimistic row paints and before any request leaves. Idempotent
+   * within one first turn: a retry that still holds an allocation reuses it.
+   */
+  const beginFirstTurn = (): string => {
+    const current = allocationRef.current
+    if (current) return current.chatId
+    const nextChatId = createChatId()
+    allocationRef.current = { chatId: nextChatId, committed: false }
+    commitChatIdentity(nextChatId)
+    return nextChatId
+  }
+
+  /**
+   * The one pre-commit rollback: identity cleared (origin route restored)
+   * and the allocation dropped. Never called once creation has landed — a
+   * later dispatch failure keeps the chat at its route (ADR-0012).
+   */
+  const rollbackFirstTurn = () => {
+    const current = allocationRef.current
+    if (!current || current.committed) return
+    allocationRef.current = null
+    resetChatIdentity()
+  }
+
   // Acceptance consumes the committed identity: the persisted first-turn row
   // may be claimed by exactly one dispatch, so once one is accepted the
-  // allocation keeps only the chatId (the pushState → prop lag bridge).
+  // allocation keeps only the chatId (the commit → prop lag bridge).
   const confirmFirstTurnDispatched = (dispatchedChatId: string) => {
     const current = allocationRef.current
     if (current?.chatId === dispatchedChatId && current.committedTurn) {
-      allocationRef.current = { chatId: current.chatId }
+      allocationRef.current = { chatId: current.chatId, committed: true }
     }
   }
 
@@ -115,47 +151,13 @@ export function useChatOperations({
     }
   }
 
-  const ensureChatExists = async ({
-    userId,
-    text,
-    clientMessageId,
-    attachmentIds,
-  }: EnsureChatForTurnArgs): Promise<EnsuredTurnChat | null> => {
-    const allocation = allocationRef.current
-    const committed = allocation?.committedTurn
-
-    // Same-payload retry of a committed-but-not-yet-dispatched first turn:
-    // re-present the committed identity so the dispatch claims the persisted
-    // row instead of duplicating it. Checked BEFORE the chatId-prop early
-    // return because navigation precedes dispatch — by retry time the prop has
-    // usually caught up to the allocated route. Once a dispatch is accepted,
-    // confirmDispatched drops the committed turn, so a later identical payload
-    // becomes a normal new message.
-    if (
-      allocation &&
-      committed &&
-      (chatId === null || chatId === allocation.chatId) &&
-      committed.text === text &&
-      isSameAttachmentSet(committed.attachmentIds, attachmentIds)
-    ) {
-      return {
-        chatId: allocation.chatId,
-        firstTurn: {
-          userMessageId: committed.userMessageId,
-          clientMessageId: committed.clientMessageId,
-          attachments: committed.attachments,
-          confirmDispatched: () => confirmFirstTurnDispatched(allocation.chatId),
-        },
-      }
-    }
-
-    if (chatId) return { chatId }
-    // A different payload while the prop lags appends to the allocated chat as
-    // a normal turn.
-    if (allocation) return { chatId: allocation.chatId }
-
-    try {
-      const created = await createFirstTurnChat({
+  const createAllocatedChat = async (
+    allocation: FirstTurnAllocation,
+    { userId, text, clientMessageId, attachmentIds }: EnsureChatForTurnArgs
+  ): Promise<EnsuredTurnChat | null> => {
+    const createWithId = (publicId: string) =>
+      createFirstTurnChat({
+        publicId,
         model: selectedModel,
         systemPrompt,
         ...(projectId ? { projectId } : {}),
@@ -164,61 +166,138 @@ export function useChatOperations({
         attachmentIds,
       })
 
-      if (!created) return null
-      if (created.kind === "local") {
-        allocationRef.current = { chatId: created.chat.id }
-        localStorage.setItem(GUEST_CHAT_STORAGE_KEY, created.chat.id)
-      } else {
-        allocationRef.current = {
-          chatId: created.chat.id,
-          committedTurn: {
-            userMessageId: created.userMessageId,
-            clientMessageId,
-            text,
-            attachmentIds,
-            attachments: created.attachments,
+    // Back to the no-chat surface while creation is in flight invalidates the
+    // allocation (the effect above nulls it). A creation that lands afterwards
+    // must neither resurrect it nor dispatch for a chat the user already
+    // left; the committed chat simply keeps its first message.
+    let active = allocation
+    const isInvalidated = () => allocationRef.current !== active
+
+    let created = await createWithId(active.chatId)
+    if (isInvalidated()) return null
+
+    // Another holder of the minted id (typed server conflict): re-mint
+    // exactly once, re-committing the route in place, then retry.
+    if (created?.kind === "conflict") {
+      active = { chatId: createChatId(), committed: false }
+      allocationRef.current = active
+      commitChatIdentity(active.chatId)
+      created = await createWithId(active.chatId)
+      if (isInvalidated()) return null
+    }
+
+    // A second conflict is a plain failure, reported in place like any other
+    // refused creation (the first conflict was swallowed by the re-mint).
+    if (created?.kind === "conflict") {
+      toast({ title: "Failed to create chat", status: "error" })
+      return null
+    }
+    if (!created) return null
+    const activeChatId = active.chatId
+    if (created.kind === "local") {
+      allocationRef.current = { chatId: activeChatId, committed: true }
+      localStorage.setItem(GUEST_CHAT_STORAGE_KEY, activeChatId)
+      return { chatId: activeChatId }
+    }
+
+    allocationRef.current = {
+      chatId: activeChatId,
+      committed: true,
+      committedTurn: {
+        userMessageId: created.userMessageId,
+        clientMessageId,
+        text,
+        attachmentIds,
+        attachments: created.attachments,
+      },
+    }
+    return {
+      chatId: activeChatId,
+      confirmDispatched: () => confirmFirstTurnDispatched(activeChatId),
+      firstTurn: {
+        userMessageId: created.userMessageId,
+        clientMessageId,
+        attachments: created.attachments,
+      },
+    }
+  }
+
+  const ensureChatExists = async (
+    args: EnsureChatForTurnArgs
+  ): Promise<EnsuredTurnChat | null> => {
+    const { text, attachmentIds } = args
+    const allocation = allocationRef.current
+    const committed = allocation?.committedTurn
+
+    // A committed-but-not-yet-dispatched first turn is a retry token held
+    // until a dispatch on this chat is ACCEPTED (confirmDispatched): a
+    // same-payload retry re-presents the committed identity so the dispatch
+    // claims the persisted row instead of duplicating it; a different payload
+    // appends as a normal turn and, once accepted, retires the token so a
+    // later identical payload is a genuine new message. A refused dispatch of
+    // either kind keeps the token, so the original payload can still claim
+    // its row.
+    const heldFirstTurn =
+      allocation && committed && (chatId === null || chatId === allocation.chatId)
+        ? {
+            chatId: allocation.chatId,
+            confirmDispatched: () =>
+              confirmFirstTurnDispatched(allocation.chatId),
+          }
+        : null
+    if (heldFirstTurn && committed) {
+      if (
+        committed.text === text &&
+        isSameAttachmentSet(committed.attachmentIds, attachmentIds)
+      ) {
+        return {
+          ...heldFirstTurn,
+          firstTurn: {
+            userMessageId: committed.userMessageId,
+            clientMessageId: committed.clientMessageId,
+            attachments: committed.attachments,
           },
         }
       }
-      // Navigation happens only after the full atomic commit (chat + bound
-      // attachments + first user message), so the handed-off route can never
-      // hold a permanently empty chat.
-      navigateToChat?.(created.chat.id)
-
-      if (created.kind === "local") {
-        return { chatId: created.chat.id }
-      }
-      return {
-        chatId: created.chat.id,
-        firstTurn: {
-          userMessageId: created.userMessageId,
-          clientMessageId,
-          attachments: created.attachments,
-          confirmDispatched: () => confirmFirstTurnDispatched(created.chat.id),
-        },
-      }
-    } catch (err: unknown) {
-      let errorMessage = "Something went wrong."
-      try {
-        const errorObj = err as { message?: string }
-        if (errorObj.message) {
-          const parsed = JSON.parse(errorObj.message)
-          errorMessage = parsed.error || errorMessage
-        }
-      } catch {
-        const errorObj = err as { message?: string }
-        errorMessage = errorObj.message || errorMessage
-      }
-      toast({
-        title: errorMessage,
-        status: "error",
-      })
-      return null
+      return heldFirstTurn
     }
+
+    // The identity was committed at Send (beginFirstTurn); creation lands
+    // here, after the pre-creation refusals. The chatId prop may already
+    // carry the committed id, so the allocation is consulted first.
+    if (allocation && !allocation.committed) {
+      try {
+        return await createAllocatedChat(allocation, args)
+      } catch (err: unknown) {
+        let errorMessage = "Something went wrong."
+        try {
+          const errorObj = err as { message?: string }
+          if (errorObj.message) {
+            const parsed = JSON.parse(errorObj.message)
+            errorMessage = parsed.error || errorMessage
+          }
+        } catch {
+          const errorObj = err as { message?: string }
+          errorMessage = errorObj.message || errorMessage
+        }
+        toast({ title: errorMessage, status: "error" })
+        return null
+      }
+    }
+
+    if (chatId) return { chatId }
+    // The prop still lags the committed identity.
+    if (allocation) return { chatId: allocation.chatId }
+
+    // No identity was committed for this send (the surface returned to
+    // onboarding mid-flight): refuse rather than mint outside Send.
+    return null
   }
 
   return {
     checkLimitsAndNotify,
     ensureChatExists,
+    beginFirstTurn,
+    rollbackFirstTurn,
   }
 }

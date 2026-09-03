@@ -166,6 +166,9 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   "composer.keystroke_to_next_paint": { durationMs: REQUIRED_NUMBER },
   "composer.keystroke_to_settled_paint": { durationMs: REQUIRED_NUMBER },
   optimistic_message_painted: { correlationId: CORRELATION },
+  // The session provider committed `/c/<chatId>` for a first turn (ADR-0033):
+  // synchronous with Send, before creation is awaited.
+  thread_route_committed: { correlationId: CORRELATION },
   request_dispatched: { correlationId: CORRELATION },
   first_chunk_received: { correlationId: CORRELATION },
   first_visible_text: { correlationId: CORRELATION, textLengthBucket: NUMBER },

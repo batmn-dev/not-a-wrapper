@@ -1,5 +1,5 @@
 import { api } from "@/convex/_generated/api"
-import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { Doc } from "@/convex/_generated/dataModel"
 import type {
   ChatTurnEditRequest,
   ChatTurnRegenerationRequest,
@@ -66,7 +66,7 @@ export async function preflightDurableGenerationInput(
     .fetchQuery(
       api.chatRuntime.planGenerationInput,
       {
-        chatId: args.chatId as Id<"chats">,
+        chatId: args.chatId,
         expectedVisibleMessageCount: args.expectedVisibleMessageCount,
         tailMessageId: args.tailMessageId,
         latestUserMessage: latestUserMessage
@@ -101,7 +101,7 @@ export async function preflightDurableGenerationInput(
       ? await deps.fetchQuery(
           api.files.getTrustedTextAttachmentsForChat,
           {
-            chatId: args.chatId as Id<"chats">,
+            chatId: args.chatId,
             references: textFileReferences,
           },
           { token: args.token }

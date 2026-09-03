@@ -48,9 +48,13 @@ deployment's label can be a custom string while its real id is the
 
    ```bash
    bunx convex data chats            # page a table
-   bunx convex run messages:getSelectedPath '{"chatId":"<id>"}'
+   bunx convex run messages:getSelectedPath '{"chatId":"<publicId>"}'
    bunx convex logs                  # tail function logs
    ```
+
+   Client-facing chat functions take the chat's client-minted `publicId`
+   (the `/c/<publicId>` route segment, the `chats.publicId` column), never
+   the Convex `_id` (ADR-0033).
 
    `convex data`/`env list` can print values — redact before sharing output.
 

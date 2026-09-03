@@ -63,6 +63,7 @@ import {
   getCurrentUser,
   isChatActive,
   requireOwnedChat,
+  requireOwnedChatByPublicId,
   type AuthenticatedChatOwner,
   type AuthenticatedRunOwner,
 } from "./lib/auth"
@@ -2248,7 +2249,12 @@ export async function prepareGenerationForChat(
   }
 }
 
-type VerifiedPrepareGenerationArgs = PrepareGenerationForChatArgs & {
+type VerifiedPrepareGenerationArgs = Omit<
+  PrepareGenerationForChatArgs,
+  "chatId"
+> & {
+  /** The client-minted publicId the route signed into the admission proof. */
+  chatId: string
   cancellationSettlementVersion: CancellationSettlementProtocolVersion
   admissionIssuedAt: number
   admissionProof: string
@@ -2284,12 +2290,17 @@ export async function prepareGenerationWithVerifiedAdmission(
       message: "Chat admission proof is invalid or expired",
     })
   }
-  return prepareGenerationForChat(ctx, prepareArgs)
+  // Boundary resolution (ADR-0033): the proof covered the public id; every
+  // prepare write below runs against the owner-verified internal id.
+  const { chat } = await requireOwnedChatByPublicId(ctx, args.chatId)
+  return prepareGenerationForChat(ctx, { ...prepareArgs, chatId: chat._id })
 }
 
 export const prepareGeneration = mutation({
   args: {
-    chatId: v.id("chats"),
+    // The client-minted publicId (ADR-0033); resolved to the owned chat below
+    // before any prepare work. The admission proof signs this same string.
+    chatId: v.string(),
     requestId: v.string(),
     model: v.string(),
     provider: v.string(),

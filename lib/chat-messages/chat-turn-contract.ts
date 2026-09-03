@@ -1,3 +1,4 @@
+import { isChatPublicId } from "@/lib/chat-store/identity"
 import type { ModelReasoningEffort } from "@/lib/models/types"
 import { isModelReasoningEffort } from "@/lib/models/types"
 import { isGenerationBudget } from "@/lib/openproviders/output-budget"
@@ -131,9 +132,12 @@ export function parseChatTurnRequest(
   const record: Record<string, unknown> = isRecord(body) ? body : {}
   const { messages, chatId, model } = record
 
+  // The chat id is the client-minted publicId (ADR-0033); its UUID shape is
+  // the only client-side identity check, so a malformed id is a 400 here and
+  // never reaches the durable contract.
   if (
     !Array.isArray(messages) ||
-    !isNonEmptyString(chatId) ||
+    !isChatPublicId(chatId) ||
     !isNonEmptyString(model)
   ) {
     return {
@@ -143,7 +147,7 @@ export function parseChatTurnRequest(
       error: "Missing required fields",
       details: {
         messages: Array.isArray(messages) ? "ok" : "required",
-        chatId: isNonEmptyString(chatId) ? "ok" : "required",
+        chatId: isChatPublicId(chatId) ? "ok" : "required",
         model: isNonEmptyString(model) ? "ok" : "required",
       },
     }

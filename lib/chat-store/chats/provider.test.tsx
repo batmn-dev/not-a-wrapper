@@ -14,7 +14,7 @@ import {
 import { resetCachedMessagesSnapshot } from "../messages/api"
 import type { Chats } from "../types"
 import { resetCachedChatsSnapshot } from "./api"
-import { ChatsProvider, useChats, type FirstTurnChat } from "./provider"
+import { ChatsProvider, useChats, type FirstTurnChatResult } from "./provider"
 
 const persistMocks = vi.hoisted(() => {
   const tables = {
@@ -119,7 +119,8 @@ function localChat(overrides: Partial<Chats> = {}): Chats {
 
 function durableChat() {
   return {
-    _id: "chat-server",
+    _id: "chat-server-row",
+    publicId: "chat-server",
     _creationTime: 1,
     userId: "user-1",
     title: "Durable chat",
@@ -446,9 +447,10 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let created: FirstTurnChat | undefined
+    let created: FirstTurnChatResult
     await act(async () => {
       created = await capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         model: "gpt-5-mini",
         systemPrompt: "system",
         message: { clientMessageId: "optimistic-1", text: "Question" },
@@ -457,6 +459,7 @@ describe("ChatsProvider guest local chats", () => {
     })
 
     expect(convexMocks.mutationFn).toHaveBeenCalledWith({
+      publicId: "chat-public-1",
       title: "New chat",
       model: "gpt-5-mini",
       systemPrompt: "system",
@@ -464,11 +467,12 @@ describe("ChatsProvider guest local chats", () => {
       message: { clientMessageId: "optimistic-1", text: "Question" },
       attachmentIds: [],
     })
+    // The chat is named by the client-minted id from the start (ADR-0033).
     expect(created).toMatchObject({
       kind: "durable",
       userMessageId: "msg_first",
       chat: {
-        id: "chat-server",
+        id: "chat-public-1",
         user_id: "user-1",
         project_id: null,
       },
@@ -484,9 +488,10 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture)
     await flushPromises()
 
-    let created: FirstTurnChat | undefined
+    let created: FirstTurnChatResult
     await act(async () => {
       created = await capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         guestUserId: "guest_1",
         message: { clientMessageId: "optimistic-1", text: "Guest question" },
         attachmentIds: [],
@@ -496,7 +501,7 @@ describe("ChatsProvider guest local chats", () => {
     expect(created).toMatchObject({
       kind: "local",
       chat: {
-        id: expect.stringMatching(/^local-/),
+        id: "chat-public-1",
         user_id: "guest_1",
         title: "New chat",
         title_source: "provisional",
@@ -554,6 +559,7 @@ describe("ChatsProvider guest local chats", () => {
     // a guest-shaped creation is a wrong-identity signal, so nothing is created.
     await expect(
       capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         guestUserId: "guest_1",
         message: { clientMessageId: "optimistic-1", text: "Guest question" },
         attachmentIds: ["attachment-1"],
@@ -582,9 +588,10 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let creationPromise: Promise<FirstTurnChat | undefined> | undefined
+    let creationPromise: Promise<FirstTurnChatResult> | undefined
     act(() => {
       creationPromise = capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         guestUserId: "guest-should-be-ignored",
         message: { clientMessageId: "optimistic-1", text: "During auth sync" },
         attachmentIds: [],
@@ -598,7 +605,7 @@ describe("ChatsProvider guest local chats", () => {
     convexMocks.isLoading = false
     rerenderProvider(capture, "user-1")
 
-    let created: FirstTurnChat | undefined
+    let created: FirstTurnChatResult
     await act(async () => {
       created = await creationPromise
     })
@@ -606,7 +613,7 @@ describe("ChatsProvider guest local chats", () => {
     expect(created).toMatchObject({
       kind: "durable",
       chat: {
-        id: "chat-auth-sync",
+        id: "chat-public-1",
         user_id: "user-1",
       },
     })
@@ -625,9 +632,10 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let creationPromise: Promise<FirstTurnChat | undefined> | undefined
+    let creationPromise: Promise<FirstTurnChatResult> | undefined
     act(() => {
       creationPromise = capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         message: {
           clientMessageId: "optimistic-1",
           text: "During stalled auth sync",
@@ -659,6 +667,7 @@ describe("ChatsProvider guest local chats", () => {
 
     await expect(
       capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         guestUserId: "guest_1",
         message: { clientMessageId: "optimistic-1", text: "hello" },
         attachmentIds: [],
@@ -686,9 +695,10 @@ describe("ChatsProvider guest local chats", () => {
     renderProvider(capture, "user-1")
     await flushPromises()
 
-    let created: FirstTurnChat | undefined
+    let created: FirstTurnChatResult
     await act(async () => {
       created = await capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
         projectId: "project-1",
         message: { clientMessageId: "optimistic-1", text: "Project question" },
         attachmentIds: [],
@@ -701,7 +711,8 @@ describe("ChatsProvider guest local chats", () => {
         projectId: "project-1",
       })
     )
-    expect(created?.chat.project_id).toBe("project-1")
+    if (created?.kind !== "durable") throw new Error("Expected durable chat")
+    expect(created.chat.project_id).toBe("project-1")
   })
 
   it("rolls back an optimistic chat when durable creation fails", async () => {
@@ -717,6 +728,7 @@ describe("ChatsProvider guest local chats", () => {
     await act(async () => {
       await expect(
         capture.current?.createFirstTurnChat({
+        publicId: "chat-public-1",
           message: { clientMessageId: "optimistic-1", text: "Question" },
           attachmentIds: [],
         })
@@ -724,7 +736,7 @@ describe("ChatsProvider guest local chats", () => {
     })
 
     expect(
-      capture.current?.chats.some((chat) => chat.id.startsWith("optimistic-"))
+      capture.current?.chats.some((chat) => chat.id === "chat-public-1")
     ).toBe(false)
     expect(convexMocks.toast).toHaveBeenCalledWith({
       title: "Failed to create chat",

@@ -55,6 +55,16 @@ const sessionMocks = vi.hoisted(() => ({
   chatId: "local-thread",
 }))
 
+// Persistence is derived from the server-seeded app user (ADR-0033): null is
+// a guest reading IndexedDB; an id is a durable chat read through Convex.
+const userMocks = vi.hoisted(() => ({
+  user: null as { id: string } | null,
+}))
+
+vi.mock("@/lib/user-store/provider", () => ({
+  useUser: () => ({ user: userMocks.user }),
+}))
+
 vi.mock("../persist", () => ({
   readFromIndexedDB: persistMocks.readFromIndexedDB,
   writeToIndexedDB: persistMocks.writeToIndexedDB,
@@ -132,6 +142,7 @@ describe("MessagesProvider local chat hydration", () => {
     convexMocks.mutationFn.mockReset()
     convexMocks.useQuery.mockClear()
     sessionMocks.chatId = "local-thread"
+    userMocks.user = null
     resetCachedMessagesSnapshot()
   })
 
@@ -196,7 +207,8 @@ describe("MessagesProvider local chat hydration", () => {
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
   })
 
-  it("does not keep an unauthenticated server chat loading after the auth gate settles", async () => {
+  it("does not keep a durable chat loading while the Convex auth gate is closed", async () => {
+    userMocks.user = { id: "user-1" }
     convexMocks.isAuthenticated = false
     convexMocks.isAuthLoading = false
     sessionMocks.chatId = "server-thread"

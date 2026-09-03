@@ -1,4 +1,3 @@
-export const LOCAL_CHAT_ID_PREFIX = "local-"
 export const OPTIMISTIC_ID_PREFIX = "optimistic-"
 export const OPTIMISTIC_EDIT_MESSAGE_ID_PREFIX = "optimistic-edit-"
 export const GUEST_USER_ID_PREFIX = "guest_"
@@ -6,17 +5,42 @@ export const GUEST_USER_ID_PREFIX = "guest_"
 export const GUEST_USER_STORAGE_KEY = "guestUserId"
 export const GUEST_CHAT_STORAGE_KEY = "guestChatId"
 
-export type LocalChatId = `${typeof LOCAL_CHAT_ID_PREFIX}${string}`
-export type OptimisticChatId = `${typeof OPTIMISTIC_ID_PREFIX}${string}`
 export type OptimisticMessageId = `${typeof OPTIMISTIC_ID_PREFIX}${string}`
 export type OptimisticEditMessageId =
   `${typeof OPTIMISTIC_EDIT_MESSAGE_ID_PREFIX}${string}`
 export type GuestUserId = `${typeof GUEST_USER_ID_PREFIX}${string}`
 
-export type ChatPersistenceMode =
-  "guestLocal" | "optimisticServer" | "durableServer" | "sharedReadOnly"
+/**
+ * Chat identity is client-minted (ADR-0033): one UUID chosen at Send is the
+ * route segment, the value every client-facing Convex function accepts, and
+ * the chat document's `publicId`. Guests and signed-in users share the
+ * scheme; whether a chat persists locally or durably is a property of the
+ * caller's auth state, never of the id's shape.
+ */
+const CHAT_PUBLIC_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-export type MessagePersistenceMode = "localOnly" | "optimistic" | "server"
+export function createChatPublicId(
+  randomId: () => string = () => crypto.randomUUID()
+): string {
+  return randomId()
+}
+
+export function isChatPublicId(id: unknown): id is string {
+  return typeof id === "string" && CHAT_PUBLIC_ID_PATTERN.test(id)
+}
+
+/**
+ * Typed creation conflict: the publicId already names a chat the caller must
+ * not converge onto (another user's, or a different first turn). The client
+ * re-mints exactly once.
+ */
+export const CHAT_PUBLIC_ID_CONFLICT_CODE = "chat_public_id_conflict" as const
+
+export type ChatPersistenceMode =
+  "guestLocal" | "durableServer" | "sharedReadOnly"
+
+export type MessagePersistenceMode = "localOnly" | "server"
 
 type ChatPersistenceOptions = {
   isSharedReadOnly?: boolean
@@ -27,16 +51,6 @@ function createPrefixedId<TPrefix extends string>(
   randomId: () => string = () => crypto.randomUUID()
 ): `${TPrefix}${string}` {
   return `${prefix}${randomId()}`
-}
-
-export function createLocalChatId(randomId?: () => string): LocalChatId {
-  return createPrefixedId(LOCAL_CHAT_ID_PREFIX, randomId)
-}
-
-export function createOptimisticChatId(
-  randomId?: () => string
-): OptimisticChatId {
-  return createPrefixedId(OPTIMISTIC_ID_PREFIX, randomId)
 }
 
 export function createOptimisticMessageId(
@@ -53,26 +67,6 @@ export function createOptimisticEditMessageId(
 
 export function createGuestUserId(randomId?: () => string): GuestUserId {
   return createPrefixedId(GUEST_USER_ID_PREFIX, randomId)
-}
-
-export function isLocalChatId(
-  id: string | null | undefined
-): id is LocalChatId {
-  return typeof id === "string" && id.startsWith(LOCAL_CHAT_ID_PREFIX)
-}
-
-export function isOptimisticChatId(
-  id: string | null | undefined
-): id is OptimisticChatId {
-  return typeof id === "string" && id.startsWith(OPTIMISTIC_ID_PREFIX)
-}
-
-export function isServerChatId(id: string | null | undefined): id is string {
-  return Boolean(id && !isLocalChatId(id) && !isOptimisticChatId(id))
-}
-
-export function isLocalMessageId(id: string | null | undefined): boolean {
-  return typeof id === "string" && id.startsWith(LOCAL_CHAT_ID_PREFIX)
 }
 
 export function isOptimisticMessageId(
@@ -95,27 +89,20 @@ export function isGuestUserId(
   return typeof id === "string" && id.startsWith(GUEST_USER_ID_PREFIX)
 }
 
+/** Guests persist chats in IndexedDB; signed-in users persist them in Convex. */
 export function getChatPersistenceMode(
-  chatId: string,
+  isAuthenticated: boolean,
   options: ChatPersistenceOptions = {}
 ): ChatPersistenceMode {
   if (options.isSharedReadOnly) return "sharedReadOnly"
-  if (isLocalChatId(chatId)) return "guestLocal"
-  if (isOptimisticChatId(chatId)) return "optimisticServer"
-  return "durableServer"
+  return isAuthenticated ? "durableServer" : "guestLocal"
 }
 
 export function getMessagePersistenceMode(
-  chatId: string,
+  isAuthenticated: boolean,
   options: ChatPersistenceOptions = {}
 ): MessagePersistenceMode {
-  const chatMode = getChatPersistenceMode(chatId, options)
-
-  if (chatMode === "guestLocal" || chatMode === "sharedReadOnly") {
-    return "localOnly"
-  }
-
-  if (chatMode === "optimisticServer") return "optimistic"
-
-  return "server"
+  return getChatPersistenceMode(isAuthenticated, options) === "durableServer"
+    ? "server"
+    : "localOnly"
 }

@@ -737,7 +737,6 @@ export function createChatTurnRuntime(args: {
     const durableRuntimeEnabled = isDurableConvexChat({
       isAuthenticated,
       convexToken,
-      chatId,
     })
 
     // Reject stale/provider-switched approval responses before durable prepare
@@ -876,7 +875,7 @@ export function createChatTurnRuntime(args: {
               ? await deps.fetchQuery(
                   api.files.getTrustedTextAttachmentsForChat,
                   {
-                    chatId: chatId as Id<"chats">,
+                    chatId,
                     references: textFileReferences,
                   },
                   { token: convexToken }
@@ -2137,7 +2136,7 @@ export function createChatTurnRuntime(args: {
           await deps.fetchMutation(
             api.chats.applyGeneratedTitle,
             {
-              chatId: chatId as Id<"chats">,
+              chatId,
               title: generated.title,
               generation: titleRequest.generation,
             },

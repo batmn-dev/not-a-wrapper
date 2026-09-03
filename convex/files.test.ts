@@ -159,6 +159,7 @@ describe("attachment reads", () => {
     const chat: Doc<"chats"> = {
       _id: chatId,
       _creationTime: 1,
+      publicId: "chat-1-public",
       userId,
       projectId: project._id,
       public: false,

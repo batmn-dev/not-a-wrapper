@@ -96,14 +96,16 @@ export type EnsureChatForTurnArgs = {
  */
 export type EnsuredTurnChat = {
   chatId: string
+  /** Called by the send runner once THIS dispatch is accepted, present while
+   * the chat still holds a committed, not-yet-dispatched first turn. The
+   * provider then retires that retry token — whether this turn claimed the
+   * row or appended after it — so a LATER identical payload becomes a genuine
+   * new message instead of a claim. A refused dispatch keeps the token. */
+  confirmDispatched?: () => void
   firstTurn?: {
     userMessageId: string
     clientMessageId: string
     attachments: UploadedAttachment[]
-    /** Called by the send runner once the dispatch is accepted. The provider
-     * then stops re-presenting the committed identity, so a LATER identical
-     * payload becomes a genuine new message instead of a claim. */
-    confirmDispatched?: () => void
   }
 }
 
@@ -128,6 +130,16 @@ export type ChatTurnAdapters = {
   store: ChatTurnStoreAdapters
   resolveUserId: () => Promise<string | null>
   checkLimitsAndNotify: (userId: string) => Promise<boolean>
+  /**
+   * First-turn identity seam (ADR-0033). `begin` mints the client chat id and
+   * commits its route synchronously — before the optimistic row paints and
+   * before any request leaves; `rollback` restores the origin route when a
+   * refusal lands before the atomic creation (which `ensureChatExists` owns).
+   */
+  firstTurn: {
+    begin: () => string
+    rollback: () => void
+  }
   ensureChatExists: (
     args: EnsureChatForTurnArgs
   ) => Promise<EnsuredTurnChat | null>
@@ -320,11 +332,22 @@ async function runSendTurn(
   let optimisticId: string | null = null
   let keepOptimistic = false
   let finalizeAcceptedTurn: (() => void) | null = null
+  // A first turn's chat exists (locally or durably) once ensureChatExists
+  // returns it; until then every refusal below rolls the committed identity
+  // back (ADR-0033). After it, nothing rolls back (ADR-0012).
+  let chatCommitted = false
 
   const removeOptimistic = () => {
     const id = optimisticId
     if (id === null) return
     adapters.setMessages((prev) => prev.filter((message) => message.id !== id))
+  }
+
+  // The route commits at Send, in the same batch as the optimistic row and
+  // the pending state below — before the rate-limit read, creation, or
+  // transport dispatch. Rejected payloads above never reach this point.
+  if (startedWithoutChat) {
+    adapters.firstTurn.begin()
   }
 
   try {
@@ -398,6 +421,7 @@ async function runSendTurn(
     if (!ensured) {
       return
     }
+    chatCommitted = true
     const currentChatId = ensured.chatId
 
     // Dispatch under the committed row's identity. On a fresh commit this is
@@ -445,7 +469,7 @@ async function runSendTurn(
       if (keepOptimistic) return
       keepOptimistic = true
       try {
-        ensured.firstTurn?.confirmDispatched?.()
+        ensured.confirmDispatched?.()
       } catch (error) {
         adapters.reportError(
           "Failed to consume accepted first-turn identity:",
@@ -545,6 +569,12 @@ async function runSendTurn(
   } finally {
     if (!keepOptimistic) {
       removeOptimistic()
+    }
+    // The one pre-commit rollback: identity reset (origin route restored),
+    // allocation cleared. The optimistic row is already gone and the Composer
+    // restores the draft because the turn reports not-accepted.
+    if (startedWithoutChat && !chatCommitted) {
+      adapters.firstTurn.rollback()
     }
     adapters.setIsSending(false)
     adapters.setIsSubmitting(false)

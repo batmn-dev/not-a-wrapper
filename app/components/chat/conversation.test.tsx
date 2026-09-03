@@ -858,6 +858,7 @@ describe("Conversation optimistic-to-durable timestamp lifecycle", () => {
             systemPrompt: "fixture system prompt",
           }),
           getCurrentChatId: () => "chat-durable",
+          firstTurn: { begin: () => "chat-durable", rollback: () => {} },
           getIsSending: () => isSending,
           setIsSending: (value) => {
             isSending = value

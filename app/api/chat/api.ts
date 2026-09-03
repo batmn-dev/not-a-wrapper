@@ -1,6 +1,5 @@
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { isServerChatId } from "@/lib/chat-store/identity"
 import {
   reserveAuthorizedPlatformUsage,
   resolveModelRoute,
@@ -284,12 +283,10 @@ export async function validateAndResolveChatCredential({
       : undefined)
 
   // Platform funding requires the durable accounting lifecycle (ADR-0021):
-  // authenticated turns against a local/optimistic chat id cannot reserve or
-  // settle, so they get no funding context and skip the platform tier.
+  // only an authenticated turn with a Convex token can reserve and settle, so
+  // guest turns get no funding context and skip the platform tier.
   const platformFundingIdentity =
-    isAuthenticated && workosUserId && token && isServerChatId(chatId)
-      ? { workosUserId }
-      : undefined
+    isAuthenticated && workosUserId && token ? { workosUserId } : undefined
 
   const effectiveEnableSearch =
     resolveLogicalModelSearchMode(model) === "always-on" ? true : enableSearch

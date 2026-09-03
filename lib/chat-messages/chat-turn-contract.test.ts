@@ -5,7 +5,7 @@ const validBody = {
   messages: [
     { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
   ],
-  chatId: "chat-1",
+  chatId: "3f2c6c1e-8b0d-4a3f-9a6e-1c2b3d4e5f60",
   model: "test-model",
   systemPrompt: "system",
 }
@@ -18,7 +18,7 @@ describe("parseChatTurnRequest", () => {
     )
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.request.chatId).toBe("chat-1")
+    expect(result.request.chatId).toBe("3f2c6c1e-8b0d-4a3f-9a6e-1c2b3d4e5f60")
     expect(result.request.model).toBe("test-model")
     expect(result.request.chatVersion).toBe(3)
   })

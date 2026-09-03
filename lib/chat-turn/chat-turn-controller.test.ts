@@ -94,6 +94,15 @@ function createHarness() {
       events.push("checkLimitsAndNotify")
       return true
     }),
+    firstTurn: {
+      begin: vi.fn(() => {
+        events.push("firstTurn.begin")
+        return "chat-1"
+      }),
+      rollback: vi.fn(() => {
+        events.push("firstTurn.rollback")
+      }),
+    },
     ensureChatExists: vi.fn(async () => {
       events.push("ensureChatExists")
       return { chatId: "chat-1" }
@@ -464,8 +473,8 @@ describe("chat turn controller", () => {
           userMessageId: "message_user_1",
           clientMessageId: "optimistic-message",
           attachments: [boundAttachment],
-          confirmDispatched,
         },
+        confirmDispatched,
       }
     })
 
@@ -551,8 +560,8 @@ describe("chat turn controller", () => {
         userMessageId: "message_user_1",
         clientMessageId: "optimistic-message",
         attachments: [],
-        confirmDispatched,
       },
+      confirmDispatched,
     }))
     adapters.sendMessage = vi.fn(() => {
       throw new Error("send failed")
@@ -576,8 +585,8 @@ describe("chat turn controller", () => {
         userMessageId: "message_user_1",
         clientMessageId: "optimistic-message",
         attachments: [],
-        confirmDispatched,
       },
+      confirmDispatched,
     }))
     adapters.sendMessageAndWaitForAcceptance = vi.fn(async () => {
       await Promise.resolve()
@@ -602,8 +611,8 @@ describe("chat turn controller", () => {
         userMessageId: "message_user_1",
         clientMessageId: "stopped-message",
         attachments: [],
-        confirmDispatched,
       },
+      confirmDispatched,
     }))
     adapters.sendMessageAndWaitForAcceptance = vi.fn(async () => {
       throw new DOMException("The operation was aborted", "AbortError")
@@ -679,8 +688,8 @@ describe("chat turn controller", () => {
         userMessageId: "message_user_1",
         clientMessageId: "stopped-before-dispatch",
         attachments: [],
-        confirmDispatched,
       },
+      confirmDispatched,
     })
     await turn
 
@@ -713,8 +722,8 @@ describe("chat turn controller", () => {
         // attempts, even though each runner allocated a fresh local id.
         clientMessageId: "committed-first-turn",
         attachments: [],
-        confirmDispatched,
       },
+      confirmDispatched,
     }))
     adapters.sendMessageAndWaitForAcceptance = vi
       .fn()
@@ -748,8 +757,8 @@ describe("chat turn controller", () => {
         userMessageId: "message_user_1",
         clientMessageId: "optimistic-message",
         attachments: [],
-        confirmDispatched,
       },
+      confirmDispatched,
     }))
     let acknowledge!: () => void
     adapters.sendMessageAndWaitForAcceptance = vi.fn(

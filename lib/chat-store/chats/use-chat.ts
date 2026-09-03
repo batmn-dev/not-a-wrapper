@@ -1,9 +1,9 @@
 "use client"
 
 import { api } from "@/convex/_generated/api"
-import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { Doc } from "@/convex/_generated/dataModel"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
-import { convexChatToChat, isConvexId, type Chats } from "../types"
+import { convexChatToChat, type Chats } from "../types"
 import { useChats } from "./provider"
 
 export type UseChatResult = {
@@ -16,14 +16,14 @@ export type UseChatResult = {
 /**
  * Resolve the args for the `chats.getById` fallback read. Returns `"skip"`
  * whenever the chat is already in the live sidebar window (served
- * synchronously), there is no chat id, or the id is a guest/local id with no
- * server record.
+ * synchronously) or there is no chat id. Guests never subscribe: the per-user
+ * query seam gates on Convex auth, so a local chat id costs no read.
  */
 function resolveGetByIdArgs(
   chatId: string | null | undefined,
   inWindow: Chats | undefined
-): { chatId: Id<"chats"> } | "skip" {
-  if (!chatId || inWindow || !isConvexId(chatId)) return "skip"
+): { chatId: string } | "skip" {
+  if (!chatId || inWindow) return "skip"
   return { chatId }
 }
 

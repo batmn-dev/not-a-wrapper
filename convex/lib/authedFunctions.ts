@@ -29,12 +29,12 @@ import {
 import { v } from "convex/values"
 import { mutation, query } from "../_generated/server"
 import {
-  getAuthorizedChatForRead,
   getCurrentUser,
   getOptionalAuth,
+  getReadableChatByPublicId,
   requireCurrentUser,
   requireIdentity,
-  requireOwnedChat,
+  requireOwnedChatByPublicId,
   requireOwnedGenerationRun,
   requireOwnedMcpServer,
   requireOwnedProject,
@@ -115,18 +115,23 @@ export const optionalAuthMutation = customMutation(
   customCtx(async (ctx) => await getOptionalAuth(ctx))
 )
 
+// Every client-facing `chatId` is the client-minted publicId (ADR-0033); the
+// builders below resolve it to the owner-verified document exactly once. The
+// owned builders hand their handlers the resolved internal id as `args.chatId`
+// so nothing behind the boundary ever holds an unresolved public id.
+
 /**
  * A read of a chat the caller may view: the owner, or anyone when the chat is
  * public (share links). Injects `ctx.chat: Doc<"chats"> | null` (null when not
- * authorized) and `ctx.user: Doc<"users"> | null`. Consumes a `chatId` arg and
- * passes it through.
+ * authorized) and `ctx.user: Doc<"users"> | null`. Consumes a `chatId` arg
+ * (publicId) and passes it through.
  */
 export const readableChatQuery = customQuery(
   query,
   customCtxAndArgs({
-    args: { chatId: v.id("chats") },
+    args: { chatId: v.string() },
     input: async (ctx, { chatId }) => {
-      const chat = await getAuthorizedChatForRead(ctx, chatId)
+      const chat = await getReadableChatByPublicId(ctx, chatId)
       const user = await getCurrentUser(ctx)
       return { ctx: { chat, user }, args: { chatId } }
     },
@@ -136,17 +141,17 @@ export const readableChatQuery = customQuery(
 /**
  * A read restricted to the chat's owner (no public exception) — throws
  * "Not authenticated" / "Chat not found" / "Not authorized". Injects
- * owner-verified `ctx.chat` and `ctx.user`. Consumes a `chatId` arg and passes
- * it through. Use `readableChatQuery` instead when public chats should be
- * viewable.
+ * owner-verified `ctx.chat` and `ctx.user`. Consumes a `chatId` arg (publicId)
+ * and passes it through. Use `readableChatQuery` instead when public chats
+ * should be viewable.
  */
 export const ownedChatQuery = customQuery(
   query,
   customCtxAndArgs({
-    args: { chatId: v.id("chats") },
+    args: { chatId: v.string() },
     input: async (ctx, { chatId }) => {
-      const { user, chat } = await requireOwnedChat(ctx, chatId)
-      return { ctx: { user, chat }, args: { chatId } }
+      const { user, chat } = await requireOwnedChatByPublicId(ctx, chatId)
+      return { ctx: { user, chat }, args: { chatId: chat._id } }
     },
   })
 )
@@ -154,15 +159,15 @@ export const ownedChatQuery = customQuery(
 /**
  * A mutation on a chat the caller owns. Injects owner-verified `ctx.chat` and
  * `ctx.user`; throws "Not authenticated" / "Chat not found" / "Not authorized".
- * Consumes a `chatId` arg and passes it through.
+ * Consumes a `chatId` arg (publicId) and passes it through.
  */
 export const ownedChatMutation = customMutation(
   mutation,
   customCtxAndArgs({
-    args: { chatId: v.id("chats") },
+    args: { chatId: v.string() },
     input: async (ctx, { chatId }) => {
-      const { user, chat } = await requireOwnedChat(ctx, chatId)
-      return { ctx: { user, chat }, args: { chatId } }
+      const { user, chat } = await requireOwnedChatByPublicId(ctx, chatId)
+      return { ctx: { user, chat }, args: { chatId: chat._id } }
     },
   })
 )

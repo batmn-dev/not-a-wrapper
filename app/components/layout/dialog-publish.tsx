@@ -19,7 +19,6 @@ import {
 import { Icon } from "@/components/ui/icon"
 import { useIntentPrefetch } from "@/components/ui/intent-prefetch"
 import { api } from "@/convex/_generated/api"
-import type { Id } from "@/convex/_generated/dataModel"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import { RiLoader4Line, RiShare2Line } from "@remixicon/react"
@@ -52,7 +51,7 @@ export function DialogPublish() {
     try {
       await sharePublishedChat({
         chatId,
-        publish: () => makePublicMutation({ chatId: chatId as Id<"chats"> }),
+        publish: () => makePublicMutation({ chatId }),
         openFallback: () => startTransition(() => setOpenDialog(true)),
       })
     } catch (error) {

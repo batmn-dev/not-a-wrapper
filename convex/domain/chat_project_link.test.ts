@@ -30,6 +30,7 @@ function chat(id: string, overrides: Partial<Doc<"chats">> = {}): Doc<"chats"> {
   return {
     _id: asId<"chats">(id),
     _creationTime: 1,
+    publicId: `${id}-public`,
     userId: asId<"users">("user-1"),
     projectId: asId<"projects">("project-1"),
     title: id,

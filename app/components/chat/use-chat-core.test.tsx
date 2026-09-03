@@ -307,6 +307,7 @@ describe("useChatCore prompt query handling", () => {
         user: authenticatedUser,
         checkLimitsAndNotify,
         ensureChatExists,
+        firstTurn: { begin: () => "chat-1", rollback: () => {} },
         bumpChat: chatCoreMocks.bumpChat,
       })
       React.useEffect(() => {
@@ -476,8 +477,8 @@ describe("useChatCore prompt query handling", () => {
           userMessageId: "message_user_1",
           clientMessageId: "stopped-before-dispatch",
           attachments: [],
-          confirmDispatched,
         },
+        confirmDispatched,
       })
       await expect(submitted).resolves.toBe(true)
     })
@@ -522,6 +523,7 @@ describe("useChatCore selected-path projection", () => {
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => ({ chatId: "chat_projection" })),
+      firstTurn: { begin: () => "chat-1", rollback: () => {} },
       bumpChat: chatCoreMocks.bumpChat,
     })
     return null
@@ -735,6 +737,7 @@ describe("useChatCore stream re-adoption on return", () => {
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => ({ chatId: "chat_a" })),
+      firstTurn: { begin: () => "chat-1", rollback: () => {} },
       bumpChat: chatCoreMocks.bumpChat,
     })
     return null
@@ -942,6 +945,7 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       user: authenticatedUser,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => ({ chatId: "chat_stopgap" })),
+      firstTurn: { begin: () => "chat-1", rollback: () => {} },
       bumpChat: chatCoreMocks.bumpChat,
     })
     React.useEffect(() => {
