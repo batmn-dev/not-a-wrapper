@@ -72,9 +72,9 @@ Options for the device memory:
   `lastUsedModel` from the first render; only the favorite fallback waits for
   `modelPrefsHydrated`, which now also waits for key status, so the Turn
   context's auto-submit gate never dispatches a `?autoSubmit=1` turn on a
-  provisional selection. The model selector likewise ignores a click on a
-  key-backed model until key status has answered instead of opening the Pro
-  dialog on a guess.
+  provisional selection. The model selector likewise holds a click on a
+  key-backed model until key status has answered (`whenKeyStatusReady`) and
+  then selects it or opens the Pro dialog, instead of deciding on a guess.
 
 ## Consequences
 

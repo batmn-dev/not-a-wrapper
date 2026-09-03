@@ -55,7 +55,7 @@ import {
   RiLockLine,
   RiSearchLine,
 } from "@remixicon/react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { ProModelDialog } from "./pro-dialog"
 
@@ -673,7 +673,11 @@ export function ModelSelector({
   variant = "default",
 }: ModelSelectorProps) {
   const isComposerVariant = variant === "composer"
-  const { models, keyStatusLoading } = useModel()
+  const { models, keyStatusLoading, whenKeyStatusReady } = useModel()
+  const latestModels = useRef(models)
+  useEffect(() => {
+    latestModels.current = models
+  }, [models])
   const { favoriteModels, updateFavoriteModels } = useFavoriteModels()
   const { isModelHidden } = useUserPreferences()
   const isMobile = useBreakpoint(768)
@@ -732,14 +736,25 @@ export function ModelSelector({
     }
   )
 
-  const handleSelect = (modelId: string, isLocked: boolean) => {
+  const handleSelect = (
+    modelId: string,
+    isLocked: boolean,
+    { settled = false }: { settled?: boolean } = {}
+  ) => {
     if (disabled) return
 
     if (isLocked) {
       // Key status is a client read that lands after first paint; until it
-      // does a key-backed model only looks locked, so the click waits for the
-      // real answer instead of opening the Pro dialog on a guess.
-      if (isUserAuthenticated && keyStatusLoading) return
+      // does a key-backed model only looks locked, so the click is held and
+      // re-run against the real answer instead of opening the Pro dialog on
+      // a guess.
+      if (isUserAuthenticated && keyStatusLoading && !settled) {
+        void whenKeyStatusReady().then(() => {
+          const model = latestModels.current.find((m) => m.id === modelId)
+          handleSelect(modelId, !model?.accessible, { settled: true })
+        })
+        return
+      }
       setSelectedProModel(modelId)
       if (!isUserAuthenticated) {
         setDrawerOpen(false)

@@ -49,8 +49,13 @@ const DEFAULT_KEY_STATUS: UserKeyStatus = {
 
 const LAST_USED_MODEL_STORAGE_KEY = "lastUsedModel"
 const LAST_USED_MODEL_CHANGE_EVENT = "last-used-model-change"
-/** In-tab fallback so a selection survives when storage is unavailable. */
+/**
+ * In-tab fallback for when storage is unavailable (a read threw, or a write
+ * failed and left storage stale); a cleared or cross-tab-removed key is
+ * honored, not resurrected.
+ */
 let memoryLastUsedModel: string | null = null
+let storageUnavailable = false
 
 type ModelContextType = {
   /** One entry per visible logical model (ADR-0020). */
@@ -69,6 +74,8 @@ type ModelContextType = {
    * only look locked, so surfaces that would act on that must wait.
    */
   keyStatusLoading: boolean
+  /** Resolves once key status has answered (immediately if it already has). */
+  whenKeyStatusReady: () => Promise<void>
   setLastUsedModel: (model: string) => void
 }
 
@@ -96,11 +103,10 @@ function readStoredLastUsedModel(): string | null {
   try {
     cached = window.localStorage.getItem(LAST_USED_MODEL_STORAGE_KEY)
   } catch {
-    // Storage unavailable: the in-tab memory below still holds the selection.
+    storageUnavailable = true
   }
-  const resolved = cached
-    ? resolveModelSelection(cached).modelId
-    : memoryLastUsedModel
+  if (storageUnavailable) cached = memoryLastUsedModel
+  const resolved = cached ? resolveModelSelection(cached).modelId : null
   return resolved && isLogicalModelId(resolved) ? resolved : null
 }
 
@@ -158,6 +164,29 @@ export function ModelProvider({
     api.userKeys.getProviderStatus
   )
 
+  // Key-status arrival as an event, for callers that hold a decision (a
+  // click on a model that only looks locked) until the answer is in.
+  const keyStatusGate = useRef<{
+    loading: boolean
+    waiters: Array<() => void>
+  }>({ loading: true, waiters: [] })
+  useEffect(() => {
+    keyStatusGate.current.loading = keyStatusLoading
+    if (keyStatusLoading) return
+    for (const resolve of keyStatusGate.current.waiters.splice(0)) resolve()
+  }, [keyStatusLoading])
+  const whenKeyStatusReady = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        if (keyStatusGate.current.loading) {
+          keyStatusGate.current.waiters.push(resolve)
+        } else {
+          resolve()
+        }
+      }),
+    []
+  )
+
   const favoriteModels = useMemo(
     () => normalizeFavoriteModels(user?.favorite_models),
     [user?.favorite_models]
@@ -177,7 +206,9 @@ export function ModelProvider({
     memoryLastUsedModel = resolvedModel
     try {
       window.localStorage.setItem(LAST_USED_MODEL_STORAGE_KEY, resolvedModel)
-    } catch {}
+    } catch {
+      storageUnavailable = true
+    }
     window.dispatchEvent(new Event(LAST_USED_MODEL_CHANGE_EVENT))
     writeComposerShellHintCookie(toShellHint(resolvedModel))
   }, [])
@@ -240,6 +271,7 @@ export function ModelProvider({
         shellHint,
         modelPrefsHydrated,
         keyStatusLoading,
+        whenKeyStatusReady,
         setLastUsedModel,
       }}
     >

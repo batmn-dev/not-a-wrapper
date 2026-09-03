@@ -17,7 +17,7 @@ import {
   readHeap,
   readMarks,
   tryWaitForMark,
-  waitForMark,
+  waitForAnyMark,
   type CollectedMark,
 } from "./marks"
 import {
@@ -113,11 +113,18 @@ async function createChat(page: Page, baseUrl: string) {
   await page.keyboard.type(CREATE_DIRECTIVE)
   await page.locator('[data-testid="send-button"]').click()
   await page.waitForURL(/\/c\//, { timeout: 30_000 })
-  await waitForMark(page, "stream_terminal", 60_000)
-  // Settlement lands after the terminal; wait for it like the durable suite
-  // does (bounded, since the receipt mark is not guaranteed on every path)
-  // so the fixture's durable write is complete before it is switched to.
-  await tryWaitForMark(page, "durable_settlement_receipt", 15_000)
+  // A turn that lost live-stream adoption emits only the receipt; one that
+  // kept it emits the terminal first and settles after, so wait for that
+  // settlement like the durable suite does (bounded: the receipt mark is not
+  // guaranteed on every path) before the fixture is switched to.
+  const first = await waitForAnyMark(
+    page,
+    ["stream_terminal", "durable_settlement_receipt"],
+    60_000
+  )
+  if (first === "stream_terminal") {
+    await tryWaitForMark(page, "durable_settlement_receipt", 15_000)
+  }
   await page.waitForTimeout(1_000)
 }
 
@@ -329,9 +336,10 @@ export async function runThreadSwitch(
       switchIndex <= options.switchCount;
       switchIndex++
     ) {
-      // Cycle with a stride so consecutive switches never revisit the chat
-      // just left (a same-row click is not a navigation).
-      const href = hrefs[switchIndex % hrefs.length]
+      // Cycle from the first row: the warm-up left the LAST one open, so no
+      // switch (the first included) clicks the row already selected, which
+      // is not a navigation.
+      const href = hrefs[(switchIndex - 1) % hrefs.length]
       const sample = await switchTo(page, href, 0, querySet)
       passes.visited.samples.push(sample)
       if (!sample.ok) failures.push(`visited #${switchIndex}: ${sample.detail}`)

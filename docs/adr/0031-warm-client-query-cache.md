@@ -36,8 +36,8 @@ not deliver anything, so that guarantee is unaffected.
   more likely paying re-execution for writes nobody is watching (ADR-0004's
   cost lens) than saving a switch. Idle cap 32 entries, global to every
   cached per-user query: the session-long reads (user document, key status,
-  preferences, sidebar window) never go idle, so in practice that is ~16
-  parked chats × the pair. At the cap a departing query is dropped instead
+  preferences) never go idle, so in practice that is ~16 parked chats × the
+  pair. At the cap a departing query is dropped instead
   of parked and a warm is skipped, so the hit guarantee below holds for
   chats left within the cap and the TTL.
 - Warm ahead of the route. `useWarmPerUserQuery` opens a query as a
@@ -55,8 +55,10 @@ not deliver anything, so that guarantee is unaffected.
 
 - A chat revisited within the idle cap and TTL renders its delivered path in
   the route commit itself (harness `SUITE=thread-switch`,
-  `nav_to_thread_painted`), and the switch opens zero new Convex
-  subscriptions. Unvisited chats subscribe at click instead of at commit.
+  `nav_to_thread_painted`), and the switch opens no new server subscription:
+  the consumer's core hook joins the parked watch, so the socket carries zero
+  `ModifyQuerySet` Adds. Unvisited chats subscribe at click instead of at
+  commit.
 - Idle subscriptions cost: every write to a parked chat re-executes its path
   query once per parked tab, for up to the TTL. Bounded by the cap and the
   TTL; revisit if the Convex functions dashboard shows the parked window
