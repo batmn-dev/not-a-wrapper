@@ -139,12 +139,13 @@ type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>
  */
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 6000)
 
-/** The selector search that surfaces `SHELL_MODEL_ID`: its display name. */
-function shellModelSearch(): string {
+/** `SHELL_MODEL_ID` resolved through the catalog (aliases map to the canonical id). */
+function shellModel() {
   const model = getModelInfo(SHELL_MODEL_ID)
-  if (!model)
+  if (!model) {
     throw new Error(`SHELL_MODEL_ID ${SHELL_MODEL_ID} is not in the catalog`)
-  return getModelDisplayName(model)
+  }
+  return model
 }
 
 /** Save the fixture selection through the composer's own controls. */
@@ -158,11 +159,13 @@ async function saveFixtureSelection(
   try {
     await page.goto(`${baseUrl}/`, { waitUntil: "load" })
     await page.waitForTimeout(SETTLE_MS)
+    const model = shellModel()
     await page.locator(MODEL_TRIGGER).click()
-    await page.getByPlaceholder("Search models...").fill(shellModelSearch())
     await page
-      .locator(`[data-model-selector-row="model:${SHELL_MODEL_ID}"]`)
-      .click()
+      .getByPlaceholder("Search models...")
+      .fill(getModelDisplayName(model))
+    // Rows carry the canonical id, so an alias in SHELL_MODEL_ID still matches.
+    await page.locator(`[data-model-selector-row="model:${model.id}"]`).click()
     await page.locator(EFFORT_TRIGGER).click()
     await page
       .getByRole("menuitemradio", { name: SHELL_EFFORT_LABEL, exact: true })
