@@ -196,7 +196,7 @@ CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 def sanitized(value: object) -> str:
-    return " ".join(CONTROL_CHARACTERS.sub("", str(value or "")).split())
+    return " ".join(CONTROL_CHARACTERS.sub(" ", str(value or "")).split())
 
 
 def truncated(value: object, limit: int) -> str:
