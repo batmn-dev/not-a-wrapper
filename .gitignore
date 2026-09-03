@@ -82,6 +82,10 @@ bun-debug.log*
 .gstack/
 .playwright-cli/
 
+# Saved agent auth sessions (Playwright storageState) — contain a session
+# cookie; provisioned locally by `bun run agent:login`, never committed.
+playwright/.auth/
+
 # The legacy measurements folder is retired. Raw browser traces and source
 # captures belong in ignored benchmark results or the sibling reference-ui
 # repository, not in docs or repository history.

@@ -20,10 +20,14 @@
  *   --name <name>          Required. Artifact base name (extension added if missing).
  *   --viewport <WxH>       Default 1280x800.
  *   --wait-for <selector>  Wait for this selector before capturing.
- *   --wait-ms <n>          Extra settle time. Default 1500 (screenshot).
+ *   --wait-ms <n>          Extra settle time after load. Default 1500.
  *   --duration-ms <n>      Recording length for video. Default 5000.
  *   --full-page            Screenshot the full scrollable page.
  *   --out-dir <dir>        Default /opt/cursor/artifacts.
+ *   --auth                 Log in via /auth/login before capturing (needs
+ *                          PERF_AUTH_PASSWORD; see scripts/lib/agent-auth.ts).
+ *   --storage-state <file> Load a saved session instead of logging in
+ *                          (e.g. the file written by `bun run agent:login`).
  *
  * Capturing the real app needs it running (bun run dev) with the usual
  * secrets; any reachable URL works for pure UI capture.
@@ -32,10 +36,13 @@ import { mkdir, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { parseArgs } from "node:util"
-import { chromium, type Browser } from "playwright"
+import { ensurePerfAuthUser } from "@/benchmarks/chat-performance/browser/ensure-auth-user"
+import type { Page } from "playwright"
+import { signInWithPassword } from "./lib/agent-auth"
+import { launchChrome } from "./lib/launch-chrome"
 
 const DEFAULT_OUT_DIR = "/opt/cursor/artifacts"
-const SYSTEM_CHROME = "/usr/local/bin/google-chrome"
+const DEFAULT_WAIT_MS = 1500
 
 type Viewport = { width: number; height: number }
 
@@ -58,36 +65,33 @@ function withExtension(name: string, extension: `.${string}`): string {
   return base.endsWith(extension) ? base : `${base}${extension}`
 }
 
-/**
- * Prefers the installed Chrome (present in the Cloud Agent image, and the
- * channel the perf harness standardizes on); falls back to its explicit path.
- */
-async function launchChrome(): Promise<Browser> {
-  try {
-    return await chromium.launch({ channel: "chrome", args: ["--no-sandbox"] })
-  } catch {
-    return await chromium.launch({
-      executablePath: SYSTEM_CHROME,
-      args: ["--no-sandbox"],
-    })
-  }
-}
-
 type CommonOptions = {
   url: string
   name: string
   viewport: Viewport
   waitFor?: string
   outDir: string
+  auth: boolean
+  storageState?: string
 }
 
 async function settle(
-  page: import("playwright").Page,
+  page: Page,
   waitFor: string | undefined,
   waitMs: number
 ): Promise<void> {
   if (waitFor) await page.waitForSelector(waitFor, { timeout: 30_000 })
   if (waitMs > 0) await page.waitForTimeout(waitMs)
+}
+
+/** Interactive login when --auth is set and no saved session is loaded. */
+async function maybeSignIn(page: Page, options: CommonOptions): Promise<void> {
+  if (options.auth && !options.storageState) {
+    // Same as `agent:login`: create/repair the pre-verified user first so
+    // --auth works on a fresh environment without a prior login run.
+    await ensurePerfAuthUser()
+    await signInWithPassword(page, new URL(options.url).origin)
+  }
 }
 
 async function captureScreenshot(
@@ -96,8 +100,18 @@ async function captureScreenshot(
   const target = path.join(options.outDir, withExtension(options.name, ".png"))
   const browser = await launchChrome()
   try {
-    const page = await browser.newPage({ viewport: options.viewport })
-    await page.goto(options.url, { waitUntil: "networkidle", timeout: 45_000 })
+    const context = await browser.newContext({
+      viewport: options.viewport,
+      ...(options.storageState ? { storageState: options.storageState } : {}),
+    })
+    const page = await context.newPage()
+    await maybeSignIn(page, options)
+    // domcontentloaded, not networkidle: the app holds a live Convex
+    // WebSocket, so the network never goes idle. settle() gates readiness.
+    await page.goto(options.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    })
     await settle(page, options.waitFor, options.waitMs)
     await page.screenshot({ path: target, fullPage: options.fullPage })
   } finally {
@@ -107,7 +121,7 @@ async function captureScreenshot(
 }
 
 async function captureVideo(
-  options: CommonOptions & { durationMs: number }
+  options: CommonOptions & { durationMs: number; waitMs: number }
 ): Promise<string> {
   const target = path.join(options.outDir, withExtension(options.name, ".webm"))
   const browser = await launchChrome()
@@ -119,10 +133,16 @@ async function captureVideo(
     const context = await browser.newContext({
       viewport: options.viewport,
       recordVideo: { dir: scratch, size: options.viewport },
+      ...(options.storageState ? { storageState: options.storageState } : {}),
     })
     const page = await context.newPage()
-    await page.goto(options.url, { waitUntil: "networkidle", timeout: 45_000 })
-    await settle(page, options.waitFor, 0)
+    await maybeSignIn(page, options)
+    // domcontentloaded, not networkidle (live Convex WebSocket never idles).
+    await page.goto(options.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    })
+    await settle(page, options.waitFor, options.waitMs)
     await page.waitForTimeout(options.durationMs)
     const video = page.video()
     await context.close()
@@ -148,6 +168,8 @@ async function main(): Promise<void> {
       "duration-ms": { type: "string" },
       "full-page": { type: "boolean", default: false },
       "out-dir": { type: "string", default: DEFAULT_OUT_DIR },
+      auth: { type: "boolean", default: false },
+      "storage-state": { type: "string" },
     },
   })
 
@@ -167,6 +189,8 @@ async function main(): Promise<void> {
     viewport: parseViewport(values.viewport),
     waitFor: values["wait-for"],
     outDir,
+    auth: values.auth ?? false,
+    storageState: values["storage-state"],
   }
 
   const written =
@@ -174,16 +198,20 @@ async function main(): Promise<void> {
       ? await captureScreenshot({
           ...common,
           fullPage: values["full-page"] ?? false,
-          waitMs: values["wait-ms"] ? Number(values["wait-ms"]) : 1500,
+          waitMs: values["wait-ms"] ? Number(values["wait-ms"]) : DEFAULT_WAIT_MS,
         })
       : await captureVideo({
           ...common,
           durationMs: values["duration-ms"]
             ? Number(values["duration-ms"])
             : 5000,
+          waitMs: values["wait-ms"] ? Number(values["wait-ms"]) : DEFAULT_WAIT_MS,
         })
 
   console.log(`qa-capture: wrote ${written}`)
 }
 
-void main()
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
