@@ -53,4 +53,10 @@ describe("formatSourceDisplayUrl", () => {
       "example.com/post#/"
     )
   })
+
+  it("keeps an explicit non-default port", () => {
+    expect(formatSourceDisplayUrl("https://www.example.com:8443/article")).toBe(
+      "example.com:8443/article"
+    )
+  })
 })
