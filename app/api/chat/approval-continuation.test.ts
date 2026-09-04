@@ -281,5 +281,12 @@ describe("approval continuation parse", () => {
 
     expect(() => split(malformed, "openai", openaiSearch)).toThrowError(invalid)
     expect(() => extractApprovalResponses([malformed])).toThrowError(invalid)
+
+    // An empty id is as unusable as a missing one.
+    const emptyId = {
+      ...wellFormed,
+      parts: [{ ...wellFormed.parts[0], approval: { id: "", approved: true } }],
+    } as UIMessage
+    expect(() => extractApprovalResponses([emptyId])).toThrowError(invalid)
   })
 })

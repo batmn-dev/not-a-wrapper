@@ -389,11 +389,16 @@ function getSlowRequestThresholdMs(): number {
 
 function getStalledContinuationThresholdMs(): number {
   const fallback = 30000
+  // setTimeout overflows past 2^31-1 ms and fires immediately; clamp so a
+  // misconfigured threshold cannot turn into a stall alert on every tool step.
+  const maxTimeoutMs = 2_147_483_647
   const parsed = Number.parseInt(
     process.env.SENTRY_CHAT_STALLED_CONTINUATION_MS ?? "",
     10
   )
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(parsed, maxTimeoutMs)
+    : fallback
 }
 
 function isReplayShapeError(message: string): boolean {
@@ -1589,12 +1594,14 @@ export function createChatTurnRuntime(args: {
           : {}),
 
         onChunk: ({ chunk }) => {
+          // Release time, read before the durable snapshot bookkeeping below.
+          const releasedAtMs = Date.now()
           liveness.chunkReleased()
           lifecycle.stream.onChunk(chunk)
           // Liveness only — this callback sits downstream of the smoothing
           // transform, so any clock here would measure our own pacing.
           if (firstTextDeltaLatencyMs === null && chunk.type === "text-delta") {
-            firstTextDeltaLatencyMs = Date.now() - streamStartMs
+            firstTextDeltaLatencyMs = releasedAtMs - streamStartMs
             perf.record("provider_first_text_delta", firstTextDeltaLatencyMs)
           }
           if (chunk.type === "reasoning-start") {

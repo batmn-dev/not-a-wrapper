@@ -2089,6 +2089,8 @@ describe("createChatTurnRuntime — abort telemetry", () => {
 
   it("captures chat_stalled_continuation once when no chunk follows a tool-calls step", async () => {
     vi.useFakeTimers()
+    // Pin the threshold so an environment override cannot skew the advances.
+    vi.stubEnv("SENTRY_CHAT_STALLED_CONTINUATION_MS", "30000")
     try {
       // A guest turn: no durable heartbeat rides the fake clock, so the only
       // thing that can end the stream here is the callbacks below.
@@ -2146,6 +2148,7 @@ describe("createChatTurnRuntime — abort telemetry", () => {
         },
       })
     } finally {
+      vi.unstubAllEnvs()
       vi.useRealTimers()
     }
   })

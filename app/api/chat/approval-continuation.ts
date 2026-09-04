@@ -53,6 +53,7 @@ function isApprovalRespondedPart(
   return (
     hasApprovalRespondedState(part) &&
     typeof part.approval?.id === "string" &&
+    part.approval.id.length > 0 &&
     typeof part.approval.approved === "boolean"
   )
 }
