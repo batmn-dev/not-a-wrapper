@@ -151,7 +151,6 @@ export function createStreamLivenessTracker(options: {
       observedToolCalls += toolCallCount
       lastProgressAtMs = now()
       lastStepFinishReason = finishReason ?? null
-      if (toolCallCount === 0) return
       if (finishReason === "tool-calls") {
         lastToolStepNumber = stepCounter
         lastToolNames = [...toolNames]
