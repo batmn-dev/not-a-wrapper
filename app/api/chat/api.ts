@@ -17,7 +17,7 @@ import { MODEL_PROVIDER_IDENTITY, type Provider } from "@/lib/provider-identity"
 import { type ProviderCredentialResolution } from "@/lib/user-keys"
 import type { UIMessage } from "ai"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
-import { extractApprovalResponses } from "./durable-turn-runtime"
+import { extractApprovalResponses } from "./approval-continuation"
 import { PublicChatHttpError } from "./public-http-error"
 
 const USAGE_ERROR_CODES = {

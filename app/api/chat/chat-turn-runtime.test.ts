@@ -2087,6 +2087,69 @@ describe("createChatTurnRuntime — abort telemetry", () => {
     })
   })
 
+  it("captures chat_stalled_continuation once when no chunk follows a tool-calls step", async () => {
+    vi.useFakeTimers()
+    try {
+      // A guest turn: no durable heartbeat rides the fake clock, so the only
+      // thing that can end the stream here is the callbacks below.
+      const harness = makeStreamHarness()
+      const runtime = createChatTurnRuntime({
+        input: makeInput({
+          isAuthenticated: false,
+          convexToken: undefined,
+          credential: {
+            provider: "anthropic",
+            apiKey: "platform-key",
+            source: "platform",
+          },
+        }),
+        deps: makeDeps(harness, makeFetchMutation()),
+      })
+      await runtime.prepare()
+      await runtime.toResponse(notAbortedSignal())
+
+      await harness.captured.streamOpts.onStepEnd({
+        toolCalls: [{ toolName: "web_search" }],
+        toolResults: [],
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          inputTokenDetails: {},
+          outputTokenDetails: {},
+        },
+        finishReason: "tool-calls",
+        performance: { responseTimeMs: 0, toolExecutionMs: {} },
+      })
+      // The provider never resumes after the tool step: the stall fires once
+      // at the threshold, then completion must not fire it again.
+      await vi.advanceTimersByTimeAsync(30_000)
+      await harness.captured.streamOpts.onEnd({
+        text: "",
+        usage: undefined,
+        steps: [],
+        finishReason: "stop",
+      })
+      await vi.advanceTimersByTimeAsync(30_000)
+
+      const stalls = vi
+        .mocked(Sentry.captureMessage)
+        .mock.calls.filter((call) => call[0] === "chat_stalled_continuation")
+      expect(stalls).toHaveLength(1)
+      expect(stalls[0]?.[1]).toMatchObject({
+        tags: { chat_stream_phase: "post_tool_continue" },
+        extra: {
+          stepCounter: 1,
+          observedToolCalls: 1,
+          lastToolNames: ["web_search"],
+          postToolContinuationDelayMs: 30_000,
+        },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("rejects toResponse() before prepare() — phase guard", async () => {
     const runtime = createChatTurnRuntime({
       input: makeInput(),

@@ -1,11 +1,10 @@
 import type { TextStreamPart, ToolSet, UIMessage } from "ai"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Id } from "@/convex/_generated/dataModel"
+import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
 import {
   createDurableSnapshotTracker,
   createRuntimeApprovalPersistenceTransform,
-  extractApprovalResponses,
-  getFinalAssistantText,
   getLatestUserMessage,
   isDurableConvexChat,
   toDurableUiMessage,
@@ -50,39 +49,6 @@ describe("durable turn runtime internals", () => {
     ] as UIMessage[]
 
     expect(getLatestUserMessage(messages)?.id).toBe("u2")
-  })
-
-  it("preserves approval responses for the next server turn", () => {
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-send_email",
-            toolCallId: "call-1",
-            state: "approval-responded",
-            input: { to: "person@example.com" },
-            approval: {
-              id: "approval-1",
-              approved: false,
-              reason: "Denied by user",
-            },
-          },
-        ],
-      },
-    ] as unknown as UIMessage[]
-
-    expect(extractApprovalResponses(messages)).toEqual([
-      {
-        messageId: "assistant-1",
-        approvalId: "approval-1",
-        toolCallId: "call-1",
-        toolName: "send_email",
-        approved: false,
-        reason: "Denied by user",
-      },
-    ])
   })
 
   it("persists tool approval requests before streaming approval chunks", async () => {
@@ -189,7 +155,7 @@ describe("durable turn runtime internals", () => {
     expect(message.id).toBe("msg_1")
     expect(message.createdAt).toEqual(new Date(100))
     expect(message.status).toBe("aborted")
-    expect(getFinalAssistantText(message)).toBe("partial output")
+    expect(extractTextFromMessageParts(message.parts)).toBe("partial output")
     expect(message.metadata?.durableStatus).toBe("aborted")
   })
 

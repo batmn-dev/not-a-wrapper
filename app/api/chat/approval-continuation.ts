@@ -1,11 +1,33 @@
-import { isToolUIPart, type ToolSet, type UIMessage } from "ai"
+import {
+  getToolName,
+  isToolUIPart,
+  type DynamicToolUIPart,
+  type ToolSet,
+  type ToolUIPart,
+  type UIMessage,
+} from "ai"
 import { PublicChatHttpError } from "./public-http-error"
 
-type ApprovalRespondedPart = UIMessage["parts"][number] & {
-  type: string
-  toolName?: string
-  providerExecuted?: boolean
+/**
+ * Approval continuation: the one module that decides whether a request's
+ * trailing assistant message carries a live approval response and what the
+ * responses are. The Chat turn runtime gates and splits history through it;
+ * the Durable turn runtime persists responses through it. One predicate, so
+ * a part is a continuation for both runtimes or for neither.
+ */
+
+export type ApprovalRespondedPart = (ToolUIPart | DynamicToolUIPart) & {
   state: "approval-responded"
+  approval: { id: string; approved: boolean; reason?: string }
+}
+
+export type ApprovalResponseForPersistence = {
+  messageId: string
+  approvalId: string
+  toolCallId: string
+  toolName: string
+  approved: boolean
+  reason?: string
 }
 
 export type ApprovalContinuationSplit = {
@@ -17,21 +39,68 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
 }
 
-function isApprovalRespondedPart(
+function hasApprovalRespondedState(
   part: UIMessage["parts"][number]
-): part is ApprovalRespondedPart {
+): part is (ToolUIPart | DynamicToolUIPart) & { state: "approval-responded" } {
+  // MCP approvals stream as dynamic-tool parts, so this must accept both tool
+  // part shapes.
   return isToolUIPart(part) && part.state === "approval-responded"
 }
 
-function getToolName(part: ApprovalRespondedPart): string | undefined {
-  if (part.type === "dynamic-tool") {
-    return typeof part.toolName === "string" && part.toolName.length > 0
-      ? part.toolName
-      : undefined
+function isApprovalRespondedPart(
+  part: UIMessage["parts"][number]
+): part is ApprovalRespondedPart {
+  return (
+    hasApprovalRespondedState(part) &&
+    typeof part.approval?.id === "string" &&
+    typeof part.approval.approved === "boolean"
+  )
+}
+
+function malformedApproval(): PublicChatHttpError {
+  return new PublicChatHttpError({
+    statusCode: 400,
+    code: "INVALID_REQUEST",
+    message: "An approval response is missing its approval id.",
+  })
+}
+
+/**
+ * The trailing assistant message's approval responses, or undefined when the
+ * request is not a continuation. Only the trailing assistant can continue:
+ * historical responses are persisted evidence and must not reclassify later
+ * sends. A responded part without a well-formed approval is untrusted wire
+ * input and is rejected here, before either runtime can read it differently.
+ */
+export function readApprovalContinuation(
+  messages: readonly UIMessage[]
+): { message: UIMessage; parts: ApprovalRespondedPart[] } | undefined {
+  const trailingMessage = messages[messages.length - 1]
+  if (!trailingMessage || trailingMessage.role !== "assistant") {
+    return undefined
   }
-  return part.type.startsWith("tool-")
-    ? part.type.slice("tool-".length)
-    : undefined
+  const parts: ApprovalRespondedPart[] = []
+  for (const part of trailingMessage.parts) {
+    if (!hasApprovalRespondedState(part)) continue
+    if (!isApprovalRespondedPart(part)) throw malformedApproval()
+    parts.push(part)
+  }
+  return parts.length > 0 ? { message: trailingMessage, parts } : undefined
+}
+
+export function extractApprovalResponses(
+  messages: readonly UIMessage[]
+): ApprovalResponseForPersistence[] {
+  const continuation = readApprovalContinuation(messages)
+  if (!continuation) return []
+  return continuation.parts.map((part) => ({
+    messageId: continuation.message.id,
+    approvalId: part.approval.id,
+    toolCallId: part.toolCallId,
+    toolName: String(getToolName(part)),
+    approved: part.approval.approved,
+    ...(part.approval.reason ? { reason: part.approval.reason } : {}),
+  }))
 }
 
 function getOriginProvider(message: UIMessage): string | undefined {
@@ -108,7 +177,10 @@ function assertContinuationPart(options: {
 /**
  * Separate and validate the live approval response at the end of a request.
  * The tail is exempt from historical projection only after provider, registry,
- * execution-kind, and provider-tool identity continuity are proven.
+ * execution-kind, and provider-tool identity continuity are proven. The Chat
+ * turn runtime runs this at two boundaries on purpose: on the wire messages
+ * before durable-prepare mutates approval state, and again on the canonical
+ * history durable-prepare returns.
  */
 export function splitAndValidateApprovalContinuation(options: {
   messages: readonly UIMessage[]
@@ -116,18 +188,13 @@ export function splitAndValidateApprovalContinuation(options: {
   tools: ToolSet
 }): ApprovalContinuationSplit {
   const { messages, targetProvider, tools } = options
-  const trailingMessage = messages[messages.length - 1]
-  if (!trailingMessage || trailingMessage.role !== "assistant") {
+  const continuation = readApprovalContinuation(messages)
+  if (!continuation) {
     return { history: [...messages], tail: [] }
   }
 
-  const approvalParts = trailingMessage.parts.filter(isApprovalRespondedPart)
-  if (approvalParts.length === 0) {
-    return { history: [...messages], tail: [] }
-  }
-
-  const originProvider = getOriginProvider(trailingMessage)
-  for (const part of approvalParts) {
+  const originProvider = getOriginProvider(continuation.message)
+  for (const part of continuation.parts) {
     assertContinuationPart({
       part,
       originProvider,
@@ -136,16 +203,17 @@ export function splitAndValidateApprovalContinuation(options: {
     })
   }
 
-  const historicalParts = trailingMessage.parts.filter(
-    (part) => !isApprovalRespondedPart(part)
+  const approvalParts = new Set<UIMessage["parts"][number]>(continuation.parts)
+  const historicalParts = continuation.message.parts.filter(
+    (part) => !approvalParts.has(part)
   )
   const history = messages.slice(0, -1)
   if (historicalParts.length > 0) {
-    history.push({ ...trailingMessage, parts: historicalParts })
+    history.push({ ...continuation.message, parts: historicalParts })
   }
 
   return {
     history,
-    tail: [{ ...trailingMessage, parts: approvalParts }],
+    tail: [{ ...continuation.message, parts: continuation.parts }],
   }
 }

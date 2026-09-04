@@ -2,7 +2,10 @@ import { google } from "@ai-sdk/google"
 import { openai } from "@ai-sdk/openai"
 import { dynamicTool, jsonSchema, tool, type ToolSet, type UIMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { splitAndValidateApprovalContinuation } from "./approval-continuation"
+import {
+  extractApprovalResponses,
+  splitAndValidateApprovalContinuation,
+} from "./approval-continuation"
 
 const openaiSearch = {
   web_search: openai.tools.webSearch({}),
@@ -221,5 +224,62 @@ describe("splitAndValidateApprovalContinuation", () => {
     ).toThrowError(
       expect.objectContaining({ code: "APPROVAL_TOOL_UNAVAILABLE" })
     )
+  })
+})
+
+describe("approval continuation parse", () => {
+  it("extracts the trailing assistant's responses for persistence", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-send_email",
+            toolCallId: "call-1",
+            state: "approval-responded",
+            input: { to: "person@example.com" },
+            approval: {
+              id: "approval-1",
+              approved: false,
+              reason: "Denied by user",
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[]
+
+    expect(extractApprovalResponses(messages)).toEqual([
+      {
+        messageId: "assistant-1",
+        approvalId: "approval-1",
+        toolCallId: "call-1",
+        toolName: "send_email",
+        approved: false,
+        reason: "Denied by user",
+      },
+    ])
+    // Historical responses are evidence, never a continuation.
+    expect(
+      extractApprovalResponses([
+        ...messages,
+        { id: "u2", role: "user", parts: [{ type: "text", text: "next" }] },
+      ])
+    ).toEqual([])
+  })
+
+  it("rejects a responded part without a well-formed approval as a 400, for split and extraction alike", () => {
+    const wellFormed = tail()
+    const malformed = {
+      ...wellFormed,
+      parts: [{ ...wellFormed.parts[0], approval: { approved: true } }],
+    } as UIMessage
+    const invalid = expect.objectContaining({
+      statusCode: 400,
+      code: "INVALID_REQUEST",
+    })
+
+    expect(() => split(malformed, "openai", openaiSearch)).toThrowError(invalid)
+    expect(() => extractApprovalResponses([malformed])).toThrowError(invalid)
   })
 })
