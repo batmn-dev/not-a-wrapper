@@ -7,8 +7,10 @@ import {
 import {
   deriveAssistantTurnPhase,
   deriveAssistantTurnView,
+  hasRenderableEvidence,
   IDLE_REASONING_VIEW,
   type AssistantTurnRenderStatus,
+  type AssistantTurnView,
 } from "@/lib/chat-messages/assistant-turn"
 import { getServerMessageId } from "@/lib/chat-messages/metadata"
 import type { UIMessage } from "@ai-sdk/react"
@@ -72,6 +74,9 @@ export type ActivityPanelTarget = {
   defaultActivityTurnId: string | undefined
   panelActivityTurnId: string | undefined
   defaultMessage: UIMessage | undefined
+  /** `defaultMessage`'s view — the live turn's view when generation is active,
+   * so the panel never walks parts the resolver already walked. */
+  defaultView: AssistantTurnView | undefined
   panelMessage: UIMessage | undefined
   isGenerationActive: boolean
   isPendingActivityTurn: boolean
@@ -103,12 +108,27 @@ export function isGenerationActive(
 }
 
 /**
+ * The last message's standing while this client's generation is active — one
+ * derivation shared by `Conversation` (the pending row and the live row) and
+ * the Activity panel (its default target), so the pending gate can't drift
+ * and the live turn's parts are walked once per render, not once per caller.
+ *
  * The pending row owns the pre-content handoff, even after persistence adopts
  * the real assistant id. A durable assistant shell can arrive before the local
  * stream publishes its first renderable part; handing the row over at identity
  * adoption would briefly replace the 32px Thinking slot with an empty turn.
  */
-export function shouldRenderPendingAssistantTurn({
+export type ActiveAssistantTurn =
+  /** No generation is active on this client. */
+  | { kind: "none" }
+  /** Generation is active and nothing renderable exists yet: the pending
+   * placeholder row owns the slot. */
+  | { kind: "pending" }
+  /** Generation is active and the last message is a renderable assistant
+   * turn; `view` is its Assistant turn view for this render. */
+  | { kind: "live"; message: UIMessage; view: AssistantTurnView }
+
+export function resolveActiveAssistantTurn({
   messages,
   status,
   isSubmitting,
@@ -116,31 +136,22 @@ export function shouldRenderPendingAssistantTurn({
   messages: UIMessage[]
   status: ChatStatus
   isSubmitting: boolean
-}): boolean {
-  if (!isGenerationActive(status, isSubmitting)) return false
+}): ActiveAssistantTurn {
+  if (!isGenerationActive(status, isSubmitting)) return { kind: "none" }
 
   const lastMessage = messages[messages.length - 1]
-  if (lastMessage?.role === "user") return true
-  if (lastMessage?.role !== "assistant") return false
-
-  const durableStatus = messageRenderStatus(lastMessage)
-  if (
-    durableStatus !== "ready" &&
-    durableStatus !== "submitted" &&
-    durableStatus !== "streaming"
-  ) {
-    return false
-  }
+  if (lastMessage?.role === "user") return { kind: "pending" }
+  if (lastMessage?.role !== "assistant") return { kind: "none" }
 
   const view = deriveAssistantTurnView(lastMessage, status)
-  const hasRenderableEvidence =
-    view.text.trim().length > 0 ||
-    view.toolParts.length > 0 ||
-    view.sources.length > 0 ||
-    view.searchImageResults.length > 0 ||
-    view.reasoning.hasObservedActivity
+  const durableStatus = messageRenderStatus(lastMessage)
+  const durableLive =
+    durableStatus === "ready" ||
+    durableStatus === "submitted" ||
+    durableStatus === "streaming"
+  if (durableLive && !hasRenderableEvidence(view)) return { kind: "pending" }
 
-  return !hasRenderableEvidence
+  return { kind: "live", message: lastMessage, view }
 }
 
 function getActivityTurnId(message: UIMessage | undefined): string | undefined {
@@ -192,11 +203,12 @@ export function selectActivityPanelTarget({
   selectedActivityTurnId?: string
 }): ActivityPanelTarget {
   const generationActive = isGenerationActive(status, isSubmitting)
-  const hasPendingAssistantTurn = shouldRenderPendingAssistantTurn({
+  const activeTurn = resolveActiveAssistantTurn({
     messages,
     status,
     isSubmitting,
   })
+  const hasPendingAssistantTurn = activeTurn.kind === "pending"
 
   // Before the first renderable part, assistant identity adoption is not a
   // visual handoff: the generation-following default remains the placeholder.
@@ -218,10 +230,17 @@ export function selectActivityPanelTarget({
     ? PENDING_ACTIVITY_TURN_ID
     : (getActivityTurnId(selectedMessage) ?? defaultActivityTurnId)
 
+  const defaultView = !defaultMessage
+    ? undefined
+    : activeTurn.kind === "live" && activeTurn.message === defaultMessage
+      ? activeTurn.view
+      : deriveAssistantTurnView(defaultMessage, status)
+
   return {
     defaultActivityTurnId,
     panelActivityTurnId,
     defaultMessage,
+    defaultView,
     panelMessage: selectedMessage ?? defaultMessage,
     isGenerationActive: generationActive,
     isPendingActivityTurn: panelActivityTurnId === PENDING_ACTIVITY_TURN_ID,
@@ -263,6 +282,7 @@ export function useActivityPanel({
     defaultActivityTurnId,
     panelActivityTurnId,
     defaultMessage,
+    defaultView,
     panelMessage,
     isGenerationActive: generationActive,
     isPendingActivityTurn,
@@ -281,10 +301,6 @@ export function useActivityPanel({
   const isPanelDefaultTurn =
     panelActivityTurnId !== undefined &&
     panelActivityTurnId === defaultActivityTurnId
-
-  const defaultView = defaultMessage
-    ? deriveAssistantTurnView(defaultMessage, status)
-    : undefined
 
   // One derivation for the panel target — the same Assistant turn view the
   // message row derives, so the trigger and the panel can never disagree.

@@ -13,6 +13,10 @@
  *  - Pure and derived PER RENDER. The AI SDK mutates part objects in place
  *    during streaming without changing array/object references, so this
  *    derivation must never be memoized by `parts` or message reference.
+ *  - ONE evidence walk per view. `view.evidence` is the Turn evidence produced
+ *    by that walk; the phase ladder and the activity presentation read it and
+ *    never re-derive from `orderedParts`, so a live row costs one O(parts)
+ *    pass per render, not one per consumer.
  *  - All metadata reads go through the Message metadata module's readers
  *    (ADR-0002) — never `metadata as Record<string, unknown>`.
  *  - `assistantTurnViewsEqual` is the render-gate: it compares only the facts
@@ -32,7 +36,11 @@ import {
 } from "./metadata"
 import { extractTextFromMessageParts, getToolRenderSignature } from "./parts"
 import type { AssistantSourceResult } from "./sources"
-import { deriveTurnEvidence, type ToolCallEvidence } from "./turn-evidence"
+import {
+  deriveTurnEvidence,
+  type ToolCallEvidence,
+  type TurnEvidence,
+} from "./turn-evidence"
 
 export type { SearchImageResult } from "./turn-evidence"
 import type { SearchImageResult } from "./turn-evidence"
@@ -78,6 +86,12 @@ export type AssistantTurnView = {
    * rebuild ordering from the type-specific projections below.
    */
   orderedParts: UIMessage["parts"]
+  /**
+   * The Turn evidence timeline from this view's single parts walk. Phase and
+   * activity derive from it; components never read it (raw facts stay behind
+   * presentation — see CONTEXT.md "Turn evidence").
+   */
+  evidence: TurnEvidence
   /** Ordered text content across all text parts. */
   text: string
   /**
@@ -197,6 +211,7 @@ export function deriveAssistantTurnView(
 
   return {
     orderedParts: parts ?? [],
+    evidence,
     text: extractTextFromMessageParts(parts),
     toolParts,
     toolRenderSignature: getToolRenderSignature(parts),
@@ -221,6 +236,21 @@ export function hasPreservedResponseContent(view: AssistantTurnView): boolean {
     view.text.length > 0 ||
     view.toolParts.length > 0 ||
     view.searchImageResults.length > 0
+  )
+}
+
+/**
+ * True once the turn has anything a row can render — text, tool cards,
+ * sources, image results, or observed reasoning activity. Until then the
+ * pending placeholder row owns the slot (see `resolveActiveAssistantTurn`).
+ */
+export function hasRenderableEvidence(view: AssistantTurnView): boolean {
+  return (
+    view.text.trim().length > 0 ||
+    view.toolParts.length > 0 ||
+    view.sources.length > 0 ||
+    view.searchImageResults.length > 0 ||
+    view.reasoning.hasObservedActivity
   )
 }
 
@@ -314,11 +344,11 @@ export function deriveAssistantTurnPhase(
 
   if (status === "submitted") return { kind: "submitted" }
 
-  // Only the live row reaches this point, so the evidence walk never runs
-  // for historical rows. Approval exclusions live in the lifecycle algebra:
-  // awaiting-approval is a pause and denied will never run, so neither is
-  // in flight; an approved response is — the tool is about to execute.
-  const toolCalls = deriveTurnEvidence(view.orderedParts).timeline.filter(
+  // Reads the view's evidence (one walk per view, never re-derived here).
+  // Approval exclusions live in the lifecycle algebra: awaiting-approval is a
+  // pause and denied will never run, so neither is in flight; an approved
+  // response is — the tool is about to execute.
+  const toolCalls = view.evidence.timeline.filter(
     (item): item is ToolCallEvidence => item.kind === "tool"
   )
   if (toolCalls.some((call) => call.lifecycle.kind === "awaiting-approval")) {

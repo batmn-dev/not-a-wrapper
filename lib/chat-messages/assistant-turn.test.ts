@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   deriveAssistantActivityModel,
   deriveAssistantActivityPresentation,
@@ -13,8 +13,44 @@ import {
   deriveReasoningView,
   type AssistantTurnRenderStatus,
 } from "./assistant-turn"
+import { deriveTurnEvidence } from "./turn-evidence"
+
+// Real implementation, spied so the one-walk contract below is observable.
+vi.mock("./turn-evidence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./turn-evidence")>()
+  return { ...actual, deriveTurnEvidence: vi.fn(actual.deriveTurnEvidence) }
+})
 
 const parts = (value: unknown) => value as UIMessage["parts"]
+
+describe("one evidence walk per view", () => {
+  it("view, phase and presentation walk the parts exactly once", () => {
+    vi.mocked(deriveTurnEvidence).mockClear()
+    const view = deriveAssistantTurnView(
+      {
+        parts: parts([
+          { type: "reasoning", text: "plan", state: "done" },
+          {
+            type: "tool-web_search",
+            toolCallId: "call-1",
+            state: "input-available",
+            input: { query: "q" },
+          },
+          { type: "text", text: "so far" },
+        ]),
+      },
+      "streaming"
+    )
+    const phase = deriveAssistantTurnPhase(view, {
+      status: "streaming",
+      isLast: true,
+    })
+    deriveAssistantActivityPresentation(view, phase)
+
+    expect(phase.kind).toBe("tooling")
+    expect(deriveTurnEvidence).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe("deriveReasoningView", () => {
   it("is thinking while any reasoning part streams", () => {

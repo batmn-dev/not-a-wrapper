@@ -12,7 +12,6 @@ import { getReasoningEffort, getToolDisplayName } from "./metadata"
 import { dedupeSources, type AssistantSourceResult } from "./sources"
 import {
   classifyToolName,
-  deriveTurnEvidence,
   resolveEntryStatus,
   type ResolvedEntryStatus,
   type ToolCallEvidence,
@@ -343,9 +342,11 @@ function deriveCompletion(
 
 /**
  * The single chronological activity derivation: a presentation mapping over
- * the Turn evidence timeline. Chronology, stable call-id identity, and source
- * attribution are the evidence walk's invariants; this function owns only
- * copy (titles, details, markers' status vocabulary) and the completion row.
+ * the Turn evidence timeline carried by the view (`view.evidence`, one walk
+ * per view — never re-derived here). Chronology, stable call-id identity, and
+ * source attribution are the evidence walk's invariants; this function owns
+ * only copy (titles, details, markers' status vocabulary) and the completion
+ * row.
  */
 export function deriveAssistantActivityModel(
   view: AssistantTurnView,
@@ -357,7 +358,7 @@ export function deriveAssistantActivityModel(
   }
 ): AssistantActivityModel | undefined {
   const settled = phase.kind === "settled"
-  const evidence = deriveTurnEvidence(view.orderedParts)
+  const evidence = view.evidence
   const entries: AssistantActivityTimelineEntry[] = []
 
   for (const item of evidence.timeline) {
