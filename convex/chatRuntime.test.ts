@@ -29,13 +29,61 @@ import {
   RESOLVED_APPROVAL_CONTINUATION_GRACE_MS,
 } from "./domain/generation_run_liveness"
 import { getSelectedPathMessages } from "./domain/message_branches"
-import type { AuthenticatedRunOwner } from "./lib/auth"
+import {
+  type AuthenticatedRunOwner,
+  requireOwnedChat,
+  requireOwnedChatByPublicId,
+  requireOwnedToolApproval,
+} from "./lib/auth"
 import {
   CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
   signChatAdmissionProof,
 } from "./lib/chatAdmissionProof"
 import { TIMING_RECEIPT_ATTACH_WINDOW_MS } from "./lib/runTimingReceipt"
 import { selectBranchForChat } from "./messages"
+
+// The cores take the owner their builders inject (ADR-0003). These resolve it
+// the same way the builders do, so every existing call site keeps its shape.
+async function prepareAsOwner(
+  ctx: MutationCtx,
+  {
+    chatId,
+    ...args
+  }: Parameters<typeof prepareGenerationForChat>[2] & { chatId: Id<"chats"> }
+) {
+  return prepareGenerationForChat(ctx, await requireOwnedChat(ctx, chatId), args)
+}
+
+async function prepareVerifiedAsOwner(
+  ctx: MutationCtx,
+  {
+    chatId,
+    ...args
+  }: Parameters<typeof prepareGenerationWithVerifiedAdmission>[2] & {
+    chatId: string
+  },
+  options?: Parameters<typeof prepareGenerationWithVerifiedAdmission>[3]
+) {
+  return prepareGenerationWithVerifiedAdmission(
+    ctx,
+    await requireOwnedChatByPublicId(ctx, chatId),
+    args,
+    options
+  )
+}
+
+async function decideAsOwner(
+  ctx: MutationCtx,
+  { approvalId, ...args }: { approvalId: string; reason?: string },
+  decision: "approved" | "denied"
+) {
+  return resolveToolCallDecision(
+    ctx,
+    await requireOwnedToolApproval(ctx, approvalId),
+    args,
+    decision
+  )
+}
 
 type TableDocuments = {
   toolApprovalRequests: Doc<"toolApprovalRequests">[]
@@ -665,7 +713,7 @@ describe("prepareGenerationForChat", () => {
     }
     const secret = "test-chat-admission-secret-with-32-bytes"
 
-    await prepareGenerationWithVerifiedAdmission(
+    await prepareVerifiedAsOwner(
       ctx,
       {
         ...admission,
@@ -716,7 +764,7 @@ describe("prepareGenerationForChat", () => {
     })
 
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId,
         requestId: "request_stale_generation_input",
         model: "gpt-5-mini",
@@ -741,8 +789,11 @@ describe("prepareGenerationForChat", () => {
     })
     const issuedAt = 1700000000000
     const secret = "test-chat-admission-secret-with-32-bytes"
+    // The proof signs the client-minted publicId; ownership resolves first
+    // (ownedChatMutation), so the owned chat must exist for the proof check
+    // to be what rejects.
     const signed = {
-      chatId,
+      chatId: chat.publicId,
       requestId: "request_tampered_route",
       model: "claude-sonnet-5",
       provider: "openrouter",
@@ -758,7 +809,7 @@ describe("prepareGenerationForChat", () => {
     }
 
     await expect(
-      prepareGenerationWithVerifiedAdmission(
+      prepareVerifiedAsOwner(
         ctx,
         {
           ...signed,
@@ -825,7 +876,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_edit",
       model: "gpt-5",
@@ -961,7 +1012,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_edit",
       model: "gpt-5",
@@ -1066,7 +1117,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    await prepareGenerationForChat(ctx, {
+    await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_edit",
       model: "gpt-5",
@@ -1138,7 +1189,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    await prepareGenerationForChat(ctx, {
+    await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_edit",
       model: "gpt-5",
@@ -1187,7 +1238,7 @@ describe("prepareGenerationForChat", () => {
     })
 
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId,
         requestId: "request_edit",
         model: "gpt-5",
@@ -1240,7 +1291,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_followup",
       model: "gpt-5",
@@ -1329,7 +1380,7 @@ describe("prepareGenerationForChat", () => {
         ],
       })
 
-      const result = await prepareGenerationForChat(ctx, {
+      const result = await prepareAsOwner(ctx, {
         chatId,
         requestId: "request_followup",
         model: "gpt-5",
@@ -1418,7 +1469,7 @@ describe("prepareGenerationForChat", () => {
     })
 
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId,
         requestId: "request_stale",
         model: "gpt-5",
@@ -1498,7 +1549,7 @@ describe("prepareGenerationForChat", () => {
     })
 
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId,
         requestId: "request_stale",
         model: "gpt-5",
@@ -1574,7 +1625,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -1664,7 +1715,7 @@ describe("prepareGenerationForChat", () => {
       messages,
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -1735,7 +1786,7 @@ describe("prepareGenerationForChat", () => {
       ],
     })
 
-    const regeneration = await prepareGenerationForChat(ctx, {
+    const regeneration = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -1757,7 +1808,7 @@ describe("prepareGenerationForChat", () => {
       status: "completed",
     })
 
-    const followUp = await prepareGenerationForChat(ctx, {
+    const followUp = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_followup",
       model: "gpt-5",
@@ -1838,7 +1889,7 @@ describe("prepareGenerationForChat", () => {
       ],
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -1947,7 +1998,7 @@ describe("prepareGenerationForChat", () => {
         messages: messages.map((storedMessage) => ({ ...storedMessage })),
       })
       await expect(
-        prepareGenerationForChat(ctx, {
+        prepareAsOwner(ctx, {
           chatId,
           requestId: "request_regen",
           model: "gpt-5",
@@ -2077,7 +2128,7 @@ describe("prepareGenerationForChat", () => {
       chats: [chat],
       messages: sparseBranchMessages(),
     })
-    const result = await prepareGenerationForChat(accepted.ctx, {
+    const result = await prepareAsOwner(accepted.ctx, {
       chatId,
       requestId: "request_edit",
       model: "gpt-5",
@@ -2093,7 +2144,7 @@ describe("prepareGenerationForChat", () => {
       messages: sparseBranchMessages(),
     })
     await expect(
-      prepareGenerationForChat(rejected.ctx, {
+      prepareAsOwner(rejected.ctx, {
         chatId,
         requestId: "request_edit",
         model: "gpt-5",
@@ -2133,7 +2184,7 @@ describe("prepareGenerationForChat", () => {
           targetAssistant,
         ],
       })
-      const result = await prepareGenerationForChat(harness.ctx, {
+      const result = await prepareAsOwner(harness.ctx, {
         chatId,
         requestId: "request_regen",
         model: "gpt-5",
@@ -2232,7 +2283,7 @@ describe("prepareGenerationForChat", () => {
     })
 
     // The user branch-navigated back to branch one before regenerating it.
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -2286,7 +2337,7 @@ describe("prepareGenerationForChat", () => {
         targetAssistant,
       ],
     })
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -2597,7 +2648,7 @@ describe("prepareGenerationForChat", () => {
       generationRuns: [run],
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_2",
       model: "gpt-5",
@@ -2691,7 +2742,7 @@ describe("prepareGenerationForChat", () => {
       generationRuns: [run],
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_2",
       model: "gpt-5",
@@ -2845,7 +2896,7 @@ describe("generation run linkage validation", () => {
       ],
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_regen",
       model: "gpt-5",
@@ -3128,7 +3179,7 @@ describe("lease lifecycle", () => {
       ],
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_lease",
       model: "gpt-5",
@@ -3622,7 +3673,7 @@ describe("approval-continuation idempotency", () => {
     const { fixture, chat, tables } = makePausedWorld()
     const { ctx, tables: world } = createMutationCtx(tables)
 
-    const first = await prepareGenerationForChat(ctx, {
+    const first = await prepareAsOwner(ctx, {
       chatId: chat._id,
       requestId: "request_continuation_1",
       model: "gpt-5",
@@ -3642,7 +3693,7 @@ describe("approval-continuation idempotency", () => {
     // The losing tab's auto-send re-prepares with the same (now-resolved)
     // approval state — rejected with the typed conflict, creating nothing.
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId: chat._id,
         requestId: "request_continuation_2",
         model: "gpt-5",
@@ -3671,7 +3722,7 @@ describe("approval-continuation idempotency", () => {
     const runCountBefore = world.generationRuns.length
 
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId: chat._id,
         requestId: "request_late_continuation",
         model: "gpt-5",
@@ -3697,7 +3748,7 @@ describe("approval-continuation idempotency", () => {
     const { ctx } = createMutationCtx(tables)
 
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId: chat._id,
         requestId: "request_displaced_continuation",
         model: "gpt-5",
@@ -3997,7 +4048,7 @@ describe("resolved-approvals-without-continuation reaper", () => {
 
     // The crashed tab comes back and fires the stale auto-send continuation.
     await expect(
-      prepareGenerationForChat(ctx, {
+      prepareAsOwner(ctx, {
         chatId: chat._id,
         requestId: "request_late_continuation",
         model: "gpt-5",
@@ -4020,7 +4071,7 @@ describe("resolved-approvals-without-continuation reaper", () => {
     const { fixture, chat, tables } = makeStrandedWorld()
     const { ctx, tables: world } = createMutationCtx(tables)
 
-    const continuation = await prepareGenerationForChat(ctx, {
+    const continuation = await prepareAsOwner(ctx, {
       chatId: chat._id,
       requestId: "request_continuation",
       model: "gpt-5",
@@ -4114,7 +4165,7 @@ describe("pending-only approval resolution", () => {
     world.tables.projects.push(project)
 
     await expect(
-      resolveToolCallDecision(
+      decideAsOwner(
         world.ctx,
         { approvalId: "approval_1" },
         "approved"
@@ -4142,12 +4193,12 @@ describe("pending-only approval resolution", () => {
       vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
       const { ctx, approval } = makeApprovalWorld()
 
-      const winner = await resolveToolCallDecision(
+      const winner = await decideAsOwner(
         ctx,
         { approvalId: "approval_1", reason: firstReason },
         first
       )
-      const loser = await resolveToolCallDecision(
+      const loser = await decideAsOwner(
         ctx,
         { approvalId: "approval_1", reason: secondReason },
         second
@@ -4171,7 +4222,7 @@ describe("pending-only approval resolution", () => {
     vi.spyOn(Date, "now").mockReturnValue(EXPIRY - 1)
     const { ctx, approval, run } = makeApprovalWorld()
 
-    const decision = await resolveToolCallDecision(
+    const decision = await decideAsOwner(
       ctx,
       { approvalId: "approval_1", reason: "Approved in time" },
       "approved"
@@ -4223,7 +4274,7 @@ describe("pending-only approval resolution", () => {
     tables.toolApprovalRequests.push(siblingApproval)
     tables.toolInvocations.push(siblingInvocation)
 
-    const result = await resolveToolCallDecision(
+    const result = await decideAsOwner(
       ctx,
       { approvalId: "approval_1" },
       "approved"
@@ -4254,7 +4305,7 @@ describe("pending-only approval resolution", () => {
     const { ctx, approval, run } = makeApprovalWorld()
 
     expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 1 })
-    const loser = await resolveToolCallDecision(
+    const loser = await decideAsOwner(
       ctx,
       { approvalId: "approval_1", reason: "Too late" },
       "denied"
@@ -4273,7 +4324,7 @@ describe("pending-only approval resolution", () => {
     vi.spyOn(Date, "now").mockReturnValue(EXPIRY)
     const { ctx, approval, run } = makeApprovalWorld()
 
-    await resolveToolCallDecision(ctx, { approvalId: "approval_1" }, "approved")
+    await decideAsOwner(ctx, { approvalId: "approval_1" }, "approved")
     expect(await reapExpiredToolApprovalsPass(ctx)).toEqual({ expired: 0 })
     expect(approval.status).toBe("expired")
     expect(run.terminalReason).toBe("approval_expired")
@@ -5179,7 +5230,7 @@ describe("chat status projection", () => {
       messages,
     })
 
-    const result = await prepareGenerationForChat(ctx, {
+    const result = await prepareAsOwner(ctx, {
       chatId,
       requestId: "request_followup",
       model: "gpt-5",

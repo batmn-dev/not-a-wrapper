@@ -38,6 +38,7 @@ import {
   requireOwnedGenerationRun,
   requireOwnedMcpServer,
   requireOwnedProject,
+  requireOwnedToolApproval,
 } from "./auth"
 
 /**
@@ -192,6 +193,27 @@ export const ownedGenerationRunMutation = customMutation(
     input: async (ctx, { runId }) => {
       const { user, chat, run } = await requireOwnedGenerationRun(ctx, runId)
       return { ctx: { user, chat, run }, args: { runId } }
+    },
+  })
+)
+
+/**
+ * A mutation on a tool approval request the caller owns. Keyed on the public
+ * `approvalId`; injects owner-verified `ctx.approval`, `ctx.run`, `ctx.chat`,
+ * and `ctx.user`. Throws "Not authenticated" / "Not authorized" for the caller
+ * and "Approval not found" for missing, not-owned, or inconsistent rows.
+ * Consumes an `approvalId` arg and passes it through.
+ */
+export const ownedToolApprovalMutation = customMutation(
+  mutation,
+  customCtxAndArgs({
+    args: { approvalId: v.string() },
+    input: async (ctx, { approvalId }) => {
+      const { user, chat, run, approval } = await requireOwnedToolApproval(
+        ctx,
+        approvalId
+      )
+      return { ctx: { user, chat, run, approval }, args: { approvalId } }
     },
   })
 )

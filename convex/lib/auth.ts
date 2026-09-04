@@ -19,6 +19,15 @@ export type AuthenticatedRunOwner = AuthenticatedChatOwner & {
   run: Doc<"generationRuns">
 }
 
+/**
+ * A run owner plus the tool approval request the caller is deciding on.
+ * Ownership is transitive through approval → run → chat. Injected by
+ * `ownedToolApprovalMutation`.
+ */
+export type AuthenticatedToolApprovalOwner = AuthenticatedRunOwner & {
+  approval: Doc<"toolApprovalRequests">
+}
+
 /** A chat is active when neither it nor its linked project is being deleted.
  * The project read is required so tombstoning a project instantly revokes
  * every linked chat without patching children. Fail closed on a dangling
@@ -243,6 +252,35 @@ export async function requireOwnedGenerationRun(
   if (!(await isChatActive(ctx, chat))) throw new Error("Run not found")
 
   return { user, chat, run }
+}
+
+/**
+ * Require the caller to own a tool approval request, keyed by the public
+ * `approvalId`. Same shape as `requireOwnedGenerationRun`: auth first, then
+ * missing, not-owned, and broken-link rows all collapse to "Approval not
+ * found". Backs `ownedToolApprovalMutation`.
+ */
+export async function requireOwnedToolApproval(
+  ctx: ConvexCtx,
+  approvalId: string
+): Promise<AuthenticatedToolApprovalOwner> {
+  const user = await requireUserForOwnedResource(ctx)
+  const approval = await ctx.db
+    .query("toolApprovalRequests")
+    .withIndex("by_approval", (q) => q.eq("approvalId", approvalId))
+    .unique()
+  if (!approval || approval.userId !== user._id) {
+    throw new Error("Approval not found")
+  }
+
+  const run = await ctx.db.get(approval.runId)
+  if (!run) throw new Error("Approval not found")
+
+  const chat = await ctx.db.get(run.chatId)
+  if (!chat || chat.userId !== user._id) throw new Error("Approval not found")
+  if (!(await isChatActive(ctx, chat))) throw new Error("Approval not found")
+
+  return { user, chat, run, approval }
 }
 
 export async function requireOwnedProject(
