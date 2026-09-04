@@ -156,6 +156,28 @@ describe("SourcesGallery favicon sharing", () => {
     )
   })
 
+  it("formats ISO timestamps as UTC calendar dates", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "iso-source",
+              href: "https://example.com/post",
+              title: "A researched headline",
+              siteName: "Example",
+              publishedDate: "2024-01-15T00:00:00Z",
+            },
+          ]}
+        />
+      )
+    })
+
+    expect(container!.querySelector("a")?.textContent).toContain(
+      "Example · Jan 15, 2024"
+    )
+  })
+
   it("shows a readable URL as the headline for a URL-only source", () => {
     act(() => {
       root?.render(

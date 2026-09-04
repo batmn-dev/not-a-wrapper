@@ -174,11 +174,7 @@ function formatSourcePublishedDate(value: string): string | undefined {
 
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return undefined
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsed)
+  return publishedDateFormatter.format(parsed)
 }
 
 function readableSourceUrl(href: string): string {
