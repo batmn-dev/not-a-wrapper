@@ -170,7 +170,10 @@ export function createStreamLivenessTracker(options: {
       }
     },
     requestAborted() {
-      if (clientAbortCaptured || completed) return
+      // A disconnect after the execution already ended is not a client abort
+      // of a live stream. The request signal's listener runs before any
+      // signal derived from it, so a guest disconnect still lands here first.
+      if (clientAbortCaptured || executionAbortCaptured || completed) return
       clientAbortCaptured = true
       onSignal("chat_client_abort", snapshot())
     },

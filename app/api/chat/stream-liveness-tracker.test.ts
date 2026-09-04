@@ -72,11 +72,7 @@ describe("stream liveness tracker", () => {
     expect(tracker.executionAborted()).toBe(false)
     vi.advanceTimersByTime(THRESHOLD_MS)
     tracker.requestAborted()
-    expect(onSignal).toHaveBeenCalledTimes(1)
-    expect(onSignal).toHaveBeenLastCalledWith(
-      "chat_client_abort",
-      expect.objectContaining({ phase: "unknown" })
-    )
+    expect(onSignal).not.toHaveBeenCalled()
 
     const second = makeTracker()
     second.tracker.streamStarted()
