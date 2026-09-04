@@ -11,6 +11,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import {
+  formatSourceDisplayUrl,
   resolveSourceLinkDestination,
   type SourceLinkDestination,
 } from "@/lib/url-safety"
@@ -177,11 +178,8 @@ function formatSourcePublishedDate(value: string): string | undefined {
   return publishedDateFormatter.format(parsed)
 }
 
-function readableSourceUrl(href: string): string {
-  return href
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .replace(/\/$/, "")
+function sourceIdentity(value: string): string {
+  return formatSourceDisplayUrl(value).trim().toLowerCase()
 }
 
 function isSourceHeadline(
@@ -191,7 +189,12 @@ function isSourceHeadline(
   hostname: string
 ): title is string {
   if (!title) return false
-  return title !== href && title !== siteName && title !== hostname
+  const identity = sourceIdentity(title)
+  return (
+    identity !== sourceIdentity(href) &&
+    identity !== sourceIdentity(hostname) &&
+    (siteName == null || identity !== sourceIdentity(siteName))
+  )
 }
 
 /** Activity sources are plain anchors; inline citations remain HoverCards. */
@@ -212,7 +215,7 @@ export function SourcesGalleryItem({
     : undefined
   const headline = isSourceHeadline(title, href, siteName, hostname)
     ? title
-    : readableSourceUrl(destination?.href ?? href)
+    : formatSourceDisplayUrl(destination?.href ?? href)
   const descriptionText = description?.trim() ? description : undefined
 
   return (

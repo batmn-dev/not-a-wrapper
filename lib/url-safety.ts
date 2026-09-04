@@ -58,3 +58,14 @@ export function resolveSourceLinkDestination(
     url,
   }
 }
+
+/** Hostname + path + query + hash, no scheme. Trailing slash is pathname-only. */
+export function formatSourceDisplayUrl(href: string): string {
+  const url = parseSafeExternalUrl(href)
+  if (!url) {
+    return href.replace(/^https?:\/\//i, "").replace(/^www\./i, "")
+  }
+  const host = url.hostname.replace(/^www\./i, "")
+  const path = url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "")
+  return `${host}${path}${url.search}${url.hash}`
+}

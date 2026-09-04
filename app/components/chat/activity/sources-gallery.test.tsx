@@ -219,6 +219,45 @@ describe("SourcesGallery favicon sharing", () => {
     )
   })
 
+  it("does not treat a www or mixed-case domain title as a headline", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "www-domain-title",
+              href: "https://example.com/article",
+              title: "www.Example.com",
+            },
+          ]}
+        />
+      )
+    })
+
+    expect(container!.querySelector(".font-semibold")?.textContent).toBe(
+      "example.com/article"
+    )
+  })
+
+  it("keeps query slashes in a URL-only headline", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "query-slash",
+              href: "https://example.com/search?q=/",
+            },
+          ]}
+        />
+      )
+    })
+
+    expect(container!.querySelector(".font-semibold")?.textContent).toBe(
+      "example.com/search?q=/"
+    )
+  })
+
   it("does not mount a description slot when description is absent", () => {
     act(() => {
       root?.render(

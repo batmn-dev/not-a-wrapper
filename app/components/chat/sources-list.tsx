@@ -3,7 +3,10 @@
 import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
 import type { AssistantSourceResult } from "@/lib/chat-messages/sources"
-import { resolveSourceLinkDestination } from "@/lib/url-safety"
+import {
+  formatSourceDisplayUrl,
+  resolveSourceLinkDestination,
+} from "@/lib/url-safety"
 import { cn } from "@/lib/utils"
 import { RiLink } from "@remixicon/react"
 import { DisclosureCard } from "./disclosure-card"
@@ -25,7 +28,7 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                 <Favicon
                   key={`${source.url}-${index}`}
                   url={source.faviconDomain ?? source.url}
-                  alt={`Favicon for ${source.title || source.url}`}
+                  alt={`Favicon for ${source.title || formatSourceDisplayUrl(source.url)}`}
                   shape="rounded"
                   className="border-background size-4 border"
                 />
@@ -42,12 +45,7 @@ export function SourcesList({ sources, className }: SourcesListProps) {
         <ul className="space-y-2">
           {sources.map((source) => {
             const destination = resolveSourceLinkDestination(source.url)
-            const displayUrl = destination
-              ? destination.url
-                  .toString()
-                  .replace(/^https?:\/\/(www\.)?/, "")
-                  .replace(/\/$/, "")
-              : source.url
+            const displayUrl = formatSourceDisplayUrl(source.url)
             const label = source.title || displayUrl
 
             return (
