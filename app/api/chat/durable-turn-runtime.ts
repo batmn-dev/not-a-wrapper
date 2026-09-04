@@ -8,7 +8,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   LEASE_DURATION_MS,
 } from "@/convex/domain/generation_run_liveness"
-import { sanitizeModelHistoryMessages as sanitizeSemanticModelHistoryMessages } from "@/convex/domain/message_visibility"
+import { sanitizeModelHistoryMessages } from "@/convex/domain/message_visibility"
 import type {
   TerminalUsageEvidencePayload,
   TitleTerminalUsageEvidence,
@@ -34,17 +34,16 @@ import type { ToolSource } from "@/lib/tools/types"
 import { estimatePartialOutputTokens } from "@/lib/usage/terminal-usage-estimate"
 import * as Sentry from "@sentry/nextjs"
 import type {
-  DynamicToolUIPart,
   UIMessage as MessageAISDK,
   StreamTextTransform,
   TextStreamPart,
   ToolApprovalStatus,
   ToolSet,
-  ToolUIPart,
   UIMessage,
 } from "ai"
-import { getToolName, isToolUIPart } from "ai"
+import { isToolUIPart } from "ai"
 import { fetchMutation as defaultFetchMutation } from "convex/nextjs"
+import { extractApprovalResponses } from "./approval-continuation"
 import { PublicChatHttpError } from "./public-http-error"
 import { toInvalidDurableRequestError } from "./utils"
 
@@ -476,15 +475,6 @@ export type DurableUiMessage = UIMessage & {
   metadata?: Record<string, unknown>
 }
 
-export type ApprovalResponseForPersistence = {
-  messageId: string
-  approvalId: string
-  toolCallId: string
-  toolName: string
-  approved: boolean
-  reason?: string
-}
-
 /**
  * Durable persistence is a property of the caller's auth (ADR-0033): a
  * signed-in caller with a Convex token runs the durable runtime; the chat id
@@ -495,10 +485,6 @@ export function isDurableConvexChat(options: {
   convexToken?: string
 }): boolean {
   return Boolean(options.isAuthenticated && options.convexToken)
-}
-
-export function extractTextFromParts(parts: UIMessage["parts"]) {
-  return extractTextFromMessageParts(parts)
 }
 
 export function getLatestUserMessage(
@@ -526,7 +512,7 @@ export function buildDurablePrepareIntent(input: {
   }
 
   const latestUserMessage =
-    input.edit || input.regeneration || hasApprovalResponse(input.messages)
+    input.edit || input.regeneration || approvalResponses.length > 0
       ? undefined
       : getLatestUserMessage(input.messages)
 
@@ -549,62 +535,6 @@ export function toDurableUiMessages(
   messages: Doc<"messages">[]
 ): DurableUiMessage[] {
   return messages.map(toDurableUiMessage)
-}
-
-export function sanitizeModelHistoryMessages(
-  messages: UIMessage[]
-): UIMessage[] {
-  return sanitizeSemanticModelHistoryMessages(messages) as UIMessage[]
-}
-
-function isApprovalRespondedToolPart(
-  part: UIMessage["parts"][number]
-): part is (ToolUIPart | DynamicToolUIPart) & {
-  state: "approval-responded"
-  approval: { id: string; approved: boolean; reason?: string }
-} {
-  // MCP approvals stream as dynamic-tool parts, so this must accept both tool
-  // part shapes.
-  return (
-    isToolUIPart(part) &&
-    part.state === "approval-responded" &&
-    typeof part.approval?.id === "string" &&
-    typeof part.approval.approved === "boolean"
-  )
-}
-
-export function extractApprovalResponses(
-  messages: UIMessage[]
-): ApprovalResponseForPersistence[] {
-  // Only the trailing assistant can continue. Historical responses are
-  // persisted evidence and must not reclassify later sends as continuations.
-  const trailingMessage = messages[messages.length - 1]
-  if (!trailingMessage || trailingMessage.role !== "assistant") {
-    return []
-  }
-
-  const responses: ApprovalResponseForPersistence[] = []
-  for (const part of trailingMessage.parts) {
-    if (!isApprovalRespondedToolPart(part)) continue
-    responses.push({
-      messageId: trailingMessage.id,
-      approvalId: part.approval.id,
-      toolCallId: part.toolCallId,
-      toolName: String(getToolName(part)),
-      approved: part.approval.approved,
-      ...(part.approval.reason ? { reason: part.approval.reason } : {}),
-    })
-  }
-
-  return responses
-}
-
-export function hasApprovalResponse(messages: UIMessage[]): boolean {
-  return extractApprovalResponses(messages).length > 0
-}
-
-export function getFinalAssistantText(message: UIMessage): string {
-  return extractTextFromParts(message.parts)
 }
 
 export function countToolParts(message: UIMessage): {
@@ -1619,7 +1549,7 @@ export function createConvexDurableTurn(args: {
 
       const durableMessages = sanitizeModelHistoryMessages(
         toDurableUiMessages(generation.messages)
-      ) as DurableUiMessage[]
+      )
 
       runId = generation.runId
       assistantMessageId = generation.assistantMessageId
@@ -1986,7 +1916,7 @@ export function createConvexDurableTurn(args: {
               deps.perf?.counter("final_flush")
               await tracker
                 .flushFinal(
-                  getFinalAssistantText(responseMessage),
+                  extractTextFromMessageParts(responseMessage.parts),
                   responseMessage.parts
                 )
                 .catch((error: unknown) => {
@@ -2061,7 +1991,7 @@ export function createConvexDurableTurn(args: {
               const completionReceipt = receiptForTerminalWrite()
               const landed = await writeTerminal("markGenerationRunCompleted", {
                 messageId: currentMessageId,
-                content: getFinalAssistantText(responseMessage),
+                content: extractTextFromMessageParts(responseMessage.parts),
                 parts: responseMessage.parts,
                 metadata: projectPersistedMessageMetadata(
                   responseMessage.metadata

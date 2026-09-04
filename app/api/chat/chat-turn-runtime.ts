@@ -128,6 +128,11 @@ import { normalizeChatError, type PublicChatError } from "./public-error"
 import { PublicChatHttpError } from "./public-http-error"
 import { createReasoningActivityTracker } from "./reasoning-activity-tracker"
 import {
+  createStreamLivenessTracker,
+  type StreamLivenessSignal,
+  type StreamLivenessSnapshot,
+} from "./stream-liveness-tracker"
+import {
   getTextFilePartReferences,
   prepareTextFilePartsForModelInput,
 } from "./text-file-parts"
@@ -248,9 +253,6 @@ function resolveDeps(overrides?: Partial<ChatTurnDeps>): ChatTurnDeps {
     chatAdmissionProofSigner: overrides?.chatAdmissionProofSigner,
   }
 }
-
-type ChatStreamPhase =
-  "pre_first_chunk" | "post_tool_continue" | "post_first_chunk" | "unknown"
 
 type ToolExecutionOutcome =
   "none" | "success" | "failure" | "timeout" | "budget_denied"
@@ -387,11 +389,16 @@ function getSlowRequestThresholdMs(): number {
 
 function getStalledContinuationThresholdMs(): number {
   const fallback = 30000
+  // setTimeout overflows past 2^31-1 ms and fires immediately; clamp so a
+  // misconfigured threshold cannot turn into a stall alert on every tool step.
+  const maxTimeoutMs = 2_147_483_647
   const parsed = Number.parseInt(
     process.env.SENTRY_CHAT_STALLED_CONTINUATION_MS ?? "",
     10
   )
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(parsed, maxTimeoutMs)
+    : fallback
 }
 
 function isReplayShapeError(message: string): boolean {
@@ -1237,7 +1244,6 @@ export function createChatTurnRuntime(args: {
     const closeWorkDuration = () => workDuration?.close()
     const currentWorkDurationMs = () =>
       workDuration?.getDurationMs() ?? initialWorkDurationMs
-    let stepCounter = 0
     let toolMetadataByCallId: ToolInvocationMetadataByCallId = {}
 
     const reasoningActivity = createReasoningActivityTracker(
@@ -1256,24 +1262,7 @@ export function createChatTurnRuntime(args: {
     let firstCallStartPerfMs: number | null = null
     let firstOutputReleasedPerfMs: number | null = null
     let lastOutputReleasedPerfMs: number | null = null
-    let sawProviderChunk = false
     let firstTextDeltaLatencyMs: number | null = null
-    // Diagnostics only (stall/abort signals): post-transform, but known the
-    // moment a chunk is released — unlike the SDK figure, which lands only
-    // when the first step ends and is therefore null for a mid-step stall.
-    let firstReleasedChunkLatencyMs: number | null = null
-    let lastChunkAtMs: number | null = null
-    let lastProgressAtMs = 0
-    let observedToolCalls = 0
-    let lastStepFinishReason: string | null = null
-    let lastToolStepNumber: number | null = null
-    let lastToolNames: string[] = []
-    let awaitingPostToolContinuation = false
-    let postToolContinuationArmedAtMs: number | null = null
-    let stalledContinuationTimer: ReturnType<typeof setTimeout> | null = null
-    let stalledContinuationCaptured = false
-    let abortCaptured = false
-    let streamCompleted = false
 
     // Title attempt tracker (ADR-0021 cancellation amendment): request-local
     // evidence of whether/where a title call started, created BEFORE the
@@ -1312,13 +1301,6 @@ export function createChatTurnRuntime(args: {
         : null
     }
 
-    const clearStalledContinuationTimer = () => {
-      if (stalledContinuationTimer !== null) {
-        clearTimeout(stalledContinuationTimer)
-        stalledContinuationTimer = null
-      }
-    }
-
     /**
      * The run timing receipt as far as this turn can observe it (ADR-0030).
      * Called at every terminal hand-off; absent fields were unobserved. The
@@ -1355,18 +1337,10 @@ export function createChatTurnRuntime(args: {
       return receipt
     }
 
-    const getStreamPhase = (): ChatStreamPhase => {
-      if (awaitingPostToolContinuation) return "post_tool_continue"
-      if (sawProviderChunk) return "post_first_chunk"
-      if (stepCounter > 0 || observedToolCalls > 0) return "unknown"
-      return "pre_first_chunk"
-    }
-
     const captureChatLifecycleSignal = (
-      signalName: "chat_client_abort" | "chat_stalled_continuation",
-      phase: ChatStreamPhase = getStreamPhase()
+      signalName: StreamLivenessSignal,
+      snapshot: StreamLivenessSnapshot
     ) => {
-      const now = Date.now()
       Sentry.captureMessage(signalName, {
         level: "warning",
         tags: {
@@ -1377,7 +1351,7 @@ export function createChatTurnRuntime(args: {
           chat_model: model,
           chat_is_authenticated: String(isAuthenticated),
           chat_error_type: "none",
-          chat_stream_phase: phase,
+          chat_stream_phase: snapshot.phase,
         },
         extra: {
           requestId,
@@ -1387,72 +1361,31 @@ export function createChatTurnRuntime(args: {
           isAuthenticated,
           messageCount: validatedMessages.length,
           chatVersion: normalizedChatVersion,
-          elapsedMs: providerStreamStarted ? now - streamStartMs : 0,
           firstTokenLatencyMs: timing.firstOutputOffsetMs() ?? null,
-          firstReleasedChunkLatencyMs,
-          timeSinceLastChunkMs:
-            lastChunkAtMs === null ? null : now - lastChunkAtMs,
-          timeSinceLastProgressMs: providerStreamStarted
-            ? now - lastProgressAtMs
-            : 0,
-          stalledThresholdMs: stalledContinuationThresholdMs,
-          stepCounter,
-          observedToolCalls,
-          lastStepFinishReason,
-          lastToolStepNumber,
-          lastToolNames,
-          awaitingPostToolContinuation,
-          postToolContinuationDelayMs:
-            postToolContinuationArmedAtMs === null
-              ? null
-              : now - postToolContinuationArmedAtMs,
+          ...snapshot,
           mcpClientCount: tool.mcpClientCount,
         },
       })
     }
 
-    const armStalledContinuationTimer = () => {
-      clearStalledContinuationTimer()
-      if (stalledContinuationCaptured || abortCaptured || streamCompleted) {
-        return
-      }
-      awaitingPostToolContinuation = true
-      postToolContinuationArmedAtMs = Date.now()
-      stalledContinuationTimer = setTimeout(() => {
-        if (stalledContinuationCaptured || abortCaptured || streamCompleted) {
-          return
-        }
-        stalledContinuationCaptured = true
-        captureChatLifecycleSignal(
-          "chat_stalled_continuation",
-          "post_tool_continue"
-        )
-      }, stalledContinuationThresholdMs)
-    }
-
-    const resolvePostToolContinuation = () => {
-      awaitingPostToolContinuation = false
-      postToolContinuationArmedAtMs = null
-      clearStalledContinuationTimer()
-    }
+    // Stream liveness: phase, the post-tool stall timer, and the rule that no
+    // signal fires after completion or an execution abort. The tracker owns
+    // the state; this closure only decorates its snapshot with identity tags.
+    const liveness = createStreamLivenessTracker({
+      stalledThresholdMs: stalledContinuationThresholdMs,
+      onSignal: captureChatLifecycleSignal,
+    })
 
     // Two abort observers have distinct meanings:
     // the REQUEST signal is client-disconnect telemetry only — for durable
     // chats the stream keeps executing after it fires — while the EXECUTION
     // signal is the stream actually ending, which owns the abort cleanup
     // (reasoning close, stalled-continuation disarm).
-    let clientAbortCaptured = false
-    const handleRequestAbort = () => {
-      if (clientAbortCaptured || streamCompleted) return
-      clientAbortCaptured = true
-      captureChatLifecycleSignal("chat_client_abort")
-    }
+    const handleRequestAbort = () => liveness.requestAborted()
     const handleExecutionAbort = () => {
-      if (abortCaptured || streamCompleted) return
-      abortCaptured = true
+      if (!liveness.executionAborted()) return
       reasoningActivity.close()
       closeWorkDuration()
-      resolvePostToolContinuation()
     }
 
     if (signal.aborted) {
@@ -1510,7 +1443,7 @@ export function createChatTurnRuntime(args: {
     // next operation begins provider consumption.
     streamStartMs = Date.now()
     streamStartPerfMs = performance.now()
-    lastProgressAtMs = streamStartMs
+    liveness.streamStarted()
     workDuration = createWorkDurationTracker({
       initialDurationMs: initialWorkDurationMs,
     })
@@ -1561,7 +1494,7 @@ export function createChatTurnRuntime(args: {
         // to, and it places the first output chunk on this process's clock
         // for the receipt's first-write delay without the retry gap inside.
         onLanguageModelCallStart: () => {
-          if (stepCounter === 0 && firstOutputReleasedPerfMs === null) {
+          if (liveness.stepCount() === 0 && firstOutputReleasedPerfMs === null) {
             firstCallStartPerfMs = performance.now()
           }
         },
@@ -1590,16 +1523,20 @@ export function createChatTurnRuntime(args: {
         // Per-step structured tracing: tool name, duration, token usage, success.
         onStepEnd: async (step) => {
           const { toolCalls, toolResults, usage, finishReason } = step
-          stepCounter++
-          observedToolCalls += toolCalls.length
-          lastProgressAtMs = Date.now()
-          lastStepFinishReason = finishReason ?? null
+          // Liveness first: a tool-calls step arms the stall clock from the
+          // step's end, so the tool-outcome recording below counts as quiet.
+          liveness.stepEnded({
+            finishReason,
+            toolCallCount: toolCalls.length,
+            toolNames: toolCalls.map((call) => call.toolName),
+          })
+          const stepNumber = liveness.stepCount()
 
           // The provider-timing source (ADR-0030): SDK step performance +
           // usage feed both the Generation stats and the run timing receipt.
           timing.recordStep(step)
           if (
-            stepCounter === 1 &&
+            stepNumber === 1 &&
             step.performance.timeToFirstOutputMs !== undefined
           ) {
             perf.record(
@@ -1616,7 +1553,7 @@ export function createChatTurnRuntime(args: {
           // the bound ToolFacts. This callback does not backpressure the SDK;
           // the durable runtime drains the write before terminal settlement.
           lifecycle.stream.recordStep({
-            stepNumber: stepCounter,
+            stepNumber,
             usage: {
               inputTokens: usage?.inputTokens,
               outputTokens: usage?.outputTokens,
@@ -1632,20 +1569,12 @@ export function createChatTurnRuntime(args: {
           // assembly and the request-level outcome summary; the turn only
           // persists durable-run state below.
           await tool.onStepFinish({
-            stepNumber: stepCounter,
+            stepNumber,
             toolCalls,
             toolResults,
             usage,
             finishReason,
           })
-
-          if (finishReason === "tool-calls") {
-            lastToolStepNumber = stepCounter
-            lastToolNames = toolCalls.map((call) => call.toolName)
-            armStalledContinuationTimer()
-          } else {
-            resolvePostToolContinuation()
-          }
         },
 
         ...(Object.keys(providerOptions).length > 0 && { providerOptions }),
@@ -1665,19 +1594,14 @@ export function createChatTurnRuntime(args: {
           : {}),
 
         onChunk: ({ chunk }) => {
-          const now = Date.now()
-          lastChunkAtMs = now
-          lastProgressAtMs = now
-          resolvePostToolContinuation()
+          // Release time, read before the durable snapshot bookkeeping below.
+          const releasedAtMs = Date.now()
+          liveness.chunkReleased()
           lifecycle.stream.onChunk(chunk)
           // Liveness only — this callback sits downstream of the smoothing
           // transform, so any clock here would measure our own pacing.
-          sawProviderChunk = true
-          if (firstReleasedChunkLatencyMs === null) {
-            firstReleasedChunkLatencyMs = now - streamStartMs
-          }
           if (firstTextDeltaLatencyMs === null && chunk.type === "text-delta") {
-            firstTextDeltaLatencyMs = now - streamStartMs
+            firstTextDeltaLatencyMs = releasedAtMs - streamStartMs
             perf.record("provider_first_text_delta", firstTextDeltaLatencyMs)
           }
           if (chunk.type === "reasoning-start") {
@@ -1688,10 +1612,9 @@ export function createChatTurnRuntime(args: {
         },
 
         onError: (err: unknown) => {
-          streamCompleted = true
+          liveness.completed()
           reasoningActivity.close()
           closeWorkDuration()
-          resolvePostToolContinuation()
           console.error(
             JSON.stringify({
               _tag: "chat_stream_provider_error",
@@ -1760,10 +1683,9 @@ export function createChatTurnRuntime(args: {
         },
 
         onAbort: async (event) => {
-          streamCompleted = true
+          liveness.completed()
           reasoningActivity.close()
           closeWorkDuration()
-          resolvePostToolContinuation()
           // Flush the latest snapshot, then mark the run aborted (guest:
           // inert) — carrying cancellation evidence: the finished-step usage
           // aggregate when any step completed, otherwise
@@ -1782,11 +1704,9 @@ export function createChatTurnRuntime(args: {
         },
 
         onEnd: async ({ text, usage, steps, finishReason }) => {
-          streamCompleted = true
+          liveness.completed()
           reasoningActivity.close()
           closeWorkDuration()
-          lastProgressAtMs = Date.now()
-          resolvePostToolContinuation()
           const rawFinishReason = steps?.[steps.length - 1]?.rawFinishReason
 
           if (
