@@ -109,7 +109,7 @@ covered once, at the `requireOwnedGenerationRun` helper tests, not per handler.
 
 `prepareGeneration`, `approveToolCall`, and `denyToolCall` had drifted back to
 raw `mutation({...})` with inline auth — the bypass class this ADR exists to
-remove — while the docs said otherwise. Both now sit on builders:
+remove — while the docs said otherwise. All three now sit on builders:
 
 - `prepareGeneration` is an `ownedChatMutation`. The builder resolves the
   client-minted `publicId` (ADR-0033) to the owner-verified chat first; the

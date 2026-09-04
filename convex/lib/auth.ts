@@ -274,7 +274,7 @@ export async function requireOwnedToolApproval(
   }
 
   const run = await ctx.db.get(approval.runId)
-  if (!run) throw new Error("Approval not found")
+  if (!run || run.userId !== user._id) throw new Error("Approval not found")
 
   const chat = await ctx.db.get(run.chatId)
   if (!chat || chat.userId !== user._id) throw new Error("Approval not found")

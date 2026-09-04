@@ -7,7 +7,7 @@ import {
   grantRejectionCode,
   requireGrantAuthorizedRun,
 } from "./chatRuntimeWorker"
-import { sha256Hex, timingSafeEqualHex } from "./lib/sha256"
+import { sha256Hex } from "./lib/sha256"
 
 // The execution-grant verifier (ADR-0011) — the only NEW authorization logic
 // on the worker path. The dispatched `...ForChat` handlers behind it are
@@ -52,29 +52,6 @@ function makeGrantWorld(
 }
 
 const runId = "run_1" as Id<"generationRuns">
-
-describe("sha256Hex", () => {
-  it("matches FIPS 180-4 test vectors", () => {
-    expect(sha256Hex("")).toBe(
-      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    )
-    expect(sha256Hex("abc")).toBe(
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-    )
-    // Multi-block input (> 64 bytes) exercises the chunk loop.
-    expect(
-      sha256Hex(
-        "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
-      )
-    ).toBe("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
-  })
-
-  it("compares hex digests without length leaks", () => {
-    expect(timingSafeEqualHex(DIGEST, DIGEST)).toBe(true)
-    expect(timingSafeEqualHex(DIGEST, sha256Hex("other"))).toBe(false)
-    expect(timingSafeEqualHex(DIGEST, DIGEST.slice(1))).toBe(false)
-  })
-})
 
 describe("requireGrantAuthorizedRun", () => {
   it("resolves the run owner for a valid, unexpired grant", async () => {

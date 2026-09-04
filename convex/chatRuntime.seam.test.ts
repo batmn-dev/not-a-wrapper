@@ -207,18 +207,19 @@ describe("approveToolCall / denyToolCall (ownedToolApprovalMutation)", () => {
     ).rejects.toThrow("Approval not found")
   })
 
-  it("lets the owner decide", async () => {
+  it.each([
+    ["approveToolCall", "approved"],
+    ["denyToolCall", "denied"],
+  ] as const)("lets the owner decide through %s", async (name, status) => {
     const t = makeT()
     const owner = await seedOwner(t, OWNER, "chat-owned")
     await seedApproval(t, owner, "approval_1")
     await expect(
-      t
-        .withIdentity({ subject: OWNER })
-        .mutation(api.chatRuntime.approveToolCall, {
-          approvalId: "approval_1",
-          reason: "ok",
-        })
-    ).resolves.toMatchObject({ status: "approved", alreadyResolved: false })
+      t.withIdentity({ subject: OWNER }).mutation(api.chatRuntime[name], {
+        approvalId: "approval_1",
+        reason: "decided",
+      })
+    ).resolves.toMatchObject({ status, alreadyResolved: false })
   })
 })
 
