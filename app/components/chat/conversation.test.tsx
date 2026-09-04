@@ -189,6 +189,10 @@ describe("Conversation recovered turn contracts", () => {
     ).toContain(
       "keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))]"
     )
+    expect(
+      container?.querySelector('[data-testid="thread-scroll-edge"]')
+        ?.parentElement?.className
+    ).toContain("grow")
   })
 
   it("puts the edit-only 40px separation on the user turn-message owner", () => {

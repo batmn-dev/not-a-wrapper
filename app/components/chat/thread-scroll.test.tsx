@@ -332,6 +332,54 @@ describe("thread scroll contract", () => {
     )
   })
 
+  it("remeasures the gutter when the conversation identity changes", () => {
+    const rect = (top: number, bottom: number) =>
+      ({
+        top,
+        bottom,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: bottom - top,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect
+
+    act(() => {
+      root.render(
+        <ThreadScrollEdge
+          chatId="chat-1"
+          streamActive={false}
+          hydrated
+          freshChat
+        />
+      )
+    })
+
+    const gutter = container.querySelector<HTMLElement>(".threadScrollVars")
+    expect(gutter).toBeTruthy()
+    if (!gutter) return
+
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue(rect(0, 800))
+    vi.spyOn(gutter, "getBoundingClientRect").mockReturnValue(rect(100, 140))
+
+    act(() => {
+      root.render(
+        <ThreadScrollEdge
+          chatId="chat-2"
+          streamActive={false}
+          hydrated
+          freshChat
+        />
+      )
+    })
+
+    expect(gutter.style.getPropertyValue("--gutter-remaining-height")).toBe(
+      "700px"
+    )
+  })
+
   it("restores an unsaved thread with the exact two-frame bottom fallback", () => {
     act(() => {
       root.render(
