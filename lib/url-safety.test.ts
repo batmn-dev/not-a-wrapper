@@ -59,4 +59,16 @@ describe("formatSourceDisplayUrl", () => {
       "example.com:8443/article"
     )
   })
+
+  it("formats a hosted non-http URL the same way as http(s)", () => {
+    expect(formatSourceDisplayUrl("ftp://www.example.com/dir/")).toBe(
+      "example.com/dir"
+    )
+  })
+
+  it("keeps schemeless labels when the URL has no host", () => {
+    expect(formatSourceDisplayUrl("javascript:alert(1)")).toBe(
+      "javascript:alert(1)"
+    )
+  })
 })
