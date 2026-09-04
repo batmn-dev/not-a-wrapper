@@ -43,7 +43,7 @@ import type { ThreadScrollTarget } from "./thread-scroll-target"
 import {
   isGenerationActive,
   PENDING_ACTIVITY_TURN_ID,
-  shouldRenderPendingAssistantTurn,
+  resolveActiveAssistantTurn,
 } from "./use-activity-panel"
 
 type MessageRenderStatus = DurableMessageStatus | "ready" | "error"
@@ -404,11 +404,12 @@ export function Conversation({
   const generationActive = isGenerationActive(status, isSubmitting)
   const lastMessage = messages[messages.length - 1]
   const previousMessage = messages[messages.length - 2]
-  const hasPendingAssistantTurn = shouldRenderPendingAssistantTurn({
+  const activeTurn = resolveActiveAssistantTurn({
     messages,
     status,
     isSubmitting,
   })
+  const hasPendingAssistantTurn = activeTurn.kind === "pending"
   // Persistence can insert the real assistant shell before its first stream
   // part. Keep that empty shell out of the rendered path so the pending row
   // remains the single 32px owner until content can replace it atomically.
@@ -568,11 +569,12 @@ export function Conversation({
             // The single per-render derivation of everything the assistant row
             // renders (see CONTEXT.md "Assistant turn view"). Derived fresh each
             // render — the AI SDK mutates part objects in place during streaming,
-            // so this must never be memoized by message reference.
-            const view = deriveAssistantTurnView(
-              message,
-              isLast ? status : "ready"
-            )
+            // so this must never be memoized by message reference. The live
+            // row reuses the view the active-turn resolver derived this render.
+            const view =
+              activeTurn.kind === "live" && activeTurn.message === message
+                ? activeTurn.view
+                : deriveAssistantTurnView(message, isLast ? status : "ready")
 
             rowModel = {
               kind: "assistant",

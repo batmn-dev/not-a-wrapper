@@ -212,20 +212,6 @@ turns per affected route, the deterministic reproduction streams normally, and
 the stats line rejects sub-second windows on multi-hundred-token replies
 (rate hidden or flagged, never 4,000 tok/s). Land only with the before/after
 query results attached to the PR.
-- **4,480-token system prompt on the OpenAI route (benchmark finding 2):**
-every GPT-5.6 Luna turn reports 4,480 input tokens (4,412 cached) for a
-one-line user prompt, while Haiku sees 1,026 and GLM 552 on the same product
-surface. Find what the OpenAI path adds (tool schemas, hosted web search
-definitions, formatting instructions, duplicated preamble) and whether it is
-needed on turns with search off and no tools. *Measure first:* dump the
-resolved system prompt and tool list per route from a local turn, count
-tokens with the provider tokenizer, and record prefill share of TTFT via the
-receipt's `providerFirstOutputMs` on Luna vs Haiku for the same prompt.
-*Verify a fix:* the `inputTokens` figure on the Generation stats tooltip for
-the three benchmark prompts falls to the intended budget, cache hit rate stays
-at or above today's, and Luna P1 median send→first-text-chunk (currently
-3.8 s) improves in a rerun of the benchmark protocol on the same day as a
-control run on main.
 - **0.5–2.3 s before the stream headers (benchmark finding 3):** between the
 client's `/api/chat` request leaving and the `start` chunk arriving we spend
 0.5–2.3 s on 26 of 27 runs (Luna P1 runs: 2.2, 2.3, 0.8 s; the one excluded
