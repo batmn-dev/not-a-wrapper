@@ -4,7 +4,6 @@ import { estimatePartialOutputTokens } from "../lib/usage/terminal-usage-estimat
 import type { Doc, Id } from "./_generated/dataModel"
 import {
   internalMutation,
-  mutation,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
@@ -60,17 +59,17 @@ import {
 } from "./domain/message_visibility"
 import { patchChatActivity } from "./domain/project_activity"
 import {
-  getCurrentUser,
   isChatActive,
-  requireOwnedChat,
-  requireOwnedChatByPublicId,
   type AuthenticatedChatOwner,
   type AuthenticatedRunOwner,
+  type AuthenticatedToolApprovalOwner,
 } from "./lib/auth"
 import {
   authenticatedQuery,
+  ownedChatMutation,
   ownedChatQuery,
   ownedGenerationRunMutation,
+  ownedToolApprovalMutation,
 } from "./lib/authedFunctions"
 import {
   CANCELLATION_SETTLEMENT_PROTOCOL_VERSION,
@@ -1055,7 +1054,6 @@ async function selectOrInsertLatestUserMessageForGeneration(
   ctx: MutationCtx,
   owner: AuthenticatedChatOwner,
   args: {
-    chatId: Id<"chats">
     requestId: string
     model: string
     provider: string
@@ -1064,7 +1062,7 @@ async function selectOrInsertLatestUserMessageForGeneration(
   now: number
 ) {
   const message = await createMessageBranchWriter(ctx, {
-    chatId: args.chatId,
+    chatId: owner.chat._id,
     now,
   }).writeUserMessage({
     clientMessageId: latestUserMessage.id,
@@ -1084,7 +1082,6 @@ export async function applyRegenerationIntentForGeneration(
   ctx: MutationCtx,
   owner: AuthenticatedChatOwner,
   args: {
-    chatId: Id<"chats">
     requestId: string
     model: string
     provider: string
@@ -1093,7 +1090,7 @@ export async function applyRegenerationIntentForGeneration(
   },
   now: number
 ) {
-  const currentMessages = await listMessages(ctx, args.chatId)
+  const currentMessages = await listMessages(ctx, owner.chat._id)
   const regenerationPlan = resolveRegenerationInputPlan(
     currentMessages,
     args.regeneration
@@ -1101,13 +1098,13 @@ export async function applyRegenerationIntentForGeneration(
 
   await denyPendingApprovalsForChat(
     ctx,
-    args.chatId,
+    owner.chat._id,
     owner.user._id,
     "auto-denied: new generation started"
   )
 
   const assistantMessage = await createMessageBranchWriter(ctx, {
-    chatId: args.chatId,
+    chatId: owner.chat._id,
     now,
   }).writeAssistantPlaceholder({
     generationRunId: args.runId,
@@ -1195,7 +1192,6 @@ export async function applyEditIntentForGeneration(
   ctx: MutationCtx,
   owner: AuthenticatedChatOwner,
   args: {
-    chatId: Id<"chats">
     requestId: string
     model: string
     provider: string
@@ -1203,11 +1199,11 @@ export async function applyEditIntentForGeneration(
   },
   now: number
 ): Promise<number | undefined> {
-  const currentMessages = await listMessages(ctx, args.chatId)
+  const currentMessages = await listMessages(ctx, owner.chat._id)
   const editPlan = resolveEditInputPlan(currentMessages, args.edit)
 
   await createMessageBranchWriter(ctx, {
-    chatId: args.chatId,
+    chatId: owner.chat._id,
     now,
   }).writeUserMessage({
     clientMessageId: args.edit.replacementMessage.id,
@@ -1226,7 +1222,7 @@ export async function applyEditIntentForGeneration(
     owner.chat.titleSource !== "user"
   ) {
     const titleGeneration = (owner.chat.titleGeneration ?? 0) + 1
-    await ctx.db.patch(args.chatId, {
+    await ctx.db.patch(owner.chat._id, {
       title: "New chat",
       titleSource: "provisional",
       titleGeneration,
@@ -1671,7 +1667,6 @@ type GenerationApprovalResponse = {
 }
 
 type GenerationInputPlanArgs = {
-  chatId: Id<"chats">
   expectedVisibleMessageCount?: number
   tailMessageId?: string
   latestUserMessage?: {
@@ -1806,7 +1801,7 @@ export async function planGenerationInputForChat(
   options: { continuationProvider?: string } = {}
 ): Promise<GenerationInputPlan> {
   validateGenerationInputIntent(args)
-  const currentMessages = await listMessages(ctx, args.chatId)
+  const currentMessages = await listMessages(ctx, owner.chat._id)
   const approvalResponses = args.approvalResponses ?? []
   let modelHistory: Doc<"messages">[]
   let pinnedProvider: string | undefined
@@ -1820,7 +1815,7 @@ export async function planGenerationInputForChat(
     const editPlan = resolveEditInputPlan(currentMessages, args.edit)
     modelHistory = projectModelHistoryMessages(
       planSelectedPathAfterUserMessage(currentMessages, {
-        chatId: args.chatId,
+        chatId: owner.chat._id,
         now:
           editPlan.editedMessage?.createdAt ??
           (currentMessages.at(-1)?.createdAt ?? 0) + 1,
@@ -1852,7 +1847,7 @@ export async function planGenerationInputForChat(
     })
     modelHistory = projectModelHistoryMessages(
       planSelectedPathAfterUserMessage(currentMessages, {
-        chatId: args.chatId,
+        chatId: owner.chat._id,
         now: currentMessages.at(-1)?.createdAt ?? 0,
         input: {
           clientMessageId: args.latestUserMessage.id,
@@ -1896,7 +1891,6 @@ export const planGenerationInput = ownedChatQuery({
 type GenerationRouteReceipt = ChatAdmissionRouteReceipt
 
 type PrepareGenerationForChatArgs = {
-  chatId: Id<"chats">
   requestId: string
   model: string
   provider: string
@@ -1939,9 +1933,9 @@ type PrepareGenerationForChatArgs = {
 
 export async function prepareGenerationForChat(
   ctx: MutationCtx,
+  owner: AuthenticatedChatOwner,
   args: PrepareGenerationForChatArgs
 ) {
-  const owner = await requireOwnedChat(ctx, args.chatId)
   const now = nowMs()
   const approvalResponses = args.approvalResponses ?? []
 
@@ -1965,13 +1959,13 @@ export async function prepareGenerationForChat(
       : args.latestUserMessage
 
   if (latestUserMessage && !args.edit) {
-    await validateSelectedPathTokenForChat(ctx, args.chatId, {
+    await validateSelectedPathTokenForChat(ctx, owner.chat._id, {
       expectedVisibleMessageCount: args.expectedVisibleMessageCount,
       tailMessageId: args.tailMessageId,
     })
   }
 
-  await closeSupersededGenerationsForChat(ctx, args.chatId, owner.user._id, now)
+  await closeSupersededGenerationsForChat(ctx, owner.chat._id, owner.user._id, now)
 
   const continuation = await applyApprovalResponses(
     ctx,
@@ -1986,7 +1980,7 @@ export async function prepareGenerationForChat(
   if (latestUserMessage) {
     await denyPendingApprovalsForChat(
       ctx,
-      args.chatId,
+      owner.chat._id,
       owner.user._id,
       "auto-denied: new generation started"
     )
@@ -1996,7 +1990,6 @@ export async function prepareGenerationForChat(
         ctx,
         owner,
         {
-          chatId: args.chatId,
           requestId: args.requestId,
           model: args.model,
           provider: args.provider,
@@ -2019,7 +2012,7 @@ export async function prepareGenerationForChat(
   }
 
   const runId = await ctx.db.insert("generationRuns", {
-    chatId: args.chatId,
+    chatId: owner.chat._id,
     userId: owner.user._id,
     requestId: args.requestId,
     model: args.model,
@@ -2088,7 +2081,6 @@ export async function prepareGenerationForChat(
       ctx,
       owner,
       {
-        chatId: args.chatId,
         requestId: args.requestId,
         model: args.model,
         provider: args.provider,
@@ -2109,12 +2101,12 @@ export async function prepareGenerationForChat(
     const pausedRunId = continuation?.pausedRunId ?? null
     if (pausedRunId && pausedRunId !== runId) {
       const pausedRun = await ctx.db.get(pausedRunId)
-      if (pausedRun && pausedRun.chatId === args.chatId) {
+      if (pausedRun && pausedRun.chatId === owner.chat._id) {
         if (pausedRun.continuationRunId !== undefined) {
           console.log(
             JSON.stringify({
               _tag: "run_continuation_conflict",
-              chatId: args.chatId,
+              chatId: owner.chat._id,
               pausedRunId,
               reason: "already-dispatched",
               winnerRunId: pausedRun.continuationRunId,
@@ -2140,7 +2132,7 @@ export async function prepareGenerationForChat(
           console.log(
             JSON.stringify({
               _tag: "run_continuation_conflict",
-              chatId: args.chatId,
+              chatId: owner.chat._id,
               pausedRunId,
               reason: "pause-settled",
               pausedRunStatus: pausedRun.status,
@@ -2161,7 +2153,7 @@ export async function prepareGenerationForChat(
           console.log(
             JSON.stringify({
               _tag: "run_continuation_conflict",
-              chatId: args.chatId,
+              chatId: owner.chat._id,
               pausedRunId,
               reason: "slot-moved",
               slotRunId: owner.chat.statusRunId,
@@ -2193,7 +2185,7 @@ export async function prepareGenerationForChat(
     })
   } else {
     const assistantMessage = await createMessageBranchWriter(ctx, {
-      chatId: args.chatId,
+      chatId: owner.chat._id,
       now,
     }).writeAssistantPlaceholder({
       generationRunId: runId,
@@ -2235,7 +2227,7 @@ export async function prepareGenerationForChat(
   const modelHistory =
     preparedModelHistory ??
     projectModelHistoryMessages(
-      getSelectedPath(await listMessages(ctx, args.chatId)).filter(
+      getSelectedPath(await listMessages(ctx, owner.chat._id)).filter(
         (message) =>
           includeAssistantInModelHistory || message._id !== assistantMessageId
       )
@@ -2249,12 +2241,7 @@ export async function prepareGenerationForChat(
   }
 }
 
-type VerifiedPrepareGenerationArgs = Omit<
-  PrepareGenerationForChatArgs,
-  "chatId"
-> & {
-  /** The client-minted publicId the route signed into the admission proof. */
-  chatId: string
+type VerifiedPrepareGenerationArgs = PrepareGenerationForChatArgs & {
   cancellationSettlementVersion: CancellationSettlementProtocolVersion
   admissionIssuedAt: number
   admissionProof: string
@@ -2262,13 +2249,16 @@ type VerifiedPrepareGenerationArgs = Omit<
 
 export async function prepareGenerationWithVerifiedAdmission(
   ctx: MutationCtx,
+  owner: AuthenticatedChatOwner,
   args: VerifiedPrepareGenerationArgs,
   options: { secret?: string; now?: number } = {}
 ) {
   const { admissionIssuedAt, admissionProof, ...prepareArgs } = args
+  // The proof signs the client-minted publicId (ADR-0033); the builder already
+  // resolved it to the owner-verified chat, so verify against that chat.
   const isVerified = verifyChatAdmissionProof(
     {
-      chatId: args.chatId,
+      chatId: owner.chat.publicId,
       requestId: args.requestId,
       model: args.model,
       provider: args.provider,
@@ -2290,17 +2280,13 @@ export async function prepareGenerationWithVerifiedAdmission(
       message: "Chat admission proof is invalid or expired",
     })
   }
-  // Boundary resolution (ADR-0033): the proof covered the public id; every
-  // prepare write below runs against the owner-verified internal id.
-  const { chat } = await requireOwnedChatByPublicId(ctx, args.chatId)
-  return prepareGenerationForChat(ctx, { ...prepareArgs, chatId: chat._id })
+  return prepareGenerationForChat(ctx, owner, prepareArgs)
 }
 
-export const prepareGeneration = mutation({
+// `ownedChatMutation` declares the `chatId` arg (the client-minted publicId,
+// ADR-0033) and resolves it to the owner-verified chat before this runs.
+export const prepareGeneration = ownedChatMutation({
   args: {
-    // The client-minted publicId (ADR-0033); resolved to the owned chat below
-    // before any prepare work. The admission proof signs this same string.
-    chatId: v.string(),
     requestId: v.string(),
     model: v.string(),
     provider: v.string(),
@@ -2344,7 +2330,11 @@ export const prepareGeneration = mutation({
     admissionProof: v.string(),
   },
   handler: async (ctx, args) =>
-    prepareGenerationWithVerifiedAdmission(ctx, args),
+    prepareGenerationWithVerifiedAdmission(
+      ctx,
+      { user: ctx.user, chat: ctx.chat },
+      args
+    ),
 })
 
 /**
@@ -3111,25 +3101,11 @@ async function expireToolApprovalForChat(
 
 export async function resolveToolCallDecision(
   ctx: MutationCtx,
-  args: { approvalId: string; reason?: string },
+  owner: AuthenticatedToolApprovalOwner,
+  args: { reason?: string },
   decision: "approved" | "denied"
 ): Promise<ToolCallDecisionResult> {
-  const user = await getCurrentUser(ctx)
-  if (!user) throw new Error("Not authenticated")
-
-  const approval = await ctx.db
-    .query("toolApprovalRequests")
-    .withIndex("by_approval", (q) => q.eq("approvalId", args.approvalId))
-    .unique()
-  if (!approval || approval.userId !== user._id) {
-    throw new Error("Approval not found")
-  }
-  const run = await ctx.db.get(approval.runId)
-  if (!run) throw new Error("Approval not found")
-  const chat = await ctx.db.get(run.chatId)
-  if (!chat || !(await isChatActive(ctx, chat))) {
-    throw new Error("Approval not found")
-  }
+  const { user, approval } = owner
 
   if (approval.status !== "pending") {
     return {
@@ -3163,20 +3139,30 @@ export async function resolveToolCallDecision(
   }
 }
 
-export const approveToolCall = mutation({
-  args: {
-    approvalId: v.string(),
-    reason: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => resolveToolCallDecision(ctx, args, "approved"),
+const toolCallDecisionArgs = { reason: v.optional(v.string()) }
+
+const approvalOwner = (ctx: {
+  user: Doc<"users">
+  chat: Doc<"chats">
+  run: Doc<"generationRuns">
+  approval: Doc<"toolApprovalRequests">
+}): AuthenticatedToolApprovalOwner => ({
+  user: ctx.user,
+  chat: ctx.chat,
+  run: ctx.run,
+  approval: ctx.approval,
 })
 
-export const denyToolCall = mutation({
-  args: {
-    approvalId: v.string(),
-    reason: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => resolveToolCallDecision(ctx, args, "denied"),
+export const approveToolCall = ownedToolApprovalMutation({
+  args: toolCallDecisionArgs,
+  handler: async (ctx, args) =>
+    resolveToolCallDecision(ctx, approvalOwner(ctx), args, "approved"),
+})
+
+export const denyToolCall = ownedToolApprovalMutation({
+  args: toolCallDecisionArgs,
+  handler: async (ctx, args) =>
+    resolveToolCallDecision(ctx, approvalOwner(ctx), args, "denied"),
 })
 
 export async function recordToolInvocationsForChat(

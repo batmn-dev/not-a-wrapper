@@ -104,3 +104,30 @@ The `requireChatOwner` delegating alias noted above was removed in this pass;
 `requireOwnedChat` directly. `approveToolCall`/`denyToolCall` stay outside the
 builder: they own by `approval.userId`, a self-identity-match shape. Auth is
 covered once, at the `requireOwnedGenerationRun` helper tests, not per handler.
+
+## Addendum (2026-09-04): the last three chatRuntime registrations
+
+`prepareGeneration`, `approveToolCall`, and `denyToolCall` had drifted back to
+raw `mutation({...})` with inline auth — the bypass class this ADR exists to
+remove — while the docs said otherwise. All three now sit on builders:
+
+- `prepareGeneration` is an `ownedChatMutation`. The builder resolves the
+  client-minted `publicId` (ADR-0033) to the owner-verified chat first; the
+  admission proof (ADR-0020), which signs that `publicId`, is then verified
+  against `ctx.chat.publicId`. Ownership therefore precedes the proof check;
+  that order flip is harmless because guests never reach this mutation.
+- `approveToolCall` / `denyToolCall` are `ownedToolApprovalMutation`s, a new
+  builder over `requireOwnedToolApproval` in `convex/lib/auth.ts`: auth first,
+  then approval → run → active chat, with missing, not-owned, and broken-link
+  rows collapsing to "Approval not found" (the `requireOwnedGenerationRun`
+  shape). The "self-identity-match" reading above was wrong: the approval is
+  an owned resource reached transitively, like the run.
+
+The cores (`prepareGenerationForChat`, `prepareGenerationWithVerifiedAdmission`,
+`resolveToolCallDecision`, and the plan / edit-intent / regeneration-intent /
+insert-user-message helpers under prepare) take the injected owner and no
+longer accept a `chatId` argument, so the second-id disagreement this ADR's
+first addendum made unrepresentable for run writes is now unrepresentable for
+prepare writes too. Core-level tests resolve the owner the way the builders do
+(`prepareAsOwner` / `decideAsOwner` helpers); the registrations themselves are
+covered by seam tests (ADR-0034).
