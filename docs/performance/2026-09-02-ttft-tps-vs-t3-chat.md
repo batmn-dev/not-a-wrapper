@@ -172,8 +172,9 @@ helpful AI assistant`) and the user text: 310–400 bytes, no `tools`, no
   44 / 41 / 54.
 - The tool was declared on every benchmark turn because `webSearchEnabled`
   defaults to on and the benchmark account had never set it (the prod
-  `userPreferences` row has no `webSearchEnabled`; all 30 benchmark assistant
-  messages carry `toolMetadataByName: ["web_search"]`). The composer gives no
+  `userPreferences` row has no `webSearchEnabled`; every one of the 29 `ours`
+  runs in the runs TSV has an assistant message whose metadata carries a
+  `toolMetadataByName` record with a `web_search` key). The composer gives no
   visible sign that search is on; the only indicator is the checkmark inside
   the "+" menu. "Web search off" in the matrix above was therefore not off.
 - Haiku's 1,026 and GLM's 552 are the same tool's smaller server-side cost

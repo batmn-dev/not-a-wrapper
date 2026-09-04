@@ -223,12 +223,16 @@ Sample rows (delta time, delta chars, DOM updates before next delta, gap):
 | 5352.1 | 4 | 1 | 1.4 |
 | 6811.6 | 6 | 1 | 4.1 |
 
-The gap never grows with a fixed cadence; it stays at one React commit
-(~2 ms) behind each delta. The 25 zero-update deltas are ones that arrived in
-the same `read()` as the following delta (p10 cadence 0 ms), so one commit
-covered both. This is a 1:1 mapping and disproves client pacing. Run 1 (DOM
-tap only) agrees: 181 batches, median 11.5 ms between batches, median 6
-chars per batch, first paint 3056 ms, last 6037 ms.
+The gap never grows with a fixed cadence; the MutationObserver batches stay
+a few milliseconds (~2 ms median) behind the deltas. The run observed 190
+observer batches for 214 deltas: mostly one batch per delta, with the 25
+zero-update deltas being ones that arrived in the same `read()` as the
+following delta (p10 cadence 0 ms) so one batch covered both, and one delta
+producing two batches. That runtime result is consistent with direct
+delivery; the absence of client pacing is established by the source
+inspection above (no pacing operator between the stream and the store), not
+by this ratio. Run 1 (DOM tap only) agrees: 181 batches, median 11.5 ms
+between batches, median 6 chars per batch, first paint 3056 ms, last 6037 ms.
 
 What is not proven: the server side. The word-sized deltas at a ~10 ms median
 cadence are consistent with the AI SDK `smoothStream()` default
@@ -236,10 +240,13 @@ cadence are consistent with the AI SDK `smoothStream()` default
 that runs on Vercel and is unverifiable from the client. Treat "T3 paces on
 the server" as unverified.
 
-**What we ship.** Server-side adaptive word chunking
-(`app/api/chat/word-chunking-transform.ts`: word-boundary reassembly, 5–80 ms
-per-word delay derived from observed arrival rate, 400 ms max buffered lag),
-then on the client the AI SDK `Chat` store mutated per part with
+**What we ship.** Server-side adaptive word chunking, evidence-gated to the
+one measured provider/model pair — the Anthropic `claude-haiku-4-5-20251001`
+route — and off for every other stream (`isWordChunkingEligible` in
+`app/api/chat/word-chunking-transform.ts`: word-boundary reassembly, 5–80 ms
+per-word delay derived from observed arrival rate, 400 ms max buffered lag;
+adding a target requires a trace showing coarse provider deltas), then on
+the client the AI SDK `Chat` store mutated per part with
 frame-aligned notification (`lib/chat-performance/message-throttle.ts`: at
 most one `useSyncExternalStore` publication per paint while streaming), and
 ADR-0016 incremental block projection.
@@ -392,9 +399,11 @@ i.e. "load more" pages of 20, all of which were rendered.
 
 **What we ship.** Eager rows with `content-visibility: auto` and
 `contain-intrinsic-size: auto 100lvh` on settled rows
-(`app/components/chat/conversation.tsx`), the live row excluded; the
-row-virtualization gate is off by default because the treatment arm's
-`scrollTop` writes killed touch momentum (see the turn-virtualization memory).
+(`app/components/chat/conversation.tsx`), the live row excluded. The
+row-virtualization arm was removed on 2026-08-26 because its reflow
+`scrollTop` writes killed touch momentum; the eager shape is the only one
+that ships (see the `TurnRow` note in `conversation.tsx` and the
+"removed virtualization arm" note in `app/components/chat/thread-scroll.tsx`).
 ChatGPT-style scroll anchoring via `scroll-margin-bottom` and trailing gutter
 (`docs/chatgpt-scroll-architecture-audit.md`).
 
@@ -478,9 +487,12 @@ selected-path / run-state subscriptions (ADR-0027) so run-doc patches do not
 re-deliver content.
 
 **Recommendation: reject.** Same architecture class (in-memory live store,
-Convex for durability and other surfaces), and their transition payloads are
-larger than ours by construction (whole paginated pages on every thread
-write, no split subscription). Nothing to port. Before/after test if we ever
+Convex for durability and other surfaces). In these captures their
+transition payloads were larger than ours: three ~30 KB frames per turn,
+consistent with whole paginated pages being re-delivered on thread writes
+with no split subscription. Which query those frames re-deliver was not
+decoded, so this is an observation from these runs, not a proven property
+of their construction. Nothing to port. Before/after test if we ever
 suspect our Convex path is chattier: wrap `socket.ws.onmessage` on our
 client during one P2 turn and compare frame count and bytes against the
 table above (theirs: ~9 frames, ~140 KB per turn).
