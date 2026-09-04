@@ -9,6 +9,8 @@ type SourceLike = {
   snippet?: string
   siteName?: string
   faviconDomain?: string
+  publishedDate?: string
+  date?: string
   toolCallId?: string
   tool_call_id?: string
   callId?: string
@@ -20,22 +22,48 @@ export type AssistantSourceResult = SourceUrlUIPart & {
   description?: string
   siteName?: string
   faviconDomain?: string
+  publishedDate?: string
   /** Explicit producer identity when the provider/tool output supplies one. */
   toolCallId?: string
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined
+}
+
+function nestedMetadataString(
+  source: SourceLike,
+  keys: readonly string[]
+): string | undefined {
+  for (const metadata of Object.values(source.providerMetadata ?? {})) {
+    if (metadata === null || typeof metadata !== "object") continue
+    const record = metadata as Record<string, unknown>
+    for (const key of keys) {
+      const value = nonEmptyString(record[key])
+      if (value) return value
+    }
+  }
+  return undefined
 }
 
 function sourceToolCallId(source: SourceLike): string | undefined {
   const direct =
     source.toolCallId ?? source.tool_call_id ?? source.callId ?? source.searchId
   if (direct) return direct
-  for (const metadata of Object.values(source.providerMetadata ?? {})) {
-    if (metadata === null || typeof metadata !== "object") continue
-    const record = metadata as Record<string, unknown>
-    for (const key of ["toolCallId", "tool_call_id", "callId", "searchId"]) {
-      if (typeof record[key] === "string") return record[key]
-    }
-  }
-  return undefined
+  return nestedMetadataString(source, [
+    "toolCallId",
+    "tool_call_id",
+    "callId",
+    "searchId",
+  ])
+}
+
+function sourcePublishedDate(source: SourceLike): string | undefined {
+  return (
+    nonEmptyString(source.publishedDate) ??
+    nonEmptyString(source.date) ??
+    nestedMetadataString(source, ["publishedDate", "date"])
+  )
 }
 
 function normalizeSource(source: SourceLike): AssistantSourceResult {
@@ -43,10 +71,11 @@ function normalizeSource(source: SourceLike): AssistantSourceResult {
     type: "source-url",
     sourceId: source.sourceId || source.url,
     url: source.url,
-    title: source.title || source.url,
+    title: nonEmptyString(source.title),
     description: source.description || source.snippet,
     siteName: source.siteName,
     faviconDomain: source.faviconDomain,
+    publishedDate: sourcePublishedDate(source),
     toolCallId: sourceToolCallId(source),
   }
 }
@@ -78,9 +107,11 @@ export function dedupeSources(
     result[existingIndex] = {
       ...source,
       ...existing,
+      title: existing.title ?? source.title,
       description: existing.description ?? source.description,
       siteName: existing.siteName ?? source.siteName,
       faviconDomain: existing.faviconDomain ?? source.faviconDomain,
+      publishedDate: existing.publishedDate ?? source.publishedDate,
       toolCallId: existing.toolCallId ?? source.toolCallId,
     }
   }

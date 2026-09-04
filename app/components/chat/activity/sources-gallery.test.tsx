@@ -127,4 +127,96 @@ describe("SourcesGallery favicon sharing", () => {
     const link = container!.querySelector("a")
     expect(link?.textContent).toContain("A result snippet preserved")
   })
+
+  it("shows title, description, and published date when all are present", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "full-source",
+              href: "https://example.com/post",
+              title: "A researched headline",
+              siteName: "Example",
+              description: "A result snippet preserved from tool output.",
+              publishedDate: "2024-01-15",
+            },
+          ]}
+        />
+      )
+    })
+
+    const link = container!.querySelector("a")
+    expect(link?.textContent).toContain("Example · Jan 15, 2024")
+    expect(link?.querySelector(".font-semibold")?.textContent).toBe(
+      "A researched headline"
+    )
+    expect(link?.querySelector(".leading-snug")?.textContent).toBe(
+      "A result snippet preserved from tool output."
+    )
+  })
+
+  it("shows a readable URL as the headline for a URL-only source", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "url-only",
+              href: "https://www.example.com/path/",
+            },
+          ]}
+        />
+      )
+    })
+
+    const link = container!.querySelector("a")
+    expect(link?.querySelector(".font-semibold")?.textContent).toBe(
+      "example.com/path"
+    )
+    expect(link?.querySelector(".leading-snug")).toBeNull()
+  })
+
+  it("does not treat a domain title as a headline", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "domain-title",
+              href: "https://apnews.com/article/example",
+              title: "apnews.com",
+            },
+          ]}
+        />
+      )
+    })
+
+    expect(container!.querySelector(".font-semibold")?.textContent).toBe(
+      "apnews.com/article/example"
+    )
+  })
+
+  it("does not mount a description slot when description is absent", () => {
+    act(() => {
+      root?.render(
+        <SourcesGallery
+          sources={[
+            {
+              sourceId: "title-only",
+              href: "https://example.com/page",
+              title: "A real headline",
+              siteName: "Example",
+            },
+          ]}
+        />
+      )
+    })
+
+    const link = container!.querySelector("a")
+    expect(link?.querySelector(".font-semibold")?.textContent).toBe(
+      "A real headline"
+    )
+    expect(link?.querySelector(".leading-snug")).toBeNull()
+  })
 })

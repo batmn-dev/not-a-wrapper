@@ -25,7 +25,7 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                 <Favicon
                   key={`${source.url}-${index}`}
                   url={source.faviconDomain ?? source.url}
-                  alt={`Favicon for ${source.title}`}
+                  alt={`Favicon for ${source.title || source.url}`}
                   shape="rounded"
                   className="border-background size-4 border"
                 />
@@ -48,6 +48,7 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                   .replace(/^https?:\/\/(www\.)?/, "")
                   .replace(/\/$/, "")
               : source.url
+            const label = source.title || displayUrl
 
             return (
               <li key={source.sourceId} className="flex items-center text-sm">
@@ -60,11 +61,11 @@ export function SourcesList({ sources, className }: SourcesListProps) {
                   >
                     <Favicon
                       url={source.faviconDomain ?? source.url}
-                      alt={`Favicon for ${source.title}`}
+                      alt={`Favicon for ${label}`}
                       shape="rounded"
                       className="size-4 flex-shrink-0"
                     />
-                    <span className="truncate">{source.title}</span>
+                    <span className="truncate">{label}</span>
                     <Icon
                       icon={RiLink}
                       slotSize={12}

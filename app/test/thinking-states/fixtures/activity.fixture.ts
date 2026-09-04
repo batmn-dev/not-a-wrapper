@@ -10,6 +10,7 @@ const ACTIVITY_SOURCES = [
     siteName: "developer.mozilla.org",
     description:
       "Accessibility makes websites usable by as many people as possible, including people with disabilities.",
+    publishedDate: "2024-01-15",
   },
   {
     type: "source-url",
@@ -17,17 +18,11 @@ const ACTIVITY_SOURCES = [
     url: "https://react.dev/reference/react",
     title: "React reference",
     siteName: "react.dev",
-    description:
-      "Reference documentation for React APIs, components, hooks, and browser integration.",
   },
   {
     type: "source-url",
     sourceId: "fixture-source-3",
     url: "https://www.w3.org/WAI/ARIA/apg/",
-    title: "ARIA Authoring Practices Guide",
-    siteName: "www.w3.org",
-    description:
-      "Patterns and keyboard interaction guidance for accessible web application widgets.",
   },
   {
     type: "source-url",
