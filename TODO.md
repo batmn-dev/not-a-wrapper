@@ -69,22 +69,32 @@ expensive platform-funded generations.
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic design system (future):** Define an agent-readable, customizable
 visual system after the product's core interaction patterns stabilize.
-- **Investigate optimistic chat navigation (replicate T3 Chat):** t3.chat
-flips the URL to `/chat/<client-generated uuid>` the moment Send is clicked
-and only then fetches the thread route chunk; no server round trip sits in the
-visible path. Ours waits for `chats.createWithFirstTurn` (ADR-0012) to mint
-the Convex id before `/c/<id>` commits. Plan: instrument the gap with the
-existing harness marks (`chat_send_intent`, `optimistic_message_painted`,
-`request_dispatched`) plus a new `thread_route_committed` mark; then decide
-between client-minted chat ids (keeping ADR-0012 atomicity and the guest
-`local-` id path intact) or keeping server ids but committing the route
-before acceptance returns. Verifiable test: run `SUITE=smoke bun run
-bench:browser` before and after on the pinned fixture and compare p50/p95 of
-`send_to_optimistic_paint` and `send_to_thread_route_committed`; the
-adoption-loss gate (Chat remounts) must stay 0 and a reload mid-stream must
-land on the same chat with the stream re-adopted. Expected: route commit at
-or before the optimistic paint, with no Convex round trip between Send and
-the thread view.
+- **Implement optimistic thread navigation (replicate T3 Chat):** commit
+`/c/<chatId>` at the Send click instead of after `chats.createWithFirstTurn`
+returns. T3 flips the URL to a client-generated id the moment Send is
+clicked and fetches the thread chunk afterward (verified 2026-09-02,
+`docs/performance/2026-09-02-t3-chat-frontend-analysis.md`); ours waits for
+the Convex round trip that mints the id, which is the largest remaining piece
+of the Luna P1 gap. Sequence: (1) add a `thread_route_committed` harness mark
+next to `chat_send_intent`, `optimistic_message_painted`, and
+`request_dispatched`, and capture a baseline with `SUITE=smoke bun run
+bench:browser` on the pinned fixture. (2) Decide the id model in a short
+ADR-0012 amendment: client-minted chat ids (UUID reserved on the client,
+accepted or rejected by `createWithFirstTurn`) or server ids with the route
+committed before acceptance returns; the guest `local-` id path must keep
+working unchanged. (3) Define the rejection path before the happy path: a
+rejected or failed first turn must roll the URL back to `/` (or the project
+route) and show the error in place, with no orphan `/c/<id>` left in history.
+(4) Prefetch the thread route chunk at Send (or composer focus) so the
+earlier route commit does not wait on a chunk download. (5) Keep Chat owned
+by the `(chat)` layout; an earlier route commit is exactly the kind of change
+that reintroduced remounts before. *Verify:* p50/p95 of
+`send_to_thread_route_committed` at or below `send_to_optimistic_paint`
+before and after; the adoption-loss gate (Chat remounts) stays 0; a reload
+mid-stream lands on the same chat with the stream re-adopted; a forced
+rejection (rate limit, invalid model) lands back on the origin route with the
+draft preserved; guest and project-onboarding sends both pass the same
+checks. Land only with the before/after harness table attached to the PR.
 - **Investigate route-level code splitting of the thread (replicate T3 Chat):**
 t3.chat loads its thread route chunk and read-only bar on demand (Vite,
 134 chunks). Our `/` and `/c/[chatId]` ship byte-identical first-load JS
