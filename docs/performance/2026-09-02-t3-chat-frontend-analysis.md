@@ -17,7 +17,7 @@ inference from feel.
 | Visibility-gated hydration | runtime: no React props on the textarea and a disabled submit until the tab is shown | established, todo filed |
 | SSR composer shell | runtime: composer visible and correctly labeled before hydration | established, todo filed |
 | Stats for Nerds | bundle audit: server-written Convex fields, client has no clock | established, not replicating |
-| Streamed-text pacing | source: Effect pipeline → zustand `setState` per delta; runtime: 214 deltas → 190 commits, median 2.3 ms lag | established: no client pacing, reject |
+| Streamed-text pacing | source: Effect pipeline → zustand `setState` per delta; runtime: 214 deltas → 190 MutationObserver batches (DevTools hook absent), median 2.3 ms lag | established: no client pacing, reject |
 | Markdown and highlighting stack | source: react-markdown + remark-gfm/math + rehype-katex + KaTeX preloaded, `marked` lexer block memo, Shiki `React.lazy` | established: same stack as ours, reject swap |
 | Thread virtualization | source: plain `messages.map`, TanStack Virtual only on sidebar; runtime: 60/60 rows in DOM at every scroll position | established: none, reject |
 | Sync-engine update batching | source: convex/react `useState` subscription, no transitions; runtime: 9 non-ping frames per turn, live turn in zustand | established: same class as ours, reject |
@@ -117,8 +117,9 @@ cold. No headings, no lists, no bold.") with GPT-5.6 Luna at Instant and:
 - record a 5 s PerformanceObserver longtask sample during streaming;
 - count WebSocket messages received during the turn (wrap
   WebSocket.prototype.addEventListener or the onmessage setter before the
-  send) and the number of React commits (React DevTools hook if present,
-  otherwise MutationObserver batches).
+  send) and the number of DOM update batches (React commits via the React
+  DevTools hook if present, otherwise MutationObserver callback batches; the
+  hook was absent on t3.chat, so every count below is observer batches).
 Report delta arrival versus DOM update timing as a table with the median gap
 and the number of DOM updates per delta. Treat the timing shape as supporting
 evidence only: a fixed cadence is consistent with client-side pacing, but
@@ -252,12 +253,13 @@ most one `useSyncExternalStore` publication per paint while streaming), and
 ADR-0016 incremental block projection.
 
 **Recommendation: reject (nothing to replicate).** Their client does less
-than ours: one commit per delta, no coalescing. Our frame aligner adds at
-most one frame (8–16 ms) of latency over their ~2 ms and removes redundant
-commits; the visible difference is not measurable by eye. Do not remove the
-frame aligner to chase parity. Before/after test if anyone proposes it: same
-`getReader` + MutationObserver tap on our `/c/<id>`, compare commits per
-second and long-task count at equal delta rate; a change is only worth
+than ours: roughly one DOM update batch per delta, no coalescing. Our frame
+aligner adds at most one frame (8–16 ms) of latency over their ~2 ms and
+removes redundant updates; the visible difference is not measurable by eye.
+Do not remove the frame aligner to chase parity. Before/after test if anyone
+proposes it: same `getReader` + MutationObserver tap on our `/c/<id>`,
+compare observer batches per second and long-task count at equal delta
+rate; a change is only worth
 shipping if long tasks drop or first-paint-after-first-delta improves by
 more than one frame.
 
@@ -468,16 +470,17 @@ Runtime, Convex socket frames during run 2 (ms after click, bytes, type):
 | 8,112 | 35,707 | Transition |
 | 23,110 → | 15 | Ping every 15 s |
 
-Run 1 had the same shape (9 non-ping frames: 359/297 B, 587/31.6 KB,
-857/1.1 KB, 1884/3.3 KB, 4324/28.7 KB, 6501/6.4 KB, 7040/35 KB). Two
-mutations (create thread + message, then a second) and about seven
-transitions per turn; three of them are ~30 KB, which is the size of a
-re-delivered sidebar page (`threads.list`, 50 items) or full message list,
-not a delta. The 3.7 s / 4.3 s frame lands mid-stream, so some document is
+Run 2 is 10 non-ping frames, 137,303 bytes. Run 1 had the same shape: 9
+non-ping frames, the two MutationResponses plus seven Transitions
+(359/297 B, 587/31.6 KB, 857/1.1 KB, 1884/3.3 KB, 4324/28.7 KB,
+6501/6.4 KB, 7040/35 KB). Two mutations (create thread + message, then a
+second) and seven to eight transitions per turn; three of them in run 1 and
+four in run 2 are ~30 KB, which is the size of a re-delivered sidebar page
+(`threads.list`, 50 items) or full message list, not a delta. The 3.7 s / 4.3 s frame lands mid-stream, so some document is
 patched while streaming (`generationStatus` on the thread, or a partial
 message write); which query it re-delivers was not decoded and is
-unverified. React commits during the stream (MutationObserver batches):
-190, all attributable to the zustand path; none coincide with a Transition
+unverified. DOM update batches during the stream (MutationObserver, 190):
+all attributable to the zustand path; none coincide with a Transition
 frame.
 
 **What we ship.** Convex 1.44 too. The live turn lives in the AI SDK
@@ -488,14 +491,14 @@ re-deliver content.
 
 **Recommendation: reject.** Same architecture class (in-memory live store,
 Convex for durability and other surfaces). In these captures their
-transition payloads were larger than ours: three ~30 KB frames per turn,
-consistent with whole paginated pages being re-delivered on thread writes
+transition payloads were larger than ours: three to four ~30 KB frames per
+turn (three in run 1, four in run 2), consistent with whole paginated pages being re-delivered on thread writes
 with no split subscription. Which query those frames re-deliver was not
 decoded, so this is an observation from these runs, not a proven property
 of their construction. Nothing to port. Before/after test if we ever
 suspect our Convex path is chattier: wrap `socket.ws.onmessage` on our
 client during one P2 turn and compare frame count and bytes against the
-table above (theirs: ~9 frames, ~140 KB per turn).
+table above (theirs: 9–10 non-ping frames, ~140 KB per turn).
 
 ## Related
 
