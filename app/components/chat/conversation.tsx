@@ -677,6 +677,7 @@ export function Conversation({
           chatId={chatId}
           streamActive={generationActive}
           hydrated={messages.length > 0}
+          contentRevision={`${messages.length}:${messages.at(-1)?.id ?? ""}`}
           freshChat={hasSentFirstMessage}
           scrollTarget={scrollTarget}
           deepLink={scrollToMessageId != null}

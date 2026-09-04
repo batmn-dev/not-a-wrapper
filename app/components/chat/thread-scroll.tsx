@@ -262,6 +262,9 @@ type ThreadScrollEdgeProps = {
   streamActive: boolean
   /** The conversation's messages are present (load restore waits for them). */
   hydrated: boolean
+  /** Rendered-row identity. Chat switches keep `hydrated` true while the
+   * previous messages can still be on screen; remeasure after new rows commit. */
+  contentRevision?: string
   /** This conversation was started in this session — its position came from
    * pinning, so the load restore must not run. */
   freshChat: boolean
@@ -278,6 +281,7 @@ export function ThreadScrollEdge({
   chatId,
   streamActive,
   hydrated,
+  contentRevision,
   freshChat,
   scrollTarget,
   deepLink = false,
@@ -422,14 +426,14 @@ export function ThreadScrollEdge({
     }
   }, [hydrated, chatId, freshChat, streamActive, scrollTarget, deepLink])
 
-  // After the stream attribute and restore commits, rewrite remaining height
-  // so a fully-visible gutter that moved still fills to the composer.
+  // After the stream attribute, restore, and row swap commit, rewrite remaining
+  // height so a fully-visible gutter that moved still fills to the composer.
   useBrowserLayoutEffect(() => {
     const el = gutterElRef.current
     const rootEl = rootRef.current ?? (el ? closestScrollRoot(el) : null)
     if (!el || !rootEl) return
     writeGutterRemaining(el, rootEl)
-  }, [chatId, streamActive, hydrated])
+  }, [chatId, streamActive, hydrated, contentRevision])
 
   return (
     <>
