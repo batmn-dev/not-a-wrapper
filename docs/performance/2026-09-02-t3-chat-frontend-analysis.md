@@ -20,7 +20,7 @@ inference from feel.
 | Streamed-text pacing | source: Effect pipeline → zustand `setState` per delta; runtime: 214 deltas → 190 MutationObserver batches (DevTools hook absent), median 2.3 ms lag | established: no client pacing, reject |
 | Markdown and highlighting stack | source: react-markdown + remark-gfm/math + rehype-katex + KaTeX preloaded, `marked` lexer block memo, Shiki `React.lazy` | established: same stack as ours, reject swap |
 | Thread virtualization | source: plain `messages.map`, TanStack Virtual only on sidebar; runtime: 60/60 rows in DOM at every scroll position | established: none, reject |
-| Sync-engine update batching | source: convex/react `useState` subscription, no transitions; runtime: 9 non-ping frames per turn, live turn in zustand | established: same class as ours, reject |
+| Sync-engine update batching | source: convex/react `useState` subscription, no transitions; runtime: 9–10 non-ping frames per turn (9 in run 1, 10 in run 2), live turn in zustand | established: same class as ours, reject |
 
 ## What is already established
 
@@ -157,8 +157,9 @@ on `document.body` filtered to `[aria-label="Assistant message"]`, a
 `PerformanceObserver` for `longtask`, the Convex socket's `onmessage`
 instance property wrapped via the `ConvexReactClient` found in React fiber
 context (`client.sync.webSocketManager.socket.ws`), and a TanStack
-`QueryCache.subscribe`. React DevTools hook absent, so "commits" below means
-MutationObserver callback batches (one per task that touched the article).
+`QueryCache.subscribe`. React DevTools hook absent, so every DOM update count below
+means MutationObserver callback batches (one per task that touched the
+article).
 
 ### Pacing
 
