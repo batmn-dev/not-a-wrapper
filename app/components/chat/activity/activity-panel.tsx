@@ -356,10 +356,11 @@ function PanelBody({
   const sources = activity.sourceResults.map((source) => ({
     sourceId: source.sourceId,
     href: source.url,
-    title: source.title ?? source.url,
+    title: source.title,
     description: source.description,
     siteName: source.siteName,
     faviconDomain: source.faviconDomain,
+    publishedDate: source.publishedDate,
   }))
 
   return (

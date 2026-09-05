@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { resolveSourceLinkDestination, toSafeWebHref } from "./url-safety"
+import {
+  formatSourceDisplayUrl,
+  resolveSourceLinkDestination,
+  toSafeWebHref,
+} from "./url-safety"
 
 describe("toSafeWebHref", () => {
   it("returns normalized http and https URLs", () => {
@@ -31,5 +35,40 @@ describe("resolveSourceLinkDestination", () => {
     expect(destination?.url.toString()).toBe(signedUrl)
     expect(destination?.href).toBe(signedUrl)
     expect(resolveSourceLinkDestination("javascript:alert(1)")).toBeNull()
+  })
+})
+
+describe("formatSourceDisplayUrl", () => {
+  it("strips scheme, www, and a trailing pathname slash", () => {
+    expect(formatSourceDisplayUrl("https://www.example.com/path/")).toBe(
+      "example.com/path"
+    )
+  })
+
+  it("keeps a slash that belongs to the query or fragment", () => {
+    expect(formatSourceDisplayUrl("https://example.com/search?q=/")).toBe(
+      "example.com/search?q=/"
+    )
+    expect(formatSourceDisplayUrl("https://example.com/post#/")).toBe(
+      "example.com/post#/"
+    )
+  })
+
+  it("keeps an explicit non-default port", () => {
+    expect(formatSourceDisplayUrl("https://www.example.com:8443/article")).toBe(
+      "example.com:8443/article"
+    )
+  })
+
+  it("formats a hosted non-http URL the same way as http(s)", () => {
+    expect(formatSourceDisplayUrl("ftp://www.example.com/dir/")).toBe(
+      "example.com/dir"
+    )
+  })
+
+  it("keeps schemeless labels when the URL has no host", () => {
+    expect(formatSourceDisplayUrl("javascript:alert(1)")).toBe(
+      "javascript:alert(1)"
+    )
   })
 })

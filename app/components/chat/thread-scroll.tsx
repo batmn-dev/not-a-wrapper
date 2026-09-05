@@ -195,6 +195,13 @@ function closestScrollRoot(el: Element | null): HTMLElement | null {
   return el?.closest<HTMLElement>("[data-scroll-root]") ?? null
 }
 
+/** Viewport space below the gutter's top edge. Unclamped: CSS min-height ignores negatives. */
+function writeGutterRemaining(el: HTMLElement, root: HTMLElement) {
+  const remaining =
+    root.getBoundingClientRect().bottom - el.getBoundingClientRect().top
+  el.style.setProperty("--gutter-remaining-height", `${remaining}px`)
+}
+
 function setScrollFromEnd(root: HTMLElement, scrolledFromEnd: boolean) {
   root.toggleAttribute("data-scroll-from-end", scrolledFromEnd)
 }
@@ -255,6 +262,9 @@ type ThreadScrollEdgeProps = {
   streamActive: boolean
   /** The conversation's messages are present (load restore waits for them). */
   hydrated: boolean
+  /** Rendered-row identity. Chat switches keep `hydrated` true while the
+   * previous messages can still be on screen; remeasure after new rows commit. */
+  contentRevision?: string
   /** This conversation was started in this session — its position came from
    * pinning, so the load restore must not run. */
   freshChat: boolean
@@ -271,21 +281,14 @@ export function ThreadScrollEdge({
   chatId,
   streamActive,
   hydrated,
+  contentRevision,
   freshChat,
   scrollTarget,
   deepLink = false,
 }: ThreadScrollEdgeProps) {
   const rootRef = useRef<HTMLElement | null>(null)
+  const gutterElRef = useRef<HTMLDivElement | null>(null)
   const restoredChatRef = useRef<string | null | false>(false)
-
-  // Per-conversation reset for pushState transitions that keep this component
-  // mounted. The null → id handoff is the same conversation acquiring its
-  // route (mirrors Chat's panel-reset rule).
-  const chatKeyRef = useRef<string | null>(chatId)
-  useBrowserLayoutEffect(() => {
-    if (chatKeyRef.current === chatId) return
-    chatKeyRef.current = chatId
-  }, [chatId])
 
   // (1) The at-end sentinel uses the reference's fixed 96px observer margin.
   const sentinelCleanupRef = useRef<(() => void) | null>(null)
@@ -338,12 +341,17 @@ export function ThreadScrollEdge({
 
   // (2) The self-regulating gutter: min-height tracks the
   // viewport space below the gutter's own top edge, unclamped, in all states.
+  // IntersectionObserver only fires when the intersection *ratio* crosses a
+  // threshold, so a fully-visible gutter that jumps (chat switch, stream end)
+  // would keep a stale remaining height. Remeasure those commits from layout.
   const gutterCleanupRef = useRef<(() => void) | null>(null)
   const gutterRef = useCallback((el: HTMLDivElement | null) => {
     gutterCleanupRef.current?.()
     gutterCleanupRef.current = null
+    gutterElRef.current = el
     const root = closestScrollRoot(el)
     if (!el || !root) return
+    writeGutterRemaining(el, root)
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[entries.length - 1]
@@ -417,6 +425,15 @@ export function ThreadScrollEdge({
       if (frame !== null) cancelAnimationFrame(frame)
     }
   }, [hydrated, chatId, freshChat, streamActive, scrollTarget, deepLink])
+
+  // After the stream attribute, restore, and row swap commit, rewrite remaining
+  // height so a fully-visible gutter that moved still fills to the composer.
+  useBrowserLayoutEffect(() => {
+    const el = gutterElRef.current
+    const rootEl = rootRef.current ?? (el ? closestScrollRoot(el) : null)
+    if (!el || !rootEl) return
+    writeGutterRemaining(el, rootEl)
+  }, [chatId, streamActive, hydrated, contentRevision])
 
   return (
     <>

@@ -466,7 +466,7 @@ export function Conversation({
 
   return (
     <div className="relative -mb-(--composer-overlap-px) flex w-full grow basis-auto flex-col pb-(--composer-overlap-px) [--composer-overlap-px:28px]">
-      <div className="keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))] flex w-full flex-col text-sm">
+      <div className="keyboard-open:pb-[calc(var(--composer-height,100px)+var(--screen-keyboard-height,0))] flex w-full grow flex-col text-sm">
         <span ref={observation.markerRef} style={{ display: "none" }} />
         {renderRows.map((row) => {
           const rowTurnId = renderRowTurnId(row)
@@ -677,6 +677,7 @@ export function Conversation({
           chatId={chatId}
           streamActive={generationActive}
           hydrated={messages.length > 0}
+          contentRevision={`${messages.length}:${messages.at(-1)?.id ?? ""}`}
           freshChat={hasSentFirstMessage}
           scrollTarget={scrollTarget}
           deepLink={scrollToMessageId != null}

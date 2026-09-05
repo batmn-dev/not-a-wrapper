@@ -11,6 +11,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import {
+  formatSourceDisplayUrl,
   resolveSourceLinkDestination,
   type SourceLinkDestination,
 } from "@/lib/url-safety"
@@ -140,10 +141,60 @@ export function SourceContent({
 
 export type SourcesGalleryItemProps = {
   href: string
-  title: string
+  title?: string
   siteName?: string
   description?: string
   faviconDomain?: string
+  publishedDate?: string
+}
+
+const publishedDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+})
+
+/** Date-only `YYYY-MM-DD` is a UTC calendar date so local TZ cannot shift the day. */
+function formatSourcePublishedDate(value: string): string | undefined {
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+  if (dateOnly) {
+    const year = Number(dateOnly[1])
+    const month = Number(dateOnly[2])
+    const day = Number(dateOnly[3])
+    const parsed = new Date(Date.UTC(year, month - 1, day))
+    if (
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() !== month - 1 ||
+      parsed.getUTCDate() !== day
+    ) {
+      return undefined
+    }
+    return publishedDateFormatter.format(parsed)
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return undefined
+  return publishedDateFormatter.format(parsed)
+}
+
+function sourceIdentity(value: string): string {
+  return formatSourceDisplayUrl(value).trim().toLowerCase()
+}
+
+function isSourceHeadline(
+  title: string | undefined,
+  href: string,
+  siteName: string | undefined,
+  hostname: string
+): title is string {
+  if (!title) return false
+  const identity = sourceIdentity(title)
+  return (
+    identity !== sourceIdentity(href) &&
+    identity !== sourceIdentity(hostname) &&
+    (siteName == null || identity !== sourceIdentity(siteName))
+  )
 }
 
 /** Activity sources are plain anchors; inline citations remain HoverCards. */
@@ -153,11 +204,19 @@ export function SourcesGalleryItem({
   siteName,
   description,
   faviconDomain,
+  publishedDate,
 }: SourcesGalleryItemProps) {
   const destination = resolveSourceLinkDestination(href)
   const hostname = destination?.url.hostname ?? getFallbackSourceLabel(href)
-
   const faviconUrl = faviconDomain ?? destination?.url.origin ?? href
+  const publisher = siteName ?? hostname
+  const formattedDate = publishedDate
+    ? formatSourcePublishedDate(publishedDate)
+    : undefined
+  const headline = isSourceHeadline(title, href, siteName, hostname)
+    ? title
+    : formatSourceDisplayUrl(destination?.href ?? href)
+  const descriptionText = description?.trim() ? description : undefined
 
   return (
     <a
@@ -175,15 +234,17 @@ export function SourcesGalleryItem({
           className="bg-card size-4 shrink-0 rounded-full object-cover motion-safe:transition-opacity"
         />
         <span className="text-muted-foreground truncate">
-          {siteName ?? hostname}
+          {formattedDate ? `${publisher} · ${formattedDate}` : publisher}
         </span>
       </div>
       <div className="line-clamp-2 text-sm font-semibold break-words">
-        {title}
+        {headline}
       </div>
-      <div className="text-muted-foreground line-clamp-2 text-sm leading-snug">
-        {description}
-      </div>
+      {descriptionText ? (
+        <div className="text-muted-foreground line-clamp-2 text-sm leading-snug">
+          {descriptionText}
+        </div>
+      ) : null}
     </a>
   )
 }

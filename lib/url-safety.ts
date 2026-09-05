@@ -58,3 +58,24 @@ export function resolveSourceLinkDestination(
     url,
   }
 }
+
+function parseDisplayUrl(href: string): URL | null {
+  const safeUrl = parseSafeExternalUrl(href)
+  if (safeUrl) return safeUrl
+  try {
+    return new URL(href.trim())
+  } catch {
+    return null
+  }
+}
+
+/** Host (including an explicit port) + path + query + hash, no scheme. Trailing slash is pathname-only. */
+export function formatSourceDisplayUrl(href: string): string {
+  const url = parseDisplayUrl(href)
+  if (url?.host) {
+    const host = url.host.replace(/^www\./i, "")
+    const path = url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "")
+    return `${host}${path}${url.search}${url.hash}`
+  }
+  return href.replace(/^https?:\/\//i, "").replace(/^www\./i, "")
+}

@@ -27,11 +27,6 @@ available.
 - **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
 - **Video generation:** Using Vercel's SDK framework
 - **Admin Portal:** A way to manage users, controls, features, etc...
-- **Dynamic Activity-panel source presentation:** adapt each source item to the
-metadata available instead of forcing every source into one fixed layout.
-Prefer a readable headline when available; include useful supporting details
-such as a publication date or description when provided; and fall back to the
-URL when richer metadata is missing.
 - **Automatic conversation context management:** replace the current
 context-limit hard stop with model-aware input budgeting that reserves space
 for instructions, tool schemas, attachments, and output. Before the selected
