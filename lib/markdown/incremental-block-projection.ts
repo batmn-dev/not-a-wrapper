@@ -302,7 +302,9 @@ function reconcileIdentities(
         changed++
       } else {
         reused++
-        return before
+        return !before.parsedBlock && block.parsedBlock
+          ? { ...before, parsedBlock: block.parsedBlock }
+          : before
       }
       return { ...block, id: before.id }
     }

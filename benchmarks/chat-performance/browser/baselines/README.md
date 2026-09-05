@@ -94,3 +94,10 @@ misses; hovered and visited switches have 20 and 50 cache hits respectively.
 The normal workflow failed only because this exact CPU environment had no
 baseline. Reviewing and collecting that artifact does not convert the failed run
 into a comparison pass: an independent normal comparison is still required.
+
+Heap evidence has an independent marker: `threadSwitch.heapProtocol: forced-gc-v1`.
+New captures require successful GC and a valid heap reading at every configured
+checkpoint. Historical captures without the marker remain latency baselines;
+their heap readings cannot prove that GC succeeded and are diagnostic only.
+Early/late interaction phases use the same absolute budgets independently of
+pooled samples, and every text scenario requires per-run content-latency evidence.

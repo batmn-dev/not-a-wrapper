@@ -226,6 +226,7 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
 
   it("refreshes a reused block when consumer components change", () => {
     const host = document.createElement("div")
+    document.body.append(host)
     const root = createRoot(host)
     const First = () => <p>First override</p>
     const Second = () => <p>Second override</p>
@@ -242,6 +243,7 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
     render(Second)
     expect(host.textContent).toBe("Second override")
     act(() => root.unmount())
+    host.remove()
   })
 
   for (const fixture of EQUIVALENCE_FIXTURES) {

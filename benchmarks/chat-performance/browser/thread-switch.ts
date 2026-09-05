@@ -14,9 +14,9 @@ import {
   installChatUiObserver,
   type ChatUiWindow,
 } from "@/lib/observability/chat-ui-observer"
-import type { Browser, BrowserContext, CDPSession, Page } from "playwright"
+import type { Browser, BrowserContext, Page } from "playwright"
+import { readForcedGcHeap } from "./forced-gc-heap"
 import {
-  readHeap,
   readMarks,
   tryWaitForMark,
   waitForAnyMark,
@@ -242,12 +242,6 @@ async function switchTo(
   }
 }
 
-async function sampleHeap(cdp: CDPSession): Promise<number | undefined> {
-  // Forced GC first, so the sample reads retained state, not garbage.
-  await cdp.send("HeapProfiler.collectGarbage").catch(() => undefined)
-  return readHeap(cdp)
-}
-
 function summarizePass(pass: PassAccumulator): ThreadSwitchPassResult {
   const numeric = (pick: (sample: SwitchSample) => number | undefined) =>
     pass.samples
@@ -366,10 +360,7 @@ export async function runThreadSwitch(
       const sample = await switchTo(page, href, 0, querySet)
       if (!sample.ok) failures.push(`visited warmup: ${sample.detail}`)
     }
-    const heapAtStart = await sampleHeap(cdp)
-    if (heapAtStart !== undefined) {
-      heapSamples.push({ switches: 0, jsHeapUsedBytes: heapAtStart })
-    }
+    heapSamples.push({ switches: 0, jsHeapUsedBytes: await readForcedGcHeap(cdp) })
     for (
       let switchIndex = 1;
       switchIndex <= options.switchCount;
@@ -383,10 +374,10 @@ export async function runThreadSwitch(
       passes.visited.samples.push(sample)
       if (!sample.ok) failures.push(`visited #${switchIndex}: ${sample.detail}`)
       if (options.heapSampleAt.includes(switchIndex)) {
-        const heap = await sampleHeap(cdp)
-        if (heap !== undefined) {
-          heapSamples.push({ switches: switchIndex, jsHeapUsedBytes: heap })
-        }
+        heapSamples.push({
+          switches: switchIndex,
+          jsHeapUsedBytes: await readForcedGcHeap(cdp),
+        })
       }
     }
     log(`  visited: ${options.switchCount} switches`)
@@ -413,6 +404,7 @@ export async function runThreadSwitch(
       summarizePass(passes.visited),
     ],
     heapSamples,
+    heapProtocol: "forced-gc-v1",
     correctnessOk: failures.length === 0,
     ...(failures.length > 0 ? { detail: failures.slice(0, 5).join("; ") } : {}),
   }
@@ -431,7 +423,7 @@ export function formatThreadSwitch(result: ThreadSwitchResult): string[] {
     )
   }
   lines.push(
-    `  heap (MB after GC): ${result.heapSamples
+    `  heap (MiB, ${result.heapProtocol === "forced-gc-v1" ? "confirmed GC" : "GC unverified"}): ${result.heapSamples
       .map(
         (sample) =>
           `@${sample.switches}=${round2(sample.jsHeapUsedBytes / 1024 / 1024)}`

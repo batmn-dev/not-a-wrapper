@@ -1,6 +1,6 @@
 # 38. Reuse context-free Markdown block parses
 
-- Status: proposed; parity and hosted performance validation pending
+- Status: proposed; parity verified, hosted latency and heap validation pending
 - Date: 2026-09-05
 - Amends: ADR-0016's projection/render boundary
 
@@ -41,3 +41,13 @@ ownership. It will be retained only if canonical DOM parity and avoided parsing
 are demonstrated, followed by fresh unprofiled measurements. Retaining syntax
 trees increases memory; the existing navigation/heap evidence must account for
 that cost. No failed capture becomes an accepted baseline.
+
+## Correctness evidence
+
+The implementation at `d3400af7` passes 144 focused Markdown/projection tests.
+An independent review compared 5,978 eligible blocks across 5,418 parse windows
+with isolated canonical ASTs, including node positions, with zero remaining
+mismatches. The two discovered definition-carrier/overlapping-span cases fall
+back. A mutation test confirms that disabling reuse restores the redundant
+renderer parses. This establishes semantics and skipped work, not a latency
+improvement or acceptable retained heap.

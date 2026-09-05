@@ -160,8 +160,9 @@ export type ThreadSwitchResult = {
   hoverMs: number
   documents: number
   passes: ThreadSwitchPassResult[]
-  /** Forced-GC JS heap through the visited pass, keyed by switch count. */
+  /** JS heap through the visited pass; GC is verified only with heapProtocol. */
   heapSamples: Array<{ switches: number; jsHeapUsedBytes: number }>
+  heapProtocol?: "forced-gc-v1"
   correctnessOk: boolean
   detail?: string
 }

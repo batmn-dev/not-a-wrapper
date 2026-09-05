@@ -45,6 +45,32 @@ import { remarkParsedBlock } from "./remark-parsed-block"
 
 const IDENTITY = "message-under-test"
 
+it("restores retained syntax after a zero-parse list extension settles", () => {
+  const first = advanceMarkdownProjection({
+    previous: null,
+    source: "- first",
+    streaming: true,
+    identity: IDENTITY,
+  })
+  const source = "- first\n- second"
+  const extended = advanceMarkdownProjection({
+    previous: first.state,
+    source,
+    streaming: true,
+    identity: IDENTITY,
+  })
+  expect(extended.parsedCharacters).toBe(0)
+  expect(extended.state.blocks[0]!.parsedBlock).toBeUndefined()
+  const settled = advanceMarkdownProjection({
+    previous: extended.state,
+    source,
+    streaming: false,
+    identity: IDENTITY,
+  })
+  expect(settled.state.blocks[0]!.id).toBe(extended.state.blocks[0]!.id)
+  expect(settled.state.blocks[0]!.parsedBlock?.source).toBe(source)
+})
+
 it("rebases retained syntax and isolates transform mutations, with canonical fallback on source changes", () => {
   const source = "Earlier block.\n\n# A **heading**"
   const result = advanceMarkdownProjection({

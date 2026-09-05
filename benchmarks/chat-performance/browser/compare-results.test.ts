@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   compareResults,
+  checkBudgets,
   resultContract,
   scenarioKey,
   validateCoverage,
@@ -40,6 +41,7 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
       const ui: Record<string, number[]> = {
         inputToOptimisticFrameMs: [40],
         inputToFirstTextFrameMs: [200],
+        deltaToContentFrameMs: [20],
       }
       if (config.action === "complete") ui.terminalToReadyFrameMs = [20]
       if (config.action === "stop") ui.stopToReadyFrameMs = [40]
@@ -203,6 +205,20 @@ describe("performance evidence contract", () => {
     expect(validateCoverage(mislabeled)).toContain(`${suite} suite is incomplete or has unexpected scenarios`)
   })
 
+  it.each(["smoke", "standard", "durable", "responsiveness"] as const)("rejects missing transport delta observations in every %s scenario", (suite) => {
+    const complete = result(suite)
+    expect(validateCoverage(complete)).toEqual([])
+    for (const scenario of complete.scenarios) {
+      const missing = structuredClone(complete)
+      const changed = missing.scenarios.find((value) => value.id === scenario.id)!
+      delete changed.metrics.deltaToContentFrameMs
+      for (const run of changed.runs) delete run.ui!.deltaToContentFrameMs
+      expect(validateCoverage(missing)).toContain(
+        `${scenario.id}: deltaToContentFrameMs missing samples (0/5)`
+      )
+    }
+  })
+
   it("rejects unknown suite names and scenarios attached to thread-switch", () => {
     expect(validateCoverage({ ...result(), suite: "custom" })).toContain("unknown benchmark suite: custom")
     const mixed = threadResult()
@@ -283,6 +299,23 @@ describe("performance evidence contract", () => {
     )
     expect(validateCoverage(slow)).toEqual([])
     expect(compareResults(slow, slow).join(" ")).toContain("5/5 exceed 100ms")
+  })
+
+  it.each(["typingToFrame", "deltaToContentFrame", "menuToFrame"])("does not let overall samples dilute a slow late %s phase", (metric) => {
+    const current = result("responsiveness")
+    const scenario = current.scenarios.find((value) => value.id === "interact-long-answer")!
+    scenario.runs.forEach((run) => {
+      run.ui![`${metric}Ms`] = [...Array(39).fill(20), 120]
+      run.ui![`${metric}LateMs`] = [20, 20, 20, 120]
+    })
+    for (const suffix of ["Ms", "LateMs"])
+      scenario.metrics[`${metric}${suffix}`] = summarize(scenario.runs.flatMap((run) => run.ui![`${metric}${suffix}`]))
+    expect(validateCoverage(current)).toEqual([])
+    const failures = checkBudgets(current)
+    expect(failures.some((failure) => failure.includes(`${metric}Ms:`))).toBe(false)
+    expect(failures).toContain(
+      `interact-long-answer ${metric}LateMs: 5/20 exceed ${metric === "menuToFrame" ? 100 : 50}ms (budget: at most 5%)`
+    )
   })
 
   it("rejects wheel captures without matching pre-input preparation", () => {
@@ -420,6 +453,34 @@ describe("performance evidence contract", () => {
     )
     current.threadSwitch!.heapSamples[0].jsHeapUsedBytes = -1
     expect(resultContract.safeParse(current).success).toBe(false)
+  })
+
+  it("requires all declared forced-GC checkpoints while keeping historical latency evidence usable", () => {
+    const current = threadResult()
+    const thread = current.threadSwitch!
+    thread.switchCount = 50
+    const visited = thread.passes.find((pass) => pass.kind === "visited")!
+    visited.switches = 50
+    visited.samples = Array.from({ length: 50 }, () => ({ ...visited.samples[0] }))
+    visited.cacheHits = 0
+    for (const [metric, field] of [
+      ["navToThreadPaintedMs", "navToPaintedMs"],
+      ["intentToRouteCommitMs", "intentToCommitMs"],
+      ["commitToFirstContentMs", "commitToFirstContentMs"],
+      ["firstContentToPaintedMs", "firstContentToPaintedMs"],
+      ["querySetAddsPerSwitch", "querySetAdds"],
+    ] as const) visited[metric] = summarize(visited.samples.map((sample) => sample[field]!))
+    thread.heapSamples = []
+    expect(validateCoverage(current)).toEqual([])
+    thread.heapProtocol = "forced-gc-v1"
+    thread.heapSamples = [0, 10, 25, 50].map((switches) => ({ switches, jsHeapUsedBytes: 1000 }))
+    expect(resultContract.parse(current).threadSwitch!.heapProtocol).toBe("forced-gc-v1")
+    expect(validateCoverage(current)).toEqual([])
+    for (const checkpoint of [0, 10, 25, 50]) {
+      const missing = structuredClone(current)
+      missing.threadSwitch!.heapSamples = thread.heapSamples.filter((sample) => sample.switches !== checkpoint)
+      expect(validateCoverage(missing)).toContain("thread-switch forced-GC heap checkpoints are incomplete")
+    }
   })
 
   it("rejects an undersampled visited pass and invalid heap checkpoints", () => {

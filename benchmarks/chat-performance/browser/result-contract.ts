@@ -100,6 +100,7 @@ export const resultContract = z
         switchCount: z.number().int().min(5),
         hoverMs: duration,
         documents: z.number().int().positive(),
+        heapProtocol: z.literal("forced-gc-v1").optional(),
         passes: z
           .array(
             z
@@ -196,9 +197,13 @@ export function scenarioKey(
 export const UI_BUDGETS: Record<string, number> = {
   inputToOptimisticFrameMs: 100,
   stopToReadyFrameMs: 100,
-  typingToFrameMs: 50,
-  deltaToContentFrameMs: 50,
-  menuToFrameMs: 100,
+  // Phase checks use the same limit without dilution from setup or another phase.
+  ...Object.fromEntries(
+    Object.entries({ typingToFrame: 50, deltaToContentFrame: 50, menuToFrame: 100 })
+      .flatMap(([metric, budget]) => ["", "Early", "Late"].map(
+        (phase) => [`${metric}${phase}Ms`, budget]
+      ))
+  ),
 }
 
 const GATES: Record<string, { relative: number; floor: number }> = {
@@ -334,6 +339,13 @@ export function validateCoverage(result: ComparableResult): string[] {
         )
     }
     const heap = result.threadSwitch.heapSamples
+    if (result.threadSwitch.heapProtocol === "forced-gc-v1") {
+      const expected = [...new Set([0, 10, 25, result.threadSwitch.switchCount])]
+        .filter((count) => count <= result.threadSwitch!.switchCount)
+      if (heap.length !== expected.length ||
+        expected.some((count) => !heap.some((sample) => sample.switches === count)))
+        errors.push("thread-switch forced-GC heap checkpoints are incomplete")
+    }
     if (
       new Set(heap.map((sample) => sample.switches)).size !== heap.length ||
       heap.some((sample) => sample.switches > result.threadSwitch!.switchCount)
@@ -404,10 +416,10 @@ export function validateCoverage(result: ComparableResult): string[] {
       )
         errors.push(`${value.id}: ${metric} has a negative duration`)
     }
-    const required =
-      value.action === "reload"
-        ? ["reloadToAuthoritativeMs"]
-        : ["inputToOptimisticFrameMs", "inputToFirstTextFrameMs"]
+    // Every scenario emits text, including the foreground samples retained before tab/reload recovery.
+    const required = ["deltaToContentFrameMs", ...(value.action === "reload"
+      ? ["reloadToAuthoritativeMs"]
+      : ["inputToOptimisticFrameMs", "inputToFirstTextFrameMs"])]
     if (value.action === "complete") required.push("terminalToReadyFrameMs")
     if (value.action === "stop") required.push("stopToReadyFrameMs")
     if (value.scenario === "mixed-markdown")
@@ -424,7 +436,6 @@ export function validateCoverage(result: ComparableResult): string[] {
           "menuToFrameLateMs",
           "scrollToFrameMs",
           "scrollToFrameLateMs",
-          "deltaToContentFrameMs",
           "deltaToContentFrameEarlyMs",
           "deltaToContentFrameLateMs"
         )

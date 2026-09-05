@@ -292,12 +292,17 @@ latency effect; the trace alone proves the invalidation cause, not the speedup.
 
 [Run 33962766141](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33962766141)
 captured the CSS fix through PR merge commit `640ac0d` (head `fbfea89d`). All
-seven correctness checks pass. Absolute budgets fail only one menu sample:
+seven correctness checks pass. Under the original pooled interaction budgets,
+the only failure was one menu sample:
 1/10 openings exceeded 100 ms, with a late-menu maximum of 122.6 ms and median
 71.6 ms. Long-answer content delivery has 6/485 samples above 50 ms, within the
 5% allowance; its median is 16.9 ms and p95 30.8 ms. This capture uses AMD EPYC
 9V74, unlike the preceding 7763 capture, so it is not an isolated before/after
-latency comparison. It remains rejected as a baseline because of the menu failure.
+latency comparison. The final audit additionally found 3/40 late typing samples
+above 50 ms (7.5%, maximum 57.2 ms), diluted by the pooled setup/typing
+denominator. Early and late typing, menu, and content phases now independently
+use the same absolute budgets and 5% allowance. This capture fails late typing
+and late menu as well as the pooled menu check; it remains rejected.
 
 ## Remaining validation
 
@@ -328,3 +333,20 @@ continues to include those slower switches.
 Production DOM/frame reporting remains opt-in with
 `NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE` defaulting to `0`. Unit tests and this observer
 comparison do not certify release responsiveness.
+
+## Final evidence audit
+
+Every text-producing scenario must contain a received-content latency sample in
+each measured run, including the foreground evidence retained before reload or
+second-tab recovery. Removing both the raw samples and summary can no longer
+make that budget disappear. Early/late interaction phases are also checked
+separately, preventing fast setup inputs from diluting slow late-stream input.
+
+New thread-switch captures label `heapProtocol: forced-gc-v1` only after every
+requested garbage collection and heap read succeeds. Missing metrics, failed GC,
+or incomplete checkpoints fail collection. Older captures remain valid latency
+evidence, but their heap readings have unverified GC status. The new protocol
+does not retroactively certify them. With the current eight-fixture traversal,
+checkpoint 25 contains the long Markdown chat; checkpoints 10 and 50 contain
+the same short chat. Comparing those distinct roles avoids confusing the mounted
+long document with retained growth after navigation.
