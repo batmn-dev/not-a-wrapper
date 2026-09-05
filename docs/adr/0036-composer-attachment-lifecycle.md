@@ -30,12 +30,12 @@ files afterward. During admission, Send and another selection could not see them
 - An accepted dispatch consumes exactly its submitted files without deleting
   bound storage rows. Rejection or exceptions release locks and preserve files.
   Files selected during dispatch remain available for the next Chat turn.
-- Composer clears or restores a submitted draft only while its edit revision
-  remains current. A later edit retains its pending or completed persistence
-  write, even when the previous send settles. Revisions stay keyed by persistence
+- Composer clears or restores a submitted draft only if no later edit invalidates
+  its pending-send guard. A later edit retains its pending or completed storage
+  write, even when the previous send settles. Guards are shared by persistence
   identity across revisits and Composer mounts, matching the shared draft storage.
-  A module-level registry lets an edit in a replacement Composer invalidate an
-  older pending send without adding a new persistence protocol. Rejected text is restored only while its original
+  The registry retains only pending sends and removes empty keys on settlement.
+  Rejected text is restored only while its original
   display identity is active, so navigating cannot restore it into another chat.
 - Composer retains draft ownership. Chat turn execution, atomic first-turn
   creation, and durable attachment binding retain their existing owners.
