@@ -69,6 +69,10 @@ a URL to the transport. `redirect: "error"` on the transport stays (ADR-era SSRF
 hardening). The Convex mutation keeps its mirrored string check for the runtimes
 where `node:dns` is unavailable.
 
+Follow-up (ADR-0035): both callers now use the MCP connection module in
+`lib/mcp/load-mcp-from-url.ts`. It owns DNS-pinned transport creation and the
+complete preparation deadline, including discovery and failure cleanup.
+
 ### Per-identity rate limiting + security headers
 
 The seam takes an optional `rateLimit: {bucket}` enforced after auth via
