@@ -8,12 +8,11 @@ const page = `<div contenteditable="true"></div><button data-testid="send-button
 
 async function paint() {
   await Promise.resolve()
-  for (let index = 0; index < 2; index++) {
-    now += 16
-    const batch = frames
-    frames = []
-    batch.forEach((callback) => callback(now))
-  }
+  now += 16
+  const batch = frames
+  frames = []
+  batch.forEach((callback) => callback(now))
+  vi.advanceTimersByTime(0)
 }
 function send() {
   const event = new MouseEvent("click", { bubbles: true })
@@ -34,6 +33,7 @@ function answer(length = 3) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
   now = 0
   frames = []
   document.body.innerHTML = page
@@ -64,12 +64,82 @@ beforeEach(() => {
 })
 afterEach(() => {
   ;(window as ChatUiWindow).__chatUiPerf?.dispose()
+  vi.useRealTimers()
   document.body.innerHTML = ""
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe("DOM/frame observations", () => {
+  it("retains individual EventTiming entries even when they share an interaction", () => {
+    let deliver: ((list: PerformanceObserverEntryList) => void) | undefined
+    vi.stubGlobal("PerformanceObserver", class {
+      static supportedEntryTypes = ["event"]
+      constructor(callback: PerformanceObserverCallback) {
+        deliver = (list) => callback(list, this)
+      }
+      observe() {}
+      disconnect() {}
+      takeRecords() { return [] }
+    })
+    const report = vi.fn()
+    installChatUiObserver({ report })
+    const entries = [16, 80].map((duration) => ({
+      duration,
+      interactionId: 7,
+      entryType: "event",
+      name: "pointerup",
+      startTime: 0,
+      toJSON: () => ({}),
+    }))
+    deliver!({
+      getEntries: () => entries,
+      getEntriesByName: () => entries,
+      getEntriesByType: () => entries,
+    })
+    expect((window as ChatUiWindow).__chatUiPerf!.values.eventTimingEntryMs)
+      .toEqual([16, 80])
+    expect(report.mock.calls).toEqual([
+      ["eventTimingEntryMs", 16],
+      ["eventTimingEntryMs", 80],
+    ])
+  })
+
+  it("checks DOM in the frame and records in its following task, cancelling stale tasks", async () => {
+    installChatUiObserver()
+    send()
+    answer()
+    await Promise.resolve()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const geometry = vi.mocked(HTMLElement.prototype.getBoundingClientRect)
+    expect(geometry).not.toHaveBeenCalled()
+    expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
+    now = 16
+    const batch = frames
+    frames = []
+    batch.forEach((callback) => callback(now))
+    expect(geometry).toHaveBeenCalled()
+    geometry.mockClear()
+    expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
+    expect(frames).toHaveLength(0)
+    now = 18
+    vi.advanceTimersByTime(0)
+    expect(geometry).not.toHaveBeenCalled()
+    expect(observer.values.inputToFirstTextFrameMs).toEqual([18])
+
+    for (const cleanup of [() => observer.reset(), () => observer.dispose()]) {
+      send()
+      answer()
+      await Promise.resolve()
+      const nextBatch = frames
+      frames = []
+      nextBatch.forEach((callback) => callback(now))
+      expect(vi.getTimerCount()).toBeGreaterThan(0)
+      cleanup()
+      expect(vi.getTimerCount()).toBe(0)
+    }
+  })
+
   it("waits for semantic Send readiness and observes aria-disabled changes", async () => {
     const button = document.querySelector("button")!
     button.setAttribute("aria-disabled", "true")
@@ -150,7 +220,7 @@ describe("DOM/frame observations", () => {
     await paint()
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.typingToFrameMs
-    ).toEqual([72])
+    ).toEqual([56])
   })
   it("observes the editor-owned popup without requiring menu semantics", async () => {
     document.body.insertAdjacentHTML(
@@ -197,10 +267,10 @@ describe("DOM/frame observations", () => {
     await paint()
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.inputToFirstTextFrameMs
-    ).toEqual([64])
+    ).toEqual([32])
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.inputToOptimisticFrameMs
-    ).toEqual([64])
+    ).toEqual([32])
   })
 
   it("only acknowledges received content once its rendered source watermark catches up", async () => {
@@ -218,7 +288,7 @@ describe("DOM/frame observations", () => {
     await paint()
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.deltaToContentFrameMs
-    ).toEqual([64])
+    ).toEqual([32])
     expect((window as ChatUiWindow).__chatUiPerf!.pendingDeltas()).toBe(0)
   })
 
@@ -235,15 +305,19 @@ describe("DOM/frame observations", () => {
     await paint()
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.stopToReadyFrameMs
-    ).toEqual([32])
+    ).toEqual([16])
   })
 
   it("invalidates measurements when the tab becomes hidden", async () => {
     installChatUiObserver()
     send()
+    answer()
+    await Promise.resolve()
+    const batch = frames
+    frames = []
+    batch.forEach((callback) => callback(now))
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden")
     document.dispatchEvent(new Event("visibilitychange"))
-    answer()
     await paint()
     expect((window as ChatUiWindow).__chatUiPerf!.hidden).toBe(true)
     expect(

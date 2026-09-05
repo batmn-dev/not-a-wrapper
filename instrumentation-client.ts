@@ -64,7 +64,7 @@ if (
           }
           Sentry.metrics.distribution(`chat.ui.${metric}`, durationMs, {
             unit: "millisecond",
-            attributes: { measurement: "dom-frame-v1" },
+            attributes: { measurement: "dom-frame-v2" },
           })
         },
       })

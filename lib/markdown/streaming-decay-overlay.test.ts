@@ -279,6 +279,119 @@ describe("setStreamingDecayEnabled preference gate", () => {
 })
 
 describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
+  it.each(["frame", "append", "deadline crossing"] as const)(
+    "pauses off-screen tails on %s expiry and resumes only current cohorts",
+    (expiry) => {
+    class FakeHighlight extends Set<unknown> {}
+    class FakeStaticRange {
+      constructor(readonly init: StaticRangeInit) {}
+    }
+    class FakeIntersectionObserver {
+      static instances: FakeIntersectionObserver[] = []
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+      constructor(readonly callback: (entries: Array<{
+        target: Element
+        isIntersecting: boolean
+      }>) => void) {
+        FakeIntersectionObserver.instances.push(this)
+      }
+      emit(target: Element, isIntersecting: boolean) {
+        this.callback([{ target, isIntersecting }])
+      }
+    }
+    const highlights = new Map<string, FakeHighlight>()
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0)
+    const clears = vi.spyOn(FakeHighlight.prototype, "clear")
+    let nextFrame: FrameRequestCallback | undefined
+    const raf = vi.fn((callback: FrameRequestCallback) => {
+      nextFrame = callback
+      return 1
+    })
+    const cancel = vi.fn(() => { nextFrame = undefined })
+    vi.stubGlobal("CSS", { highlights })
+    vi.stubGlobal("Highlight", FakeHighlight)
+    vi.stubGlobal("StaticRange", FakeStaticRange)
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver)
+    vi.stubGlobal("requestAnimationFrame", raf)
+    vi.stubGlobal("cancelAnimationFrame", cancel)
+    const container = document.createElement("div")
+    container.innerHTML = "<p>Ready</p>"
+    document.body.append(container)
+    try {
+      observeStreamingDecay(container)
+      const observer = FakeIntersectionObserver.instances[0]!
+      const originalTail = container.lastElementChild!
+      expect(observer.observe).toHaveBeenCalledWith(originalTail)
+      originalTail.append(" new")
+      observeStreamingDecay(container)
+      expect(highlights.get("naw-stream-decay-0")!.size).toBeGreaterThan(0)
+      observer.emit(originalTail, false)
+      // A preceding visible cohort keeps its normal fade after the tail exits.
+      expect(highlights.get("naw-stream-decay-0")!.size).toBeGreaterThan(0)
+      expect(cancel).not.toHaveBeenCalled()
+
+      clock.mockReturnValue(100)
+      originalTail.append(" hidden")
+      observeStreamingDecay(container)
+      clock.mockReturnValue(200)
+      container.insertAdjacentHTML("beforeend", "<p> latest</p>")
+      observeStreamingDecay(container)
+      const newTail = container.lastElementChild!
+      expect(observer.unobserve).toHaveBeenCalledWith(originalTail)
+      expect(observer.observe).toHaveBeenLastCalledWith(newTail)
+      clock.mockReturnValue(300)
+      observer.emit(newTail, false)
+      // Target replacement and repeated off-screen reports must not extend grace.
+      clock.mockReturnValue(DECAY_TOTAL_MS + 1)
+      if (expiry === "frame") {
+        const finalGraceFrame = nextFrame!
+        nextFrame = undefined
+        finalGraceFrame(DECAY_TOTAL_MS + 1)
+      } else {
+        if (expiry === "deadline crossing") {
+          clock.mockReturnValueOnce(DECAY_TOTAL_MS - 1)
+        }
+        newTail.append(" at expiry")
+        observeStreamingDecay(container)
+      }
+      expect([...highlights.values()].every((bucket) => bucket.size === 0)).toBe(true)
+      expect(nextFrame).toBeUndefined()
+      const clearsWhileHidden = clears.mock.calls.length
+      const framesWhileHidden = raf.mock.calls.length
+      clock.mockReturnValue(500)
+      newTail.append(" offscreen")
+      observeStreamingDecay(container)
+      observer.emit(originalTail, true)
+      expect(clears).toHaveBeenCalledTimes(clearsWhileHidden)
+      expect(raf).toHaveBeenCalledTimes(framesWhileHidden)
+
+      clock.mockReturnValue(550)
+      observer.emit(newTail, true)
+      expect(highlights.get("naw-stream-decay-0")!.size).toBe(0)
+      expect(highlights.get("naw-stream-decay-1")!.size).toBeGreaterThan(0)
+      expect(raf).toHaveBeenCalledTimes(framesWhileHidden + 1)
+      settleStreamingDecay(container)
+      expect(observer.disconnect).toHaveBeenCalledTimes(1)
+      const clearsAfterSettle = clears.mock.calls.length
+      observer.emit(newTail, false)
+      expect(clears).toHaveBeenCalledTimes(clearsAfterSettle)
+
+      observeStreamingDecay(container)
+      setStreamingDecayEnabled(false)
+      expect(FakeIntersectionObserver.instances[1]!.disconnect)
+        .toHaveBeenCalledTimes(1)
+    } finally {
+      setStreamingDecayEnabled(false)
+      setStreamingDecayEnabled(true)
+      container.remove()
+      clock.mockRestore()
+      clears.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("registers bucket highlights over appended text and clears on settle", () => {
     class FakeHighlight {
       ranges: unknown[]

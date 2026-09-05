@@ -58,7 +58,9 @@ the content-free measurement JSON in `perf-results`.
 Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM
-before a frame and records after its paint opportunity. These are DOM/frame
+in a rendering callback and records in a task queued after that rendering
+opportunity (`dom-frame-v2`). V1's extra animation-frame wait is removed; its
+captures are incompatible and must be repeated. These are DOM/frame
 proxies, not first-pixel timestamps; old React-effect marks remain separate.
 
 Continuous receipt-to-content samples match a text-source watermark, at most four

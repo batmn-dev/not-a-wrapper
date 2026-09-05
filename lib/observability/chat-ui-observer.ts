@@ -20,7 +20,7 @@ export type ChatUiMetric =
   | "terminalToReadyFrameMs"
   | "stopToReadyFrameMs"
   | "lcpMs"
-  | "interactionMs"
+  | "eventTimingEntryMs"
   | "threadSwitchToFrameMs"
   | "navigationToThreadFrameMs"
 
@@ -51,6 +51,7 @@ export function installChatUiObserver(
   const values: ChatUiObserver["values"] = {}
   const observers: PerformanceObserver[] = []
   const frames = new Set<number>()
+  const frameTasks = new Set<ReturnType<typeof setTimeout>>()
   let hidden = document.visibilityState !== "visible"
   let sentAt: number | undefined
   let sendCandidate: number | undefined
@@ -71,7 +72,6 @@ export function installChatUiObserver(
   let menuAt: number | undefined
   let navigation:
     { at: number; previous: Element | undefined; pathname: string } | undefined
-  const seenInteractions = new Set<number>()
   const once = new Set<string>()
   const editorSelector = '[contenteditable="true"]'
   const sendSelector = '[data-testid="send-button"]'
@@ -114,11 +114,24 @@ export function installChatUiObserver(
     })
     frames.add(id)
   }
-  const afterFrame = (callback: () => void) => frame(() => frame(callback))
-  // Inspect DOM before one frame and timestamp after its paint opportunity.
+  const postFrameTask = (callback: () => void) => {
+    const timer = setTimeout(() => {
+      frameTasks.delete(timer)
+      callback()
+    }, 0)
+    frameTasks.add(timer)
+  }
+  const afterFrame = (callback: () => void) => {
+    const observedTurn = turn
+    frame(() => postFrameTask(() => {
+      if (turn === observedTurn) callback()
+    }))
+  }
+  // scan() inspects DOM in rAF; a later task follows that rendering opportunity
+  // without waiting for another frame. This is not a pixel-presentation timestamp.
   const recordFrame = (metric: ChatUiMetric, at: number) => {
     const observedTurn = turn
-    frame(() => {
+    postFrameTask(() => {
       if (turn === observedTurn || metric.startsWith("navigation"))
         record(metric, at)
     })
@@ -246,6 +259,8 @@ export function installChatUiObserver(
     navigation = undefined
     frames.forEach(cancelAnimationFrame)
     frames.clear()
+    frameTasks.forEach(clearTimeout)
+    frameTasks.clear()
     queued = false
     samples = []
     textLength = 0
@@ -388,20 +403,7 @@ export function installChatUiObserver(
       for (const entry of list.getEntries()) {
         if (type === "largest-contentful-paint")
           values.lcpMs = [entry.startTime]
-        else {
-          const interaction = entry as PerformanceEventTiming & {
-            interactionId?: number
-          }
-          if (
-            interaction.interactionId &&
-            !seenInteractions.has(interaction.interactionId)
-          ) {
-            if (seenInteractions.size < 1024) {
-              seenInteractions.add(interaction.interactionId)
-              record("interactionMs", 0, entry.duration)
-            } else dropped++
-          }
-        }
+        else record("eventTimingEntryMs", 0, entry.duration)
       }
     })
     observer.observe({
@@ -454,6 +456,8 @@ export function installChatUiObserver(
       mutations.disconnect()
       observers.forEach((observer) => observer.disconnect())
       frames.forEach(cancelAnimationFrame)
+      frameTasks.forEach(clearTimeout)
+      frameTasks.clear()
       document.removeEventListener("click", pointer, true)
       document.removeEventListener("keydown", keydown, true)
       document.removeEventListener("beforeinput", beforeinput, true)

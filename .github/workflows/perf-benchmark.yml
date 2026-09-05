@@ -22,6 +22,7 @@ on:
       - "bun.lock"
       - "lib/markdown/**"
       - "lib/chat-store/messages/**"
+      - "lib/chat-store/chats/**"
       - "lib/observability/**"
       - "benchmarks/chat-performance/**"
       - "instrumentation-client.ts"

@@ -60,7 +60,7 @@ const scenario = z
 export const resultContract = z
   .object({
     schemaVersion: z.literal(2),
-    measurementVersion: z.literal("dom-frame-v1"),
+    measurementVersion: z.literal("dom-frame-v2"),
     profiled: z.literal(false).optional(),
     buildClass: z.literal("production"),
     instrumentationBuild: z.boolean(),

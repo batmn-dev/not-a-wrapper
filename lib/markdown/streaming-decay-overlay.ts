@@ -20,8 +20,8 @@
  *
  * Invariant boundaries:
  * - Paint only. Text is never gated, reordered, or delayed — this is not a
- *   reveal scheduler. The only state is per-container append cohorts
- *   ({start, end, arrivedAt} over rendered textContent), pruned by age.
+ *   reveal scheduler. Per-container append cohorts
+ *   ({start, end, arrivedAt} over rendered textContent) are pruned by age.
  * - Append detection diffs RENDERED text between commits, so the mend pass
  *   needs no offset mapping: mended completions and a table proven out of
  *   `clipUnprovenTableTail` simply arrive as one cohort and fade together.
@@ -222,6 +222,10 @@ export function decayBucketOf(cohort: DecayCohort, now: number): number {
 type ContainerState = {
   baseline: string | null
   cohorts: DecayCohort[]
+  tail: Element
+  visible: boolean
+  offscreenGraceUntil: number
+  observer: IntersectionObserver | null
 }
 
 function isSupported(): boolean {
@@ -247,6 +251,39 @@ class StreamingDecayManager {
   private rafHandle: number | null = null
   private lastPaintAt = Number.NEGATIVE_INFINITY
   private bucketHighlights: Highlight[] | null = null
+  private hasPaintedRanges = false
+
+  // Observe the growing block without layout reads or DOM wrappers. A large
+  // intersecting block stays eligible even when its trailing text is off-screen.
+  private createState(container: Element): ContainerState {
+    const state: ContainerState = {
+      baseline: null,
+      cohorts: [],
+      tail: container.lastElementChild ?? container,
+      visible: true,
+      offscreenGraceUntil: 0,
+      observer: null,
+    }
+    if (typeof IntersectionObserver !== "undefined") {
+      state.observer = new IntersectionObserver((entries) => {
+        if (this.states.get(container) !== state) return
+        const entry = entries.findLast(({ target }) => target === state.tail)
+        if (!entry || entry.isIntersecting === state.visible) return
+        state.visible = entry.isIntersecting
+        const now = performance.now()
+        // Let preceding visible cohorts finish; repeated off-screen updates
+        // keep this deadline so unseen streaming cannot sustain the loop.
+        state.offscreenGraceUntil = state.visible ? 0 : now + DECAY_TOTAL_MS
+        state.cohorts = state.cohorts.filter(
+          (cohort) => now - cohort.arrivedAt < DECAY_TOTAL_MS
+        )
+        if (!container.ownerDocument.hidden) this.paint(now)
+        this.ensureLoop()
+      })
+      state.observer.observe(state.tail)
+    }
+    return state
+  }
 
   /**
    * Register bucket Highlights once and mutate their ranges. Replacing registry
@@ -276,9 +313,13 @@ class StreamingDecayManager {
     const now = performance.now()
     const existing = this.states.get(container)
     if (!existing) container.setAttribute(decayRootAttribute, "")
-    const state = existing ?? {
-      baseline: null,
-      cohorts: [],
+    const state = existing ?? this.createState(container)
+    const tail = container.lastElementChild ?? container
+    if (tail !== state.tail) {
+      state.observer?.unobserve(state.tail)
+      state.tail = tail
+      // Keep known visibility until the new block's asynchronous observation.
+      state.observer?.observe(tail)
     }
     const nextText = container.textContent ?? ""
     state.cohorts = advanceDecayCohorts({
@@ -289,18 +330,29 @@ class StreamingDecayManager {
     })
     state.baseline = nextText
     this.states.set(container, state)
-    // A hidden tab keeps streaming commits flowing, but building StaticRanges
-    // nobody can see is waste — cohorts still advance above, and the rAF loop
-    // (paused while hidden) prunes and repaints on the first visible frame.
-    if (!container.ownerDocument.hidden) this.paint(now)
+    const graceExpired = state.offscreenGraceUntil > 0 && now >= state.offscreenGraceUntil
+    if (graceExpired) state.offscreenGraceUntil = 0
+    // After the bounded fade grace, invisible tails only advance cohorts.
+    // Re-entry resumes current cohorts; hidden tabs also skip unseen ranges.
+    if (
+      (this.isPaintEligible(state, now) ||
+        (graceExpired && this.hasPaintedRanges)) &&
+      !container.ownerDocument.hidden
+    ) {
+      this.paint(now)
+    }
     this.ensureLoop()
   }
 
   /** Settlement/unmount: drop the container and repaint without it. */
   settle(container: Element): void {
-    if (!this.states.delete(container)) return
+    const state = this.states.get(container)
+    if (!state) return
+    state.observer?.disconnect()
+    this.states.delete(container)
     container.removeAttribute(decayRootAttribute)
     this.paint(performance.now())
+    this.ensureLoop()
   }
 
   /** Preference off: drop everything and clear every bucket immediately. */
@@ -310,7 +362,8 @@ class StreamingDecayManager {
       this.rafHandle = null
     }
     if (this.states.size > 0) {
-      for (const container of this.states.keys()) {
+      for (const [container, state] of this.states) {
+        state.observer?.disconnect()
         container.removeAttribute(decayRootAttribute)
       }
       this.states.clear()
@@ -326,11 +379,29 @@ class StreamingDecayManager {
       }
     }
     this.bucketHighlights = null
+    this.hasPaintedRanges = false
+  }
+
+  private isPaintEligible(state: ContainerState, now: number): boolean {
+    return state.visible || now < state.offscreenGraceUntil
   }
 
   private ensureLoop(): void {
+    const now = performance.now()
+    if (
+      ![...this.states.values()].some(
+        (state) => this.isPaintEligible(state, now) && state.cohorts.length > 0
+      )
+    ) {
+      if (this.rafHandle !== null) {
+        cancelAnimationFrame(this.rafHandle)
+        // Observe may cross the grace deadline before this pending tick runs.
+        if (this.hasPaintedRanges) this.paint(now)
+      }
+      this.rafHandle = null
+      return
+    }
     if (this.rafHandle !== null) return
-    if (![...this.states.values()].some((s) => s.cohorts.length > 0)) return
     this.rafHandle = requestAnimationFrame(this.tick)
   }
 
@@ -338,16 +409,21 @@ class StreamingDecayManager {
     this.rafHandle = null
     const now = performance.now()
     let live = false
+    let graceExpired = false
     for (const state of this.states.values()) {
+      if (state.offscreenGraceUntil > 0 && now >= state.offscreenGraceUntil) {
+        state.offscreenGraceUntil = 0
+        graceExpired = true
+      }
       state.cohorts = state.cohorts.filter(
         (c) => now - c.arrivedAt < DECAY_TOTAL_MS
       )
-      live ||= state.cohorts.length > 0
+      live ||= this.isPaintEligible(state, now) && state.cohorts.length > 0
     }
     // Throttled: bucket assignments change on a DECAY_BUCKET_MS grid, so
     // rebuilding ranges every frame produces identical output most frames.
     // The terminal tick always paints so expiry clears every bucket.
-    if (!live || now - this.lastPaintAt >= PAINT_MIN_INTERVAL_MS) {
+    if (graceExpired || !live || now - this.lastPaintAt >= PAINT_MIN_INTERVAL_MS) {
       this.paint(now)
     }
     if (live) this.rafHandle = requestAnimationFrame(this.tick)
@@ -362,7 +438,12 @@ class StreamingDecayManager {
       () => []
     )
     for (const [container, state] of this.states) {
-      if (!container.isConnected || state.cohorts.length === 0) continue
+      if (
+        !container.isConnected ||
+        !this.isPaintEligible(state, now) ||
+        state.cohorts.length === 0
+      )
+        continue
       collectCohortRanges(
         container,
         state.baseline ?? "",
@@ -372,6 +453,7 @@ class StreamingDecayManager {
       )
     }
     const highlights = this.ensureBucketHighlights()
+    this.hasPaintedRanges = buckets.some((ranges) => ranges.length > 0)
     for (let bucket = 0; bucket < DECAY_BUCKET_COUNT; bucket++) {
       const highlight = highlights[bucket]!
       highlight.clear()

@@ -285,8 +285,10 @@ calls are counted (`providerToolCalls`) because their time stays in the window.
 ## 14. DOM/frame responsiveness contract (schema v2, ADR-0037)
 
 These names are separate from the older React-effect marks. A frame observation
-checks DOM before a frame, then records after its paint opportunity; it is not a
-compositor timestamp. The observation tab must remain visible.
+checks DOM in a rendering callback, then records in a task after that rendering
+opportunity; it is not a compositor timestamp or an upper bound on presentation.
+`dom-frame-v2` removes the old extra animation-frame wait and rejects v1 captures.
+The observation tab must remain visible.
 
 | Metric | Definition |
 | --- | --- |
@@ -306,7 +308,7 @@ compositor timestamp. The observation tab must remain visible.
 | `stopToReadyFrameMs` | Stop click to visible idle composer state, even when blank Send is disabled. |
 | `threadSwitchToFrameMs` | Sidebar click to changed destination content across a frame opportunity, with destination URL checked. |
 | `lcpMs` | Last observed browser LCP entry; diagnostic, not composer readiness. |
-| `interactionMs` | One Event Timing duration per interaction ID; diagnostic, not session INP. |
+| `eventTimingEntryMs` | Each delivered Event Timing entry's duration (16 ms reporting threshold); diagnostic, not a logical interaction maximum or session INP. Multiple events may share an interaction ID. |
 
 The fixed normal-profile budgets are defined in `result-contract.ts`. Result JSON
 retains raw content-free samples so budget-exceedance rates can be recomputed.

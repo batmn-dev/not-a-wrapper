@@ -19,11 +19,20 @@ The guarded Composer submit handler confirms the input; consuming Enter in an
 editor menu never resets the active measurement. Coalesced typing preserves the
 oldest input awaiting a frame. Late interactions wait for 80% of deterministic
 fixture content, with separate early/late coverage requirements.
-An observer checks the intended DOM state before a frame, then timestamps after
-that frame has had a paint opportunity. These are explicitly DOM/frame proxies,
+An observer checks the intended DOM state in a rendering callback, then timestamps
+in a cancellable task queued from that callback, after its rendering opportunity.
+This follows the [rAF-to-timer pattern](https://web.dev/articles/optimize-inp#yield_to_allow_rendering_work_to_occur_sooner).
+Measurement version `dom-frame-v2` removes v1's extra animation-frame wait; old
+captures cannot be compared or adjusted by subtracting a fixed frame duration.
+These are explicitly DOM/frame proxies,
 not compositor or first-pixel measurements. Existing React-effect timings retain
 their historical definitions as diagnostic columns. Traces remain the authority
 when investigating actual presentation delay.
+
+The browser trace confirmed that even the earlier double-rAF proxy could precede
+native Event Timing presentation. Neither version establishes physical pixel
+presentation or an upper bound on it. DOM inspection remains before rendering;
+moving the inspection into the later task could credit a mutation after the frame.
 
 A sampled transport text-length watermark is matched to the current assistant's
 rendered source length to measure receipt-to-content-frame delay throughout the
@@ -87,4 +96,24 @@ blocking Send on full-document View Transition capture. Removing motion entirely
 was considered; keeping the live-element slide preserves the interaction while
 letting feedback begin immediately. Hidden/reduced-motion documents skip animation.
 The composer also reuses identical sizing measurements across editor transactions
-and controlled-value commits, invalidating on value, width, node, class or style.
+and controlled-value commits, invalidating on value, width, node, class, style or
+computed typography and wrapping inputs.
+
+Menu commands subscribe separately from changing message/list data. Memoized
+sidebar adapters compare the complete chat value and their own active state;
+inactive rows need not rebuild their menu controls when another chat is selected.
+Reset remains scoped to the selected chat, and only its active menu receives the
+reset command. Delete confirmation mounts on first request and remains mounted
+through later closes so its existing transition lifecycle is retained. Splitting
+the command subscriptions extends the existing providers; a new shared state
+system or disabling menu behavior was unnecessary.
+
+Highlight styling is scoped to the streaming root and inherited by descendants.
+The overlay observes its last block with IntersectionObserver. Once that block is
+offscreen, a bounded grace interval lets preceding visible cohorts finish, then
+range repainting pauses. Appends still advance cohort state, so scrolling into the
+tail resumes only current cohorts. No text or wrapper nodes are inserted. A large
+intersecting block remains eligible conservatively. The current native text-length
+read is retained for visible repainting because child-only Markdown renders can
+change text-node extent between parent commits; stale cached offsets would tint
+the wrong text.

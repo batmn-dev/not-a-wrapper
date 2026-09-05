@@ -20,7 +20,7 @@ function result(): ComparableResult {
   }
   return {
     schemaVersion: 2,
-    measurementVersion: "dom-frame-v1",
+    measurementVersion: "dom-frame-v2",
     buildClass: "production",
     instrumentationBuild: true,
     machineClass: "linux-x64",

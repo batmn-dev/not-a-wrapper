@@ -1419,7 +1419,7 @@ async function main() {
     .trim()
   const file: BenchmarkResultFile = {
     schemaVersion: 2,
-    measurementVersion: "dom-frame-v1",
+    measurementVersion: "dom-frame-v2",
     profiled: process.env.PERF_PROFILE === "true",
     fixtureHash: hashValue(
       isThreadSwitch

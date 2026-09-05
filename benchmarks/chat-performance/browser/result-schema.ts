@@ -161,7 +161,7 @@ export type ThreadSwitchResult = {
 
 export type BenchmarkResultFile = {
   schemaVersion: 2
-  measurementVersion: "dom-frame-v1"
+  measurementVersion: "dom-frame-v2"
   profiled?: boolean
   generatedAt: string
   commit: string
