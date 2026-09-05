@@ -60,9 +60,12 @@ viewport by itself is not a phone-performance simulation.
 
 ## Evidence and gates
 
-Workflow dispatch `diagnose=true` supports only `suite=responsiveness` and records
-one profiled run per `only` scenario ID (default: `new-chat-cold,interact-long-answer`).
-Other suites are rejected before setup; disable `diagnose` to run them normally.
+Workflow dispatch `diagnose=true` supports `suite=responsiveness` and `standard`,
+recording one profiled run per `only` scenario ID. Blank `only` defaults to
+`new-chat-cold,interact-long-answer` for responsiveness and
+`mixed-markdown-30-slab` for standard. Other suites are rejected before setup;
+disable `diagnose` to run them normally. Observer/rendering controls still
+require responsiveness.
 Diagnostics skip performance certification, and profiled results are rejected as
 baselines. The separate `perf-diagnostics` artifact contains `.cpuprofile` files,
 browser timeline `.trace.json` files, and the matching public JavaScript chunks
@@ -70,8 +73,9 @@ for locating sampled functions. These developer diagnostics are separate from
 the content-free measurement JSON in `perf-results`.
 
 For focused style attribution, `diagnose=true, late_menu_trace=true` with
-`only` left blank defaults to `interact-long-answer` and records invalidations around the late menu
-opening. Local equivalent: `PERF_PROFILE=true PERF_PROFILE_LATE_MENU=true`.
+`only` left blank defaults to `interact-long-answer` and records invalidations
+around the late menu opening. Local equivalent:
+`PERF_PROFILE=true PERF_PROFILE_LATE_MENU=true`.
 The native artifact is explicitly named `.late-menu.trace.json`; an interrupted
 capture is `.late-menu.partial.trace.json`. CPU profiling still covers the journey.
 This mode cannot combine with other diagnostic controls or non-interactive

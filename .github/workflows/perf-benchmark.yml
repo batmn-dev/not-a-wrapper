@@ -44,7 +44,7 @@ on:
         type: boolean
         default: false
       diagnose:
-        description: "Profile responsiveness scenarios; never a performance certification"
+        description: "Profile responsiveness or standard scenarios; never a performance certification"
         type: boolean
         default: false
       only:
@@ -89,7 +89,11 @@ jobs:
       WARMUPS: ${{ inputs.diagnose && '0' || '1' }}
       PERF_PROFILE: ${{ inputs.diagnose && 'true' || 'false' }}
       PERF_PROFILE_LATE_MENU: ${{ inputs.late_menu_trace && 'true' || 'false' }}
-      ONLY: ${{ inputs.diagnose && (inputs.only || (inputs.late_menu_trace && 'interact-long-answer' || 'new-chat-cold,interact-long-answer')) || '' }}
+      ONLY: >-
+        ${{ inputs.diagnose && (inputs.only ||
+          (inputs.late_menu_trace && 'interact-long-answer' ||
+           inputs.suite == 'standard' && 'mixed-markdown-30-slab' ||
+           'new-chat-cold,interact-long-answer')) || '' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite
@@ -104,13 +108,13 @@ jobs:
             exit 1
           fi
           if [ "${{ inputs.late_menu_trace }}" = "true" ]; then
-            if [ "${{ inputs.diagnose }}" != "true" ] || [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; then
-              echo "::error::late_menu_trace requires diagnose=true and cannot combine with another diagnostic control."
+            if [ "${{ inputs.diagnose }}" != "true" ] || [ "$SUITE" != "responsiveness" ] || [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; then
+              echo "::error::late_menu_trace requires diagnose=true, suite=responsiveness, and cannot combine with another diagnostic control."
               exit 1
             fi
           fi
-          if [ "$SUITE" != "responsiveness" ]; then
-            echo "::error title=Unsupported diagnostic suite::diagnose=true supports only suite=responsiveness. Disable diagnose to run the selected suite normally."
+          if [ "$SUITE" != "responsiveness" ] && { [ "$SUITE" != "standard" ] || [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; }; then
+            echo "::error title=Unsupported diagnostic suite::Ordinary profiling supports responsiveness and standard. Observer/rendering controls require responsiveness. Disable diagnose to run other suites normally."
             exit 1
           fi
 
