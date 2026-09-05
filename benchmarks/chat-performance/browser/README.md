@@ -209,3 +209,11 @@ Real-provider first-output/token-rate analysis stays separate, grouped by the re
 provider route, reasoning setting, tool configuration, and outcome.
 Production sampling discards interrupted turns on tab return and resumes for new
 turns; benchmark documents retain the stricter permanent visibility invalidation.
+
+Anonymous standard/smoke dispatches have a separate concurrency lane from
+credentialed journey runs. Their suite definitions are checked to reject any
+authenticated scenario. Each paired comparison still runs sequentially on one
+isolated CI machine; authenticated suites remain serialized. This avoids blocking
+an authenticated PR comparison behind an unrelated guest rendering capture.
+Guest usage admission still reaches the shared deployment under a fresh anonymous
+identity; these lanes isolate browser CPU, not backend capacity.

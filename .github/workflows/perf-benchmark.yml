@@ -73,7 +73,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: perf-benchmark
+  # Guest rendering runs use separate identities; credentialed runs stay serialized.
+  # Each before/after pair remains sequential on one isolated runner.
+  group: perf-benchmark-${{ github.event_name == 'workflow_dispatch' && (inputs.suite == 'standard' || inputs.suite == 'smoke') && 'guest' || 'authenticated' }}
   cancel-in-progress: false
 
 jobs:
@@ -146,6 +148,11 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Validate anonymous lane isolation
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.suite == 'standard' || inputs.suite == 'smoke') }}
+        run: |
+          bun -e 'import { STANDARD_SUITE, SMOKE_SUITE } from "./benchmarks/chat-performance/browser/scenarios"; if ([...STANDARD_SUITE, ...SMOKE_SUITE].some(scenario => scenario.auth)) throw new Error("The guest lane must not contain authenticated scenarios")'
 
       # Branch timing runs only in this controlled lane, never ordinary CI.
       - name: Micro-benchmark timing gates
