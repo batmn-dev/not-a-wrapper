@@ -20,6 +20,7 @@ type GeneratedLargePasteBase = AttachmentBase & {
 
 type AttachmentKindBase = SelectedFileBase | GeneratedLargePasteBase
 
+/** Pending admission and transfer share the existing indeterminate presentation. */
 export type UploadingAttachment = AttachmentKindBase & {
   status: "uploading"
   attemptId: number
