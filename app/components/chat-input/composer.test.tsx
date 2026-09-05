@@ -1133,6 +1133,48 @@ describe("Composer primary action", () => {
     }
   )
 
+  it.each([0, 600])(
+    "preserves a replacement Composer draft after %sms when the old send settles",
+    async (delay) => {
+      vi.useFakeTimers()
+      try {
+        composerMocks.draftById.set("remounted-chat", "first message")
+        let accept!: (value: boolean) => void
+        const mounted = renderComposer({
+          chatId: "remounted-chat",
+          onTurn: () =>
+            new Promise<boolean>((resolve) => {
+              accept = resolve
+            }),
+        })
+        await act(async () => {
+          mounted
+            .querySelector<HTMLButtonElement>('[data-testid="send-button"]')!
+            .click()
+        })
+        act(() => root?.render(null))
+        rerenderComposer({ chatId: "remounted-chat" })
+        changeComposerValue("replacement draft")
+        act(() => {
+          vi.advanceTimersByTime(delay)
+        })
+        await act(async () => {
+          accept(true)
+        })
+        act(() => {
+          vi.advanceTimersByTime(600)
+        })
+        expect(promptInputMockCalls.at(-1)?.value).toBe("replacement draft")
+        expect(composerMocks.draftById.get("remounted-chat")).toBe(
+          "replacement draft"
+        )
+        expect(composerMocks.clearDraft).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
   it("insertQuote persists into the draft; setText is display-only", async () => {
     vi.useFakeTimers()
     try {

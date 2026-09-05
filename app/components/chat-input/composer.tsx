@@ -113,6 +113,9 @@ type ComposerProps = {
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
 
+// Draft storage is shared across mounts; settlement guards must be as well.
+const draftRevisions = new Map<string | null, number>()
+
 type ComposerDraftIdentity = {
   persistenceId: string | null
   displayId: string
@@ -323,9 +326,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const { localValue, valueRef, applyValue, isCurrentDraft } =
       useComposerDraftDisplay(draftIdentity, draftValue)
 
-    // Revisited drafts retain their revision while an older send is pending.
-    const draftRevisions = useRef(new Map<string | null, number>())
-
     const debouncedSetDraftValue = useMemo(
       () => debounce((value: string) => setDraftValue(value), 500),
       [setDraftValue]
@@ -349,10 +349,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleValueChange = useCallback(
       (newValue: string) => {
         const key = draftIdentity.persistenceId
-        draftRevisions.current.set(
-          key,
-          (draftRevisions.current.get(key) ?? 0) + 1
-        )
+        draftRevisions.set(key, (draftRevisions.get(key) ?? 0) + 1)
         applyValue(newValue)
         debouncedSetDraftValue(newValue)
       },
@@ -362,7 +359,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const handleSend = useCallback(async () => {
       const text = valueRef.current
       const key = draftIdentity.persistenceId
-      const submittedRevision = draftRevisions.current.get(key) ?? 0
+      const submittedRevision = draftRevisions.get(key) ?? 0
       let accepted = false
       try {
         accepted = await submitAttachments(text, (payload) => {
@@ -378,16 +375,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         if (
           !accepted &&
           isCurrentDraft() &&
-          (draftRevisions.current.get(key) ?? 0) === submittedRevision &&
+          (draftRevisions.get(key) ?? 0) === submittedRevision &&
           text &&
           valueRef.current === ""
         )
           applyValue(text)
       }
-      if (
-        accepted &&
-        (draftRevisions.current.get(key) ?? 0) === submittedRevision
-      ) {
+      if (accepted && (draftRevisions.get(key) ?? 0) === submittedRevision) {
         debouncedSetDraftValue.cancel()
         clearDraft()
       }

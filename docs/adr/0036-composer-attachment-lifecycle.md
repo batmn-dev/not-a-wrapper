@@ -33,7 +33,9 @@ files afterward. During admission, Send and another selection could not see them
 - Composer clears or restores a submitted draft only while its edit revision
   remains current. A later edit retains its pending or completed persistence
   write, even when the previous send settles. Revisions stay keyed by persistence
-  identity across revisits. Rejected text is restored only while its original
+  identity across revisits and Composer mounts, matching the shared draft storage.
+  A module-level registry lets an edit in a replacement Composer invalidate an
+  older pending send without adding a new persistence protocol. Rejected text is restored only while its original
   display identity is active, so navigating cannot restore it into another chat.
 - Composer retains draft ownership. Chat turn execution, atomic first-turn
   creation, and durable attachment binding retain their existing owners.
