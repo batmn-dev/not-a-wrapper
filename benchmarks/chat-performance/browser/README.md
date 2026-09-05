@@ -110,6 +110,14 @@ or competing input, opposite movement, navigation/root changes, and application
 scroll commands invalidate the pending observation. A five-second watchdog fails
 an unmatched capture without truncating an accepted duration. Native scroll
 anchoring has no causal input identifier; this remains a DOM/frame proxy.
+Interaction captures declare `wheelProtocol: prepared-wheel-v1`. Immediately before
+native input, the harness supplies the observer with the root's position and the
+expected delta. The actual wheel event consumes that preparation once and supplies
+the latency timestamp. This preserves scrolling that occurs before passive event
+delivery without changing browser scheduling. Missing, stale, mismatched, or
+invalidated preparation fails; older interaction captures are incompatible.
+Failure probes retain only closed wheel-state reasons, counts, timings, and scroll
+positions to distinguish skipped eligibility from delayed event delivery.
 
 Normal-profile budgets allow at most 5% over 100 ms for Send/Stop/menu feedback,
 and 50 ms for typing and received-content frames. Relative gates cover load,

@@ -252,6 +252,15 @@ describe("performance evidence contract", () => {
     expect(compareResults(slow, slow).join(" ")).toContain("5/5 exceed 100ms")
   })
 
+  it("rejects wheel captures without matching pre-input preparation", () => {
+    const before = result()
+    const current = result()
+    current.scenarios[0].wheelProtocol = "prepared-wheel-v1"
+    expect(compareResults(before, current).join(" ")).toContain("scenario missing")
+    before.scenarios[0].wheelProtocol = "prepared-wheel-v1"
+    expect(compareResults(before, current)).toEqual([])
+  })
+
   it("rejects failures and malformed numbers rather than dropping them", () => {
     const invalid = result()
     invalid.scenarios[0].metrics.inputToFirstTextFrameMs.p50 = NaN

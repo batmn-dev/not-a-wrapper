@@ -30,6 +30,12 @@ baseline is never a fallback. Scenario identity, coverage, and budgets remain
 checked after selection. Do not add placeholders for environments not yet captured.
 An explicit baseline JSON path remains supported for inspecting one capture.
 
+Interactive scrolling scenarios require `wheelProtocol: "prepared-wheel-v1"`:
+the harness captures position before native input, then measures from the actual
+wheel event to observed movement. Scenario matching rejects older scroll captures
+that sampled their starting position inside a potentially delayed passive handler.
+Non-scrolling scenarios are unaffected by this protocol field.
+
 Captures also require `replayPolicy: "disabled-v1"`. Performance builds disable
 Sentry and PostHog session recording at initialization while retaining other
 telemetry; normal production recording behavior is unchanged. A browser marker

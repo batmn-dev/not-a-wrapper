@@ -24,11 +24,26 @@ export type ChatUiMetric =
   | "threadSwitchToFrameMs"
   | "navigationToThreadFrameMs"
 
+export type WheelObservationReason =
+  | "idle" | "prepared" | "waiting" | "recorded" | "cleared"
+  | "outside-root" | "modified" | "boundary" | "nested-scroll"
+  | "cancelled" | "root-changed" | "opposite-motion"
+  | "competing-input" | "programmatic-scroll" | "watchdog"
+  | "missing-preparation" | "stale-preparation" | "mismatched-preparation"
+
 export type ChatUiObserver = {
   values: Partial<Record<ChatUiMetric, number[]>>
   hidden: boolean
   pendingDeltas: () => number
   droppedSamples: () => number
+  prepareWheel: (root: HTMLElement, deltaY: number) => void
+  wheelDiagnostics: () => {
+    received: number; armed: number; scrollEvents: number
+    reason: WheelObservationReason; pending: boolean; prepared: boolean
+    preparedTop?: number; deliveryTop?: number; eventAt?: number
+    deliveryAt?: number; lastScanTop?: number
+    preparationInvalidatedBy?: WheelObservationReason
+  }
   programmaticScroll: (root: HTMLElement) => void
   confirmSend: () => void
   setPhase: (phase: "early" | "late") => void
@@ -49,6 +64,7 @@ export function installChatUiObserver(
   options: {
     report?: (metric: ChatUiMetric, durationMs: number) => void
     resumeOnVisible?: boolean
+    requireWheelPreparation?: boolean
   } = {}
 ): void {
   const observedWindow = window as ChatUiWindow
@@ -86,10 +102,26 @@ export function installChatUiObserver(
         watchdog: ReturnType<typeof setTimeout>
       }
     | undefined
-  const clearPendingWheel = (invalid = false) => {
+  let preparedWheel: {
+    root: HTMLElement; start: number; at: number; deltaY: number
+    pathname: string; watchdog: ReturnType<typeof setTimeout>
+  } | undefined
+  const wheelState: Omit<ReturnType<ChatUiObserver["wheelDiagnostics"]>, "pending" | "prepared"> = {
+    received: 0, armed: 0, scrollEvents: 0, reason: "idle",
+  }
+  const clearPreparedWheel = (invalid = false, reason: WheelObservationReason = "cleared") => {
+    if (!preparedWheel) return
+    clearTimeout(preparedWheel.watchdog)
+    preparedWheel = undefined
+    wheelState.reason = reason
+    if (invalid) wheelState.preparationInvalidatedBy = reason
+    if (invalid) dropped++
+  }
+  const clearPendingWheel = (invalid = false, reason: WheelObservationReason = "cleared") => {
     if (!pendingWheel) return
     clearTimeout(pendingWheel.watchdog)
     pendingWheel = undefined
+    wheelState.reason = reason
     if (invalid) dropped++
   }
   let navigation:
@@ -172,23 +204,27 @@ export function installChatUiObserver(
   const scan = () => {
     if (pendingWheel) {
       const wheel = pendingWheel
+      wheelState.lastScanTop = wheel.root.scrollTop
       if (
         wheel.event.defaultPrevented ||
         location.pathname !== wheel.pathname ||
         document.querySelector("[data-scroll-root]") !== wheel.root
       ) {
-        clearPendingWheel(true)
+        clearPendingWheel(true, wheel.event.defaultPrevented ? "cancelled" : "root-changed")
       } else if (
         (wheel.root.scrollTop - wheel.start) * Math.sign(wheel.event.deltaY) > 0
       ) {
-        clearPendingWheel()
+        clearPendingWheel(false, "recorded")
         recordFrame("scrollToFrameMs", wheel.at)
         if (wheel.phase)
           recordFrame(phaseMetric("scrollToFrame", wheel.phase), wheel.at)
       } else if (wheel.root.scrollTop !== wheel.start) {
-        clearPendingWheel(true)
+        clearPendingWheel(true, "opposite-motion")
       }
     }
+    if (preparedWheel && (location.pathname !== preparedWheel.pathname ||
+      document.querySelector("[data-scroll-root]") !== preparedWheel.root))
+      clearPreparedWheel(true, "root-changed")
     const editor = document.querySelector(editorSelector)
     const send = document.querySelector<HTMLButtonElement>(sendSelector)
     const row = lastTurn()
@@ -301,6 +337,7 @@ export function installChatUiObserver(
     inputPending = false
     navigation = undefined
     clearPendingWheel()
+    clearPreparedWheel()
     frames.forEach(cancelAnimationFrame)
     frames.clear()
     frameTasks.forEach(clearTimeout)
@@ -317,7 +354,8 @@ export function installChatUiObserver(
   }
   const beginSend = (at: number) => {
     turn++
-    clearPendingWheel(true)
+    clearPendingWheel(true, "root-changed")
+    clearPreparedWheel(true, "root-changed")
     navigation = undefined
     // Keep the document's load and typing observations when beginning its first turn.
     sentAt = at
@@ -345,7 +383,10 @@ export function installChatUiObserver(
       if (sendCandidate === at) sendCandidate = undefined
     }, 0)
   }
-  const competingInput = () => clearPendingWheel(true)
+  const competingInput = () => {
+    clearPendingWheel(true, "competing-input")
+    clearPreparedWheel(true, "competing-input")
+  }
   const pointer = (event: MouseEvent) => {
     competingInput()
     const target = event.target instanceof Element ? event.target : null
@@ -404,22 +445,44 @@ export function installChatUiObserver(
   }
   const wheel = (event: WheelEvent) => {
     const root = document.querySelector<HTMLElement>("[data-scroll-root]")
-    if (
-      !root ||
-      !(event.target instanceof Node) ||
-      !root.contains(event.target) ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.deltaY === 0 ||
-      event.defaultPrevented
-    )
+    wheelState.received++
+    wheelState.eventAt = eventTime(event)
+    wheelState.deliveryAt = performance.now()
+    wheelState.deliveryTop = root?.scrollTop
+    const reject = (reason: WheelObservationReason) => {
+      const hadObservation = Boolean(pendingWheel || preparedWheel)
+      clearPendingWheel(true, reason)
+      clearPreparedWheel(true, reason)
+      if (!hadObservation && options.requireWheelPreparation) dropped++
+      wheelState.reason = reason
+    }
+    if (!root || !(event.target instanceof Node) || !root.contains(event.target)) {
+      reject("outside-root")
       return
+    }
+    if (event.ctrlKey || event.shiftKey || event.deltaY === 0 || event.defaultPrevented) {
+      reject(event.defaultPrevented ? "cancelled" : "modified")
+      return
+    }
+    if (!pendingWheel && options.requireWheelPreparation && !preparedWheel) {
+      reject("missing-preparation")
+      return
+    }
+    if (preparedWheel && (preparedWheel.root !== root || preparedWheel.pathname !== location.pathname ||
+      preparedWheel.deltaY !== event.deltaY)) {
+      reject("mismatched-preparation")
+      return
+    }
+    if (preparedWheel && (eventTime(event) < preparedWheel.at || performance.now() - preparedWheel.at >= 5000)) {
+      reject("stale-preparation")
+      return
+    }
+    const start = preparedWheel?.start ?? root.scrollTop
     const maxScroll = root.scrollHeight - root.clientHeight
-    if (
-      maxScroll <= 0 ||
-      (event.deltaY < 0 ? root.scrollTop <= 0 : root.scrollTop >= maxScroll)
-    )
+    if (maxScroll <= 0 || (event.deltaY < 0 ? start <= 0 : start >= maxScroll)) {
+      reject("boundary")
       return
+    }
     // This proxy covers direct transcript scrolling, not nested scroll chaining.
     for (
       let node =
@@ -432,33 +495,40 @@ export function installChatUiObserver(
       if (
         node.scrollHeight > node.clientHeight &&
         /^(auto|scroll|overlay)$/.test(getComputedStyle(node).overflowY)
-      )
+      ) {
+        reject("nested-scroll")
         return
+      }
     }
     if (
       pendingWheel &&
       (pendingWheel.event.defaultPrevented ||
         Math.sign(pendingWheel.event.deltaY) !== Math.sign(event.deltaY))
     )
-      clearPendingWheel(true)
+      clearPendingWheel(true, "opposite-motion")
+    clearPreparedWheel()
+    if (!pendingWheel) wheelState.armed++
+    wheelState.reason = "waiting"
     pendingWheel ??= {
       at: eventTime(event),
-      start: root.scrollTop,
+      start,
       phase,
       root,
       pathname: location.pathname,
       event,
       // A watchdog rejects an incomplete capture; it never caps a measured latency.
-      watchdog: setTimeout(() => clearPendingWheel(true), 5000),
+      watchdog: setTimeout(() => clearPendingWheel(true, "watchdog"), 5000),
     }
     schedule()
   }
   const scroll = (event: Event) => {
+    if (event.target === document.querySelector("[data-scroll-root]")) wheelState.scrollEvents++
     if (event.target === pendingWheel?.root) schedule()
   }
   const visibility = () => {
     if (document.visibilityState !== "visible") {
       clearPendingWheel()
+      clearPreparedWheel()
       if (!lcpReported && values.lcpMs?.[0] !== undefined) {
         options.report?.("lcpMs", values.lcpMs[0])
         lcpReported = true
@@ -520,8 +590,23 @@ export function installChatUiObserver(
     reset,
     pendingDeltas: () => samples.length,
     droppedSamples: () => dropped,
+    prepareWheel(root, deltaY) {
+      clearPendingWheel(true, "competing-input")
+      clearPreparedWheel(true, "competing-input")
+      if (root !== document.querySelector("[data-scroll-root]") || !Number.isFinite(deltaY) || deltaY === 0)
+        throw new Error("Invalid wheel preparation")
+      preparedWheel = {
+        root, start: root.scrollTop, deltaY, at: performance.now(), pathname: location.pathname,
+        watchdog: setTimeout(() => clearPreparedWheel(true, "watchdog"), 5000),
+      }
+      wheelState.preparedTop = preparedWheel.start
+      delete wheelState.preparationInvalidatedBy
+      wheelState.reason = "prepared"
+    },
+    wheelDiagnostics: () => ({ ...wheelState, pending: Boolean(pendingWheel), prepared: Boolean(preparedWheel) }),
     programmaticScroll(root) {
-      if (pendingWheel?.root === root) clearPendingWheel(true)
+      if (pendingWheel?.root === root) clearPendingWheel(true, "programmatic-scroll")
+      if (preparedWheel?.root === root) clearPreparedWheel(true, "programmatic-scroll")
     },
     confirmSend() {
       if (sendCandidate === undefined) return
@@ -557,6 +642,7 @@ export function installChatUiObserver(
     },
     dispose() {
       clearPendingWheel()
+      clearPreparedWheel()
       clearTimeout(candidateTimer)
       mutations.disconnect()
       observers.forEach((observer) => observer.disconnect())

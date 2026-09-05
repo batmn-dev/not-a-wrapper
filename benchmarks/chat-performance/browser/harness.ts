@@ -348,7 +348,7 @@ async function runScenarioOnce(
   timeoutMs: number
 ): Promise<RunMetrics> {
   const page = await context.newPage()
-  await page.addInitScript(installChatUiObserver)
+  await page.addInitScript(installChatUiObserver, { requireWheelPreparation: true })
   await page.setViewportSize(
     config.viewport === "mobile"
       ? { width: 390, height: 844 }
@@ -581,6 +581,12 @@ async function runScenarioOnce(
             node.scrollTop > 0 ? -400 : 400
           )
           interactionProbeStage = "late scroll frame"
+          await scroll.evaluate((root, deltaY) => {
+            const observer = (window as ChatUiWindow).__chatUiPerf
+            if (!observer || !(root instanceof HTMLElement))
+              throw new Error("Wheel observer unavailable")
+            observer.prepareWheel(root, deltaY)
+          }, direction)
           await page.mouse.wheel(0, direction)
           await page.waitForFunction(() => {
             const observer = (window as ChatUiWindow).__chatUiPerf
@@ -1038,6 +1044,7 @@ async function runScenarioOnce(
         ),
         droppedUiSamples: observer?.droppedSamples(),
         pendingDeltas: observer?.pendingDeltas(),
+        wheel: observer?.wheelDiagnostics(),
         marks: [...new Set(performance.getEntriesByType("mark")
           .filter((mark) => mark.name.startsWith("chat-perf:"))
           .map((mark) => mark.name.slice("chat-perf:".length)))],
@@ -1396,6 +1403,7 @@ async function main() {
       action: config.action,
       sampleCount: RUNS,
       warmupRuns: WARMUPS,
+      wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),
       metrics: {

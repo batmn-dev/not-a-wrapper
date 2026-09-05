@@ -327,6 +327,12 @@ application scroll command invalidate the pending observation. A five-second
 watchdog fails an unmatched capture; it does not cap accepted sample durations.
 Hidden/reset/disposed observations clear the watchdog. These remain DOM proxies:
 native scroll anchoring exposes no causal input identifier and can affect position.
+The benchmark's `prepared-wheel-v1` protocol supplies the pre-input root position
+immediately before native wheel dispatch, then consumes it on the matching actual
+event. Duration starts at that event's timestamp, not preparation time. This
+handles movement preceding passive listener delivery. Missing, stale, mismatched,
+or invalidated preparation rejects the capture; unprepared interaction baselines
+cannot compare with this protocol.
 Stop correctness checks assistant source length at idle feedback, 250 ms later,
 and after the terminal/settlement wait and settling buffer. Each checkpoint must
 be no longer than the preceding one; shorter canonical snapshots remain valid.

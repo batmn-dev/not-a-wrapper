@@ -84,6 +84,70 @@ afterEach(() => {
 })
 
 describe("DOM/frame observations", () => {
+  it("uses prepared geometry when native scrolling precedes passive wheel delivery", async () => {
+    const root = scrollRoot()
+    installChatUiObserver({ requireWheelPreparation: true })
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    observer.setPhase("late")
+    now = 50
+    observer.prepareWheel(root, 400)
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    now = 120
+    const event = new WheelEvent("wheel", { bubbles: true, deltaY: 400 })
+    Object.defineProperty(event, "timeStamp", { value: 100 })
+    root.dispatchEvent(event)
+    await paint()
+    expect(observer.values.scrollToFrameLateMs).toEqual([36])
+    expect(observer.wheelDiagnostics()).toMatchObject({
+      reason: "recorded", preparedTop: 0, deliveryTop: 400, eventAt: 100,
+      deliveryAt: 120, received: 1, armed: 1, pending: false, prepared: false,
+    })
+    expect(observer.droppedSamples()).toBe(0)
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    expect(observer.wheelDiagnostics().reason).toBe("missing-preparation")
+    expect(observer.droppedSamples()).toBe(1)
+  })
+  it.each(["missing", "stale", "direction", "programmatic", "input", "route", "watchdog"])("rejects %s wheel preparation instead of using post-input geometry", async (failure) => {
+    const root = scrollRoot()
+    installChatUiObserver({ requireWheelPreparation: true })
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const path = location.pathname
+    now = 50
+    if (failure !== "missing") observer.prepareWheel(root, 400)
+    if (failure === "programmatic") noteChatProgrammaticScroll(root)
+    if (failure === "input") document.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }))
+    if (failure === "watchdog") vi.advanceTimersByTime(5000)
+    try {
+      if (failure === "route") history.pushState(null, "", "/c/prepared-wheel-other")
+      root.scrollTop = 400
+      now = 120
+      const event = new WheelEvent("wheel", { bubbles: true, deltaY: failure === "direction" ? -400 : 400 })
+      Object.defineProperty(event, "timeStamp", { value: failure === "stale" ? 20 : 100 })
+      root.dispatchEvent(event)
+      await paint()
+      expect(observer.values.scrollToFrameMs).toBeUndefined()
+      expect(observer.droppedSamples()).toBeGreaterThan(0)
+      expect(observer.wheelDiagnostics().prepared).toBe(false)
+    } finally {
+      history.replaceState(null, "", path)
+    }
+  })
+  it.each(["hidden", "dispose", "reset"])("clears a prepared wheel watchdog on %s", (action) => {
+    const root = scrollRoot()
+    installChatUiObserver({ requireWheelPreparation: true })
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    observer.prepareWheel(root, 400)
+    if (action === "hidden") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden")
+      document.dispatchEvent(new Event("visibilitychange"))
+    } else if (action === "dispose") observer.dispose()
+    else observer.reset()
+    vi.advanceTimersByTime(5000)
+    expect(observer.droppedSamples()).toBe(0)
+    expect(observer.wheelDiagnostics().prepared).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
   it("honors the benchmark opt-out when a delayed import tries to reinstall", () => {
     installChatUiObserver()
     const pageWindow = window as ChatUiWindow

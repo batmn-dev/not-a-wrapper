@@ -101,6 +101,8 @@ export type ScenarioResult = {
   cache: "cold" | "warm"
   auth: boolean
   followup: boolean
+  /** Native wheel timing uses an explicit pre-input position snapshot. */
+  wheelProtocol?: "prepared-wheel-v1"
   scenario: string
   directive: string
   viewport: string

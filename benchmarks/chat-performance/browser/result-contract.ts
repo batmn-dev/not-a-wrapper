@@ -28,6 +28,7 @@ const scenario = z
     cache: z.enum(["cold", "warm"]),
     auth: z.boolean(),
     followup: z.boolean(),
+    wheelProtocol: z.literal("prepared-wheel-v1").optional(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
     warmupRuns: z.number().int().nonnegative(),
@@ -161,6 +162,7 @@ export function scenarioKey(
     | "cache"
     | "auth"
     | "followup"
+    | "wheelProtocol"
   >
 ): string {
   return [
@@ -173,6 +175,7 @@ export function scenarioKey(
     value.cache,
     value.auth,
     value.followup,
+    value.wheelProtocol,
   ].join("/")
 }
 
@@ -252,6 +255,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           cache: config.cache ?? "warm",
           auth: config.auth ?? false,
           followup: config.followup ?? false,
+          wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
         })
       )
     )
