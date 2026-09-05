@@ -1,5 +1,43 @@
-import { describe, expect, it } from "vitest"
-import { durationsOverlappingRun } from "./marks"
+/** @vitest-environment jsdom */
+import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  durationsOverlappingRun,
+  findDirectTranscriptWheelPoint,
+} from "./marks"
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  Reflect.deleteProperty(document, "elementFromPoint")
+  document.body.replaceChildren()
+})
+
+it("selects an unobscured gutter instead of a nested scroller and rejects an overlay", () => {
+  vi.stubGlobal("innerWidth", 390)
+  vi.stubGlobal("innerHeight", 844)
+  const root = document.createElement("div")
+  const nested = document.createElement("div")
+  nested.style.overflowY = "auto"
+  Object.defineProperties(nested, {
+    clientHeight: { value: 100 },
+    scrollHeight: { value: 200 },
+  })
+  root.append(nested)
+  document.body.append(root)
+  vi.spyOn(root, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 390, 844)
+  )
+  const hitTest = vi.fn((x: number): Element => (x < 8 ? nested : root))
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: hitTest,
+  })
+  expect(findDirectTranscriptWheelPoint(root)).toEqual({ x: 386, y: 422 })
+  hitTest.mockReturnValue(document.body)
+  expect(() => findDirectTranscriptWheelPoint(root)).toThrow(
+    "No unobscured direct transcript wheel target"
+  )
+})
 
 describe("observed responsiveness intervals", () => {
   it.each(["long_task", "raf_gap"] as const)(

@@ -13,6 +13,44 @@ export type CollectedMark = {
   detail: Record<string, unknown> | null
 }
 
+/** Self-contained for page.evaluate; matches the observer's direct-root wheel scope. */
+export function findDirectTranscriptWheelPoint(root: Element): {
+  x: number
+  y: number
+} {
+  const bounds = root.getBoundingClientRect()
+  const left = Math.max(0, bounds.left)
+  const right = Math.min(innerWidth, bounds.right)
+  const top = Math.max(0, bounds.top)
+  const bottom = Math.min(innerHeight, bounds.bottom)
+  if (right - left <= 8 || bottom <= top)
+    throw new Error("Scroll root has no visible bounds")
+  // Prefer the gutter; the center can hit a nested code scroller.
+  for (const x of [left + 4, right - 4, (left + right) / 2]) {
+    for (const fraction of [0.5, 0.35, 0.65]) {
+      const y = top + (bottom - top) * fraction
+      const target = document.elementFromPoint(x, y)
+      if (!target || !root.contains(target)) continue
+      let nestedScroll = false
+      for (
+        let node: Element | null = target;
+        node && node !== root;
+        node = node.parentElement
+      ) {
+        if (
+          node.scrollHeight > node.clientHeight &&
+          /^(auto|scroll|overlay)$/.test(getComputedStyle(node).overflowY)
+        ) {
+          nestedScroll = true
+          break
+        }
+      }
+      if (!nestedScroll) return { x, y }
+    }
+  }
+  throw new Error("No unobscured direct transcript wheel target")
+}
+
 /** Full durations of observed intervals overlapping the run, regardless of callback delivery time. */
 export function durationsOverlappingRun(
   marks: CollectedMark[],

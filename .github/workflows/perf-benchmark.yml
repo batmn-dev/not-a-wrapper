@@ -156,7 +156,7 @@ jobs:
             console.log(join(directory, latest));
           ')
           echo "current results: $CURRENT"
-          BASELINE="benchmarks/chat-performance/browser/baselines/ci-${SUITE}.json"
+          BASELINE="benchmarks/chat-performance/browser/baselines/ci-${SUITE}/"
           if [ "$COLLECT_BASELINE" = "true" ]; then
             BASELINE="--collect-baseline"
           fi

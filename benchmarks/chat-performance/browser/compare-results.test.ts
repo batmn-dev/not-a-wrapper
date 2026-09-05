@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
@@ -105,6 +105,45 @@ function threadResult(): ComparableResult {
 }
 
 describe("performance evidence contract", () => {
+  it("selects one exact environment from a directory and rejects missing, duplicate, or invalid candidates", () => {
+    const directory = mkdtempSync(join(tmpdir(), "chat-perf-baselines-"))
+    try {
+      const baselines = join(directory, "baselines")
+      mkdirSync(baselines)
+      const current = join(directory, "current.json")
+      writeFileSync(current, JSON.stringify(result()))
+      const compare = (path = baselines) => spawnSync("bun", [
+        "run", "benchmarks/chat-performance/browser/compare-results.ts", path, current,
+      ], { encoding: "utf8" })
+      const otherCpu = result()
+      otherCpu.cpuModel = "another-cpu"
+      writeFileSync(join(baselines, "other.json"), JSON.stringify(otherCpu))
+      const missing = compare()
+      expect(missing.status).toBe(1)
+      expect(missing.stderr).toContain("No matching baseline")
+
+      const matching = join(baselines, "matching.json")
+      writeFileSync(matching, JSON.stringify(result()))
+      const selected = compare()
+      expect(selected.status).toBe(0)
+      expect(selected.stdout).toContain(`selected baseline: ${matching}`)
+      expect(compare(matching).status).toBe(0)
+
+      const duplicate = join(baselines, "duplicate.json")
+      writeFileSync(duplicate, JSON.stringify(result()))
+      const ambiguous = compare()
+      expect(ambiguous.status).toBe(1)
+      expect(ambiguous.stderr).toContain("Multiple matching baselines")
+
+      writeFileSync(duplicate, "{}")
+      const invalid = compare()
+      expect(invalid.status).toBe(1)
+      expect(invalid.stderr).toContain(`Invalid baseline ${duplicate}`)
+    } finally {
+      rmSync(directory, { recursive: true })
+    }
+  })
+
   it("the CLI fails instead of reporting success when its baseline is absent", () => {
     const directory = mkdtempSync(join(tmpdir(), "chat-perf-contract-"))
     try {

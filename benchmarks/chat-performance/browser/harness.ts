@@ -48,6 +48,7 @@ import {
 } from "./ensure-auth-user"
 import {
   durationsOverlappingRun,
+  findDirectTranscriptWheelPoint,
   readHeap,
   readMarks,
   tryWaitForMark,
@@ -342,6 +343,8 @@ async function runScenarioOnce(
   await page.bringToFront()
   const cdp: CDPSession = await context.newCDPSession(page)
   let profiling = false
+  let interactionProbeStage = "entry"
+  let wheelPoint: { x: number; y: number } | undefined
   await cdp.send("Performance.enable")
   if (config.cache === "cold") {
     await cdp.send("Network.enable")
@@ -406,6 +409,28 @@ async function runScenarioOnce(
       // The measured document is an existing conversation, not the seed turn.
       await page.reload({ waitUntil: "domcontentloaded" })
       await editor.waitFor({ state: "visible" })
+      // A visible composer can precede history hydration. The follow-up's
+      // selected-path token must include the settled seed, not an empty path.
+      await waitForMark(page, "authoritative_thread_content_received", 30000)
+      await page.waitForFunction(
+        (seedLength) => {
+          const turns = document.querySelectorAll("section[data-turn-id]")
+          const seed = turns.item(turns.length - 1)
+          const assistant = seed?.querySelector<HTMLElement>(
+            '[data-message-author-role="assistant"][data-perf-text-length]'
+          )
+          return (
+            Boolean(seed?.querySelector('[data-message-author-role="user"]')) &&
+            Number(assistant?.dataset.perfTextLength) === seedLength &&
+            document.querySelector('[data-testid="send-button"]')
+              ?.getAttribute("aria-label") === "Send prompt"
+          )
+        },
+        deterministicScenarioText(FOLLOWUP_SEED.scenario).text.length,
+        { timeout: 30000 }
+      )
+      chatResponse = null
+      chatResponseUrls.length = 0
     }
 
     const heapBefore = await readHeap(cdp)
@@ -483,6 +508,7 @@ async function runScenarioOnce(
     }
 
     if (config.interact) {
+      interactionProbeStage = "first visible response"
       await awaitFirstVisible()
       const requireStreaming = async (phase: string, interaction: string) => {
         if (
@@ -495,6 +521,7 @@ async function runScenarioOnce(
       }
       for (const phase of ["early", "late"] as const) {
         if (phase === "late") {
+          interactionProbeStage = "late 80% checkpoint"
           const expectedLength = deterministicScenarioText(config.scenario).text
             .length
           await page.waitForFunction(
@@ -515,44 +542,69 @@ async function runScenarioOnce(
           (value) => (window as ChatUiWindow).__chatUiPerf?.setPhase(value),
           phase
         )
+        interactionProbeStage = `${phase} typing`
         await requireStreaming(phase, "typing")
         await editor.click()
         await page.keyboard.type("A draft.", {
           delay: 40,
         })
+        interactionProbeStage = `${phase} menu open`
         await requireStreaming(phase, "menu")
         await page.getByTestId("composer-plus-btn").click()
         await page
           .locator("[data-chat-composer-menu]")
           .waitFor({ state: "visible" })
+        interactionProbeStage = `${phase} menu frame`
         await page.waitForFunction(
-          (value) =>
-            ((window as ChatUiWindow).__chatUiPerf?.values[
-              value === "early" ? "menuToFrameEarlyMs" : "menuToFrameLateMs"
-            ]?.length ?? 0) > 0,
+          (value) => {
+            const observer = (window as ChatUiWindow).__chatUiPerf
+            if (
+              (observer?.values[
+                value === "early" ? "menuToFrameEarlyMs" : "menuToFrameLateMs"
+              ]?.length ?? 0) > 0
+            ) return true
+            if (observer?.droppedSamples())
+              throw new Error("UI capture invalid before menu frame")
+            if (
+              document.querySelector('[data-testid="send-button"]')
+                ?.getAttribute("aria-label") !== "Stop"
+            )
+              throw new Error("Stream ended before menu frame")
+            return false
+          },
           phase
         )
+        interactionProbeStage = `${phase} menu close`
         await page.keyboard.press("Escape")
+        await page.locator("[data-chat-composer-menu]")
+          .waitFor({ state: "hidden" })
         const scroll = page.locator("[data-scroll-root]")
         if (phase === "late") {
-          const bounds = await scroll.boundingBox()
-          if (!bounds) throw new Error("Scroll root has no visible bounds")
-          // Move the real pointer without Playwright scrolling the root into view.
-          await page.mouse.move(
-            bounds.x + bounds.width / 2,
-            bounds.y + bounds.height / 2
-          )
+          interactionProbeStage = "late scroll target"
+          wheelPoint = await scroll.evaluate(findDirectTranscriptWheelPoint)
+          // Move the pointer without Playwright scrolling the root into view.
+          await page.mouse.move(wheelPoint.x, wheelPoint.y)
           await requireStreaming(phase, "scroll")
           const direction = await scroll.evaluate((node) =>
             node.scrollTop > 0 ? -400 : 400
           )
+          interactionProbeStage = "late scroll frame"
           await page.mouse.wheel(0, direction)
-          await page.waitForFunction(
-            () =>
-              ((window as ChatUiWindow).__chatUiPerf?.values.scrollToFrameLateMs
-                ?.length ?? 0) > 0
-          )
+          await page.waitForFunction(() => {
+            const observer = (window as ChatUiWindow).__chatUiPerf
+            if ((observer?.values.scrollToFrameLateMs?.length ?? 0) > 0)
+              return true
+            if (observer?.droppedSamples())
+              throw new Error("UI capture invalid before scroll frame")
+            if (
+              document.querySelector('[data-testid="send-button"]')
+                ?.getAttribute("aria-label") !== "Stop"
+            )
+              throw new Error("Stream ended before scroll frame")
+            return false
+          })
         }
+        interactionProbeStage = `${phase} interaction completion`
         await requireStreaming(phase, "interaction completion")
       }
     }
@@ -973,6 +1025,47 @@ async function runScenarioOnce(
                   : detail,
       },
     }
+  } catch (error) {
+    if (!config.interact && !config.followup) throw error
+    const probe = await page.evaluate((point) => {
+      const observer = (window as ChatUiWindow).__chatUiPerf
+      const root = document.querySelector<HTMLElement>("[data-scroll-root]")
+      const menu = document.querySelector<HTMLElement>("[data-chat-composer-menu]")
+      const target = point ? document.elementFromPoint(point.x, point.y) : null
+      return {
+        streaming: document.querySelector('[data-testid="send-button"]')
+          ?.getAttribute("aria-label") === "Stop",
+        hidden: document.visibilityState !== "visible",
+        menuVisible: Boolean(menu?.checkVisibility({
+          checkOpacity: true, checkVisibilityCSS: true,
+        })),
+        uiSamples: Object.fromEntries(
+          Object.entries(observer?.values ?? {}).map(
+            ([metric, samples]) => [metric, samples.length]
+          )
+        ),
+        droppedUiSamples: observer?.droppedSamples(),
+        pendingDeltas: observer?.pendingDeltas(),
+        marks: [...new Set(performance.getEntriesByType("mark")
+          .filter((mark) => mark.name.startsWith("chat-perf:"))
+          .map((mark) => mark.name.slice("chat-perf:".length)))],
+        scroll: root ? {
+          top: root.scrollTop,
+          range: root.scrollHeight - root.clientHeight,
+          pointInside: target ? root.contains(target) : undefined,
+        } : undefined,
+      }
+    }, wheelPoint).catch(() => undefined)
+    const message = String(error).split("\n")[0]
+    const responses = chatResponseUrls.map((response) => {
+      const [status, url] = response.split(" ")
+      return { status, origin: new URL(url).origin }
+    })
+    const stage = config.interact ? interactionProbeStage : "follow-up"
+    throw new Error(
+      `${config.id}: ${stage}: ${message}; probe=${JSON.stringify(probe)}; responses=${JSON.stringify(responses)}`,
+      { cause: error }
+    )
   } finally {
     try {
       if (profiling) {

@@ -482,6 +482,7 @@ describe("Composer primary action", () => {
       stop,
       isSubmitting: false,
       status: "streaming",
+      isSendReady: false,
     })
 
     const button = mounted.querySelector(
@@ -559,6 +560,21 @@ describe("Composer primary action", () => {
     renderComposer({ isSubmitting: false, status: "ready" })
 
     expect(promptInputActionMockCalls.at(-1)?.tooltip).toBe("Message is empty")
+  })
+
+  it("keeps the draft writable while Send waits for history, then sends the retained draft", async () => {
+    const onTurn = vi.fn(async () => true)
+    const mounted = renderComposer({ onTurn, isSendReady: false, status: "ready" })
+    changeComposerValue("draft while loading")
+    expect(mounted.querySelector("textarea")?.disabled).toBe(false)
+    expect(mounted.querySelector('[aria-label="Send prompt"]')?.getAttribute("aria-disabled")).toBe("true")
+    await act(async () => { promptInputMockCalls.at(-1)?.onSubmit?.() })
+    expect(onTurn).not.toHaveBeenCalled()
+    expect(promptInputMockCalls.at(-1)?.value).toBe("draft while loading")
+
+    rerenderComposer({ onTurn, isSendReady: true, status: "ready" })
+    await act(async () => { promptInputMockCalls.at(-1)?.onSubmit?.() })
+    expect(onTurn).toHaveBeenCalledWith(expect.objectContaining({ text: "draft while loading" }))
   })
 
   it("routes native form submission through the guarded send contract", async () => {

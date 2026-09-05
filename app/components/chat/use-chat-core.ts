@@ -367,7 +367,14 @@ export function useChatCore({
   // This is the only long-task/rAF-gap observer; another mount would double-count.
   useChatResponsivenessMarks(status === "streaming")
 
-  const { selectedRun } = useMessages()
+  const { selectedRun, isLoading: isHistoryLoading } = useMessages()
+  // Existing sends carry the rendered path's admission token. Wait for the
+  // selected binding, query hydration, and the commit projecting its history.
+  const isHistoryReady =
+    chatId === null ||
+    (detachableStream.commit.chatId === chatId &&
+      !isHistoryLoading &&
+      (initialMessages.length === 0 || messages.length > 0))
   const connectionState = useConvexConnectionState()
   const stopGenerationRunMutation = useMutation(
     api.chatRuntime.stopGenerationRun
@@ -766,6 +773,7 @@ export function useChatCore({
   // to clear its persisted draft.
   const submit = useCallback(
     async ({ text, files, attachments }: ChatTurnPayload): Promise<boolean> => {
+      if (!isHistoryReady) return false
       const submittedFiles = [...files]
       const optimisticAttachments = attachments.flatMap((attachment) =>
         typeof attachment.name === "string" &&
@@ -808,7 +816,7 @@ export function useChatCore({
       }
       return accepted
     },
-    [chatTurn, messages, bumpChat]
+    [chatTurn, messages, bumpChat, isHistoryReady]
   )
 
   const autoSubmittedPromptRef = useRef<string | null>(null)
@@ -822,11 +830,9 @@ export function useChatCore({
       return
     }
 
-    // Wait for model preferences to hydrate before dispatching, so the turn
-    // snapshot resolves the user's model — not the tier default. The once-
-    // guard is only consumed after this gate, so the effect retries on the
-    // hydration commit.
-    if (!turnContextHydrated) return
+    // Wait for preferences and existing history before consuming the once-
+    // guard, so the turn retries with the correct model and selected path.
+    if (!turnContextHydrated || !isHistoryReady) return
 
     const autoSubmitKey = `${chatId}:${prompt}`
     if (autoSubmittedPromptRef.current === autoSubmitKey) return
@@ -856,7 +862,14 @@ export function useChatCore({
         autoSubmittedPromptRef.current = null
       }
     })()
-  }, [chatId, prompt, shouldAutoSubmitPrompt, turnContextHydrated, submit])
+  }, [
+    chatId,
+    prompt,
+    shouldAutoSubmitPrompt,
+    turnContextHydrated,
+    isHistoryReady,
+    submit,
+  ])
 
   const { submitEdit } = useChatEdit({
     chatTurn,
@@ -900,6 +913,7 @@ export function useChatCore({
     regenerate,
 
     isSubmitting,
+    isHistoryReady,
     setIsSubmitting,
     hasDialogAuth,
     setHasDialogAuth,

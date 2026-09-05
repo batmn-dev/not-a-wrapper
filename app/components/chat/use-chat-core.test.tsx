@@ -20,6 +20,8 @@ beforeEach(() => {
   // The shared stream owner is process-lived; without a reset, one test's
   // live mock binding leaks into the next test's mount-time readopt.
   resetSharedChatStreamOwnersForTests()
+  chatCoreMocks.historyLoading = false
+  chatCoreMocks.useBindingMessages = false
 })
 
 let useChatCore: (typeof import("./use-chat-core"))["useChatCore"]
@@ -49,6 +51,7 @@ const chatCoreMocks = vi.hoisted(() => ({
   updateTitle: vi.fn(),
   // Controllable useChat state for the selected-path projection effect tests.
   useChatState: { messages: [] as unknown[], status: "ready" as string },
+  useBindingMessages: false,
   // Every constructed mock Chat instance in creation order, plus the instance
   // the hook currently renders through — the re-adoption tests assert which
   // binding survives a mounted A→B→A transition.
@@ -56,6 +59,7 @@ const chatCoreMocks = vi.hoisted(() => ({
   lastUseChatInstance: null as unknown,
   // Controllable Turn context hydration for the auto-submit gate tests.
   turnContextHydrated: true,
+  historyLoading: false,
   // Controllable selected-run projection for the deferred-Stop tests.
   selectedRun: null as unknown,
 }))
@@ -102,7 +106,10 @@ vi.mock("convex/react", () => ({
 // The presentation resolver's durable input: guest/local default (no run),
 // controllable for the deferred-Stop projection-gap tests.
 vi.mock("@/lib/chat-store/messages/provider", () => ({
-  useMessages: () => ({ selectedRun: chatCoreMocks.selectedRun }),
+  useMessages: () => ({
+    selectedRun: chatCoreMocks.selectedRun,
+    isLoading: chatCoreMocks.historyLoading,
+  }),
 }))
 
 vi.mock("@ai-sdk/react", () => ({
@@ -143,11 +150,13 @@ vi.mock("./use-frame-aligned-chat", () => ({
   useFrameAlignedChat: ({
     chat,
   }: {
-    chat: { sendMessage: typeof chatCoreMocks.sendMessage }
+    chat: { sendMessage: typeof chatCoreMocks.sendMessage; messages: UIMessage[] }
   }) => {
     chatCoreMocks.lastUseChatInstance = chat
     return {
-      messages: chatCoreMocks.useChatState.messages,
+      messages: chatCoreMocks.useBindingMessages
+        ? chat.messages
+        : chatCoreMocks.useChatState.messages,
       sendMessage: chat.sendMessage,
       regenerate: chatCoreMocks.regenerate,
       status: chatCoreMocks.useChatState.status,
@@ -261,6 +270,7 @@ describe("useChatCore prompt query handling", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     chatCoreMocks.turnContextHydrated = true
+    chatCoreMocks.useChatState.messages = []
   })
 
   afterEach(() => {
@@ -278,11 +288,13 @@ describe("useChatCore prompt query handling", () => {
   function renderCore({
     search,
     chatId = "chat-project",
+    initialMessages = [],
     ensureChatExists = vi.fn(async () => ({ chatId: "chat-project" })),
     checkLimitsAndNotify = vi.fn(async () => true),
   }: {
     search: string
     chatId?: string | null
+    initialMessages?: UIMessage[]
     ensureChatExists?: Parameters<typeof useChatCore>[0]["ensureChatExists"]
     checkLimitsAndNotify?: (uid: string) => Promise<boolean>
   }) {
@@ -301,7 +313,7 @@ describe("useChatCore prompt query handling", () => {
 
     function Harness() {
       const core = useChatCore({
-        initialMessages: [] as UIMessage[],
+        initialMessages,
         cacheAndAddMessage: vi.fn(),
         chatId,
         user: authenticatedUser,
@@ -316,7 +328,12 @@ describe("useChatCore prompt query handling", () => {
       return null
     }
 
-    const rerender = () => {
+    const rerender = (next?: { chatId: string; initialMessages: UIMessage[]; search: string }) => {
+      if (next) {
+        chatId = next.chatId
+        initialMessages = next.initialMessages
+        window.history.replaceState(null, "", `/c/${chatId}${next.search}`)
+      }
       act(() => {
         root?.render(
           <React.StrictMode>
@@ -387,12 +404,10 @@ describe("useChatCore prompt query handling", () => {
     expect(window.location.search).toBe("")
   })
 
-  it("defers auto-submit until the Turn context hydrates, then dispatches once", async () => {
-    // The headline staleness fix: the turn must not dispatch with the tier
-    // default model while model prefs are still hydrating. The gate must run
-    // BEFORE the once-guard is consumed, so the deferred prompt still sends
-    // after hydration.
-    chatCoreMocks.turnContextHydrated = false
+  it.each(["context", "history"])("defers auto-submit until %s hydrates, then dispatches once", async (source) => {
+    // Defer before consuming the once-guard, preserving the pending prompt.
+    chatCoreMocks.turnContextHydrated = source !== "context"
+    chatCoreMocks.historyLoading = source === "history"
 
     const { rerender } = renderCore({
       search: "?prompt=Project%20question&autoSubmit=1",
@@ -406,11 +421,80 @@ describe("useChatCore prompt query handling", () => {
     )
 
     chatCoreMocks.turnContextHydrated = true
+    chatCoreMocks.historyLoading = false
     rerender()
     await flushAsyncWork()
 
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledTimes(1)
     expect(window.location.search).toBe("")
+  })
+
+  it("holds existing-chat sends until loaded history reaches the rendered path", async () => {
+    const history: UIMessage[] = [
+      { id: "user-seed", role: "user", parts: [{ type: "text", text: "seed" }] },
+      { id: "assistant-seed", role: "assistant", parts: [{ type: "text", text: "answer" }], metadata: { serverMessageId: "assistant-server" } },
+    ]
+    chatCoreMocks.historyLoading = true
+    const { getCore, rerender } = renderCore({ search: "", initialMessages: history })
+    const payload = { text: "follow-up", files: [], attachments: [] }
+    await act(async () => {
+      expect(getCore()!.isHistoryReady).toBe(false)
+      await expect(getCore()!.submit(payload)).resolves.toBe(false)
+    })
+    chatCoreMocks.historyLoading = false
+    rerender()
+    expect(getCore()!.isHistoryReady).toBe(false)
+    expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
+
+    chatCoreMocks.useChatState.messages = history
+    rerender()
+    expect(getCore()!.isHistoryReady).toBe(true)
+    await act(async () => { await getCore()!.submit(payload) })
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ body: expect.objectContaining({
+        expectedVisibleMessageCount: 2,
+        tailMessageId: "assistant-server",
+      }) })
+    )
+  })
+
+  it("auto-submits on a cached chat switch only after its stream binding commits", async () => {
+    chatCoreMocks.useBindingMessages = true
+    const history = (id: string): UIMessage[] => [
+      { id, role: "assistant", parts: [{ type: "text", text: id }], metadata: { serverMessageId: id } },
+    ]
+    const { rerender } = renderCore({
+      search: "",
+      chatId: "chat-a",
+      initialMessages: history("assistant-a"),
+      ensureChatExists: vi.fn(async () => ({ chatId: "chat-b" })),
+    })
+    rerender({
+      chatId: "chat-b",
+      initialMessages: history("assistant-b"),
+      search: "?prompt=Follow%20up&autoSubmit=1",
+    })
+    await flushAsyncWork()
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledOnce()
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ body: expect.objectContaining({
+        chatId: "chat-b",
+        expectedVisibleMessageCount: 1,
+        tailMessageId: "assistant-b",
+      }) })
+    )
+  })
+
+  it("allows a first send without waiting for existing-history readiness", async () => {
+    chatCoreMocks.historyLoading = true
+    const { getCore } = renderCore({ search: "", chatId: null })
+    expect(getCore()!.isHistoryReady).toBe(true)
+    await act(async () => {
+      await getCore()!.submit({ text: "first prompt", files: [], attachments: [] })
+    })
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledOnce()
   })
 
   it("disarms the performance header when submit is rejected before dispatch", async () => {

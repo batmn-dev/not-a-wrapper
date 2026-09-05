@@ -165,6 +165,7 @@ function ChatInner({
     presentation,
     hasSentFirstMessage,
     isSubmitting,
+    isHistoryReady,
     lastFinishReason,
     scrollToMessageId,
     submit,
@@ -397,6 +398,7 @@ function ChatInner({
       bottomSpacing="none"
       onTurn={submit}
       isSubmitting={isSubmitting}
+      isSendReady={isHistoryReady}
       status={effectiveStatus}
       stop={stop}
       stoppable={presentation.stoppable}

@@ -96,6 +96,8 @@ type ComposerProps = {
    * restore-payload path after every successful send. */
   onTurn: (payload: ComposerTurnPayload) => Promise<boolean> | boolean
   isSubmitting?: boolean
+  /** Holds Send while the surface loads required context; typing and Stop remain available. */
+  isSendReady?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
   stop?: () => void
   /** Resolver-driven Stop affordance beyond the local transport: a stoppable
@@ -210,6 +212,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       chatId,
       onTurn,
       isSubmitting,
+      isSendReady = true,
       status,
       stop,
       stoppable,
@@ -428,6 +431,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         isStreaming: presentStop,
         isAbortable: presentStop,
         canSend:
+          isSendReady &&
           !isSubmitting &&
           attachmentsReady &&
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
@@ -437,6 +441,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       attachments,
       attachmentsReady,
       isSubmitting,
+      isSendReady,
       localValue,
       status,
       stop,

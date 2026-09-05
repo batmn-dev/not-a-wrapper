@@ -431,6 +431,20 @@ export function checkBudgets(result: ComparableResult): string[] {
   return errors
 }
 
+export const ENVIRONMENT_FIELDS = [
+  "measurementVersion",
+  "identityProtocol",
+  "buildClass",
+  "instrumentationBuild",
+  "machineClass",
+  "cpuModel",
+  "cpuCount",
+  "memoryGb",
+  "browserVersion",
+  "fixtureHash",
+  "suite",
+] as const satisfies readonly (keyof ComparableResult)[]
+
 export function compareResults(
   base: ComparableResult,
   current: ComparableResult
@@ -440,19 +454,7 @@ export function compareResults(
     ...validateCoverage(current),
     ...checkBudgets(current),
   ]
-  for (const field of [
-    "measurementVersion",
-    "identityProtocol",
-    "buildClass",
-    "instrumentationBuild",
-    "machineClass",
-    "cpuModel",
-    "cpuCount",
-    "memoryGb",
-    "browserVersion",
-    "fixtureHash",
-    "suite",
-  ] as const) {
+  for (const field of ENVIRONMENT_FIELDS) {
     if (base[field] !== current[field])
       errors.push(`${field} mismatch; collect a matching baseline`)
   }
