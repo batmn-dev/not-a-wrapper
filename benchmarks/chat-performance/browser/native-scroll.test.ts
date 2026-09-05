@@ -67,12 +67,20 @@ describe("native scroll presentation", () => {
     expect(() => parseNativeScroll({ traceEvents: change(fixture()) }, anchor)).toThrow(/menu input/i)
   })
 
+  it("rejects zero browser duration through the duration guard", () => {
+    const traceEvents = fixture().map((e) =>
+      e.name === "GenerationToBrowserMain" && e.ph === "e" && e.ts === 290585547
+        ? { ...e, ts: 291078272 } : e
+    )
+    expect(() => parseNativeScroll({ traceEvents }, anchor))
+      .toThrow("Presentation must follow browser dispatch")
+  })
+
   it.each([
     ["absent dispatch", (events: ReturnType<typeof fixture>) => events.filter((e) => e.name !== "GenerationToBrowserMain")],
     ["incomplete dispatch", (events: ReturnType<typeof fixture>) => events.filter((e) => !(e.name === "GenerationToBrowserMain" && e.ph === "e"))],
     ["duplicate dispatch", (events: ReturnType<typeof fixture>) => [...events, event("GenerationToBrowserMain", "e", 290585548)]],
     ["late dispatch start", (events: ReturnType<typeof fixture>) => events.map((e) => e.name === "GenerationToBrowserMain" && e.ph === "b" ? { ...e, ts: e.ts + 1 } : e)],
-    ["nonpositive browser duration", (events: ReturnType<typeof fixture>) => events.map((e) => e.name === "GenerationToBrowserMain" && e.ph === "e" ? { ...e, ts: 291078272 } : e)],
     ["absent presentation", (events: ReturnType<typeof fixture>) => events.filter((e) => !e.name.startsWith("SwapEnd"))],
     ["incomplete interval", (events: ReturnType<typeof fixture>) => events.filter((e) => !(e.name === "EventLatency" && e.ph === "e" && e.ts === 291078272))],
     ["duplicate gesture", (events: ReturnType<typeof fixture>) => [...events, begin(290223824)]],
