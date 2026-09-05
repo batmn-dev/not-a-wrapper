@@ -5,16 +5,12 @@ import {
   MCP_MAX_TOOLS_PER_REQUEST,
   MCP_TRUSTED_RETRY_SERVER_ALLOWLIST,
 } from "@/lib/config"
-import { createMCPClient } from "@ai-sdk/mcp"
 import { fetchMutation, fetchQuery } from "convex/nextjs"
-import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
 import { buildStoredMcpAuthHeaders } from "./auth-headers"
-import { createPinnedMcpFetch } from "./pinned-fetch"
-import { resolveMcpUrlForConnection } from "./url-validation"
+import { isCircuitOpen, recordFailure, recordSuccess } from "./circuit-breaker"
+import { loadMCPToolsFromURL, type McpConnection } from "./load-mcp-from-url"
 
-type MCPClient = Awaited<ReturnType<typeof createMCPClient>>
-
-type MCPToolSet = Awaited<ReturnType<MCPClient["tools"]>>
+type MCPToolSet = McpConnection["tools"]
 
 export type ServerInfo = {
   displayName: string
@@ -38,14 +34,14 @@ export type ServerInfo = {
 
 export type LoadToolsResult = {
   tools: MCPToolSet
-  /** Active MCP client connections. Must be closed after streaming via after(). */
-  clients: MCPClient[]
+  /** Active MCP connections. The Tool runtime closes them after turn settlement. */
+  clients: Pick<McpConnection, "close">[]
   toolServerMap: Map<string, ServerInfo>
   failedServerCount: number
 }
 
 export type LoadToolsOptions = {
-  /** Per-server connection timeout in ms. @default MCP_CONNECTION_TIMEOUT_MS (5000) */
+  /** Per-server preparation deadline in ms. @default MCP_CONNECTION_TIMEOUT_MS (5000) */
   timeout?: number
 }
 
@@ -247,50 +243,19 @@ export async function loadUserMcpTools(
     return { ...emptyResult, failedServerCount: circuitBreakerSkipped }
   }
 
-  // Isolate slow servers with parallel, per-server timeouts.
+  // Each server prepares independently, including discovery within its deadline.
   const clientResults = await Promise.allSettled(
-    serversToConnect.map(async (server) => {
-      // SSRF gate — string + DNS-rebinding checks. The returned address is also
-      // pinned into the transport fetch so validation and connection cannot
-      // diverge between check and use.
-      const resolvedUrl = await resolveMcpUrlForConnection(server.url)
-
-      const headers = buildStoredMcpAuthHeaders(server, ownerId)
-
-      // Keep the losing promise so a late client can still be closed.
-      // Note: @ai-sdk/mcp 2.x HTTP/SSE transports reject 3xx responses by
-      // default (redirect: "error") — deliberate here; see
-      // describeMcpConnectionError for the rationale and the user-facing error.
-      const clientPromise = createMCPClient({
-        transport: {
-          type: server.transport,
-          url: server.url,
-          fetch: createPinnedMcpFetch(resolvedUrl),
-          ...(headers ? { headers } : {}),
-        },
+    serversToConnect.map(async (server) =>
+      loadMCPToolsFromURL({
+        url: server.url,
+        transport: server.transport,
+        headers: buildStoredMcpAuthHeaders(server, ownerId),
+        timeout,
       })
-
-      try {
-        return await Promise.race([
-          clientPromise,
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("MCP connection timeout")),
-              timeout
-            )
-          ),
-        ])
-      } catch (error) {
-        clientPromise.then(
-          (orphanedClient) => void orphanedClient.close().catch(() => {}),
-          () => {} // Client also failed — nothing to clean up
-        )
-        throw error
-      }
-    })
+    )
   )
 
-  const clients: MCPClient[] = []
+  const clients: Pick<McpConnection, "close">[] = []
   // The SDK's opaque mapped type has no mutable builder interface.
   const mergedTools: Record<string, unknown> = {}
   const toolServerMap = new Map<string, ServerInfo>()
@@ -319,7 +284,7 @@ export async function loadUserMcpTools(
     recordSuccess(server._id)
 
     try {
-      const tools = await client.tools()
+      const tools = client.tools
       const serverSlug = slugify(server.name)
       const retrySafetyTrusted = isRetrySafetyTrustedServer(server)
 

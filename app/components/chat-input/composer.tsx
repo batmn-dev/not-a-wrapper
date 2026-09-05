@@ -38,12 +38,11 @@ import {
 } from "@/components/ui/prompt-input"
 import { toast } from "@/components/ui/toast"
 import { TooltipShortcut } from "@/components/ui/tooltip"
-import {
-  type Attachment,
-} from "@/lib/file-handling"
+import { type Attachment } from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getLogicalModelInfo } from "@/lib/models"
 import type { ChatUiWindow } from "@/lib/observability/chat-ui-observer"
+import { isReasoningEffortControlEnabled } from "@/lib/reasoning-effort"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
 import { RiArrowUpLine } from "@remixicon/react"
@@ -61,18 +60,16 @@ import { flushSync } from "react-dom"
 import { ButtonPlusMenu } from "./button-plus-menu"
 import type { ComposerActionId } from "./composer-action-registry"
 import { runComposerSlideTransition } from "./composer-view-transition"
+import { EffortControl } from "./effort-control"
 import { FileList } from "./file-list"
 import { InputDropZone } from "./input-drop-zone"
 import { coordinateComposerPaste } from "./large-paste-policy"
 import {
-  assembleComposerTurnPayload,
   restoreLargePasteText,
   type PendingAttachment,
 } from "./pending-attachment"
 import { resolveComposerPrimaryActionState } from "./primary-action-state"
 import { useComposerConnectors } from "./use-composer-connectors"
-import { isReasoningEffortControlEnabled } from "@/lib/reasoning-effort"
-import { EffortControl } from "./effort-control"
 import { WebSearchControl } from "./web-search-control"
 
 export type ComposerTurnPayload = {
@@ -118,6 +115,9 @@ type ComposerProps = {
 }
 
 const isOnlyWhitespace = (text: string) => !/[^\s]/.test(text)
+
+// Shared across mounts and retained only while a send can settle.
+const pendingDraftSends = new Map<string | null, Set<{ edited: boolean }>>()
 
 type ComposerDraftIdentity = {
   persistenceId: string | null
@@ -196,7 +196,12 @@ function useComposerDraftDisplay(
     }
   }, [adoptDraftValue, draftIdentity.displayId, draftValue])
 
-  return { localValue, valueRef, applyValue }
+  const isCurrentDraft = useCallback(
+    () => draftSyncRef.current.displayId === draftIdentity.displayId,
+    [draftIdentity.displayId]
+  )
+
+  return { localValue, valueRef, applyValue, isCurrentDraft }
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(
@@ -289,16 +294,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // immediately and hands only ready metadata to the Chat turn.
     const {
       attachments,
+      attachmentsReady,
       lockedAttachmentIds,
       announcement: attachmentAnnouncement,
       announce: setAttachmentAnnouncement,
       handleFileUpload,
       handleLargePaste,
       handleFileRemove,
-      lockAttachments,
-      unlockAttachments,
+      submitAttachments,
       retryAttachment,
-      consumeAttachments,
     } = useFilePickerState({
       convex,
       uploadGeneratedPastes: shouldUploadGeneratedPastes,
@@ -322,10 +326,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const { draftValue, setDraftValue, clearDraft } = useChatDraft(
       draftIdentity.persistenceId
     )
-    const { localValue, valueRef, applyValue } = useComposerDraftDisplay(
-      draftIdentity,
-      draftValue
-    )
+    const { localValue, valueRef, applyValue, isCurrentDraft } =
+      useComposerDraftDisplay(draftIdentity, draftValue)
 
     const debouncedSetDraftValue = useMemo(
       () => debounce((value: string) => setDraftValue(value), 500),
@@ -349,76 +351,61 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // the current text — the same guarantee the pre-Composer inputRef gave.
     const handleValueChange = useCallback(
       (newValue: string) => {
+        for (const pending of pendingDraftSends.get(
+          draftIdentity.persistenceId
+        ) ?? []) {
+          pending.edited = true
+        }
         applyValue(newValue)
         debouncedSetDraftValue(newValue)
       },
-      [applyValue, debouncedSetDraftValue]
+      [applyValue, debouncedSetDraftValue, draftIdentity.persistenceId]
     )
 
     const handleSend = useCallback(async () => {
       const text = valueRef.current
-      const submittedAttachments = attachments
-      const submittedAttachmentIds = submittedAttachments.map(
-        (attachment) => attachment.id
-      )
-      if (
-        submittedAttachments.some((attachment) => attachment.status !== "ready")
-      ) {
-        setAttachmentAnnouncement(
-          "Wait for every attachment to finish uploading, or remove failed files."
-        )
-        return
-      }
-      const turnPayload = assembleComposerTurnPayload({
-        text,
-        attachments: submittedAttachments,
-      })
-      if (!lockAttachments(submittedAttachmentIds)) return
-      // Clear the display at handoff; the persisted draft survives until the
-      // turn reports success. Clearing through applyValue also empties the
-      // ref synchronously, so a second Enter in the same commit cannot
-      // re-send the old text.
-      applyValue("")
-      let accepted: boolean
+      const key = draftIdentity.persistenceId
+      const pendingSend = { edited: false }
+      const pending =
+        pendingDraftSends.get(key) ?? new Set<typeof pendingSend>()
+      pending.add(pendingSend)
+      pendingDraftSends.set(key, pending)
+      let accepted = false
       try {
-        accepted = await onTurn(turnPayload)
+        accepted = await submitAttachments(text, (payload) => {
+          // Clear only after attachment admission, before dispatch can yield.
+          // The persisted draft survives until the turn reports success.
+          applyValue("")
+          return onTurn(payload)
+        })
+      } catch {
+        toast({ title: "Send failed. Please try again.", status: "error" })
       } finally {
-        unlockAttachments(submittedAttachmentIds)
-      }
-      if (accepted === true) {
-        consumeAttachments(submittedAttachmentIds)
-        if (submittedAttachments.length > 0) {
-          setAttachmentAnnouncement(
-            `${submittedAttachments.length} attachment${submittedAttachments.length === 1 ? "" : "s"} sent.`
-          )
-        }
-        debouncedSetDraftValue.cancel()
-        clearDraft()
-        return
-      }
-      // Rejected turn (guard failure, limit, network error): put the payload
-      // back so the user can fix and resend — the error toast must not fire
-      // over an emptied composer. Skip the text restore if the user already
-      // started a new draft while the turn was in flight.
-      if (text && valueRef.current === "") {
-        applyValue(text)
-      }
-      if (submittedAttachments.length > 0) {
-        setAttachmentAnnouncement(
-          "Send failed. Ready attachments were preserved."
+        pending.delete(pendingSend)
+        if (pending.size === 0) pendingDraftSends.delete(key)
+        // Preserve any new draft typed while dispatch was pending.
+        if (
+          !accepted &&
+          isCurrentDraft() &&
+          !pendingSend.edited &&
+          text &&
+          valueRef.current === ""
         )
+          applyValue(text)
+        if (accepted && !pendingSend.edited) {
+          debouncedSetDraftValue.cancel()
+          clearDraft()
+        }
       }
     }, [
       applyValue,
-      attachments,
-      consumeAttachments,
-      lockAttachments,
-      unlockAttachments,
+      submitAttachments,
       onTurn,
+      draftIdentity.persistenceId,
+      isCurrentDraft,
       debouncedSetDraftValue,
       clearDraft,
       valueRef,
-      setAttachmentAnnouncement,
     ])
 
     const primaryAction = useMemo(() => {
@@ -431,9 +418,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       // A resolver-declined Stop is not overridden after submission settles.
       // Never present an enabled Stop without an actionable handler.
       const presentStop = Boolean(stop) && (canStop || Boolean(isSubmitting))
-      const attachmentsReady = attachments.every(
-        (attachment) => attachment.status === "ready"
-      )
       const isMessageEmpty =
         !isSubmitting &&
         attachmentsReady &&
@@ -449,7 +433,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
         isMessageEmpty,
       })
-    }, [attachments, isSubmitting, localValue, status, stop, stoppable])
+    }, [
+      attachments,
+      attachmentsReady,
+      isSubmitting,
+      localValue,
+      status,
+      stop,
+      stoppable,
+    ])
 
     const handlePrimaryActionClick = useCallback(() => {
       if (primaryAction.disabled || primaryAction.intent !== "stop") {
@@ -629,7 +621,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 />
               </div>
               <PromptInputActions
-                className="h-9 gap-1.5 justify-start self-center [grid-area:leading]"
+                className="h-9 justify-start gap-1.5 self-center [grid-area:leading]"
                 data-composer-leading="true"
                 data-composer-transition-slot="leading"
                 onClick={(e) => e.stopPropagation()}

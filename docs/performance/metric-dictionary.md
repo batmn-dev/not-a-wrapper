@@ -282,7 +282,7 @@ calls are counted (`providerToolCalls`) because their time stays in the window.
   populations.
 - `p95` on sample sets smaller than 20 — report median/max only and say so.
 
-## 14. DOM/frame responsiveness contract (schema v2, ADR-0035)
+## 14. DOM/frame responsiveness contract (schema v2, ADR-0037)
 
 These names are separate from the older React-effect marks. A frame observation
 checks DOM before a frame, then records after its paint opportunity; it is not a

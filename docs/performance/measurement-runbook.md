@@ -92,7 +92,7 @@ instrumented run must not introduce a new task longer than 50 ms.
 
 ## Responsiveness workflow (schema v2)
 
-Read ADR-0035 and metric dictionary group 14. `SUITE=responsiveness` is the small
+Read ADR-0037 and metric dictionary group 14. `SUITE=responsiveness` is the small
 signed-in core: cold entry, follow-up after reloading its seeded conversation,
 reasoning-first, long-answer interaction, one 4x CPU + constrained-network repeat,
 Stop, and error recovery. Existing thread-switch and stress/recovery suites remain

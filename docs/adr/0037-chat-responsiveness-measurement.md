@@ -1,4 +1,4 @@
-# ADR-0035: Measure chat responsiveness through a small set of user journeys
+# ADR-0037: Measure chat responsiveness through a small set of user journeys
 
 Status: accepted, 2026-09-04
 

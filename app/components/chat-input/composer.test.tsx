@@ -2,6 +2,8 @@
 
 import type { Id } from "@/convex/_generated/dataModel"
 import { resolveGenerationPresentation } from "@/lib/chat-runs/run-presentation"
+import { checkFileUploadLimit, uploadStagedFile } from "@/lib/file-handling"
+import { validateFile } from "@/lib/file/validation"
 import React, { act } from "react"
 import { createRoot, Root } from "react-dom/client"
 import {
@@ -64,13 +66,12 @@ const composerMocks = vi.hoisted(() => ({
   setDraftValueById: [] as Array<{ draftId: string | null; value: string }>,
   clearDraftById: [] as Array<string | null>,
   attachments: [] as PendingAttachment[],
+  useRealPicker: false,
+  selectFiles: undefined as ((files: File[]) => void) | undefined,
   setDraftValue: vi.fn(),
   clearDraft: vi.fn(),
   handleFileRemove: vi.fn(),
-  lockAttachments: vi.fn(() => true),
-  unlockAttachments: vi.fn(),
   retryAttachment: vi.fn(),
-  consumeAttachments: vi.fn(),
   announce: vi.fn(),
   handleFileUpload: vi.fn(),
   handleLargePaste: vi.fn((text: string) => ({
@@ -169,21 +170,56 @@ vi.mock("@/app/hooks/use-chat-draft", () => ({
   },
 }))
 
-vi.mock("@/app/components/chat/use-file-upload", () => ({
-  useFilePickerState: () => ({
-    attachments: composerMocks.attachments,
-    lockedAttachmentIds: new Set<string>(),
-    announcement: "",
-    announce: composerMocks.announce,
-    handleFileUpload: composerMocks.handleFileUpload,
-    handleLargePaste: composerMocks.handleLargePaste,
-    handleFileRemove: composerMocks.handleFileRemove,
-    lockAttachments: composerMocks.lockAttachments,
-    unlockAttachments: composerMocks.unlockAttachments,
-    retryAttachment: composerMocks.retryAttachment,
-    consumeAttachments: composerMocks.consumeAttachments,
-  }),
+vi.mock("@/lib/file-handling", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/file-handling")>()),
+  checkFileUploadLimit: vi.fn(),
+  uploadStagedFile: vi.fn(),
 }))
+vi.mock("@/lib/file/validation", () => ({ validateFile: vi.fn() }))
+
+vi.mock("@/app/components/chat/use-file-upload", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/app/components/chat/use-file-upload")
+    >()
+  const { assembleComposerTurnPayload } = await import("./pending-attachment")
+  return {
+    useFilePickerState: (
+      options: Parameters<typeof actual.useFilePickerState>[0]
+    ) => {
+      const picker = actual.useFilePickerState(options)
+      if (composerMocks.useRealPicker) {
+        composerMocks.selectFiles = picker.handleFileUpload
+        return picker
+      }
+      return {
+        attachments: composerMocks.attachments,
+        attachmentsReady: composerMocks.attachments.every(
+          ({ status }) => status === "ready"
+        ),
+        lockedAttachmentIds: new Set<string>(),
+        announcement: "",
+        announce: composerMocks.announce,
+        handleFileUpload: composerMocks.handleFileUpload,
+        handleLargePaste: composerMocks.handleLargePaste,
+        handleFileRemove: composerMocks.handleFileRemove,
+        retryAttachment: composerMocks.retryAttachment,
+        submitAttachments: (
+          text: string,
+          dispatch: (
+            payload: ReturnType<typeof assembleComposerTurnPayload>
+          ) => boolean | Promise<boolean>
+        ) =>
+          dispatch(
+            assembleComposerTurnPayload({
+              text,
+              attachments: composerMocks.attachments,
+            })
+          ),
+      }
+    },
+  }
+})
 
 vi.mock("@/components/common/model-selector/base", () => ({
   ModelSelector: (props: ModelSelectorProps) => {
@@ -342,6 +378,8 @@ describe("Composer primary action", () => {
     composerMocks.setDraftValueById.length = 0
     composerMocks.clearDraftById.length = 0
     composerMocks.attachments = []
+    composerMocks.useRealPicker = false
+    composerMocks.selectFiles = undefined
     composerMocks.enableSearch = false
     composerMocks.searchMode = "optional"
     composerMocks.effortLevels = []
@@ -868,6 +906,56 @@ describe("Composer primary action", () => {
     expect(promptInputMockCalls.at(-1)?.value).toBe("chat B draft")
   })
 
+  it("blocks Send from selection through validation using the real attachment module", async () => {
+    composerMocks.useRealPicker = true
+    composerMocks.draftValue = "Read this"
+    vi.mocked(checkFileUploadLimit).mockResolvedValue({
+      count: 0,
+      limit: 5,
+      canUpload: true,
+    })
+    let validate!: (value: Awaited<ReturnType<typeof validateFile>>) => void
+    vi.mocked(validateFile).mockReturnValue(
+      new Promise((resolve) => {
+        validate = resolve
+      })
+    )
+    vi.mocked(uploadStagedFile).mockResolvedValue({
+      fileUrl: "/ready",
+      attachmentId: "ready",
+    })
+    const onTurn = vi.fn(async () => true)
+    const mounted = renderComposer({
+      onTurn,
+      isSubmitting: false,
+      status: "ready",
+    })
+    const selected = new File(["hello"], "hello.txt", { type: "text/plain" })
+    const send = mounted.querySelector(
+      '[data-testid="send-button"]'
+    ) as HTMLButtonElement
+    act(() => {
+      composerMocks.selectFiles!([selected])
+    })
+    expect(send.getAttribute("aria-disabled")).toBe("true")
+    await act(async () => {
+      send.click()
+    })
+    expect(onTurn).not.toHaveBeenCalled()
+    expect(promptInputMockCalls.at(-1)?.value).toBe("Read this")
+    await act(async () => {
+      validate({ isValid: true })
+    })
+    expect(send.getAttribute("aria-disabled")).not.toBe("true")
+    await act(async () => {
+      send.click()
+    })
+    expect(onTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Read this", files: [selected] })
+    )
+    expect(composerMocks.clearDraft).toHaveBeenCalledTimes(1)
+  })
+
   it("emits one turn payload on send and clears the draft only on success", async () => {
     const attachment = new File(["hello"], "hello.txt", { type: "text/plain" })
     composerMocks.draftValue = "hello there"
@@ -917,62 +1005,175 @@ describe("Composer primary action", () => {
       ],
     })
     expect(composerMocks.clearDraft).toHaveBeenCalledTimes(1)
-    expect(composerMocks.consumeAttachments).toHaveBeenCalledWith([
-      "attachment-1",
-    ])
-    expect(composerMocks.lockAttachments).toHaveBeenCalledWith(["attachment-1"])
-    expect(composerMocks.unlockAttachments).toHaveBeenCalledWith([
-      "attachment-1",
-    ])
     // Display cleared at handoff (the controlled value the input renders).
     expect(promptInputMockCalls.at(-1)?.value).toBe("")
   })
 
-  it("restores the payload and keeps the persisted draft when the turn is rejected", async () => {
-    composerMocks.draftValue = "rejected send"
+  it.each(["reject", "throw"])(
+    "restores the payload and keeps the persisted draft on %s",
+    async (outcome) => {
+      composerMocks.draftValue = "rejected send"
 
-    const onTurn = vi.fn(async () => false)
-    const mounted = renderComposer({
-      onTurn,
-      isSubmitting: false,
-      status: "ready",
-    })
+      const onTurn = vi.fn(async () => {
+        if (outcome === "throw") throw new Error("Dispatch failed")
+        return false
+      })
+      const mounted = renderComposer({
+        onTurn,
+        isSubmitting: false,
+        status: "ready",
+      })
 
-    const send = mounted.querySelector(
-      '[data-testid="send-button"]'
-    ) as HTMLButtonElement | null
+      const send = mounted.querySelector(
+        '[data-testid="send-button"]'
+      ) as HTMLButtonElement | null
 
-    await act(async () => {
-      send?.click()
-      await Promise.resolve()
-    })
+      await act(async () => {
+        send?.click()
+        await Promise.resolve()
+      })
 
-    expect(onTurn).toHaveBeenCalledTimes(1)
-    expect(composerMocks.clearDraft).not.toHaveBeenCalled()
-    // The rejection toast must not fire over an emptied composer: the typed
-    // text comes back so the user can fix and resend.
-    expect(promptInputMockCalls.at(-1)?.value).toBe("rejected send")
-  })
+      expect(onTurn).toHaveBeenCalledTimes(1)
+      expect(composerMocks.clearDraft).not.toHaveBeenCalled()
+      // The rejection toast must not fire over an emptied composer: the typed
+      // text comes back so the user can fix and resend.
+      expect(promptInputMockCalls.at(-1)?.value).toBe("rejected send")
+    }
+  )
 
-  it("restores the same generated attachment after a rejected send", async () => {
-    const generated = composerMocks.handleLargePaste("x".repeat(10_000))
-    composerMocks.attachments = [generated]
-    const mounted = renderComposer({
-      onTurn: vi.fn(async () => false),
-      isSubmitting: false,
-      status: "ready",
-    })
+  it.each([0, 600])(
+    "preserves the next draft when an earlier send is accepted after %sms",
+    async (delay) => {
+      vi.useFakeTimers()
+      try {
+        composerMocks.draftValue = "first message"
+        let accept!: (value: boolean) => void
+        const onTurn = vi.fn(
+          () =>
+            new Promise<boolean>((resolve) => {
+              accept = resolve
+            })
+        )
+        const mounted = renderComposer({
+          chatId: "chat-a",
+          onTurn,
+          isSubmitting: false,
+          status: "ready",
+        })
+        const send = mounted.querySelector(
+          '[data-testid="send-button"]'
+        ) as HTMLButtonElement
+        await act(async () => {
+          send.click()
+        })
+        changeComposerValue("next message")
+        act(() => {
+          vi.advanceTimersByTime(delay)
+        })
+        await act(async () => {
+          accept(true)
+        })
+        act(() => {
+          vi.advanceTimersByTime(600)
+        })
+        expect(promptInputMockCalls.at(-1)?.value).toBe("next message")
+        expect(composerMocks.draftById.get("chat-a")).toBe("next message")
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
 
-    const send = mounted.querySelector(
-      '[data-testid="send-button"]'
-    ) as HTMLButtonElement | null
-    await act(async () => {
-      send?.click()
-      await Promise.resolve()
-    })
+  it.each(["reject elsewhere", "accept after return"] as const)(
+    "keeps draft ownership across navigation: %s",
+    async (scenario) => {
+      vi.useFakeTimers()
+      try {
+        composerMocks.draftById.set("chat-a", "first message")
+        let settle!: (value: boolean) => void
+        const onTurn = vi.fn(
+          () =>
+            new Promise<boolean>((resolve) => {
+              settle = resolve
+            })
+        )
+        const props = { onTurn, isSubmitting: false, status: "ready" as const }
+        const mounted = renderComposer({ ...props, chatId: "chat-a" })
+        const send = mounted.querySelector(
+          '[data-testid="send-button"]'
+        ) as HTMLButtonElement
+        await act(async () => {
+          send.click()
+        })
+        rerenderComposer({ ...props, chatId: "chat-b" })
+        if (scenario === "accept after return") {
+          rerenderComposer({ ...props, chatId: "chat-a" })
+          changeComposerValue("new A draft")
+          act(() => {
+            vi.advanceTimersByTime(600)
+          })
+        }
+        await act(async () => {
+          settle(scenario === "accept after return")
+        })
+        act(() => {
+          vi.advanceTimersByTime(600)
+        })
+        if (scenario === "reject elsewhere") {
+          expect(promptInputMockCalls.at(-1)?.value).toBe("")
+          expect(composerMocks.draftById.get("chat-a")).toBe("first message")
+          expect(composerMocks.draftById.has("chat-b")).toBe(false)
+        } else {
+          expect(promptInputMockCalls.at(-1)?.value).toBe("new A draft")
+          expect(composerMocks.draftById.get("chat-a")).toBe("new A draft")
+        }
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
 
-    expect(composerMocks.consumeAttachments).not.toHaveBeenCalled()
-  })
+  it.each([0, 600])(
+    "preserves a replacement Composer draft after %sms when the old send settles",
+    async (delay) => {
+      vi.useFakeTimers()
+      try {
+        composerMocks.draftById.set("remounted-chat", "first message")
+        let accept!: (value: boolean) => void
+        const mounted = renderComposer({
+          chatId: "remounted-chat",
+          onTurn: () =>
+            new Promise<boolean>((resolve) => {
+              accept = resolve
+            }),
+        })
+        await act(async () => {
+          mounted
+            .querySelector<HTMLButtonElement>('[data-testid="send-button"]')!
+            .click()
+        })
+        act(() => root?.render(null))
+        rerenderComposer({ chatId: "remounted-chat" })
+        changeComposerValue("replacement draft")
+        act(() => {
+          vi.advanceTimersByTime(delay)
+        })
+        await act(async () => {
+          accept(true)
+        })
+        act(() => {
+          vi.advanceTimersByTime(600)
+        })
+        expect(promptInputMockCalls.at(-1)?.value).toBe("replacement draft")
+        expect(composerMocks.draftById.get("remounted-chat")).toBe(
+          "replacement draft"
+        )
+        expect(composerMocks.clearDraft).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
 
   it("insertQuote persists into the draft; setText is display-only", async () => {
     vi.useFakeTimers()

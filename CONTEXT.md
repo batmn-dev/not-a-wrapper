@@ -220,6 +220,10 @@ The deep client module that assembles a **Chat turn** payload: it owns the draft
 _Avoid_: chat-input prop orchestration (the shallow 21-prop interface), parent-owned draft/file state, `quotedText`-style commands modeled as state
 _Status_: implemented 2026-07-03.
 
+**Composer attachments**:
+The internal Composer module (`useFilePickerState` in `app/components/chat/use-file-upload.ts`) owns selection admission, upload attempts, retry/removal, and the submitted attachment snapshot. Selected files reserve their identity and appear immediately using the existing indeterminate uploading state, before quota checks or validation yield. The same identity survives admission and upload; removal or unmount invalidates pending admission. `submitAttachments(text, dispatch)` owns readiness, payload assembly, locking, and accepted/rejected dispatch cleanup. Accepted dispatch consumes only its submitted files without deleting their bound rows; rejection or an exception preserves them and releases locks. Files selected during dispatch belong to the next Chat turn. Composer owns draft clearing/restoration, guarded by pending sends shared across Composer mounts by persistence key, so a settling send cannot discard newer edits; guards are removed on settlement, and Chat owns execution; durable binding remains in Atomic first-turn creation and the Chat turn controller. See ADR-0036.
+_Avoid_: parent-managed lock/unlock/consume protocol, a second upload queue for presentation, hiding selected files until validation completes
+
 **Composer shell hint**:
 The one cookie (`composer_shell`, `lib/composer-shell-hint.ts`, ADR-0032) mirroring the device memory the new-chat **Composer** resolves from — the last-used model and that model's stored effort — so the server-rendered shell paints the saved selection on first paint. `localStorage` stays the source of truth: the cookie is written at the two memory writers (`ModelProvider.setLastUsedModel`, **Turn context** `setReasoningEffort`) and re-synced after hydration only on drift. The root layout reads it off the request beside `getUserAuth()` (no network) and seeds `ModelProvider.lastUsedModel` plus the Turn context's effort server snapshot; `parseComposerShellHint` validates model and effort against the catalog so a stale or forged cookie never paints an invalid label. The model catalog itself is static bundle data (`getVisibleLogicalModelViews()`), not a fetch; while the client-only key status is still loading, a signed-in device's last-used model keeps its `accessible` presentation flag so a key-backed selection paints without a flip (admission never reads that flag).
 _Avoid_: a second preference store, reading Convex in the root layout for shell state, an unvalidated cookie value, gating the last-used model on the favorites read, fetching the static catalog
@@ -311,6 +315,10 @@ _Avoid_: terminal drain (implies a reveal queue), delayed trailing text, settle-
 **Tool runtime**:
 Everything a chat request needs to use tools, prepared once per request and alive for the whole stream: the merged tool set, per-tool metadata, step gating, budget accounting, and tool outcome recording.
 _Avoid_: tool coordinator, tool orchestrator, tool loader
+
+**MCP connection**:
+The module shared by the Tool runtime and the settings connection test that owns URL validation, DNS-pinned transport creation, discovery, cancellation, and cleanup under one preparation deadline per server (ADR-0035). It returns tools and an idempotent close operation; successful chat connections stay alive until the Tool runtime disposes them.
+_Avoid_: raw SDK client ownership in callers, separate connection and discovery deadlines
 
 **Tool layer**:
 One of the sources tools come from — Layer 1 (provider-native), Layer 2 (Exa search/content fallback), Layer 3 (user-configured MCP servers). Layers are merged into the tool runtime; later layers win name collisions.

@@ -59,15 +59,16 @@ streams via `DefaultChatTransport`, which does not attach the header); it is
 covered by `SameSite=Lax`. Public GETs (`health`, `models`, `csrf`,
 `rate-limits`) stay open by design.
 
-### One SSRF gate for MCP (`assertMcpUrlAllowed`)
+### One SSRF gate for MCP
 
-`lib/mcp/url-validation.ts` now exports `assertMcpUrlAllowed(url)`, which runs the
-pure string check **and** the DNS-resolving rebinding check and throws on the
-first failure. It is the single sanctioned way to open an MCP connection: both
-`loadMCPToolsFromURL` (the test path) and the chat runtime call it before handing
-a URL to the transport. `redirect: "error"` on the transport stays (ADR-era SSRF
-hardening). The Convex mutation keeps its mirrored string check for the runtimes
-where `node:dns` is unavailable.
+ADR-0035 supersedes the original direct-caller validation: settings and the
+chat runtime now delegate to `loadMCPToolsFromURL` in
+`lib/mcp/load-mcp-from-url.ts`. This shared module calls
+`resolveMcpUrlForConnection` for string and DNS-rebinding checks, then pins the
+transport to the validated addresses. It owns the complete preparation deadline,
+including discovery and failure cleanup. `redirect: "error"` remains enforced.
+The Convex mutation keeps its mirrored string check for runtimes where
+`node:dns` is unavailable.
 
 ### Per-identity rate limiting + security headers
 
@@ -106,7 +107,8 @@ old value to `_PREVIOUS`, then dropped once rows re-encrypt.
 - CSRF is enforced structurally on every migrated mutation route; forgetting it
   requires bypassing the seam. The token mechanism is no longer dead code.
 - There is one place that owns MCP SSRF policy. The `/api/mcp-servers/test`
-  hole is closed; the runtime and test paths cannot diverge again.
+  hole is closed; both paths use DNS-pinned sockets, so the transport cannot
+  re-resolve the hostname to an unvalidated address after validation.
 - BYOK keys are owner- and purpose-bound at rest and `ENCRYPTION_KEY` is
   rotatable. **Format change is not backward compatible** — pre-existing dev rows
   (unversioned) no longer decrypt and must be re-entered or wiped. This is
@@ -123,9 +125,6 @@ old value to `_PREVIOUS`, then dropped once rows re-encrypt.
   MCP servers fail closed when the owner identity, stored credential material, or
   decrypted header cannot be produced, so the loader does not silently contact
   them anonymously.
-- **DNS TOCTOU:** `assertMcpUrlAllowed` resolves, then the transport resolves
-  again — a sub-second rebind between the two still slips through. Pinning the
-  validated IP into the connection is the complete fix.
 - **CSP `script-src` still allows `'unsafe-inline'`** (the App Router emits inline
   bootstrap scripts and we have not adopted nonce injection). The non-script
   directives carry the weight today; nonce-based `script-src` is the next step.

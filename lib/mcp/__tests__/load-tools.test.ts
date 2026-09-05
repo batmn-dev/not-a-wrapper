@@ -191,7 +191,8 @@ describe("loadUserMcpTools", () => {
       expect(result.tools).toHaveProperty("github_create_issue")
       expect(result.tools).toHaveProperty("github_list_repos")
       expect(result.clients).toHaveLength(1)
-      expect(result.clients[0]).toBe(client)
+      await result.clients[0].close()
+      expect(client.close).toHaveBeenCalledTimes(1)
       expect(mockCreateMCPClient).toHaveBeenCalledWith(
         expect.objectContaining({
           transport: expect.objectContaining({
@@ -295,7 +296,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-
   describe("auth headers", () => {
     it("passes decrypted bearer auth headers to the MCP transport", async () => {
       const server = mockServer({
@@ -320,6 +320,7 @@ describe("loadUserMcpTools", () => {
         ownerId: "test-user",
       })
       expect(mockCreateMCPClient).toHaveBeenCalledWith({
+        initializationOptions: { signal: expect.any(AbortSignal) },
         transport: {
           type: "http",
           url: "https://mcp.example.com",
@@ -387,7 +388,6 @@ describe("loadUserMcpTools", () => {
       )
     })
   })
-
 
   describe("multi-server merging", () => {
     it("merges tools from multiple servers with different namespaces", async () => {
@@ -502,7 +502,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-
   describe("approval filtering", () => {
     it("excludes tools that are explicitly not approved", async () => {
       const server = mockServer({ _id: "s1", name: "GitHub" })
@@ -552,7 +551,6 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-
   describe("tool limit", () => {
     it("stops adding tools after reaching MCP_MAX_TOOLS_PER_REQUEST", async () => {
       const tools: Record<string, unknown> = {}
@@ -572,7 +570,6 @@ describe("loadUserMcpTools", () => {
       expect(Object.keys(result.tools).length).toBeLessThanOrEqual(50)
     })
   })
-
 
   describe("error handling", () => {
     it("skips failed server connections gracefully", async () => {
@@ -647,10 +644,11 @@ describe("loadUserMcpTools", () => {
       const result = await loadUserMcpTools("test-token")
 
       expect(result.tools).toHaveProperty("stable_good_tool")
-      expect(result.clients).toHaveLength(2)
+      expect(result.clients).toHaveLength(1)
+      expect(result.failedServerCount).toBe(1)
+      expect(flakyClient.close).toHaveBeenCalledTimes(1)
     })
   })
-
 
   describe("circuit breaker", () => {
     it("skips servers with open circuits", async () => {
@@ -705,8 +703,44 @@ describe("loadUserMcpTools", () => {
     })
   })
 
-
   describe("timeout orphan cleanup", () => {
+    it("discovers servers in parallel and keeps healthy tools when others time out", async () => {
+      vi.useFakeTimers()
+      try {
+        const slow = mockClient()
+        slow.tools.mockReturnValue(new Promise(() => {}))
+        const healthy = mockClient({ tool: mockTool("tool") })
+        mockFetchQuery
+          .mockResolvedValueOnce([
+            mockServer({ _id: "slow", name: "Slow" }),
+            mockServer({
+              _id: "healthy",
+              name: "Healthy",
+              url: "https://healthy.example.com",
+            }),
+          ])
+          .mockResolvedValueOnce([])
+        mockClientsByUrl({
+          "https://mcp.example.com": slow,
+          "https://healthy.example.com": healthy,
+        })
+        const pending = loadUserMcpTools("test-token", { timeout: 50 })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(slow.tools).toHaveBeenCalledTimes(1)
+        expect(healthy.tools).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(50)
+        const result = await pending
+        expect(result.tools).toHaveProperty("healthy_tool")
+        expect(result.failedServerCount).toBe(1)
+        expect(result.clients).toHaveLength(1)
+        expect(slow.close).toHaveBeenCalledTimes(1)
+        expect(healthy.close).not.toHaveBeenCalled()
+        await result.clients[0].close()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it("closes orphaned client when timeout wins the race", async () => {
       const server = mockServer({ name: "Slow" })
       const orphanedClient = mockClient({ tool: mockTool("tool") })
@@ -753,7 +787,6 @@ describe("loadUserMcpTools", () => {
       // A post-timeout rejection must be absorbed.
       rejectClient(new Error("Connection also failed"))
       await Promise.resolve()
-
     })
   })
 })

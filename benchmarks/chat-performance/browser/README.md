@@ -1,7 +1,7 @@
 # Chat responsiveness benchmarks
 
 The real production application with only the provider replaced by a deterministic
-script. Stream correctness gates every timing result. See ADR-0035 and
+script. Stream correctness gates every timing result. See ADR-0037 and
 `docs/performance/metric-dictionary.md` group 14 for the measurement contract.
 
 ```sh

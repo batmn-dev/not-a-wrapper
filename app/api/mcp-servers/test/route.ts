@@ -1,7 +1,6 @@
 import { authenticatedRoute } from "@/app/api/_lib/authenticated-route"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
-import { MCP_CONNECTION_TIMEOUT_MS } from "@/lib/config"
 import { buildStoredMcpAuthHeaders } from "@/lib/mcp/auth-headers"
 import { loadMCPToolsFromURL } from "@/lib/mcp/load-mcp-from-url"
 import { McpUrlValidationError } from "@/lib/mcp/url-validation"
@@ -100,19 +99,11 @@ export const POST = authenticatedRoute(
         headers = buildStoredMcpAuthHeaders(storedServer, session.userId)
       }
 
-      const result = await Promise.race([
-        loadMCPToolsFromURL({
-          url: url.trim(),
-          transport: (transport === "sse" ? "sse" : "http") as "http" | "sse",
-          headers,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Connection timed out")),
-            MCP_CONNECTION_TIMEOUT_MS
-          )
-        ),
-      ])
+      const result = await loadMCPToolsFromURL({
+        url: url.trim(),
+        transport: transport === "sse" ? "sse" : "http",
+        headers,
+      })
 
       const toolNames = Object.keys(result.tools)
 
