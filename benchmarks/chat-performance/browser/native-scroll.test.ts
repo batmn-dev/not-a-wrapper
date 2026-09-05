@@ -18,6 +18,7 @@ const fixture = () => [
   event("SwapEndToPresentationCompositorFrame", "b", 291078167),
   event("SwapEndToPresentationCompositorFrame", "e", 291078272),
   event("EventLatency", "e", 291078272),
+  { ...begin(291900000, "MOUSE_PRESSED"), id2: { local: "0x3" } },
   begin(292000000),
   event("SwapEndToPresentationCompositorFrame", "b", 292400000),
   event("SwapEndToPresentationCompositorFrame", "e", 292500000),
@@ -32,6 +33,29 @@ describe("native scroll presentation", () => {
       event("SwapEndToPresentationCompositorFrame", "e", 291100000, "0x2"),
     )
     expect(parseNativeScroll({ traceEvents }, anchor)).toEqual({ inputToPresentationMs: 854.448 })
+  })
+
+  it.each([-200, -122, 153, 200])("matches a %iµs two-clamp residual without changing native duration", (residual) => {
+    const traceEvents = fixture().map((e) => e.name === anchor.name ? { ...e, ts: e.ts - residual } : e)
+    expect(parseNativeScroll({ traceEvents }, anchor)).toEqual({ inputToPresentationMs: 854.448 })
+  })
+
+  it.each([-201, 201])("rejects a %iµs residual outside the precision bound", (residual) => {
+    const traceEvents = fixture().map((e) => e.name === anchor.name ? { ...e, ts: e.ts - residual } : e)
+    expect(() => parseNativeScroll({ traceEvents }, anchor)).toThrow("Missing or ambiguous native scroll update")
+  })
+
+  it("rejects distinct gestures within the precision bound", () => {
+    const traceEvents = [...fixture(), { ...begin(290223977), id2: { local: "0x2" } }]
+    expect(() => parseNativeScroll({ traceEvents }, anchor)).toThrow("Missing or ambiguous native scroll update")
+  })
+
+  it.each([
+    ["missing", (events: ReturnType<typeof fixture>) => events.filter((e) => e.id2.local !== "0x3")],
+    ["early", (events: ReturnType<typeof fixture>) => events.map((e) => e.id2.local === "0x3" ? { ...e, ts: 291078271 } : e)],
+    ["ambiguous", (events: ReturnType<typeof fixture>) => [...events, begin(291950000, "MOUSE_PRESSED")]],
+  ])("rejects %s subsequent menu input", (_label, change) => {
+    expect(() => parseNativeScroll({ traceEvents: change(fixture()) }, anchor)).toThrow(/menu input/i)
   })
 
   it.each([

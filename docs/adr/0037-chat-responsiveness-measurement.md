@@ -67,7 +67,7 @@ the explicit `SwapEndToPresentationCompositorFrame` endpoint. An isolated wheel'
 event timestamp and UserTiming anchor select one process/string-local async track
 and its bounded interval. Missing, ambiguous, incomplete, or lost trace evidence
 fails. Required protocols are `wheelProtocol: native-presentation-v1` and
-`interactionProtocol: late-typing-native-wheel-menu-v1`; earlier scroll captures
+`interactionProtocol: late-typing-native-wheel-menu-v2`; earlier scroll captures
 are incompatible. Normal runs retain native traces in CI artifacts without CPU
 profiling and disable the old geometry-reading wheel observer. Chromium's native
 presentation signal is not proof of physical pixels. Production `scrollToFrameMs`

@@ -400,13 +400,13 @@ function prepareNativeWheel(root: Element): number {
     const scrolled = (scrollEvent: Event) => {
       if (scrollEvent.target !== root) return
       document.removeEventListener("scroll", scrolled, true)
-      // Sequence the next interaction after rendering opportunities; never use
-      // these callbacks as the scroll latency measurement.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
+      // Match the observer's one-frame handoff; the trace verifies presentation
+      // precedes menu input and remains the sole scroll latency endpoint.
+      requestAnimationFrame(() => setTimeout(() => {
         if (event.defaultPrevented || document.querySelector("[data-scroll-root]") !== root)
           capture.error = "Native wheel cancelled or transcript replaced"
         else capture.ready = true
-      }))
+      }, 0))
     }
     document.addEventListener("scroll", scrolled, { capture: true, passive: true })
   }, { once: true, capture: true, passive: true })
@@ -689,9 +689,25 @@ async function runScenarioOnce(
           delay: BENCHMARK_TYPING_DELAY_MS,
         })
         const scroll = page.locator("[data-scroll-root]")
+        let menuPoint: { x: number; y: number } | undefined
         if (phase === "late") {
           interactionProbeStage = "late scroll target"
           wheelPoint = await scroll.evaluate(findDirectTranscriptWheelPoint)
+          // The sticky composer stays fixed while the transcript scrolls. Native
+          // input avoids locator.click's extra stable-box frame waits mid-stream.
+          menuPoint = await page.getByTestId("composer-plus-btn").evaluate((button) => {
+            if (!(button instanceof HTMLButtonElement) || button.disabled ||
+              button.getAttribute("aria-disabled") === "true" ||
+              button.getAttribute("aria-expanded") === "true")
+              throw new Error("Late menu trigger is not ready")
+            const bounds = button.getBoundingClientRect()
+            const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+            if (bounds.width <= 0 || bounds.height <= 0 ||
+              point.x < 0 || point.x >= innerWidth || point.y < 0 || point.y >= innerHeight ||
+              document.elementFromPoint(point.x, point.y)?.closest('[data-testid="composer-plus-btn"]') !== button)
+              throw new Error("Late menu trigger is obscured")
+            return point
+          })
           // Move the pointer without Playwright scrolling the root into view.
           await page.mouse.move(wheelPoint.x, wheelPoint.y)
           if (!tracing) {
@@ -715,7 +731,8 @@ async function runScenarioOnce(
         }
         interactionProbeStage = `${phase} menu open`
         await requireStreaming(phase, "menu")
-        await page.getByTestId("composer-plus-btn").click()
+        if (menuPoint) await page.mouse.click(menuPoint.x, menuPoint.y)
+        else await page.getByTestId("composer-plus-btn").click()
         interactionProbeStage = `${phase} menu frame`
         await page.waitForFunction(
           (value) => {
@@ -1568,7 +1585,7 @@ async function main() {
       warmupRuns: WARMUPS,
       wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
       menuProtocol: config.interact ? "activation-v1" : undefined,
-      interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v1" : undefined,
+      interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
       contentFrameProtocol: "publisher-frame-v1",
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),

@@ -108,7 +108,7 @@ export type ScenarioResult = {
   /** Opening intent precedes native menu mousedown handling. */
   menuProtocol?: "activation-v1"
   /** Late probes finish before unmeasured menu dismissal. */
-  interactionProtocol?: "late-typing-native-wheel-menu-v1"
+  interactionProtocol?: "late-typing-native-wheel-menu-v2"
   /** Committed streamed content can be inspected in its publication frame. */
   contentFrameProtocol?: "publisher-frame-v1"
   scenario: string

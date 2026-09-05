@@ -141,8 +141,14 @@ Benchmark scrolling uses `scrollInputToPresentationMs`: Chromium EventLatency
 input through an explicit `SwapEndToPresentationCompositorFrame` endpoint. An
 isolated wheel event and its UserTiming anchor identify one process/string-local
 async track within a complete bounded interval. Missing, ambiguous, incomplete,
-or lost native evidence fails collection. `wheelProtocol: native-presentation-v1`
-and `interactionProtocol: late-typing-native-wheel-menu-v1` reject older captures.
+or lost native evidence fails collection. Menu input must follow the wheel's
+native presentation; the handoff uses one rAF-to-task opportunity. The late menu
+is clicked natively at its verified pre-wheel position in the sticky composer,
+avoiding extra locator stability waits. Its actual pointerdown must open the menu
+while streaming remains active; no retry or fallback is permitted. Version2 rejects
+the earlier two-rAF/locator-click sequencing.
+`wheelProtocol: native-presentation-v1`
+and `interactionProtocol: late-typing-native-wheel-menu-v2` reject older captures.
 Normal runs retain native traces in CI artifacts without CPU profiling and disable
 the old geometry-reading wheel observer. Production `scrollToFrameMs` remains a
 DOM/frame movement proxy. Neither metric establishes physical pixel timing, and
@@ -227,5 +233,5 @@ commits do not require a new baseline; changed hook layouts still require review
 
 Late interactions retain the 80% content checkpoint and run typing, native wheel,
 then menu opening. The active-stream check follows the measured menu frame;
-unmeasured dismissal follows. `late-typing-native-wheel-menu-v1` rejects both
+unmeasured dismissal follows. `late-typing-native-wheel-menu-v2` rejects both
 earlier probe ordering and the previous DOM/frame wheel measurement.

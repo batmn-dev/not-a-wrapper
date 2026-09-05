@@ -353,7 +353,7 @@ Readiness requires global `accountReadinessProtocol: matching-account-v1`.
 The original-base overlay publishes the same observation-only admission predicate
 without changing its product gate; earlier readiness captures are incompatible.
 Native benchmark scrolling requires `wheelProtocol: native-presentation-v1` and
-`interactionProtocol: late-typing-native-wheel-menu-v1`. The isolated wheel's
+`interactionProtocol: late-typing-native-wheel-menu-v2`. The isolated wheel's
 event timestamp and UserTiming anchor select a unique process/string-local async
 track and complete bounded presentation interval. Lost, missing, ambiguous, or
 incomplete evidence fails. Native traces remain CI artifacts; normal runs do not

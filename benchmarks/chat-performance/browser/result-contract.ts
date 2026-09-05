@@ -37,7 +37,7 @@ const scenario = z
     followup: z.boolean(),
     wheelProtocol: z.literal("native-presentation-v1").optional(),
     menuProtocol: z.literal("activation-v1").optional(),
-    interactionProtocol: z.literal("late-typing-native-wheel-menu-v1").optional(),
+    interactionProtocol: z.literal("late-typing-native-wheel-menu-v2").optional(),
     contentFrameProtocol: z.literal("publisher-frame-v1").optional(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
@@ -294,7 +294,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           followup: config.followup ?? false,
           wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
           menuProtocol: config.interact ? "activation-v1" : undefined,
-          interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v1" : undefined,
+          interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
           contentFrameProtocol: "publisher-frame-v1",
         })
       )

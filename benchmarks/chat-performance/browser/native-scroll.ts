@@ -31,12 +31,12 @@ export function parseNativeScroll(trace: unknown, input: z.input<typeof wheelAnc
   if (marks.length !== 1) throw new Error("Missing or ambiguous wheel anchor")
   // The mark uses startTime: observedAt; trace timestamps are microseconds.
   const generationTs = marks[0].ts - (anchor.observedAt - anchor.eventAt) * 1000
-  // Allow 0.1ms timestamp rounding, but never multiple candidate gestures.
+  // Chromium independently clamps event time and time origin by up to 100µs each.
   const begins = events.filter((event) =>
     event.name === "EventLatency" && event.ph === "b" &&
     ["FIRST_GESTURE_SCROLL_UPDATE", "GESTURE_SCROLL_UPDATE"].includes(
       event.args?.event_latency?.event_type ?? ""
-    ) && Math.abs(event.ts - generationTs) <= 100
+    ) && Math.abs(event.ts - generationTs) <= 200
   )
   if (begins.length !== 1) throw new Error("Missing or ambiguous native scroll update")
   const begin = begins[0]
@@ -64,6 +64,13 @@ export function parseNativeScroll(trace: unknown, input: z.input<typeof wheelAnc
   const finishes = presentations.filter((event) => event.ph === "e")
   if (starts.length !== 1 || finishes.length !== 1 || finishes[0].ts < starts[0].ts)
     throw new Error("Missing or ambiguous compositor presentation")
+  const menuInputs = events.filter((event) =>
+    event.name === "EventLatency" && event.ph === "b" && event.ts > begin.ts &&
+    event.args?.event_latency?.event_type === "MOUSE_PRESSED"
+  )
+  if (menuInputs.length !== 1) throw new Error("Missing or ambiguous subsequent menu input")
+  if (menuInputs[0].ts < finishes[0].ts)
+    throw new Error("Menu input preceded wheel presentation")
   const inputToPresentationMs = (finishes[0].ts - begin.ts) / 1000
   if (!Number.isFinite(inputToPresentationMs) || inputToPresentationMs <= 0)
     throw new Error("Presentation must follow native input")
