@@ -270,7 +270,7 @@ index 622750f8..376d6fad 100644
  })
 
  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
-@@ -34,7 +38,49 @@ if (posthogKey && !posthog.__loaded) {
+@@ -34,7 +38,52 @@ if (posthogKey && !posthog.__loaded) {
      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
      person_profiles: "identified_only",
      capture_pageview: false,
@@ -310,6 +310,9 @@ index 622750f8..376d6fad 100644
 +              ...(metric.startsWith("deltaToContentFrame") || metric === "inputToFirstTextFrameMs"
 +                ? { contentFrameProtocol: "publisher-frame-v1" }
 +                : {}),
++              ...(metric.startsWith("navigationToSend")
++                ? { accountReadinessProtocol: "matching-account-v1" }
++                : {}),
 +              ...(metric.startsWith("menuToFrame")
 +                ? { menuProtocol: "activation-v1" }
 +                : {}),
@@ -320,3 +323,55 @@ index 622750f8..376d6fad 100644
 +    )
 +    .catch((error) => Sentry.captureException(error))
 +}
+diff --git a/lib/user-store/provider.tsx b/lib/user-store/provider.tsx
+--- a/lib/user-store/provider.tsx
++++ b/lib/user-store/provider.tsx
+@@ -8,6 +8,7 @@
+
+ import { api } from "@/convex/_generated/api"
+ import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
++import { noteChatAccountReadiness } from "@/lib/observability/chat-ui-events"
+ import { defaultPreferences } from "@/lib/user-preference-store/utils"
+ import type { UserProfile } from "@/lib/user/types"
+ import { useAuth } from "@workos-inc/authkit-nextjs/components"
+@@ -18,6 +19,7 @@
+   useCallback,
+   useContext,
+   useEffect,
++  useLayoutEffect,
+   useRef,
+   useState,
+   type PropsWithChildren,
+@@ -55,7 +57,10 @@
+   const updateProfileMutation = useMutation(api.users.updateProfile)
+   const createOrUpdateMutation = useMutation(api.users.createOrUpdate)
+   const { user: workosUser, loading: isAuthLoading } = useAuth()
+-  const { isAuthenticated: isConvexAuthenticated } = useConvexAuth()
++  const {
++    isAuthenticated: isConvexAuthenticated,
++    isLoading: isConvexAuthLoading,
++  } = useConvexAuth()
+
+   const { data: convexUser } = usePerUserQuery(api.users.getCurrent)
+
+@@ -195,6 +200,20 @@
+     [user?.id, updateProfileMutation]
+   )
+
++  const isChatAdmissionReady =
++    !isAuthLoading &&
++    (user?.id
++      ? workosUser?.id === user.id &&
++        isConvexAuthenticated &&
++        convexUser?.workosUserId === user.id
++      : !workosUser && !isConvexAuthLoading && !isConvexAuthenticated)
++
++  // Publish committed state before the external frame observer can sample it.
++  useLayoutEffect(() => {
++    noteChatAccountReadiness(isChatAdmissionReady)
++    return () => noteChatAccountReadiness(undefined)
++  }, [isChatAdmissionReady])
++
+   return (
+     <UserContext.Provider value={{ user, isLoading, updateUser }}>
+       {children}

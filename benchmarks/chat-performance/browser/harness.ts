@@ -43,6 +43,7 @@ import {
 import { classifyChatError } from "@/lib/observability/chat-error-taxonomy"
 import { hashValue } from "../fixtures"
 import { waitForTraceCompletion } from "./diagnostic-trace"
+import { parseNativeScroll } from "./native-scroll"
 import {
   ensurePerfAuthUser,
   getPerfAuthPassword,
@@ -368,6 +369,50 @@ async function waitForSendReady(page: Page): Promise<void> {
   })
 }
 
+type NativeWheelCapture = {
+  name: string
+  eventAt: number
+  observedAt: number
+  ready: boolean
+  error?: string
+}
+type NativeWheelWindow = Window & { __perfNativeWheel?: NativeWheelCapture }
+
+/** No geometry reads after input: native tracing owns the presentation timestamp. */
+function prepareNativeWheel(root: Element): number {
+  if (!(root instanceof HTMLElement) ||
+    document.querySelector('[data-testid="send-button"]')?.getAttribute("aria-label") !== "Stop")
+    throw new Error("Native scroll preparation missed the active stream")
+  const deltaY = root.scrollTop > 0 ? -400 : 400
+  if (root.scrollHeight <= root.clientHeight) throw new Error("Transcript cannot scroll")
+  document.addEventListener("wheel", (event) => {
+    const observedAt = performance.now()
+    const eventAt = event.timeStamp > 1e12 ? event.timeStamp - performance.timeOrigin : event.timeStamp
+    const capture: NativeWheelCapture = {
+      name: "chat-perf:native-wheel", eventAt, observedAt, ready: false,
+    }
+    ;(window as NativeWheelWindow).__perfNativeWheel = capture
+    if (event.target !== root || event.ctrlKey || event.shiftKey || event.deltaY !== deltaY) {
+      capture.error = "Native wheel missed the prepared direct transcript target"
+      return
+    }
+    performance.mark(capture.name, { startTime: observedAt, detail: { eventAt, observedAt } })
+    const scrolled = (scrollEvent: Event) => {
+      if (scrollEvent.target !== root) return
+      document.removeEventListener("scroll", scrolled, true)
+      // Sequence the next interaction after rendering opportunities; never use
+      // these callbacks as the scroll latency measurement.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (event.defaultPrevented || document.querySelector("[data-scroll-root]") !== root)
+          capture.error = "Native wheel cancelled or transcript replaced"
+        else capture.ready = true
+      }))
+    }
+    document.addEventListener("scroll", scrolled, { capture: true, passive: true })
+  }, { once: true, capture: true, passive: true })
+  return deltaY
+}
+
 async function runScenarioOnce(
   context: BrowserContext,
   baseUrl: string,
@@ -375,7 +420,7 @@ async function runScenarioOnce(
   timeoutMs: number
 ): Promise<RunMetrics> {
   const page = await context.newPage()
-  await page.addInitScript(installChatUiObserver, { requireWheelPreparation: true })
+  await page.addInitScript(installChatUiObserver, { observeWheel: false })
   await page.setViewportSize(
     config.viewport === "mobile"
       ? { width: 390, height: 844 }
@@ -387,15 +432,37 @@ async function runScenarioOnce(
   let tracing = false
   let traceResult: Promise<string | undefined> | undefined
   let lateMenuTraceComplete = false
+  let traceDataLoss = false
+  let traceBytes: Buffer | undefined
+  let nativeWheel: NativeWheelCapture | undefined
   const stopTrace = async () => {
     traceResult = new Promise<string | undefined>((resolve) => {
       cdp.once("Tracing.tracingComplete", (event) => {
+        traceDataLoss = event.dataLossOccurred === true
         resolve(event.stream)
       })
     })
     await cdp.send("Tracing.end")
     tracing = false
     // Encoding the trace can outlast the remaining stream. Drain after probes.
+  }
+  const readTrace = async () => {
+    if (traceBytes) return traceBytes
+    if (!traceResult) throw new Error("Native trace was not completed")
+    const handle = await waitForTraceCompletion(traceResult)
+    const chunks: Buffer[] = []
+    try {
+      let eof = false
+      while (!eof) {
+        const part = await cdp.send("IO.read", { handle })
+        chunks.push(Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8"))
+        eof = part.eof
+      }
+    } finally {
+      await cdp.send("IO.close", { handle })
+    }
+    traceBytes = Buffer.concat(chunks)
+    return traceBytes
   }
   let interactionProbeStage = "entry"
   let wheelPoint: { x: number; y: number } | undefined
@@ -627,44 +694,27 @@ async function runScenarioOnce(
           wheelPoint = await scroll.evaluate(findDirectTranscriptWheelPoint)
           // Move the pointer without Playwright scrolling the root into view.
           await page.mouse.move(wheelPoint.x, wheelPoint.y)
-          const direction = await scroll.evaluate((root) => {
-            if (document.querySelector('[data-testid="send-button"]')
-              ?.getAttribute("aria-label") !== "Stop")
-              throw new Error("late scroll missed the active stream")
-            const observer = (window as ChatUiWindow).__chatUiPerf
-            if (!observer || !(root instanceof HTMLElement))
-              throw new Error("Wheel observer unavailable")
-            const deltaY = root.scrollTop > 0 ? -400 : 400
-            observer.prepareWheel(root, deltaY)
-            return deltaY
-          })
-          interactionProbeStage = "late scroll frame"
+          if (!tracing) {
+            await cdp.send("Tracing.start", {
+              categories: PROFILE_LATE_MENU
+                ? "input,benchmark,blink.user_timing,devtools.timeline,disabled-by-default-devtools.timeline.invalidationTracking"
+                : "input,benchmark,blink.user_timing",
+              transferMode: "ReturnAsStream",
+            })
+            tracing = true
+          }
+          const direction = await scroll.evaluate(prepareNativeWheel)
+          interactionProbeStage = "late native scroll"
           await page.mouse.wheel(0, direction)
           await page.waitForFunction(() => {
-            const observer = (window as ChatUiWindow).__chatUiPerf
-            if ((observer?.values.scrollToFrameLateMs?.length ?? 0) > 0)
-              return true
-            if (observer?.droppedSamples())
-              throw new Error("UI capture invalid before scroll frame")
-            if (
-              document.querySelector('[data-testid="send-button"]')
-                ?.getAttribute("aria-label") !== "Stop"
-            )
-              throw new Error("Stream ended before scroll frame")
-            return false
-          })
+            const capture = (window as NativeWheelWindow).__perfNativeWheel
+            if (capture?.error) throw new Error(capture.error)
+            return capture?.ready === true
+          }, undefined, { timeout: 5000 })
+          nativeWheel = await page.evaluate(() => (window as NativeWheelWindow).__perfNativeWheel)
         }
         interactionProbeStage = `${phase} menu open`
         await requireStreaming(phase, "menu")
-        if (PROFILE_LATE_MENU && phase === "late") {
-          // Invalidation tracking is intentionally limited to this interaction.
-          await cdp.send("Tracing.start", {
-            categories:
-              "devtools.timeline,blink.user_timing,disabled-by-default-devtools.timeline.invalidationTracking",
-            transferMode: "ReturnAsStream",
-          })
-          tracing = true
-        }
         await page.getByTestId("composer-plus-btn").click()
         interactionProbeStage = `${phase} menu frame`
         await page.waitForFunction(
@@ -1018,7 +1068,17 @@ async function runScenarioOnce(
       .filter((mark) => mark.name === "stream_publication_summary")
       .at(-1)
 
+    let scrollInputToPresentationMs: number | undefined
+    if (config.interact) {
+      if (!nativeWheel) throw new Error("Native wheel anchor missing")
+      if (tracing) await stopTrace()
+      const trace = await readTrace()
+      if (traceDataLoss) throw new Error("Native trace lost events")
+      scrollInputToPresentationMs = parseNativeScroll(JSON.parse(trace.toString()), nativeWheel).inputToPresentationMs
+    }
+
     const result: RunMetrics = {
+      scrollInputToPresentationMs,
       ui: uiObservation.values,
       hiddenDuringMeasurement: uiObservation.hidden,
       pendingDeltaSamples: uiObservation.pendingDeltas,
@@ -1169,37 +1229,29 @@ async function runScenarioOnce(
     )
   } finally {
     try {
-      if (profiling) {
-        const { profile } = await cdp.send("Profiler.stop")
+      if (profiling || tracing || traceResult) {
         const directory = path.join(
           REPO_ROOT,
           "benchmarks/chat-performance/browser/results"
         )
         mkdirSync(directory, { recursive: true })
         const capture = `${config.id}-${Date.now()}`
-        writeFileSync(
-          path.join(directory, `${capture}.cpuprofile`),
-          JSON.stringify(profile)
-        )
+        if (profiling) {
+          const { profile } = await cdp.send("Profiler.stop")
+          writeFileSync(
+            path.join(directory, `${capture}.cpuprofile`),
+            JSON.stringify(profile)
+          )
+        }
         if (tracing) await stopTrace()
         if (traceResult) {
-          const traceStream = await waitForTraceCompletion(traceResult)
-          const chunks: Buffer[] = []
-          let eof = false
-          while (!eof) {
-            const part = await cdp.send("IO.read", { handle: traceStream })
-            chunks.push(
-              Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
-            )
-            eof = part.eof
-          }
-          await cdp.send("IO.close", { handle: traceStream })
+          const trace = await readTrace()
           const scope = PROFILE_LATE_MENU
             ? `.late-menu${lateMenuTraceComplete ? "" : ".partial"}`
             : ""
           writeFileSync(
             path.join(directory, `${capture}${scope}.trace.json`),
-            Buffer.concat(chunks)
+            trace
           )
         }
       }
@@ -1514,13 +1566,14 @@ async function main() {
       action: config.action,
       sampleCount: RUNS,
       warmupRuns: WARMUPS,
-      wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
+      wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
       menuProtocol: config.interact ? "activation-v1" : undefined,
-      interactionProtocol: config.interact ? "late-typing-wheel-menu-v1" : undefined,
+      interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v1" : undefined,
       contentFrameProtocol: "publisher-frame-v1",
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),
       metrics: {
+        ...(config.interact ? { scrollInputToPresentationMs: summarize(numeric((run) => run.scrollInputToPresentationMs)) } : {}),
         ...Object.fromEntries(
           [...new Set(runs.flatMap((run) => Object.keys(run.ui ?? {})))].map(
             (metric) => [
@@ -1636,6 +1689,7 @@ async function main() {
   const file: BenchmarkResultFile = {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v3",
+    accountReadinessProtocol: "matching-account-v1",
     typingCadenceMs: BENCHMARK_TYPING_DELAY_MS,
     replayPolicy: "disabled-v1",
     identityProtocol: process.env.PERF_CDP_URL

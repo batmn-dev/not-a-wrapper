@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Chat } from "@ai-sdk/react"
 import { subscribeToFrameAlignedMessages } from "@/lib/chat-performance/message-throttle"
 import { alignThreadScrollTarget } from "@/app/components/chat/thread-scroll-target"
-import { noteChatProgrammaticScroll } from "./chat-ui-events"
+import { noteChatAccountReadiness, noteChatProgrammaticScroll } from "./chat-ui-events"
 import { installChatUiObserver, type ChatUiWindow } from "./chat-ui-observer"
 
 let now = 0
@@ -79,6 +79,7 @@ beforeEach(() => {
 afterEach(() => {
   ;(window as ChatUiWindow).__chatUiPerf?.dispose()
   delete (window as ChatUiWindow).__chatUiPerfDisabled
+  delete (window as ChatUiWindow).__chatAccountReady
   vi.useRealTimers()
   document.body.innerHTML = ""
   vi.restoreAllMocks()
@@ -401,6 +402,7 @@ describe("DOM/frame observations", () => {
   })
 
   it("waits for semantic Send readiness and observes aria-disabled changes", async () => {
+    noteChatAccountReadiness(true)
     const button = document.querySelector("button")!
     button.setAttribute("aria-disabled", "true")
     installChatUiObserver()
@@ -419,6 +421,44 @@ describe("DOM/frame observations", () => {
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.navigationToSendReadyMs
     ).toHaveLength(1)
+  })
+
+  it("reports enabled Send separately while account admission is unavailable", async () => {
+    installChatUiObserver()
+    noteChatAccountReadiness(false)
+    await paint()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    expect(observer.values.navigationToSendControlEnabledMs).toEqual([16])
+    expect(observer.values.navigationToSendReadyMs).toBeUndefined()
+    noteChatAccountReadiness(true)
+    await paint()
+    expect(observer.values.navigationToSendControlEnabledMs).toEqual([16])
+    expect(observer.values.navigationToSendReadyMs).toEqual([32])
+  })
+
+  it("requires simultaneous readiness rather than an earlier account-ready timestamp", async () => {
+    const button = document.querySelector("button")!
+    button.disabled = true
+    noteChatAccountReadiness(true)
+    installChatUiObserver()
+    await paint()
+    noteChatAccountReadiness(false)
+    button.disabled = false
+    await paint()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    expect(observer.values.navigationToSendControlEnabledMs).toEqual([32])
+    expect(observer.values.navigationToSendReadyMs).toBeUndefined()
+    noteChatAccountReadiness(true)
+    await paint()
+    expect(observer.values.navigationToSendReadyMs).toEqual([48])
+  })
+
+  it("reads committed account state published before observer installation", async () => {
+    noteChatAccountReadiness(true)
+    installChatUiObserver()
+    await paint()
+    expect((window as ChatUiWindow).__chatUiPerf!.values.navigationToSendReadyMs)
+      .toEqual([16])
   })
 
   it("observes popup positioning without waiting for unrelated stream mutations", async () => {
@@ -754,6 +794,20 @@ describe("DOM/frame observations", () => {
       ).toBeUndefined()
     }
   )
+  it("leaves native wheel diagnostics free of observer geometry reads", () => {
+    const root = scrollRoot()
+    const top = vi.spyOn(root, "scrollTop", "get")
+    installChatUiObserver({ observeWheel: false })
+    const query = vi.spyOn(document, "querySelector")
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    expect(query).not.toHaveBeenCalled()
+    expect(top).not.toHaveBeenCalled()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    expect(observer.wheelDiagnostics()).toMatchObject({ received: 0, armed: 0, pending: false })
+    expect(observer.droppedSamples()).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it("does not attribute a nested scroller's wheel to the transcript", async () => {
     const root = scrollRoot()
     const nested = document.createElement("div")

@@ -25,6 +25,7 @@ export const MEASUREMENT_HOOK_FILES = [
   "app/components/chat/thread-scroll.tsx",
   "app/components/chat/use-detachable-chat-stream.ts",
   "lib/chat-performance/message-throttle.ts",
+  "lib/user-store/provider.tsx",
 ] as const
 
 /** Ignore only this audited product setting when comparing measurement bootstrap. */

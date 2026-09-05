@@ -107,6 +107,12 @@ V1's extra animation-frame wait remains removed. Earlier captures are incompatib
 and must be repeated. These are DOM/frame
 proxies, not first-pixel timestamps; old React-effect marks remain separate.
 
+`navigationToSendControlEnabledMs` reports the enabled button with probe text;
+`navigationToSendReadyMs` requires that state and matching-account admission
+simultaneously. Both revisions publish the same observation-only predicate; the
+original-base overlay leaves its product gate unchanged. Required
+`accountReadinessProtocol: matching-account-v1` rejects older readiness captures.
+
 All scripted typing uses the same 40 ms key cadence, including fixture setup and
 the early/late draft probes. `typingCadenceMs` is required environment metadata.
 Zero-delay automation can starve post-frame timers while frames continue, so its
@@ -131,20 +137,16 @@ Hidden tabs invalidate the entire run; do not interpret any of its timings. Do n
 Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
 the oldest waiting input. Completed foreground runs fail if any sampled content
 never reaches the rendered watermark; buffer overflow also fails explicitly.
-An eligible transcript wheel waits for movement in its requested direction,
-retaining the oldest pending timestamp across rendering opportunities. Cancelled
-or competing input, opposite movement, navigation/root changes, and application
-scroll commands invalidate the pending observation. A five-second watchdog fails
-an unmatched capture without truncating an accepted duration. Native scroll
-anchoring has no causal input identifier; this remains a DOM/frame proxy.
-Interaction captures declare `wheelProtocol: prepared-wheel-v1`. Immediately before
-native input, the harness supplies the observer with the root's position and the
-expected delta. The actual wheel event consumes that preparation once and supplies
-the latency timestamp. This preserves scrolling that occurs before passive event
-delivery without changing browser scheduling. Missing, stale, mismatched, or
-invalidated preparation fails; older interaction captures are incompatible.
-Failure probes retain only closed wheel-state reasons, counts, timings, and scroll
-positions to distinguish skipped eligibility from delayed event delivery.
+Benchmark scrolling uses `scrollInputToPresentationMs`: Chromium EventLatency
+input through an explicit `SwapEndToPresentationCompositorFrame` endpoint. An
+isolated wheel event and its UserTiming anchor identify one process/string-local
+async track within a complete bounded interval. Missing, ambiguous, incomplete,
+or lost native evidence fails collection. `wheelProtocol: native-presentation-v1`
+and `interactionProtocol: late-typing-native-wheel-menu-v1` reject older captures.
+Normal runs retain native traces in CI artifacts without CPU profiling and disable
+the old geometry-reading wheel observer. Production `scrollToFrameMs` remains a
+DOM/frame movement proxy. Neither metric establishes physical pixel timing, and
+the protocol change alone is not evidence of improved responsiveness.
 
 Menu samples use `menuProtocol: activation-v1`: primary pointerdown opening intent
 to the observed frame, with a keyboard activation fallback. This includes native
@@ -225,6 +227,5 @@ commits do not require a new baseline; changed hook layouts still require review
 
 Late interactions retain the 80% content checkpoint and run typing, native wheel,
 then menu opening. The active-stream check follows the measured menu frame;
-unmeasured menu dismissal happens afterward. Captures record
-`interactionProtocol: late-typing-wheel-menu-v1` so comparisons reject the older
-order, which spent the remaining stream window closing the menu before scrolling.
+unmeasured dismissal follows. `late-typing-native-wheel-menu-v1` rejects both
+earlier probe ordering and the previous DOM/frame wheel measurement.

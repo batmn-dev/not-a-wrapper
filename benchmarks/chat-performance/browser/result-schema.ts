@@ -16,6 +16,8 @@ export type MetricSummary = {
 
 export type RunMetrics = {
   ui?: Record<string, number[]>
+  /** Native wheel generation to the first matching browser presentation feedback. */
+  scrollInputToPresentationMs?: number
   /** Foreground loss invalidates interactive timings. */
   hiddenDuringMeasurement?: boolean
   pendingDeltaSamples?: number
@@ -101,12 +103,12 @@ export type ScenarioResult = {
   cache: "cold" | "warm"
   auth: boolean
   followup: boolean
-  /** Native wheel timing uses an explicit pre-input position snapshot. */
-  wheelProtocol?: "prepared-wheel-v1"
+  /** Native input/frame trace joins replace the DOM scroll proxy. */
+  wheelProtocol?: "native-presentation-v1"
   /** Opening intent precedes native menu mousedown handling. */
   menuProtocol?: "activation-v1"
   /** Late probes finish before unmeasured menu dismissal. */
-  interactionProtocol?: "late-typing-wheel-menu-v1"
+  interactionProtocol?: "late-typing-native-wheel-menu-v1"
   /** Committed streamed content can be inspected in its publication frame. */
   contentFrameProtocol?: "publisher-frame-v1"
   scenario: string
@@ -175,6 +177,7 @@ export type BenchmarkResultFile = {
   typingCadenceMs: 40
   replayPolicy: "disabled-v1"
   identityProtocol: "ci-isolated-v1" | "attached-session-v1"
+  accountReadinessProtocol: "matching-account-v1"
   profiled?: boolean
   generatedAt: string
   commit: string

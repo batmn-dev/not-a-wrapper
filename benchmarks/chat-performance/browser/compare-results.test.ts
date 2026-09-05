@@ -29,6 +29,7 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
     typingCadenceMs: 40,
     replayPolicy: "disabled-v1",
     identityProtocol: "ci-isolated-v1",
+    accountReadinessProtocol: "matching-account-v1",
     buildClass: "production",
     instrumentationBuild: true,
     machineClass: "linux-x64",
@@ -49,10 +50,11 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
       if (config.scenario === "mixed-markdown") ui.inputToFirstActivityFrameMs = [80]
       if (suite === "responsiveness") {
         ui.navigationToComposerInputMs = [100]
+        ui.navigationToSendControlEnabledMs = [100]
         ui.navigationToSendReadyMs = [100]
       }
       if (config.interact) {
-        for (const metric of ["typingToFrame", "menuToFrame", "scrollToFrame", "deltaToContentFrame"])
+        for (const metric of ["typingToFrame", "menuToFrame", "deltaToContentFrame"])
           for (const phase of ["", "Early", "Late"])
             ui[`${metric}${phase}Ms`] = [20]
       }
@@ -64,14 +66,14 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
         auth: config.auth ?? false,
         followup: config.followup ?? false,
         contentFrameProtocol: "publisher-frame-v1",
-        wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
+        wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
         menuProtocol: config.interact ? "activation-v1" : undefined,
-        interactionProtocol: config.interact ? "late-typing-wheel-menu-v1" : undefined,
+        interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v1" : undefined,
         sampleCount: 5,
         warmupRuns: 1,
         correctnessOk: true,
         metrics: Object.fromEntries(
-          Object.entries({ ...ui, ...(config.action === "reload" ? { reloadToAuthoritativeMs: [40] } : {}) })
+          Object.entries({ ...ui, ...(config.interact ? { scrollInputToPresentationMs: [20] } : {}), ...(config.action === "reload" ? { reloadToAuthoritativeMs: [40] } : {}) })
             .map(([key, values]) => [key, summarize(Array(5).fill(values[0]))])
         ),
         runs: Array.from({ length: 5 }, () => ({
@@ -79,6 +81,7 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
           hiddenDuringMeasurement: false,
           pendingDeltaSamples: 0,
           droppedUiSamples: 0,
+          ...(config.interact ? { scrollInputToPresentationMs: 20 } : {}),
           ...(config.action === "stop" ? { stopSourceLengths: { atReady: 100, after250Ms: 80, afterSettlement: 60 } } : {}),
           ...(config.action === "reload" ? { reloadToAuthoritativeMs: 40 } : {}),
           ui: structuredClone(ui),
@@ -385,13 +388,69 @@ describe("performance evidence contract", () => {
     )
   })
 
-  it("rejects wheel captures without matching pre-input preparation", () => {
+  it("rejects wheel captures without matching native presentation evidence", () => {
     const before = result("responsiveness")
     const current = result("responsiveness")
     delete before.scenarios[3].wheelProtocol
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
-    before.scenarios[3].wheelProtocol = "prepared-wheel-v1"
+    before.scenarios[3].wheelProtocol = "native-presentation-v1"
     expect(compareResults(before, current)).toEqual([])
+  })
+
+  it("requires native scroll samples in every interactive run and matching aggregates", () => {
+    const current = result("responsiveness")
+    const scenario = current.scenarios.find((value) => value.wheelProtocol)!
+    expect(validateCoverage(current)).toEqual([]) // No DOM scroll proxy is required.
+    delete scenario.runs[0].scrollInputToPresentationMs
+    scenario.metrics.scrollInputToPresentationMs = summarize(Array(4).fill(20))
+    expect(validateCoverage(current).join(" ")).toContain("scrollInputToPresentationMs missing")
+    scenario.runs[0].scrollInputToPresentationMs = 80
+    scenario.metrics.scrollInputToPresentationMs = summarize(Array(5).fill(20))
+    expect(validateCoverage(current).join(" ")).toContain("scrollInputToPresentationMs summary disagrees")
+    scenario.runs.forEach((run) => { delete run.scrollInputToPresentationMs })
+    delete scenario.metrics.scrollInputToPresentationMs
+    expect(validateCoverage(current).join(" ")).toContain("scrollInputToPresentationMs missing")
+  })
+
+  it.each([0, -1, NaN, Infinity])("rejects invalid native scroll duration %s", (duration) => {
+    const current = result("responsiveness")
+    current.scenarios.find((value) => value.wheelProtocol)!.runs[0].scrollInputToPresentationMs = duration
+    expect(resultContract.safeParse(current).success).toBe(false)
+  })
+
+  it("retains the same relative allowance for native scroll timing", () => {
+    const before = result("responsiveness")
+    const current = result("responsiveness")
+    const scenario = current.scenarios.find((value) => value.wheelProtocol)!
+    for (const ms of [40, 41]) {
+      scenario.runs.forEach((run) => { run.scrollInputToPresentationMs = ms })
+      scenario.metrics.scrollInputToPresentationMs = summarize(Array(5).fill(ms))
+      const report = assessComparison(before, current)
+      expect(report.measurementErrors).toEqual([])
+      expect(report.regressions).toHaveLength(ms === 40 ? 0 : 1)
+      if (ms === 41) expect(report.regressions![0]).toContain("scrollInputToPresentationMs: 20 → 41ms")
+    }
+  })
+
+  it("requires raw enabled-control and joint readiness observations independently", () => {
+    for (const metric of ["navigationToSendControlEnabledMs", "navigationToSendReadyMs"]) {
+      const current = result("responsiveness")
+      delete current.scenarios[0].runs[0].ui![metric]
+      expect(validateCoverage(current).join(" ")).toContain(`${metric} missing from an individual run`)
+    }
+  })
+
+  it("rejects legacy readiness and DOM-wheel protocols rather than relabeling them", () => {
+    const current = result("responsiveness")
+    expect(resultContract.safeParse({ ...current, accountReadinessProtocol: undefined }).success).toBe(false)
+    for (const protocol of [
+      { wheelProtocol: "prepared-wheel-v1" },
+      { interactionProtocol: "late-typing-wheel-menu-v1" },
+    ]) {
+      const legacy = structuredClone(current)
+      Object.assign(legacy.scenarios.find((value) => value.wheelProtocol)!, protocol)
+      expect(resultContract.safeParse(legacy).success).toBe(false)
+    }
   })
 
   it("rejects menu captures using the old post-mousedown click anchor", () => {
@@ -409,7 +468,7 @@ describe("performance evidence contract", () => {
     delete before.scenarios[3].interactionProtocol
     expect(assessComparison(before, current).regressions).toBeNull()
     expect(validateCoverage(before).join(" ")).toContain("unexpected scenarios")
-    before.scenarios[3].interactionProtocol = "late-typing-wheel-menu-v1"
+    before.scenarios[3].interactionProtocol = "late-typing-native-wheel-menu-v1"
     expect(compareResults(before, current)).toEqual([])
   })
 

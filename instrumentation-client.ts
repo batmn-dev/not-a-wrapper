@@ -76,6 +76,9 @@ if (
               ...(metric.startsWith("deltaToContentFrame") || metric === "inputToFirstTextFrameMs"
                 ? { contentFrameProtocol: "publisher-frame-v1" }
                 : {}),
+              ...(metric.startsWith("navigationToSend")
+                ? { accountReadinessProtocol: "matching-account-v1" }
+                : {}),
               ...(metric.startsWith("menuToFrame")
                 ? { menuProtocol: "activation-v1" }
                 : {}),

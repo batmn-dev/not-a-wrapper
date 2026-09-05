@@ -35,9 +35,9 @@ const scenario = z
     cache: z.enum(["cold", "warm"]),
     auth: z.boolean(),
     followup: z.boolean(),
-    wheelProtocol: z.literal("prepared-wheel-v1").optional(),
+    wheelProtocol: z.literal("native-presentation-v1").optional(),
     menuProtocol: z.literal("activation-v1").optional(),
-    interactionProtocol: z.literal("late-typing-wheel-menu-v1").optional(),
+    interactionProtocol: z.literal("late-typing-native-wheel-menu-v1").optional(),
     contentFrameProtocol: z.literal("publisher-frame-v1").optional(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
@@ -60,6 +60,7 @@ const scenario = z
             afterSettlement: z.number().int().nonnegative(),
           }).optional(),
           ui: z.record(z.string(), z.array(duration)).optional(),
+          scrollInputToPresentationMs: z.number().finite().positive().optional(),
           sendToFirstVisibleTextMs: duration.optional(),
           totalBlockingTimeMs: duration.optional(),
           reloadToAuthoritativeMs: duration.optional(),
@@ -83,6 +84,7 @@ export const resultContract = z
     typingCadenceMs: z.literal(40),
     replayPolicy: z.literal("disabled-v1"),
     identityProtocol: z.enum(["ci-isolated-v1", "attached-session-v1"]),
+    accountReadinessProtocol: z.literal("matching-account-v1"),
     profiled: z.literal(false).optional(),
     buildClass: z.literal("production"),
     instrumentationBuild: z.boolean(),
@@ -224,7 +226,7 @@ const GATES: Record<string, { relative: number; floor: number }> = {
   menuToFrameMs: { relative: 0.35, floor: 20 },
   menuToFrameEarlyMs: { relative: 0.35, floor: 20 },
   menuToFrameLateMs: { relative: 0.35, floor: 20 },
-  scrollToFrameLateMs: { relative: 0.35, floor: 20 },
+  scrollInputToPresentationMs: { relative: 0.35, floor: 20 },
   terminalToReadyFrameMs: { relative: 0.35, floor: 30 },
   stopToReadyFrameMs: { relative: 0.35, floor: 20 },
   sendToFirstVisibleTextMs: { relative: 0.35, floor: 150 },
@@ -238,6 +240,7 @@ const GATES: Record<string, { relative: number; floor: number }> = {
 
 type RawRun = ComparableResult["scenarios"][number]["runs"][number]
 const RAW_GATED_METRICS = {
+  scrollInputToPresentationMs: (run: RawRun) => run.scrollInputToPresentationMs,
   sendToFirstVisibleTextMs: (run: RawRun) => run.sendToFirstVisibleTextMs,
   totalBlockingTimeMs: (run: RawRun) => run.totalBlockingTimeMs,
   reloadToAuthoritativeMs: (run: RawRun) => run.reloadToAuthoritativeMs,
@@ -289,9 +292,9 @@ export function validateCoverage(result: ComparableResult): string[] {
           cache: config.cache ?? "warm",
           auth: config.auth ?? false,
           followup: config.followup ?? false,
-          wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
+          wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
           menuProtocol: config.interact ? "activation-v1" : undefined,
-          interactionProtocol: config.interact ? "late-typing-wheel-menu-v1" : undefined,
+          interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v1" : undefined,
           contentFrameProtocol: "publisher-frame-v1",
         })
       )
@@ -359,6 +362,13 @@ export function validateCoverage(result: ComparableResult): string[] {
       )
   }
   for (const value of result.scenarios) {
+    if (expectedSuite?.some((config) => config.id === value.id && config.interact)) {
+      if (value.runs.some((run) => {
+        const sample = run.scrollInputToPresentationMs
+        return sample === undefined || !Number.isFinite(sample) || sample <= 0
+      }))
+        errors.push(`${value.id}: scrollInputToPresentationMs missing or invalid in an individual run`)
+    }
     if (value.action === "stop") {
       for (const run of value.runs) {
         if (value.auth && run.correctness.settlementOutcome !== "aborted")
@@ -429,7 +439,7 @@ export function validateCoverage(result: ComparableResult): string[] {
     if (value.scenario === "mixed-markdown")
       required.push("inputToFirstActivityFrameMs")
     if (result.suite === "responsiveness") {
-      required.push("navigationToComposerInputMs", "navigationToSendReadyMs")
+      required.push("navigationToComposerInputMs", "navigationToSendControlEnabledMs", "navigationToSendReadyMs")
       if (value.scenario === "long-markdown")
         required.push(
           "typingToFrameMs",
@@ -438,8 +448,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           "menuToFrameMs",
           "menuToFrameEarlyMs",
           "menuToFrameLateMs",
-          "scrollToFrameMs",
-          "scrollToFrameLateMs",
+          "scrollInputToPresentationMs",
           "deltaToContentFrameEarlyMs",
           "deltaToContentFrameLateMs"
         )
@@ -451,7 +460,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           `${value.id}: ${metric} missing samples (${count}/${value.sampleCount})`
         )
       if (
-        metric !== "reloadToAuthoritativeMs" &&
+        !(metric in RAW_GATED_METRICS) &&
         value.runs.some((run) => !run.ui?.[metric]?.length)
       ) {
         errors.push(`${value.id}: ${metric} missing from an individual run`)
@@ -484,6 +493,7 @@ export const ENVIRONMENT_FIELDS = [
   "typingCadenceMs",
   "replayPolicy",
   "identityProtocol",
+  "accountReadinessProtocol",
   "buildClass",
   "instrumentationBuild",
   "machineClass",

@@ -15,15 +15,21 @@ never certifies regression protection. See ADR-0037 for the approved policy.
 
 Comparability requires matching schema/measurement versions, exact browser,
 CPU model/count, memory class, fixture hash, identity, build class, instrumentation,
-typing cadence, replay policy, suite, scenario conditions, and complete samples.
+typing cadence, replay/account-readiness policies, suite, scenario conditions,
+and complete samples.
 A personal-session Mac capture cannot seed isolated Linux CI comparisons.
 Measurement changes require a reviewed overlay; never relabel older captures.
 
 Current protocols include `dom-frame-v3`, 40 ms typing, `disabled-v1` replay,
-`publisher-frame-v1` streamed content, `prepared-wheel-v1` scrolling,
-`activation-v1` menus, and `late-typing-wheel-menu-v1` interactive probe order.
-DOM/frame observations are presentation proxies, not pixel timing or INP.
-Profiling is diagnostic and cannot certify a performance baseline.
+`matching-account-v1` admission readiness, `publisher-frame-v1` streamed content,
+`native-presentation-v1` scrolling, `activation-v1` menus, and
+`late-typing-native-wheel-menu-v1` probe order. Older captures cannot be relabeled.
+Send control enablement is distinct from simultaneous enabled/admitted readiness.
+Scroll uses a complete, uniquely anchored native compositor presentation interval;
+lost, missing, or ambiguous trace evidence fails. Native traces are retained as CI
+artifacts in normal runs, without CPU profiling. DOM/frame proxies and Chromium
+presentation signals do not establish physical pixel timing or INP.
+CPU-profiled captures remain diagnostic and cannot certify a performance baseline.
 
 External JSON paths and directories remain supported for inspecting reviewed
 captures. Directory selection requires exactly one matching environment;

@@ -42,6 +42,12 @@ not compositor or first-pixel measurements. Existing React-effect timings retain
 their historical definitions as diagnostic columns. Traces remain the authority
 when investigating actual presentation delay.
 
+`navigationToSendControlEnabledMs` records visual enablement with probe text.
+`navigationToSendReadyMs` additionally requires matching-account admission at
+that observation. `accountReadinessProtocol: matching-account-v1` rejects earlier
+captures. The original-base overlay publishes
+the same observation-only predicate without changing its product Send gate.
+
 The browser trace confirmed that even the earlier double-rAF proxy could precede
 native Event Timing presentation. Neither version establishes physical pixel
 presentation or an upper bound on it. DOM inspection remains before rendering;
@@ -56,14 +62,16 @@ Each stream binds to the active measurement turn so a detached stream cannot
 contaminate a later send. Generic Thinking feedback is distinct from actual
 inspectable reasoning/tool activity.
 
-Wheel observation waits for actual root movement rather than a fixed number of
-frames. It retains the oldest pending input timestamp; cancellation, competing
-input, opposite movement, navigation/root replacement, and shared application
-scroll commands invalidate the pending sample. A five-second watchdog rejects
-unmatched captures without truncating measured latency. The command bridge is
-inert when the observer is not installed and imports only its type. Native scroll
-anchoring has no exposed input identity, so this remains a DOM/frame proxy rather
-than a claim of compositor-level causality.
+Benchmark `scrollInputToPresentationMs` uses Chromium EventLatency input through
+the explicit `SwapEndToPresentationCompositorFrame` endpoint. An isolated wheel's
+event timestamp and UserTiming anchor select one process/string-local async track
+and its bounded interval. Missing, ambiguous, incomplete, or lost trace evidence
+fails. Required protocols are `wheelProtocol: native-presentation-v1` and
+`interactionProtocol: late-typing-native-wheel-menu-v1`; earlier scroll captures
+are incompatible. Normal runs retain native traces in CI artifacts without CPU
+profiling and disable the old geometry-reading wheel observer. Chromium's native
+presentation signal is not proof of physical pixels. Production `scrollToFrameMs`
+remains a separate wheel-to-observed-movement DOM/frame proxy.
 
 Result schema v2 carries complete scenario identity, fixture script hash, browser,
 hardware, cache, network, authentication, and measurement-version dimensions.

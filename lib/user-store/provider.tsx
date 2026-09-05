@@ -9,6 +9,7 @@
 import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
+import { noteChatAccountReadiness } from "@/lib/observability/chat-ui-events"
 import { defaultPreferences } from "@/lib/user-preference-store/utils"
 import type { UserProfile } from "@/lib/user/types"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
@@ -19,6 +20,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PropsWithChildren,
@@ -234,6 +236,12 @@ export function UserProvider({
         isConvexAuthenticated &&
         convexUser?.workosUserId === user.id
       : !workosUser && !isConvexAuthLoading && !isConvexAuthenticated)
+
+  // Publish committed state before the external frame observer can sample it.
+  useLayoutEffect(() => {
+    noteChatAccountReadiness(isChatAdmissionReady)
+    return () => noteChatAccountReadiness(undefined)
+  }, [isChatAdmissionReady])
 
   return (
     <UserContext.Provider value={{ user, isLoading, isChatAdmissionReady, updateUser }}>

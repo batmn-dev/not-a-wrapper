@@ -1,6 +1,7 @@
 /** Content-free DOM/frame proxies. No text, message identity, or URLs leave this observer. */
 export type ChatUiMetric =
   | "navigationToComposerInputMs"
+  | "navigationToSendControlEnabledMs"
   | "navigationToSendReadyMs"
   | "inputToOptimisticFrameMs"
   | "inputToFirstTextFrameMs"
@@ -45,6 +46,7 @@ export type ChatUiObserver = {
     preparationInvalidatedBy?: WheelObservationReason
   }
   publicationFrame: () => void
+  accountReadinessChanged: () => void
   programmaticScroll: (root: HTMLElement) => void
   confirmSend: () => void
   setPhase: (phase: "early" | "late") => void
@@ -58,6 +60,8 @@ export type ChatUiWindow = Window & {
   __chatUiPerf?: ChatUiObserver
   /** Benchmark opt-out survives a delayed instrumentation import after disposal. */
   __chatUiPerfDisabled?: boolean
+  /** Current committed boolean only; no account identity is retained. */
+  __chatAccountReady?: boolean
 }
 
 /** Self-contained so the benchmark can install the identical observer before navigation. */
@@ -66,6 +70,7 @@ export function installChatUiObserver(
     report?: (metric: ChatUiMetric, durationMs: number) => void
     resumeOnVisible?: boolean
     requireWheelPreparation?: boolean
+    observeWheel?: boolean
   } = {}
 ): void {
   const observedWindow = window as ChatUiWindow
@@ -279,14 +284,18 @@ export function installChatUiObserver(
       inputAt = undefined
     }
     if (
-      (!once.has("navigationToSendReadyMs") ||
+      (!once.has("navigationToSendControlEnabledMs") ||
+        (observedWindow.__chatAccountReady === true && !once.has("navigationToSendReadyMs")) ||
         (terminalAt !== undefined && !once.has("terminalToReadyFrameMs")) ||
         (stopAt !== undefined && !once.has("stopToReadyFrameMs"))) &&
       send?.getAttribute("aria-label") === "Send prompt" &&
       isVisible(send)
     ) {
-      if (!send.disabled && send.getAttribute("aria-disabled") !== "true")
-        recordOnce("navigationToSendReadyMs", 0)
+      if (!send.disabled && send.getAttribute("aria-disabled") !== "true") {
+        recordOnce("navigationToSendControlEnabledMs", 0)
+        if (observedWindow.__chatAccountReady === true)
+          recordOnce("navigationToSendReadyMs", 0)
+      }
       if (terminalAt !== undefined)
         recordOnce("terminalToReadyFrameMs", terminalAt)
       if (stopAt !== undefined) {
@@ -513,6 +522,7 @@ export function installChatUiObserver(
     }
   }
   const wheel = (event: WheelEvent) => {
+    if (options.observeWheel === false) return
     const root = document.querySelector<HTMLElement>("[data-scroll-root]")
     wheelState.received++
     wheelState.eventAt = eventTime(event)
@@ -609,6 +619,7 @@ export function installChatUiObserver(
       reset()
       // Resume future turns, but do not relabel a tab return as a new document load.
       once.add("navigationToComposerInputMs")
+      once.add("navigationToSendControlEnabledMs")
       once.add("navigationToSendReadyMs")
       once.add("navigationToThreadFrameMs")
     }
@@ -661,6 +672,7 @@ export function installChatUiObserver(
     reset,
     pendingDeltas: () => samples.length,
     droppedSamples: () => dropped,
+    accountReadinessChanged: schedule,
     prepareWheel(root, deltaY) {
       clearPendingWheel(true, "competing-input")
       clearPreparedWheel(true, "competing-input")
@@ -754,4 +766,5 @@ export function installChatUiObserver(
       delete observedWindow.__chatUiPerf
     },
   }
+  if (observedWindow.__chatAccountReady !== undefined) schedule()
 }

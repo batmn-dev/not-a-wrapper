@@ -298,7 +298,7 @@ observer follows its first visible frame instead of waiting for another stream
 mutation or animation completion. Rescans require a matching source watermark,
 viewport intersection, and an active finite animation, and stop when its remaining
 duration expires. Pending content remains explicit if it never becomes visible.
-The interaction-specific `prepared-wheel-v1` protocol remains a separate condition.
+Benchmark native scroll presentation is separate from these DOM/frame proxies.
 `contentFrameProtocol: publisher-frame-v1` adds a guarded observation after an
 SDK publication inside rAF. A committed watermark can be inspected in that same
 rendering opportunity, avoiding an extra frame when the ordinary observer ran
@@ -311,17 +311,18 @@ The observation tab must remain visible.
 | Metric | Definition |
 | --- | --- |
 | `navigationToComposerInputMs` | Navigation start to the frame following the first successfully entered probe text. Includes driver scheduling; an upper bound, not an inferred hydration timestamp. |
-| `navigationToSendReadyMs` | Navigation start to an enabled Send control with the probe text present. |
+| `navigationToSendControlEnabledMs` | Navigation start to visual Send enablement with probe text present; does not establish account admission. |
+| `navigationToSendReadyMs` | Navigation start to an observation with both an enabled Send control and the matching-account admission predicate satisfied (`accountReadinessProtocol: matching-account-v1`). |
 | `navigationToThreadFrameMs` | Navigation start to conversation content observed across a frame opportunity. |
 | `inputToOptimisticFrameMs` | Activating click/Enter timestamp, confirmed by the guarded Composer submit handler, to the new user message visible across a frame opportunity. Menu-consumed Enter does not begin a turn. |
 | `inputToFirstTextFrameMs` | Same input to nonempty current-turn assistant Markdown across a frame opportunity. |
 | `inputToFirstActivityFrameMs` | Same input to an inspectable activity disclosure. Bare Thinking does not satisfy it. |
 | `typingToFrameMs` | Oldest unobserved key/beforeinput timestamp to an editor update observed across a frame opportunity. Coalesced input retains the oldest delay; no slow-sample cutoff. |
 | `menuToFrameMs` | Primary pointerdown or Enter/Space opening intent to visible composer menu across a frame opportunity; standalone accessibility activation clicks fall back to click. Includes native mousedown opening work. Closing/cancelling clears intent (`menuProtocol: activation-v1`). |
-| `scrollToFrameMs` | Direct vertical wheel event to changed thread scroll position across a frame opportunity. Excludes cancelled events, zoom/horizontal gestures, blocked scroll directions and nested scroll chaining; not a general touch-scroll/INP metric. |
+| `scrollToFrameMs` | Production DOM/frame proxy from eligible vertical wheel input to observed thread movement. The benchmark disables this geometry-reading wheel observer. |
+| `scrollInputToPresentationMs` | Benchmark Chromium EventLatency input to the explicit `SwapEndToPresentationCompositorFrame` endpoint on the uniquely matched native scroll interval; not a physical-pixel timestamp. |
 | `deltaToContentFrameMs` | A sampled received-text watermark to an at-least-equal rendered-source watermark in a visible Markdown container across a frame opportunity. Four samples/sec maximum; no provider gaps included. |
 | `typingToFrameEarlyMs` / `typingToFrameLateMs`, `menuToFrameEarlyMs` / `menuToFrameLateMs`, `deltaToContentFrameEarlyMs` / `deltaToContentFrameLateMs` | Harness phases: early interaction after first text; late interaction after at least 80% of the deterministic fixture source is rendered while the stream remains active. Each phase must produce samples in every run. |
-| `scrollToFrameLateMs` | Scroll response during the late phase, when the long answer has overflow to scroll. |
 | `terminalToReadyFrameMs` | Transport finish/error to idle composer state across a frame opportunity. Local Stop without a transport finish does not invent a terminal event. |
 | `stopToReadyFrameMs` | Stop click to visible idle composer state, even when blank Send is disabled. |
 | `threadSwitchToFrameMs` | Sidebar click to changed destination content across a frame opportunity, with destination URL checked. |
@@ -348,19 +349,16 @@ the same absolute budgets independently, so setup samples cannot dilute a slow
 late-stream phase. Completed foreground runs must drain
 all sampled received content; pending counts remain explicit for Stop, reload, and
 intentional second-tab cutoffs. Any observation-buffer overflow invalidates a run.
-Eligible wheel input waits for matching root movement, retaining the oldest
-pending event's full elapsed duration even across multiple rendering opportunities.
-Cancellation, competing input, opposite movement, root/navigation changes, or an
-application scroll command invalidate the pending observation. A five-second
-watchdog fails an unmatched capture; it does not cap accepted sample durations.
-Hidden/reset/disposed observations clear the watchdog. These remain DOM proxies:
-native scroll anchoring exposes no causal input identifier and can affect position.
-The benchmark's `prepared-wheel-v1` protocol supplies the pre-input root position
-immediately before native wheel dispatch, then consumes it on the matching actual
-event. Duration starts at that event's timestamp, not preparation time. This
-handles movement preceding passive listener delivery. Missing, stale, mismatched,
-or invalidated preparation rejects the capture; unprepared interaction baselines
-cannot compare with this protocol.
+Readiness requires global `accountReadinessProtocol: matching-account-v1`.
+The original-base overlay publishes the same observation-only admission predicate
+without changing its product gate; earlier readiness captures are incompatible.
+Native benchmark scrolling requires `wheelProtocol: native-presentation-v1` and
+`interactionProtocol: late-typing-native-wheel-menu-v1`. The isolated wheel's
+event timestamp and UserTiming anchor select a unique process/string-local async
+track and complete bounded presentation interval. Lost, missing, ambiguous, or
+incomplete evidence fails. Native traces remain CI artifacts; normal runs do not
+CPU-profile. Production wheel observation remains a movement proxy, invalidated by
+cancellation, competing input, navigation, or application scroll commands.
 Stop correctness checks assistant source length at idle feedback, 250 ms later,
 and after the terminal/settlement wait and settling buffer. Each checkpoint must
 be no longer than the preceding one; shorter canonical snapshots remain valid.

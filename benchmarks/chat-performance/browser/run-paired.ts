@@ -38,7 +38,7 @@ function jsonFiles(directory: string) {
 
 function capture(cwd: string, destination: string) {
   const directory = path.join(cwd, resultsDirectory)
-  const existing = new Set(jsonFiles(directory))
+  const existing = new Set(existsSync(directory) ? readdirSync(directory) : [])
   // Preserve a failed capture for diagnosis, but never compare it as valid evidence.
   let failure: unknown
   try {
@@ -48,6 +48,14 @@ function capture(cwd: string, destination: string) {
   }
   const fresh = jsonFiles(directory).filter((file) => !existing.has(file))
   if (fresh.length === 1) cpSync(path.join(directory, fresh[0]), destination)
+  const traces = existsSync(directory) ? readdirSync(directory).filter((file) =>
+    file.endsWith(".trace.json") && !existing.has(file)
+  ) : []
+  if (traces.length > 0) {
+    const traceDirectory = path.join(path.dirname(destination), `${path.basename(destination, ".json")}-native-traces`)
+    mkdirSync(traceDirectory, { recursive: true })
+    for (const file of traces) cpSync(path.join(directory, file), path.join(traceDirectory, file))
+  }
   if (failure) throw failure
   if (fresh.length !== 1) throw new Error(`Expected one new capture, received ${fresh.length}`)
 }

@@ -48,22 +48,7 @@ export function findDirectTranscriptWheelPoint(root: Element): {
     for (const fraction of [0.5, 0.35, 0.65]) {
       const y = top + (bottom - top) * fraction
       const target = document.elementFromPoint(x, y)
-      if (!target || !root.contains(target)) continue
-      let nestedScroll = false
-      for (
-        let node: Element | null = target;
-        node && node !== root;
-        node = node.parentElement
-      ) {
-        if (
-          node.scrollHeight > node.clientHeight &&
-          /^(auto|scroll|overlay)$/.test(getComputedStyle(node).overflowY)
-        ) {
-          nestedScroll = true
-          break
-        }
-      }
-      if (!nestedScroll) return { x, y }
+      if (target === root) return { x, y }
     }
   }
   throw new Error("No unobscured direct transcript wheel target")

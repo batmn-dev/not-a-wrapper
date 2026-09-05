@@ -67,11 +67,20 @@ Other work and delayed input delivery also contributed; disabling analytics is
 not yet proof that the whole regression is fixed. A fresh normal comparison must
 pass before release. A successful diagnostic is not performance certification.
 
-Late probes measure typing, native wheel, then menu while the stream is active;
-unmeasured dismissal follows. The protocol checks the 80% checkpoint, eight keys
-at 40 ms, native event anchoring, direction, and active-stream state. Earlier probe
-orders are incompatible. Rejected HTTP requests fail promptly with sanitized
-status/error-category diagnostics. Samples, fixtures, and thresholds stay intact.
+[Run 33977091454](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33977091454)
+at `e29c9fa8` also failed the old relative gate: constrained scroll proxy
+192.7→491.8 ms and visible Send enablement increased about 300 ms. Typing fell
+821.7→53.9 ms and total blocking time 16,443→2,952 ms. These are mixed results.
+
+The approved correction retains the account safety guard and reports raw button
+enablement separately from simultaneous account-and-button readiness. Both arms
+observe the same predicate without changing the original product's Send behavior.
+Benchmark scrolling now uses an explicitly matched native presentation trace;
+the old wheel observer forced layout during measurement. New protocols reject
+old captures, retain raw traces, and preserve the relative thresholds. Neither a
+protocol change nor a profiled diagnostic establishes a passing comparison.
+Late probes still run typing, wheel, then menu at the 80% content checkpoint while
+streaming. Final-head validity and regression checks remain required.
 
 ## Correctness, observer overhead, and retained heap
 

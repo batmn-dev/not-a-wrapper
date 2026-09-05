@@ -15,6 +15,7 @@ import {
 } from "vitest"
 import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 import { UserProvider, useUser } from "./provider"
+import type { ChatUiWindow } from "@/lib/observability/chat-ui-observer"
 
 const providerMocks = vi.hoisted(() => ({
   authLoading: true,
@@ -269,6 +270,18 @@ describe("UserProvider", () => {
     providerMocks.convexAuthLoading = false
     renderProvider()
     expect(readiness()).toBe("true")
+  })
+
+  it("publishes current committed admission state and clears it on unmount", () => {
+    setAuthenticatedProfileUser()
+    renderProvider()
+    expect((window as ChatUiWindow).__chatAccountReady).toBe(true)
+    providerMocks.workosUser = { ...providerMocks.workosUser, id: "user-2" }
+    renderProvider()
+    expect((window as ChatUiWindow).__chatAccountReady).toBe(false)
+    act(() => root?.unmount())
+    root = null
+    expect((window as ChatUiWindow).__chatAccountReady).toBeUndefined()
   })
 
   it("retries a rejected bootstrap only on request and keeps admission closed until its row arrives", async () => {
