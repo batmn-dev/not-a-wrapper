@@ -396,3 +396,49 @@ with no separate loader 87232; wrapper module 990530 and its required chunks
 remain in all five relevant SSR manifests. The build, typecheck, lint, and 59
 focused tests pass. This proves shared loading and preserved preload metadata,
 not a measured first-output speedup. A fresh hosted capture must quantify that.
+
+The focused-element controller capture,
+[run 33965166940](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33965166940),
+uses PR merge commit `c3d9383` (head `23326a28`), build
+`CX1WLEA5VPOpq-mF-z_su`, and the same exact AMD EPYC 7763 environment and
+scenario protocols as run 33963860476. All seven correctness checks pass.
+Late typing now has median 17.1 ms, p95 41 ms, maximum 44.5 ms, and 0/40
+samples over 50 ms; late menu has median 72.3 ms, maximum 82 ms, and 0/5 over
+100 ms (p95 omitted). All normal long-answer phase budgets pass. The intervening
+changes also include syntax-cache restoration and stricter evidence validation,
+so this is a matched before/after result rather than an isolated controller A/B.
+
+The capture still fails first-content delivery: cold 1/10, Stop 5/24, and error
+4/60 over 50 ms. Every failure is the first received-content observation in its
+run. This predates the shared-loader correction and is rejected as a baseline.
+
+The independent thread-switch comparison in
+[run 33966180716](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33966180716)
+passes against the committed AMD EPYC 9V74 baseline. All 90 switches are correct.
+At `905f042f`, unvisited-click/hover/visited medians are 54.6/48.8/45.3 ms and
+p95 values are 774.4/799.9/562.3 ms; slow long-chat observations remain included.
+Confirmed-GC heap at 0/10/25/50 visited switches is 25.253/26.012/38.970/27.125
+MiB. Checkpoint 25 mounts the long answer; 10 and 50 mount the same short chat,
+with 1.113 MiB growth between them. The long-chat heap is about 1.5 MiB above
+the historical capture, whose GC success is unverified, so this is not a strict
+causal memory comparison. Retained syntax has no global cache and leaves with
+its component projection. The finite nonmonotonic traversal does not prove the
+absence of a leak; it bounds the observed footprint for this workload.
+
+The final shared-loader core capture,
+[run 33966293285](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33966293285),
+uses `905f042f` on AMD EPYC 9V74 and passes all seven correctness checks. All
+normal Send, typing, menu, Stop-feedback, and long-answer phase budgets pass.
+Late typing has median 17.6 ms, p95 35.8 ms, and maximum 38.3 ms (n=40); late
+menu has median 61.1 ms and maximum 86.3 ms (n=5, p95 omitted). The capture
+still fails cold content delivery (2/10 above 50 ms, maximum 53 ms) and Stop
+content delivery (3/25, maximum 57.3 ms). It is rejected as a responsiveness
+baseline. The confirmed loader-path correction is not a claim that every
+first-output delay is solved. The outstanding budgets remain explicit release
+limitations.
+
+Final source validation at `905f042f`: 2,881 tests pass across 284 test files;
+the one skipped local test is the timing gate enabled separately by
+`CHAT_PERF_GATES=true` in the controlled CI lane. Hosted build, lint/typecheck,
+automated review checks, and Vercel preview pass. These code checks do not
+override the failed performance budgets or establish a production deployment.

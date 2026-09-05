@@ -77,8 +77,8 @@ commit `7026cbad`, AMD EPYC 9V74, Chromium `151.0.7922.34`. All 90 switches pass
 correctness and coverage (20 unvisited-click, 20 unvisited-hover, 50 visited).
 The long Markdown fixture accounts for every sample above 150 ms; those samples
 are retained. Median navigation is 45–48 ms and p95 is 601–829 ms. These tails
-are measured existing behavior, not proof of fast navigation. An independent
-normal comparison is still required. Other suites remain pending.
+are measured existing behavior, not proof of fast navigation. The independent
+normal comparison is recorded below. Other suites remain pending.
 
 Reviewed AMD EPYC 7763 capture: [run 33960196987](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33960196987),
 commit `36f21d1b`, build `KelASso9apfbIAqom0pYJ`, Chromium `151.0.7922.34`,
@@ -101,3 +101,17 @@ checkpoint. Historical captures without the marker remain latency baselines;
 their heap readings cannot prove that GC succeeded and are diagnostic only.
 Early/late interaction phases use the same absolute budgets independently of
 pooled samples, and every text scenario requires per-run content-latency evidence.
+
+Independent thread-switch comparison passed in
+[run 33966180716](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33966180716)
+at `905f042f`, build `RMitC1zNfrZaMAuQM4H13`, on AMD EPYC 9V74 and Chromium
+151.0.7922.34, against the committed 9V74 baseline from run 33958084155.
+All 90 switches pass. Unvisited-click/hover/visited medians are 54.6/48.8/45.3 ms
+and p95 values 774.4/799.9/562.3 ms. Unvisited click means no prior navigation
+in that document, not forced cache misses: the new pass has 11 hits/9 misses
+(the matching baseline has 14/6). Normal pointer/click warming remains enabled;
+cache labels describe authoritative data readiness at route commit, not its origin.
+Hover and visited passes have 20 and 50 hits. Long-destination tails are retained.
+The capture records `forced-gc-v1` and all 0/10/25/50 checkpoints. Heap is
+25.253/26.012/38.970/27.125 MiB respectively; 25 contains the long chat, while
+10 and 50 contain the same short chat. This finite traversal is not leak proof.

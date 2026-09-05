@@ -1,6 +1,6 @@
 # 38. Reuse context-free Markdown block parses
 
-- Status: proposed; parity verified, hosted latency and heap validation pending
+- Status: accepted; correctness and bounded heap validated, delivery budgets remain unmet
 - Date: 2026-09-05
 - Amends: ADR-0016's projection/render boundary
 
@@ -12,7 +12,7 @@ projection and in ReactMarkdown: each 4 KB arrival prepares dozens of renderer
 pipelines. Later slabs have less than 1 ms of style recalculation, so the
 separate Activity-host selector correction cannot explain away that work.
 
-## Approach under validation
+## Decision
 
 Keep the existing projection parser and ReactMarkdown renderer. Retain an
 eligible block's parser result alongside its exact source. For stable,
@@ -36,11 +36,11 @@ settlement verification, and fallback behavior remain authoritative.
 - Replace ReactMarkdown or move parsing to a worker: potentially larger gains,
   but adds a new rendering or scheduling boundary with broader parity risk.
 
-The proposed narrow reuse keeps existing dependencies and transformation
-ownership. It will be retained only if canonical DOM parity and avoided parsing
-are demonstrated, followed by fresh unprofiled measurements. Retaining syntax
-trees increases memory; the existing navigation/heap evidence must account for
-that cost. No failed capture becomes an accepted baseline.
+The narrow reuse keeps existing dependencies and transformation ownership.
+Canonical DOM parity and avoided parsing are demonstrated, and fresh unprofiled
+measurements plus a confirmed-GC navigation capture bound its current footprint.
+Retaining syntax trees increases active-message memory. This optimization does
+not meet every delivery budget; no failed capture becomes an accepted baseline.
 
 ## Correctness evidence
 
@@ -51,3 +51,19 @@ mismatches. The two discovered definition-carrier/overlapping-span cases fall
 back. A mutation test confirms that disabling reuse restores the redundant
 renderer parses. This establishes semantics and skipped work, not a latency
 improvement or acceptable retained heap.
+
+## Hosted evidence and limits
+
+The unprofiled standard capture at `8ed2237d` has 65 ms slab median versus
+78.5 ms in the earlier same-environment capture; intervening CSS changes prevent
+attributing the entire difference to syntax reuse. Fourteen of fifteen slab
+observations still exceed 50 ms. A fresh profile confirms retained-block renderer
+parsing is a small remaining cost; canonical projection and real transforms
+still consume time.
+
+The `905f042f` navigation capture passes its exact-environment comparison and
+records successful forced GC at all checkpoints. The mounted long answer uses
+38.970 MiB; the later short-chat checkpoint uses 27.125 MiB. This is bounded
+workload evidence, not proof against leaks or a causal comparison with older
+GC-unverified heap readings. Detailed artifacts and limitations are recorded in
+`docs/performance/2026-09-05-interaction-optimizations.md`.
