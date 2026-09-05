@@ -360,18 +360,17 @@ async function runScenarioOnce(
   const cdp: CDPSession = await context.newCDPSession(page)
   let profiling = false
   let tracing = false
-  let traceStream: string | undefined
+  let traceResult: Promise<string | undefined> | undefined
   let lateMenuTraceComplete = false
   const stopTrace = async () => {
-    const completed = new Promise<string>((resolve, reject) => {
+    traceResult = new Promise<string | undefined>((resolve) => {
       cdp.once("Tracing.tracingComplete", (event) => {
-        if (event.stream) resolve(event.stream)
-        else reject(new Error("Diagnostic trace did not return a stream"))
+        resolve(event.stream)
       })
     })
     await cdp.send("Tracing.end")
     tracing = false
-    traceStream = await completed
+    // Encoding the trace can outlast the remaining stream. Drain after probes.
   }
   let interactionProbeStage = "entry"
   let wheelPoint: { x: number; y: number } | undefined
@@ -1112,7 +1111,9 @@ async function runScenarioOnce(
           JSON.stringify(profile)
         )
         if (tracing) await stopTrace()
-        if (traceStream) {
+        if (traceResult) {
+          const traceStream = await traceResult
+          if (!traceStream) throw new Error("Diagnostic trace did not return a stream")
           const chunks: Buffer[] = []
           let eof = false
           while (!eof) {

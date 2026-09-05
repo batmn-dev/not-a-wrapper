@@ -40,6 +40,7 @@ export function useDockedPanelCollapse({
   const [closing, setClosing] = useState(false)
   const [wasExpanded, setWasExpanded] = useState(dockedExpanded)
   const cleanupCloseRef = useRef<(() => void) | null>(null)
+  const expandedHostRef = useRef<HTMLElement | null>(null)
   const cleanupClose = useCallback(() => {
     cleanupCloseRef.current?.()
     cleanupCloseRef.current = null
@@ -66,6 +67,15 @@ export function useDockedPanelCollapse({
   const onDockedContentRef = useCallback(
     (element: HTMLElement | null) => {
       cleanupClose()
+
+      const host = element
+        ? slotElement?.closest<HTMLElement>(".side-pane-shell-host") ?? null
+        : null
+      if (expandedHostRef.current !== host) {
+        expandedHostRef.current?.removeAttribute("data-activity-expanded")
+      }
+      expandedHostRef.current = host
+      host?.toggleAttribute("data-activity-expanded", dockedExpanded)
 
       if (!slotElement) return
 

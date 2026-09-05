@@ -236,6 +236,45 @@ were 103.9–117.6 ms across the affected journeys. These captures fail the
 absolute budgets and cannot be accepted as baselines. Earlier content-frame
 numbers use a different observation protocol and cannot establish a speedup.
 
+[Run 33961398828](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33961398828)
+then captured PR head `7b9d1d8f` through GitHub's synthetic merge commit
+`6f44002b`, on the same AMD EPYC 7763 and Chromium version. The first-Send
+medians were 70.8–82.9 ms across unconstrained initial-send journeys; every
+sample met 100 ms. Warm follow-up median was 34.5 ms and Stop feedback median
+was 41 ms. Late-menu median decreased from 178.5 to 135.5 ms but still exceeded
+100 ms in every run. All seven correctness checks passed. Changes since the
+preceding capture include tooltip hover intent and skipping completed observer
+probes, so this is a same-environment before/after comparison, not an isolated
+tooltip A/B experiment. The observer timing protocol and budgets are unchanged.
+Cold first-content, Stop first-content, and long-answer content/menu samples
+still fail absolute budgets; this capture is not an acceptable baseline.
+
+The standard suite in
+[run 33960825679](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33960825679)
+also passed all eleven correctness checks on AMD EPYC 7763 at `36f21d1b`.
+It failed content-frame budgets for bursty output (5/50 samples), large slabs
+(15/15), and partial-error output (5/60). Slab first samples were 145.3–168 ms;
+later samples were 62.1–89.4 ms. Zero samples were pending or dropped. These
+results remain rejected rather than seeding slow baseline values.
+
+The bounded menu invalidation trace from
+[run 33961871108](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33961871108)
+identified 16 full-subtree invalidations on `.side-pane-shell-host`, caused by
+its Activity-dock `:has()` selectors interacting with Chromium's merged
+relational-selector invalidation sets. The capture used `7b9d1d8f`, build
+`e4f-qasEgi12AV_qwUx_L`, Intel Xeon Platinum 8573C, and Chromium
+`151.0.7922.34`. Invalidation tracking is intrusive: its durations are not
+release measurements. The menu window completed, but waiting for trace encoding
+delayed the later scroll until the stream ended, so the overall journey failed.
+Trace encoding is now awaited only after the remaining interaction probes.
+
+The dock's existing callback-ref controller now publishes `data-activity-expanded`
+on the host; the same two scrollbar rules consume that attribute. This preserves
+open/close behavior while removing the host's dependency on arbitrary descendant
+mutations. Nineteen focused panel/controller tests pass, including detached-slot
+replacement and unmount cleanup. A fresh unprofiled capture must establish the
+latency effect; the trace alone proves the invalidation cause, not the speedup.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the
