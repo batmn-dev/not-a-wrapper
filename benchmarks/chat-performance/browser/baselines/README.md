@@ -22,7 +22,8 @@ protocol and cannot seed CI baselines. Refresh deliberately when conditions chan
 
 GitHub-hosted runners can have different CPUs. Each suite directory contains
 exactly one reviewed JSON per environment. Directory selection uses the same
-strict environment fields as comparison: measurement version, identity protocol,
+strict environment fields as comparison: measurement version, typing cadence,
+replay policy, identity protocol,
 build class, instrumentation setting, machine class, CPU model/count, memory,
 browser version, fixture hash, and suite. Schema validation still applies to every
 candidate. Zero matches, duplicate matches, and invalid JSON fail; another CPU's

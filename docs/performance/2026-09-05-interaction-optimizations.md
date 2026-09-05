@@ -132,10 +132,12 @@ root-cause evidence only; it cannot provide whole-window timing or certification
 The normal rendering probe omits this high-volume optional trace category.
 
 [Run 33955151948](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33955151948)
-at `2d36aa43`, on AMD EPYC 7763 with the same browser and fixture, still measured
+at `2d36aa43`, on AMD EPYC 7763 with the same browser and fixture, measured
 10,331 ms layout work with Smooth and 10,732 ms with Quick (25,102 and 24,917 ms
-main-thread work). Both complete stream oracles passed. This does not demonstrate
-a latency improvement from the calendar correction; layout remains a bottleneck.
+main-thread work). Both complete stream oracles passed. This runner differs from
+the earlier Intel Xeon Platinum 8573C control; their absolute totals are not
+comparable and cannot attribute a speedup or regression to the calendar correction.
+Within this capture, layout remains a substantial part of main-thread work.
 
 The standard capture also exposed a visibility-observer error: an initial scan
 at zero opacity did not rescan during the finite Markdown reveal animation, so
