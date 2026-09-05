@@ -331,10 +331,16 @@ describe("useChatCore prompt query handling", () => {
       return null
     }
 
-    const rerender = (next?: { chatId: string; initialMessages: UIMessage[]; search: string }) => {
+    const rerender = (next?: {
+      chatId: string
+      initialMessages: UIMessage[]
+      search: string
+      ensureChatExists?: Parameters<typeof useChatCore>[0]["ensureChatExists"]
+    }) => {
       if (next) {
         chatId = next.chatId
         initialMessages = next.initialMessages
+        if (next.ensureChatExists) ensureChatExists = next.ensureChatExists
         window.history.replaceState(null, "", `/c/${chatId}${next.search}`)
       }
       act(() => {
@@ -463,6 +469,45 @@ describe("useChatCore prompt query handling", () => {
         tailMessageId: "assistant-server",
       }) })
     )
+  })
+
+  it("retains submit identity while using the latest committed history and chat controller", async () => {
+    const history: UIMessage[] = [
+      { id: "user-b", role: "user", parts: [{ type: "text", text: "question" }] },
+      { id: "assistant-b", role: "assistant", parts: [{ type: "text", text: "answer" }], metadata: { serverMessageId: "assistant-server-b" } },
+    ]
+    const { getCore, rerender } = renderCore({
+      search: "",
+      chatId: "chat-a",
+      ensureChatExists: vi.fn(async () => ({ chatId: "chat-a" })),
+    })
+    const retainedSubmit = getCore()!.submit
+
+    chatCoreMocks.useChatState.messages = history
+    rerender()
+    expect(getCore()!.submit).toBe(retainedSubmit)
+    rerender({
+      chatId: "chat-b",
+      initialMessages: history,
+      search: "",
+      ensureChatExists: vi.fn(async () => ({ chatId: "chat-b" })),
+    })
+    expect(getCore()!.submit).toBe(retainedSubmit)
+
+    await act(async () => {
+      await expect(retainedSubmit({ text: "follow-up", files: [], attachments: [] })).resolves.toBe(true)
+    })
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledOnce()
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ body: expect.objectContaining({
+        chatId: "chat-b",
+        chatVersion: 3,
+        expectedVisibleMessageCount: 2,
+        tailMessageId: "assistant-server-b",
+      }) })
+    )
+    expect(chatCoreMocks.bumpChat).toHaveBeenCalledWith("chat-b")
   })
 
   it("auto-submits on a cached chat switch only after its stream binding commits", async () => {

@@ -49,6 +49,7 @@ import { RiArrowUpLine } from "@remixicon/react"
 import { useConvex } from "convex/react"
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -206,7 +207,7 @@ function useComposerDraftDisplay(
   return { localValue, valueRef, applyValue, isCurrentDraft }
 }
 
-export const Composer = forwardRef<ComposerHandle, ComposerProps>(
+export const Composer = memo(forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
     {
       chatId,
@@ -777,4 +778,4 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       </div>
     )
   }
-)
+))

@@ -280,6 +280,75 @@ describe("DOM/frame observations", () => {
     ).toHaveLength(1)
   })
 
+  it.each(["mousedown", "click"])("includes opening work for a menu activated on %s", async (activation) => {
+    document.body.insertAdjacentHTML("beforeend", '<button data-testid="composer-plus-btn" aria-expanded="false">Add</button>')
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const trigger = document.querySelector<HTMLElement>('[data-testid="composer-plus-btn"]')!
+    now = 100
+    const down = new MouseEvent("pointerdown", { bubbles: true, button: 0 })
+    Object.defineProperty(down, "timeStamp", { value: now })
+    trigger.dispatchEvent(down)
+    now = 200
+    if (activation === "mousedown") trigger.setAttribute("aria-expanded", "true")
+    const click = new MouseEvent("click", { bubbles: true, detail: 1 })
+    Object.defineProperty(click, "timeStamp", { value: now })
+    trigger.dispatchEvent(click)
+    trigger.setAttribute("aria-expanded", "true")
+    document.body.insertAdjacentHTML("beforeend", "<div data-chat-composer-menu>Menu</div>")
+    await paint()
+    expect(observer.values.menuToFrameMs).toEqual([116])
+  })
+
+  it.each(["Enter", " "])("retains %s keyboard activation time through repeat and generated click", async (activation) => {
+    document.body.insertAdjacentHTML("beforeend", '<button data-testid="composer-plus-btn" aria-expanded="false">Add</button>')
+    installChatUiObserver()
+    const trigger = document.querySelector<HTMLElement>('[data-testid="composer-plus-btn"]')!
+    now = 100
+    const key = new KeyboardEvent("keydown", { bubbles: true, key: activation })
+    Object.defineProperty(key, "timeStamp", { value: now })
+    trigger.dispatchEvent(key)
+    now = 200
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: activation, repeat: true }))
+    trigger.setAttribute("aria-expanded", "true")
+    const click = new MouseEvent("click", { bubbles: true, detail: 0 })
+    Object.defineProperty(click, "timeStamp", { value: now })
+    trigger.dispatchEvent(click)
+    document.body.insertAdjacentHTML("beforeend", "<div data-chat-composer-menu>Menu</div>")
+    await paint()
+    expect((window as ChatUiWindow).__chatUiPerf!.values.menuToFrameMs).toEqual([116])
+  })
+
+  it.each(["Escape", "Tab", "pointercancel"])("does not measure menu closing or reuse %s-cancelled intent on keyboard reopening", async (cancel) => {
+    document.body.insertAdjacentHTML("beforeend",
+      '<button data-testid="composer-plus-btn" aria-expanded="true">Add</button><div data-chat-composer-menu>Menu</div>')
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const trigger = document.querySelector<HTMLElement>('[data-testid="composer-plus-btn"]')!
+    const popup = document.querySelector<HTMLElement>("[data-chat-composer-menu]")!
+    trigger.click()
+    // A closing surface may remain visible until its exit transition completes.
+    await paint()
+    expect(observer.values.menuToFrameMs).toBeUndefined()
+
+    trigger.setAttribute("aria-expanded", "false")
+    trigger.click()
+    document.dispatchEvent(cancel === "pointercancel"
+      ? new Event("pointercancel")
+      : new KeyboardEvent("keydown", { key: cancel }))
+    popup.remove()
+    await paint()
+    now = 1000
+    document.body.append(popup)
+    await paint()
+    expect(observer.values.menuToFrameMs).toBeUndefined()
+
+    trigger.click()
+    popup.textContent = "Reopened by plus"
+    await paint()
+    expect(observer.values.menuToFrameMs).toHaveLength(1)
+  })
+
   it("menu-consumed Enter does not reset the active stream", async () => {
     installChatUiObserver()
     send()

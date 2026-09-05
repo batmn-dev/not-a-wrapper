@@ -148,12 +148,47 @@ the interaction probes, recorded in environment metadata, avoiding incomparable
 zero-delay automation bursts. Neither change alters feedback budgets or product
 animations.
 
+## Rejected containment control
+
+[Run 33956973113](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33956973113)
+compared Smooth, Quick, and Smooth with diagnostic inline-size containment on
+one AMD EPYC 7763 runner, commit `d41971ff`, build `lZJLyEeEsI8g-2XTfKLJk`, and
+Chromium `151.0.7922.34`. All three passed the complete stream oracle and ended
+with identical Markdown and scroll geometry. Smooth layout work was 10,398 ms;
+containment measured 10,353 ms, a 0.43% difference in one capture. Main-thread
+work changed from 25,506 to 25,219 ms while TBT increased from 154 to 169 ms.
+This does not establish a meaningful improvement, so containment was not applied.
+A global `.markdown` rule would also affect shared-page user bubbles whose width
+depends on their content, outside the full-width assistant surface tested here.
+
+The transient route-handoff flag now has a narrow context subscription. Ordinary
+chat-session consumers skip the adoption-only notification after chat identity
+stabilizes, and `ChatInner` skips unchanged parent renders. Thirty-nine focused
+tests preserve route rollback, Back navigation, model selection, and reasoning
+effort. A mutation check restoring the broad notification makes the isolation test
+fail. This proves avoided renders; latency improvement requires the hosted run.
+
+The shared Composer now skips unchanged parent renders. Its Send callback forwards
+to the latest committed implementation, preserving that invocation's controller
+and history throughout asynchronous acceptance. A retained-callback test crosses
+chat A to chat B and verifies B's history, version, and controller are used. Local
+draft and Stop changes still update; 61 focused tests pass. Hosted measurements
+must establish any latency benefit.
+
+A further observer audit found that native menus open on mousedown, before the old
+click anchor. Menu timing now starts at primary pointerdown or keyboard opening
+intent, and closing/cancelling clears it. Interactive captures require
+`menuProtocol: activation-v1`; production menu distributions carry the same tag.
+A delayed-click test proves the opening work remains included, and 69 observer
+tests pass. Earlier interactive results cannot seed the corrected menu protocol.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the
 earlier asset work. Hosted browser execution has since supplied the scoped
-comparison above and exposed failures in the full journey capture. Hosted journey
-diagnostics are ongoing, including follow-up and constrained interaction checks.
+comparison above and exposed failures in the full journey capture. The latest full responsiveness capture passes all seven journey correctness
+checks, including follow-up and constrained scrolling. Absolute latency budgets
+still fail, so this is not release certification.
 Runner-matched responsiveness, standard, durable, and thread-switch baselines
 remain pending.
 Production DOM/frame reporting remains opt-in with

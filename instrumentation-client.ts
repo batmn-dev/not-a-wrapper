@@ -69,7 +69,12 @@ if (
           }
           Sentry.metrics.distribution(`chat.ui.${metric}`, durationMs, {
             unit: "millisecond",
-            attributes: { measurement: "dom-frame-v3" },
+            attributes: {
+              measurement: "dom-frame-v3",
+              ...(metric.startsWith("menuToFrame")
+                ? { menuProtocol: "activation-v1" }
+                : {}),
+            },
           })
         },
       })

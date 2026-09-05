@@ -1405,6 +1405,7 @@ async function main() {
       sampleCount: RUNS,
       warmupRuns: WARMUPS,
       wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
+      menuProtocol: config.interact ? "activation-v1" : undefined,
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),
       metrics: {

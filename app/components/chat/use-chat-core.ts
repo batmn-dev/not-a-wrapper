@@ -44,6 +44,7 @@ import { useSearchParams } from "next/navigation"
 import {
   useCallback,
   useEffect,
+  useInsertionEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -774,7 +775,7 @@ export function useChatCore({
   // Submit action — one send-type Chat turn from a Composer payload. Returns
   // whether the turn was accepted (dispatched), so the Composer knows whether
   // to clear its persisted draft.
-  const submit = useCallback(
+  const submitForCurrentRender = useCallback(
     async ({ text, files, attachments }: ChatTurnPayload): Promise<boolean> => {
       if (!isSendReady) return false
       const submittedFiles = [...files]
@@ -820,6 +821,16 @@ export function useChatCore({
       return accepted
     },
     [chatTurn, messages, bumpChat, isSendReady]
+  )
+
+  // Stable event identity; each invocation retains its committed turn snapshot.
+  const committedSubmitRef = useRef(submitForCurrentRender)
+  useInsertionEffect(() => {
+    committedSubmitRef.current = submitForCurrentRender
+  }, [submitForCurrentRender])
+  const submit = useCallback(
+    (payload: ChatTurnPayload) => committedSubmitRef.current(payload),
+    []
   )
 
   const autoSubmittedPromptRef = useRef<string | null>(null)

@@ -441,6 +441,22 @@ describe("Composer primary action", () => {
     })
   }
 
+  it("skips unchanged parent renders while keeping draft and status updates live", () => {
+    const props = { onTurn: vi.fn(() => true), stop: vi.fn(), status: "ready" as const }
+    const mounted = renderComposer(props)
+    const initialRenders = modelSelectorMockCalls.length
+
+    rerenderComposer(props)
+    expect(modelSelectorMockCalls).toHaveLength(initialRenders)
+
+    changeComposerValue("new draft")
+    expect(promptInputMockCalls.at(-1)?.value).toBe("new draft")
+    expect(modelSelectorMockCalls.length).toBeGreaterThan(initialRenders)
+
+    rerenderComposer({ ...props, status: "streaming" })
+    expect(mounted.querySelector('[data-testid="send-button"]')?.getAttribute("aria-label")).toBe("Stop")
+  })
+
   it("keeps search outside the editor document and preserves the surface placeholder", () => {
     composerMocks.enableSearch = true
     renderComposer({ placeholder: "Message this project" })

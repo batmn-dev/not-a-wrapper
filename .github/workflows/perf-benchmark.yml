@@ -55,7 +55,7 @@ on:
         type: boolean
         default: false
       rendering_probe:
-        description: "Diagnostic smooth/quick and inline-size containment traces (requires diagnose)"
+        description: "Diagnostic smooth/quick and inner text block-layout traces (requires diagnose)"
         type: boolean
         default: false
 
@@ -158,8 +158,8 @@ jobs:
         run: |
           STREAMING_PRESENTATION=smooth LABEL=smooth CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
           STREAMING_PRESENTATION=quick LABEL=quick CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
-          printf '%s\n' '.markdown { contain: inline-size !important; }' > /tmp/chat-inline-size-probe.css
-          STREAMING_PRESENTATION=smooth INJECT_CSS_FILE=/tmp/chat-inline-size-probe.css LABEL=inline-size CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+          printf '%s\n' '.text-message, .text-message > div { display: flow-root !important; }' > /tmp/chat-inner-block-layout-probe.css
+          STREAMING_PRESENTATION=smooth INJECT_CSS_FILE=/tmp/chat-inner-block-layout-probe.css LABEL=inner-block-layout CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
 
       - name: Compare against baseline
         if: ${{ !inputs.diagnose }}

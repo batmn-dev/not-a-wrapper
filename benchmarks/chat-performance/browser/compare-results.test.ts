@@ -262,6 +262,15 @@ describe("performance evidence contract", () => {
     expect(compareResults(before, current)).toEqual([])
   })
 
+  it("rejects menu captures using the old post-mousedown click anchor", () => {
+    const before = result()
+    const current = result()
+    current.scenarios[0].menuProtocol = "activation-v1"
+    expect(compareResults(before, current).join(" ")).toContain("scenario missing")
+    before.scenarios[0].menuProtocol = "activation-v1"
+    expect(compareResults(before, current)).toEqual([])
+  })
+
   it("rejects failures and malformed numbers rather than dropping them", () => {
     const invalid = result()
     invalid.scenarios[0].metrics.inputToFirstTextFrameMs.p50 = NaN

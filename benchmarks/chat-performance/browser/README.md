@@ -134,6 +134,12 @@ invalidated preparation fails; older interaction captures are incompatible.
 Failure probes retain only closed wheel-state reasons, counts, timings, and scroll
 positions to distinguish skipped eligibility from delayed event delivery.
 
+Menu samples use `menuProtocol: activation-v1`: primary pointerdown opening intent
+to the observed frame, with a keyboard activation fallback. This includes native
+menus that open on mousedown before click, as well as desktop click-open menus.
+Closing or cancelling clears the intent; a later opening cannot reuse it.
+Earlier click-anchored interactive captures are not comparable.
+
 Normal-profile budgets allow at most 5% over 100 ms for Send/Stop/menu feedback,
 and 50 ms for typing and received-content frames. Relative gates cover load,
 first output, server preparation, settlement, and navigation. These are targets,

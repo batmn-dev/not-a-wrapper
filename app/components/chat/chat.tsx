@@ -189,6 +189,11 @@ const ChatInner = memo(function ChatInner({
     setComposerText,
   })
 
+  const handleLockedGuestModelSelect = useCallback(
+    () => setHasDialogAuth(true),
+    [setHasDialogAuth]
+  )
+
   // Conversation effort readback (ADR-0026): the last assistant message's
   // applied effort restores the selector when a chat is reopened — messages
   // are the conversation's effort memory; there is no per-chat server field.
@@ -407,7 +412,7 @@ const ChatInner = memo(function ChatInner({
       status={effectiveStatus}
       stop={stop}
       stoppable={presentation.stoppable}
-      onLockedGuestModelSelect={() => setHasDialogAuth(true)}
+      onLockedGuestModelSelect={handleLockedGuestModelSelect}
     />
   )
 

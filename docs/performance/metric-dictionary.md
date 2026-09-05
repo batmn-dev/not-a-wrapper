@@ -310,7 +310,7 @@ The observation tab must remain visible.
 | `inputToFirstTextFrameMs` | Same input to nonempty current-turn assistant Markdown across a frame opportunity. |
 | `inputToFirstActivityFrameMs` | Same input to an inspectable activity disclosure. Bare Thinking does not satisfy it. |
 | `typingToFrameMs` | Oldest unobserved key/beforeinput timestamp to an editor update observed across a frame opportunity. Coalesced input retains the oldest delay; no slow-sample cutoff. |
-| `menuToFrameMs` | Composer plus-menu click to visible menu across a frame opportunity. |
+| `menuToFrameMs` | Primary pointerdown or Enter/Space opening intent to visible composer menu across a frame opportunity; standalone accessibility activation clicks fall back to click. Includes native mousedown opening work. Closing/cancelling clears intent (`menuProtocol: activation-v1`). |
 | `scrollToFrameMs` | Direct vertical wheel event to changed thread scroll position across a frame opportunity. Excludes cancelled events, zoom/horizontal gestures, blocked scroll directions and nested scroll chaining; not a general touch-scroll/INP metric. |
 | `deltaToContentFrameMs` | A sampled received-text watermark to an at-least-equal rendered-source watermark in a visible Markdown container across a frame opportunity. Four samples/sec maximum; no provider gaps included. |
 | `typingToFrameEarlyMs` / `typingToFrameLateMs`, `menuToFrameEarlyMs` / `menuToFrameLateMs`, `deltaToContentFrameEarlyMs` / `deltaToContentFrameLateMs` | Harness phases: early interaction after first text; late interaction after at least 80% of the deterministic fixture source is rendered while the stream remains active. Each phase must produce samples in every run. |

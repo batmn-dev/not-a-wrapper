@@ -103,6 +103,8 @@ export type ScenarioResult = {
   followup: boolean
   /** Native wheel timing uses an explicit pre-input position snapshot. */
   wheelProtocol?: "prepared-wheel-v1"
+  /** Opening intent precedes native menu mousedown handling. */
+  menuProtocol?: "activation-v1"
   scenario: string
   directive: string
   viewport: string

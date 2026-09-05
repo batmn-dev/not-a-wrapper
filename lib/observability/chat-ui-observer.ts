@@ -91,6 +91,7 @@ export function installChatUiObserver(
   let inputAt: number | undefined
   let inputPending = false
   let menuAt: number | undefined
+  let keyboardMenuTrigger: Element | undefined
   let pendingWheel:
     | {
         at: number
@@ -356,6 +357,7 @@ export function installChatUiObserver(
   const reset = () => {
     turn++
     sentAt = sendCandidate = stopAt = terminalAt = inputAt = menuAt = undefined
+    keyboardMenuTrigger = undefined
     clearTimeout(candidateTimer)
     phase = undefined
     dropped = 0
@@ -379,6 +381,8 @@ export function installChatUiObserver(
   }
   const beginSend = (at: number) => {
     turn++
+    menuAt = undefined
+    keyboardMenuTrigger = undefined
     clearPendingWheel(true, "root-changed")
     clearPreparedWheel(true, "root-changed")
     navigation = undefined
@@ -412,6 +416,20 @@ export function installChatUiObserver(
     clearPendingWheel(true, "competing-input")
     clearPreparedWheel(true, "competing-input")
   }
+  const cancelMenu = () => {
+    menuAt = undefined
+    keyboardMenuTrigger = undefined
+  }
+  const pointerdown = (event: PointerEvent) => {
+    competingInput()
+    keyboardMenuTrigger = undefined
+    const trigger = event.target instanceof Element
+      ? event.target.closest('[data-testid="composer-plus-btn"]')
+      : null
+    menuAt = event.button === 0 && event.isPrimary !== false && trigger && trigger.getAttribute("aria-expanded") !== "true"
+      ? eventTime(event)
+      : undefined
+  }
   const pointer = (event: MouseEvent) => {
     competingInput()
     const target = event.target instanceof Element ? event.target : null
@@ -421,8 +439,14 @@ export function installChatUiObserver(
         stopAt = eventTime(event)
       else candidateSend(event)
     }
-    if (target?.closest('[data-testid="composer-plus-btn"]'))
-      menuAt = eventTime(event)
+    const menuTrigger = target?.closest('[data-testid="composer-plus-btn"]')
+    // Native menus can already open on mousedown. Never restart their clock at click.
+    if (!menuTrigger) menuAt = undefined
+    else if (event.detail === 0 && menuTrigger !== keyboardMenuTrigger)
+      menuAt = menuTrigger.getAttribute("aria-expanded") !== "true"
+        ? eventTime(event)
+        : undefined
+    keyboardMenuTrigger = undefined
     const link = target?.closest<HTMLAnchorElement>(
       'a[data-sidebar-item="true"][href^="/c/"]'
     )
@@ -444,6 +468,16 @@ export function installChatUiObserver(
   const keydown = (event: KeyboardEvent) => {
     competingInput()
     const target = event.target instanceof Element ? event.target : null
+    const menuTrigger = target?.closest('[data-testid="composer-plus-btn"]')
+    if (event.repeat && menuTrigger === keyboardMenuTrigger &&
+      (event.key === "Enter" || event.key === " ")) return
+    cancelMenu()
+    if (menuTrigger && (event.key === "Enter" || event.key === " ")) {
+      menuAt = !event.repeat && menuTrigger.getAttribute("aria-expanded") !== "true"
+        ? eventTime(event)
+        : undefined
+      if (menuAt !== undefined) keyboardMenuTrigger = menuTrigger
+    }
     if (!target?.closest(editorSelector)) return
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing)
       candidateSend(event)
@@ -552,6 +586,7 @@ export function installChatUiObserver(
   }
   const visibility = () => {
     if (document.visibilityState !== "visible") {
+      cancelMenu()
       clearPendingWheel()
       clearPreparedWheel()
       if (!lcpReported && values.lcpMs?.[0] !== undefined) {
@@ -584,7 +619,8 @@ export function installChatUiObserver(
       "aria-expanded",
     ],
   })
-  document.addEventListener("pointerdown", competingInput, true)
+  document.addEventListener("pointerdown", pointerdown, true)
+  document.addEventListener("pointercancel", cancelMenu, true)
   document.addEventListener("touchstart", competingInput, { capture: true, passive: true })
   document.addEventListener("click", pointer, true)
   document.addEventListener("keydown", keydown, true)
@@ -666,6 +702,7 @@ export function installChatUiObserver(
       schedule()
     },
     dispose() {
+      cancelMenu()
       clearPendingWheel()
       clearPreparedWheel()
       clearTimeout(candidateTimer)
@@ -674,7 +711,8 @@ export function installChatUiObserver(
       frames.forEach(cancelAnimationFrame)
       frameTasks.forEach(clearTimeout)
       frameTasks.clear()
-      document.removeEventListener("pointerdown", competingInput, true)
+      document.removeEventListener("pointerdown", pointerdown, true)
+      document.removeEventListener("pointercancel", cancelMenu, true)
       document.removeEventListener("touchstart", competingInput, true)
       document.removeEventListener("click", pointer, true)
       document.removeEventListener("keydown", keydown, true)

@@ -41,6 +41,12 @@ wheel event to observed movement. Scenario matching rejects older scroll capture
 that sampled their starting position inside a potentially delayed passive handler.
 Non-scrolling scenarios are unaffected by this protocol field.
 
+Interactive scenarios also require `menuProtocol: "activation-v1"`. Menu timing
+starts at primary pointerdown before native mousedown opening work, with a
+keyboard-generated activation fallback. Closing clicks cannot arm an opening.
+Older click-anchored interactive captures are incompatible; non-interactive
+suites are unaffected.
+
 Captures also require `replayPolicy: "disabled-v1"`. Performance builds disable
 Sentry and PostHog session recording at initialization while retaining other
 telemetry; normal production recording behavior is unchanged. A browser marker

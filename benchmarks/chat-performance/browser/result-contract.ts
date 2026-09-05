@@ -29,6 +29,7 @@ const scenario = z
     auth: z.boolean(),
     followup: z.boolean(),
     wheelProtocol: z.literal("prepared-wheel-v1").optional(),
+    menuProtocol: z.literal("activation-v1").optional(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
     warmupRuns: z.number().int().nonnegative(),
@@ -164,6 +165,7 @@ export function scenarioKey(
     | "auth"
     | "followup"
     | "wheelProtocol"
+    | "menuProtocol"
   >
 ): string {
   return [
@@ -177,6 +179,7 @@ export function scenarioKey(
     value.auth,
     value.followup,
     value.wheelProtocol,
+    value.menuProtocol,
   ].join("/")
 }
 
@@ -257,6 +260,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           auth: config.auth ?? false,
           followup: config.followup ?? false,
           wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
+          menuProtocol: config.interact ? "activation-v1" : undefined,
         })
       )
     )
