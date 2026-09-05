@@ -524,7 +524,7 @@ async function runScenarioOnce(
       profiling = true
       if (!PROFILE_LATE_MENU) {
         await cdp.send("Tracing.start", {
-          categories: "devtools.timeline,blink.user_timing",
+          categories: "devtools.timeline,blink.user_timing,input,latencyInfo,cc,benchmark",
           transferMode: "ReturnAsStream",
         })
         tracing = true
