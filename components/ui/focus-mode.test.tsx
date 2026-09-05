@@ -10,6 +10,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest"
 import { FocusModeController } from "./focus-mode"
 
@@ -42,23 +43,84 @@ describe("FocusModeController", () => {
     document.documentElement.removeAttribute("data-focus-mode")
   })
 
-  it("publishes keyboard modality and clears it before pointer focus", () => {
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { bubbles: true, key: "Tab" })
-    )
-    expect(document.documentElement.dataset.focusMode).toBe("keyboard")
+  function controls() {
+    const first = document.createElement("button")
+    const second = document.createElement("textarea")
+    container.append(first, second)
+    first.focus()
+    return { first, second }
+  }
 
-    document.dispatchEvent(new Event("pointerdown", { bubbles: true }))
+  function keydown(key = "Tab") {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key })
+    )
+  }
+
+  it("transfers keyboard modality across Tab, programmatic focus, and blur", () => {
+    const { first, second } = controls()
+    keydown()
+    expect(first.dataset.focusMode).toBe("keyboard")
+    second.focus() // Tab's native default action moves focus after keydown.
+    expect(first.hasAttribute("data-focus-mode")).toBe(false)
+    expect(second.dataset.focusMode).toBe("keyboard")
+
+    second.blur()
+    expect(second.hasAttribute("data-focus-mode")).toBe(false)
+    first.focus() // Programmatic focus retains the last input modality.
+    expect(first.dataset.focusMode).toBe("keyboard")
     expect(document.documentElement.hasAttribute("data-focus-mode")).toBe(false)
   })
 
-  it("removes its document listeners with the callback-ref lifecycle", () => {
+  it("clears keyboard presentation on a prevented pointer press and subsequent focus", () => {
+    const { first, second } = controls()
+    keydown()
+    second.addEventListener("pointerdown", (event) => event.preventDefault())
+    second.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }))
+    expect(document.activeElement).toBe(first)
+    expect(first.hasAttribute("data-focus-mode")).toBe(false)
+    second.focus()
+    expect(second.hasAttribute("data-focus-mode")).toBe(false)
+    keydown("a")
+    expect(second.dataset.focusMode).toBe("keyboard")
+  })
+
+  it("does not rewrite an unchanged marker or mutate the HTML element", () => {
+    const { first } = controls()
+    const setMarker = vi.spyOn(first, "setAttribute")
+    const setRoot = vi.spyOn(document.documentElement, "setAttribute")
+    const removeRoot = vi.spyOn(document.documentElement, "removeAttribute")
+    try {
+      keydown("a")
+      keydown("b")
+      keydown("c")
+      document.dispatchEvent(new Event("pointerdown", { bubbles: true }))
+      expect(setMarker).toHaveBeenCalledExactlyOnceWith("data-focus-mode", "keyboard")
+      expect(setRoot).not.toHaveBeenCalled()
+      expect(removeRoot).not.toHaveBeenCalled()
+    } finally {
+      setMarker.mockRestore()
+      setRoot.mockRestore()
+      removeRoot.mockRestore()
+    }
+  })
+
+  it("cleans detached targets at the next focus event and removes its listeners on unmount", () => {
+    const { first, second } = controls()
+    keydown()
+    first.remove() // Browsers can remove a focused node without firing focusout.
+    second.focus()
+    expect(first.hasAttribute("data-focus-mode")).toBe(false)
+    expect(second.dataset.focusMode).toBe("keyboard")
+    second.remove()
     act(() => root.unmount())
+    expect(second.hasAttribute("data-focus-mode")).toBe(false)
     root = createRoot(container)
 
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { bubbles: true, key: "Tab" })
-    )
+    container.append(first)
+    first.focus()
+    keydown()
+    expect(first.hasAttribute("data-focus-mode")).toBe(false)
     expect(document.documentElement.hasAttribute("data-focus-mode")).toBe(false)
   })
 })

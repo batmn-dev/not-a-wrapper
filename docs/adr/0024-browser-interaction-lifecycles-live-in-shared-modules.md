@@ -37,6 +37,11 @@ changing. This decision is about where browser lifecycle knowledge lives.
    ProseMirror callback-ref lifecycle creates and disposes it; editor updates
    and committed Composer updates are its only two signals. It stays behind
    the existing off-by-default, content-free Chat-performance allow-list.
+5. `components/ui/focus-mode.tsx` owns input modality for the shared focus
+   variants. Its callback-ref lifecycle tracks keyboard/pointer events and focus
+   transfer, publishing state on the focused element. The selector still requires
+   native `:focus-visible`; moving the state off `html` avoids invalidating every
+   descendant when the user switches input methods.
 No Module introduces a React `useEffect`; browser ownership is event-driven or
 callback-ref-owned.
 

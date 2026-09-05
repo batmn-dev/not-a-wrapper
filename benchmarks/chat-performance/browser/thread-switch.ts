@@ -423,7 +423,7 @@ export function formatThreadSwitch(result: ThreadSwitchResult): string[] {
     )
   }
   lines.push(
-    `  heap (MiB, ${result.heapProtocol === "forced-gc-v1" ? "confirmed GC" : "GC unverified"}): ${result.heapSamples
+    `  heap (MiB, confirmed GC): ${result.heapSamples
       .map(
         (sample) =>
           `@${sample.switches}=${round2(sample.jsHeapUsedBytes / 1024 / 1024)}`

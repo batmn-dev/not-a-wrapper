@@ -330,7 +330,10 @@ The observation tab must remain visible.
 
 The fixed normal-profile budgets are defined in `result-contract.ts`. Result JSON
 retains raw content-free samples so budget-exceedance rates can be recomputed.
-Summaries must match their raw observations. Completed foreground runs must drain
+Summaries must match their raw observations. Every text scenario requires a
+content-latency sample per run. Early/late typing, menu, and content phases use
+the same absolute budgets independently, so setup samples cannot dilute a slow
+late-stream phase. Completed foreground runs must drain
 all sampled received content; pending counts remain explicit for Stop, reload, and
 intentional second-tab cutoffs. Any observation-buffer overflow invalidates a run.
 Eligible wheel input waits for matching root movement, retaining the oldest

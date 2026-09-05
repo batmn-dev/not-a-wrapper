@@ -22,9 +22,9 @@
 @custom-variant keyboard-open (&:where(.keyboard-open *));
 /* Tailwind requires each custom-variant name and selector on one physical line. */
 /* prettier-ignore */
-@custom-variant keyboard-focused (&:is(html[data-focus-mode="keyboard"] :focus-visible));
+@custom-variant keyboard-focused (&:is(html [data-focus-mode="keyboard"]:focus-visible));
 /* prettier-ignore */
-@custom-variant not-keyboard-focused (&:not(:is(html[data-focus-mode="keyboard"] :focus-visible)));
+@custom-variant not-keyboard-focused (&:not(:is(html [data-focus-mode="keyboard"]:focus-visible)));
 
 @custom-variant tall (@media (min-height: 40rem));
 @custom-variant not-tall (@media (max-height: 39.99rem));
@@ -964,7 +964,7 @@
     box-shadow: none;
   }
   /* Textareas match :focus-visible on every focus, so keyboard mode owns the visible indicator (same outline as Button). */
-  html[data-focus-mode="keyboard"] textarea:focus-visible {
+  html textarea[data-focus-mode="keyboard"]:focus-visible {
     outline: 1.5px solid var(--interactive-outline-color, var(--text-primary));
     outline-offset: 2.5px;
   }

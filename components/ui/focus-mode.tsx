@@ -6,30 +6,50 @@ const FOCUS_MODE_ATTRIBUTE = "data-focus-mode"
 const KEYBOARD_FOCUS_MODE = "keyboard"
 
 /**
- * Publishes the document's current input modality for shared focus variants.
- * The controller owns no React state: capture-phase input events update the
- * stable html attribute before the focused control's presentation is resolved.
+ * Publishes input modality only on the focused element, avoiding document-wide
+ * style invalidation. Native :focus-visible still decides whether to show a ring.
  */
 function FocusModeController() {
   const attachInputModality = useCallback((node: HTMLSpanElement | null) => {
     if (!node) return
 
     const ownerDocument = node.ownerDocument
-    const root = ownerDocument.documentElement
+    let keyboardMode = false
+    let markedElement: Element | null = null
+    const clearMarker = () => {
+      markedElement?.removeAttribute(FOCUS_MODE_ATTRIBUTE)
+      markedElement = null
+    }
+    const updateMarker = () => {
+      const focusedElement = ownerDocument.activeElement
+      const next = keyboardMode && focusedElement !== ownerDocument.documentElement
+        ? focusedElement
+        : null
+      if (next === markedElement) return
+      clearMarker()
+      markedElement = next
+      markedElement?.setAttribute(FOCUS_MODE_ATTRIBUTE, KEYBOARD_FOCUS_MODE)
+    }
     const markKeyboard = () => {
-      root.setAttribute(FOCUS_MODE_ATTRIBUTE, KEYBOARD_FOCUS_MODE)
+      keyboardMode = true
+      updateMarker()
     }
     const markPointer = () => {
-      root.removeAttribute(FOCUS_MODE_ATTRIBUTE)
+      keyboardMode = false
+      clearMarker()
     }
 
     ownerDocument.addEventListener("keydown", markKeyboard, true)
     ownerDocument.addEventListener("pointerdown", markPointer, true)
+    ownerDocument.addEventListener("focusin", updateMarker, true)
+    ownerDocument.addEventListener("focusout", clearMarker, true)
 
     return () => {
       ownerDocument.removeEventListener("keydown", markKeyboard, true)
       ownerDocument.removeEventListener("pointerdown", markPointer, true)
-      root.removeAttribute(FOCUS_MODE_ATTRIBUTE)
+      ownerDocument.removeEventListener("focusin", updateMarker, true)
+      ownerDocument.removeEventListener("focusout", clearMarker, true)
+      clearMarker()
     }
   }, [])
 

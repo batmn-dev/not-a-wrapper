@@ -12,6 +12,7 @@ on:
       - "components/ui/prompt-input.tsx"
       - "components/ui/calendar.tsx"
       - "components/ui/tooltip.tsx"
+      - "components/ui/focus-mode.tsx"
       - "components/ui/message.tsx"
       - "components/ui/lazy-markdown.ts"
       - "components/ui/markdown.tsx"

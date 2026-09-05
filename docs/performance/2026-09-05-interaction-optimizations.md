@@ -90,12 +90,13 @@ main-thread work per arm. The paired diagnostic input and blocking figures were:
 
 | Pair | Main-thread work change | Keydown median, off → on (ms) | Reported TBT, off → on (ms) |
 | --- | ---: | ---: | ---: |
-| 1 | −0.092% | 37.35 → 36.63 | 167.3 → 157.6 |
-| 2 | +0.191% | 46.19 → 36.15 | 139.8 → 169.5 |
-| 3 | +0.169% | 43.65 → 32.98 | 152.7 → 142.5 |
-| 4 | +0.624% | 36.42 → 35.14 | 161.3 → 169.7 |
-| 5 | +0.624% | 32.04 → 31.08 | 155.2 → 119.8 |
+| 1 | −0.092% | 37.89 → 37.33 | 167.3 → 157.6 |
+| 2 | +0.191% | 46.34 → 37.06 | 139.8 → 169.5 |
+| 3 | +0.169% | 44.73 → 33.44 | 152.7 → 142.5 |
+| 4 | +0.624% | 37.07 → 37.40 | 161.3 → 169.7 |
+| 5 | +0.624% | 32.39 → 31.59 | 155.2 → 119.8 |
 
+Keydown medians use the benchmark’s upper-middle quantile rule.
 Each arm captured eight native keydown entries. These are individual event
 latencies, not logical interaction maxima or INP. Reported TBT sums the portions
 above 50 ms of long tasks starting inside the window; unlike the unioned work
@@ -299,7 +300,8 @@ the only failure was one menu sample:
 5% allowance; its median is 16.9 ms and p95 30.8 ms. This capture uses AMD EPYC
 9V74, unlike the preceding 7763 capture, so it is not an isolated before/after
 latency comparison. The final audit additionally found 3/40 late typing samples
-above 50 ms (7.5%, maximum 57.2 ms), diluted by the pooled setup/typing
+above 50 ms (7.5%; median 16.5 ms, p95 55.4 ms, maximum 57.2 ms),
+diluted by the pooled setup/typing
 denominator. Early and late typing, menu, and content phases now independently
 use the same absolute budgets and 5% allowance. This capture fails late typing
 and late menu as well as the pooled menu check; it remains rejected.
@@ -350,3 +352,24 @@ does not retroactively certify them. With the current eight-fixture traversal,
 checkpoint 25 contains the long Markdown chat; checkpoints 10 and 50 contain
 the same short chat. Comparing those distinct roles avoids confusing the mounted
 long document with retained growth after navigation.
+
+The first syntax-reuse core capture,
+[run 33963860476](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33963860476),
+used PR merge commit `b576dcd` (head `d3400af7`) on AMD EPYC 7763. All seven
+journeys pass correctness, but strict collection fails cold content (2/10), Stop
+content (4/25), late typing (5/40), late content (5/95), and menu (1/10 overall,
+1/5 late). Late typing has median 17.9 ms, p95 61.6 ms, and maximum 71.4 ms;
+late menu has median 94.5 ms and maximum 105.6 ms (n=5, p95 omitted). Every
+late typing failure is the first keystroke after changing input modality. That
+is consistent with the previously traced HTML focus-mode invalidation, though
+this unprofiled capture alone does not attribute its CPU time. No baseline was
+accepted from this capture.
+
+The shared focus controller now publishes keyboard mode only on the focused
+element. Focus events transfer the marker; pointer input, blur, and teardown
+remove it. The CSS still requires native `:focus-visible` and retains its
+specificity through a static `html` ancestor. This removes the traced document-wide
+attribute invalidation without replacing the app’s keyboard/pointer focus policy.
+Eight focused tests, typecheck, lint, compiled-selector verification, and an
+independent event-order/cleanup review pass. Fresh hosted latency evidence remains
+required; these checks establish behavior and selector scope, not a speedup.
