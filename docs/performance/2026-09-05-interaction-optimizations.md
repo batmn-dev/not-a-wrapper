@@ -161,6 +161,17 @@ This does not establish a meaningful improvement, so containment was not applied
 A global `.markdown` rule would also affect shared-page user bubbles whose width
 depends on their content, outside the full-width assistant surface tested here.
 
+[Run 33958747562](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33958747562)
+then compared the inner flex containers with diagnostic `display: flow-root` on
+commit `eac0bbcf`, build `KBE4b-OR0Tiau0v1veNcE`, AMD EPYC 7763, and the same
+Chromium version. Smooth layout was 11,430 ms versus 11,053 ms with the control;
+main-thread work was 24,755 versus 24,445 ms, while TBT increased from 136 to
+175 ms. Markdown height changed by 16 px and scroll height by 20 px. All stream
+oracles passed, but this single capture neither establishes a useful improvement
+nor preserves geometry. No product layout change was applied.
+
+## Render subscriptions and observation accuracy
+
 The transient route-handoff flag now has a narrow context subscription. Ordinary
 chat-session consumers skip the adoption-only notification after chat identity
 stabilizes, and `ChatInner` skips unchanged parent renders. Thirty-nine focused
@@ -182,6 +193,14 @@ intent, and closing/cancelling clears it. Interactive captures require
 A delayed-click test proves the opening work remains included, and 69 observer
 tests pass. Earlier interactive results cannot seed the corrected menu protocol.
 
+The observer can run before the SDK publisher in one animation-frame batch.
+A guarded publisher callback now inspects confirmed content in that same
+rendering opportunity, avoiding an otherwise unnecessary additional frame.
+Deferred commits keep the ordinary fallback. Streamed-content results require
+`contentFrameProtocol: publisher-frame-v1`; older captures cannot seed this
+protocol. This is a measurement correction, not a product speedup. A fresh
+observer-overhead control and full captures remain necessary.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the
@@ -189,8 +208,11 @@ earlier asset work. Hosted browser execution has since supplied the scoped
 comparison above and exposed failures in the full journey capture. The latest full responsiveness capture passes all seven journey correctness
 checks, including follow-up and constrained scrolling. Absolute latency budgets
 still fail, so this is not release certification.
-Runner-matched responsiveness, standard, durable, and thread-switch baselines
-remain pending.
+A reviewed thread-switch baseline from run 33958084155 contains 90 valid
+switches. Median navigation is 45–48 ms; p95 is 601–829 ms, with the long
+Markdown fixture accounting for every sample above 150 ms. Those samples are
+retained. An independent normal comparison remains required. Runner-matched
+responsiveness, standard, and durable baselines remain pending.
 Production DOM/frame reporting remains opt-in with
 `NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE` defaulting to `0`. Unit tests and this observer
 comparison do not certify release responsiveness.

@@ -1,4 +1,5 @@
 import { markChatPerf } from "@/lib/observability/chat-performance"
+import { noteChatPublicationFrame } from "@/lib/observability/chat-ui-events"
 import type { Chat, UIMessage } from "@ai-sdk/react"
 
 type ScheduledPublication =
@@ -58,10 +59,11 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
 
   const publish = () => {
     cancelScheduledPublication()
-    if (!pending) return
+    if (!pending) return false
     pending = false
     if (chat.status === "streaming") streamingPublicationCount++
     onChange()
+    return true
   }
 
   const schedule = () => {
@@ -71,7 +73,9 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
     if (typeof requestAnimationFrame === "function") {
       scheduled = {
         kind: "frame",
-        id: requestAnimationFrame(publish),
+        id: requestAnimationFrame(() => {
+          if (publish()) noteChatPublicationFrame()
+        }),
       }
       return
     }

@@ -1,8 +1,8 @@
 # Browser performance baselines
 
 The comparator now **fails when a baseline is missing**. A green correctness run
-alone is never proof of speed. There are currently no schema-v2 CI baselines;
-collect them on the actual runner after this workflow is available on GitHub.
+alone is never proof of speed. Reviewed captures are stored below by suite and exact runner environment.
+A capture alone does not prove an independent comparison passes.
 
 1. Dispatch `perf-benchmark.yml` with the desired suite and `collect_baseline=true`.
 2. Review the uploaded JSON, correctness, sample coverage, and absolute budgets.
@@ -41,6 +41,13 @@ wheel event to observed movement. Scenario matching rejects older scroll capture
 that sampled their starting position inside a potentially delayed passive handler.
 Non-scrolling scenarios are unaffected by this protocol field.
 
+Streamed-content captures require `contentFrameProtocol: publisher-frame-v1`.
+When the SDK publishes inside an animation frame, the observer can inspect the
+committed source watermark in that same rendering opportunity. Deferred commits
+retain the normal observation fallback. Both paths timestamp a later task; neither
+claims pixel presentation. Old streamed-content captures are incompatible. The
+thread-switch-only suite has no streaming scenarios and is unaffected.
+
 Interactive scenarios also require `menuProtocol: "activation-v1"`. Menu timing
 starts at primary pointerdown before native mousedown opening work, with a
 keyboard-generated activation fallback. Closing clicks cannot arm an opening.
@@ -64,3 +71,11 @@ bun run benchmarks/chat-performance/browser/compare-results.ts --collect-baselin
 
 This explicitly checks correctness, coverage, and absolute budgets but performs no
 relative comparison. It cannot be used to report regression protection as armed.
+
+Reviewed thread-switch capture: [run 33958084155](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33958084155),
+commit `7026cbad`, AMD EPYC 9V74, Chromium `151.0.7922.34`. All 90 switches pass
+correctness and coverage (20 unvisited-click, 20 unvisited-hover, 50 visited).
+The long Markdown fixture accounts for every sample above 150 ms; those samples
+are retained. Median navigation is 45–48 ms and p95 is 601–829 ms. These tails
+are measured existing behavior, not proof of fast navigation. An independent
+normal comparison is still required. Other suites remain pending.

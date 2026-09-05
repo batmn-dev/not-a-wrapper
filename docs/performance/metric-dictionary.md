@@ -299,6 +299,13 @@ mutation or animation completion. Rescans require a matching source watermark,
 viewport intersection, and an active finite animation, and stop when its remaining
 duration expires. Pending content remains explicit if it never becomes visible.
 The interaction-specific `prepared-wheel-v1` protocol remains a separate condition.
+`contentFrameProtocol: publisher-frame-v1` adds a guarded observation after an
+SDK publication inside rAF. A committed watermark can be inspected in that same
+rendering opportunity, avoiding an extra frame when the ordinary observer ran
+before the publisher. Deferred commits keep the normal fallback; both endpoints
+remain post-render-opportunity task proxies, with no fixed frame subtraction.
+Production aggregates include the protocol tags.
+
 The observation tab must remain visible.
 
 | Metric | Definition |

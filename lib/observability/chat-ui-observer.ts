@@ -44,6 +44,7 @@ export type ChatUiObserver = {
     deliveryAt?: number; lastScanTop?: number
     preparationInvalidatedBy?: WheelObservationReason
   }
+  publicationFrame: () => void
   programmaticScroll: (root: HTMLElement) => void
   confirmSend: () => void
   setPhase: (phase: "early" | "late") => void
@@ -88,6 +89,8 @@ export function installChatUiObserver(
   let dropped = 0
   let turn = 0
   let queued = false
+  let disposed = false
+  let publicationTurn: number | undefined
   let inputAt: number | undefined
   let inputPending = false
   let menuAt: number | undefined
@@ -305,6 +308,16 @@ export function installChatUiObserver(
       isVisible(users[users.length - 1])
     )
       recordOnce("inputToOptimisticFrameMs", sentAt)
+    // A disclosure means actual inspectable activity exists; bare "Thinking" is feedback only.
+    const activity = row?.querySelector(
+      'button[aria-label^="Open activity:"], button[aria-label^="Close activity:"]'
+    )
+    if (!once.has("inputToFirstActivityFrameMs") && isVisible(activity))
+      recordOnce("inputToFirstActivityFrameMs", sentAt)
+    scanContent(row)
+  }
+  const scanContent = (row: Element | undefined) => {
+    if (sentAt === undefined) return
     const markdown = row?.querySelector(
       '[data-message-author-role="assistant"] .markdown'
     )
@@ -315,12 +328,6 @@ export function installChatUiObserver(
       markdown.textContent?.trim()
     )
       recordOnce("inputToFirstTextFrameMs", sentAt)
-    // A disclosure means actual inspectable activity exists; bare "Thinking" is feedback only.
-    const activity = row?.querySelector(
-      'button[aria-label^="Open activity:"], button[aria-label^="Close activity:"]'
-    )
-    if (!once.has("inputToFirstActivityFrameMs") && isVisible(activity))
-      recordOnce("inputToFirstActivityFrameMs", sentAt)
     const source = row?.querySelector<HTMLElement>("[data-perf-text-length]")
     const renderedLength = Number(source?.dataset.perfTextLength ?? 0)
     if (samples.length > 0 && markdownVisible) {
@@ -370,6 +377,7 @@ export function installChatUiObserver(
     frameTasks.forEach(clearTimeout)
     frameTasks.clear()
     queued = false
+    publicationTurn = undefined
     samples = []
     textLength = 0
     sampledAt = -Infinity
@@ -678,6 +686,24 @@ export function installChatUiObserver(
     setPhase(next) {
       phase = next
     },
+    publicationFrame() {
+      if (disposed || hidden || navigation || sentAt === undefined || terminalAt !== undefined ||
+        (samples.length === 0 && once.has("inputToFirstTextFrameMs")) ||
+        publicationTurn === turn) return
+      const observedTurn = turn
+      publicationTurn = observedTurn
+      // The publisher called us inside rAF. Its microtask checkpoint remains
+      // before rendering; deferred React commits keep the ordinary rAF fallback.
+      queueMicrotask(() => {
+        if (publicationTurn !== observedTurn) return
+        publicationTurn = undefined
+        if (disposed || hidden || navigation || document.visibilityState !== "visible" ||
+          turn !== observedTurn || sentAt === undefined || terminalAt !== undefined) return
+        const users = document.querySelectorAll(userSelector)
+        if (users.length === 0 || users[users.length - 1] === previousUser) return
+        scanContent(lastTurn())
+      })
+    },
     bindStream() {
       const expectedTurn = turn
       const receive = observedWindow.__chatUiPerf!.receive
@@ -702,6 +728,8 @@ export function installChatUiObserver(
       schedule()
     },
     dispose() {
+      disposed = true
+      publicationTurn = undefined
       cancelMenu()
       clearPendingWheel()
       clearPreparedWheel()

@@ -71,9 +71,8 @@ if (
             unit: "millisecond",
             attributes: {
               measurement: "dom-frame-v3",
-              ...(metric.startsWith("menuToFrame")
-                ? { menuProtocol: "activation-v1" }
-                : {}),
+              contentFrameProtocol: "publisher-frame-v1",
+              menuProtocol: "activation-v1",
             },
           })
         },

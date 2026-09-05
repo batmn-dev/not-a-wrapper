@@ -44,6 +44,7 @@ function result(): ComparableResult {
         cache: "warm",
         auth: true,
         followup: false,
+        contentFrameProtocol: "publisher-frame-v1",
         action: "complete",
         sampleCount: 5,
         warmupRuns: 1,
@@ -269,6 +270,13 @@ describe("performance evidence contract", () => {
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
     before.scenarios[0].menuProtocol = "activation-v1"
     expect(compareResults(before, current)).toEqual([])
+  })
+
+  it("rejects streamed content captured without the publication-frame protocol", () => {
+    const before = result()
+    delete before.scenarios[0].contentFrameProtocol
+    expect(validateCoverage(before).join(" ")).toContain("content-frame protocol")
+    expect(compareResults(before, result()).join(" ")).toContain("scenario missing")
   })
 
   it("rejects failures and malformed numbers rather than dropping them", () => {

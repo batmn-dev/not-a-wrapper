@@ -140,6 +140,13 @@ menus that open on mousedown before click, as well as desktop click-open menus.
 Closing or cancelling clears the intent; a later opening cannot reuse it.
 Earlier click-anchored interactive captures are not comparable.
 
+Streamed-content captures require `contentFrameProtocol: publisher-frame-v1`.
+When the SDK publishes inside an animation frame, the observer can inspect the
+committed source watermark in that same rendering opportunity. Deferred commits
+retain the normal observation fallback. Both paths timestamp a later task; neither
+claims pixel presentation. Old streamed-content captures are incompatible. The
+thread-switch-only suite has no streaming scenarios and is unaffected.
+
 Normal-profile budgets allow at most 5% over 100 ms for Send/Stop/menu feedback,
 and 50 ms for typing and received-content frames. Relative gates cover load,
 first output, server preparation, settlement, and navigation. These are targets,

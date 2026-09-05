@@ -30,6 +30,7 @@ const scenario = z
     followup: z.boolean(),
     wheelProtocol: z.literal("prepared-wheel-v1").optional(),
     menuProtocol: z.literal("activation-v1").optional(),
+    contentFrameProtocol: z.literal("publisher-frame-v1").optional(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
     warmupRuns: z.number().int().nonnegative(),
@@ -166,6 +167,7 @@ export function scenarioKey(
     | "followup"
     | "wheelProtocol"
     | "menuProtocol"
+    | "contentFrameProtocol"
   >
 ): string {
   return [
@@ -180,6 +182,7 @@ export function scenarioKey(
     value.followup,
     value.wheelProtocol,
     value.menuProtocol,
+    value.contentFrameProtocol,
   ].join("/")
 }
 
@@ -246,6 +249,8 @@ function observedNumbers(values: Array<number | undefined>): number[] {
 
 export function validateCoverage(result: ComparableResult): string[] {
   const errors: string[] = []
+  if (result.scenarios.some((scenario) => scenario.contentFrameProtocol !== "publisher-frame-v1"))
+    errors.push("missing content-frame protocol: publisher-frame-v1")
   const keys = result.scenarios.map(scenarioKey)
   if (new Set(keys).size !== keys.length)
     errors.push("duplicate scenario identity")
@@ -261,6 +266,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           followup: config.followup ?? false,
           wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
           menuProtocol: config.interact ? "activation-v1" : undefined,
+          contentFrameProtocol: "publisher-frame-v1",
         })
       )
     )

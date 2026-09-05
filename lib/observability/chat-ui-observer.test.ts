@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { Chat } from "@ai-sdk/react"
+import { subscribeToFrameAlignedMessages } from "@/lib/chat-performance/message-throttle"
 import { alignThreadScrollTarget } from "@/app/components/chat/thread-scroll-target"
 import { noteChatProgrammaticScroll } from "./chat-ui-events"
 import { installChatUiObserver, type ChatUiWindow } from "./chat-ui-observer"
@@ -84,6 +86,127 @@ afterEach(() => {
 })
 
 describe("DOM/frame observations", () => {
+  it("observes a publisher after an earlier observer callback in the same rendering opportunity", async () => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const chat = new Chat({ id: "publication" })
+    vi.spyOn(chat, "status", "get").mockReturnValue("streaming")
+    const unsubscribe = subscribeToFrameAlignedMessages(chat, () => answer(3))
+    observer.receive("text-delta", 3)
+    chat.messages = [{ id: "answer", role: "assistant", parts: [] }]
+    await Promise.resolve()
+    const batch = frames
+    frames = []
+    expect(batch).toHaveLength(2)
+    now = 16
+    batch[0](now) // observer sees the old DOM
+    expect(observer.pendingDeltas()).toBe(1)
+    batch[1](now) // publisher commits later in this same rendering update
+    await Promise.resolve()
+    expect(observer.pendingDeltas()).toBe(0)
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+    now = 25 // rendering work is included before the task endpoint
+    vi.advanceTimersByTime(0)
+    expect(observer.values.deltaToContentFrameMs).toEqual([25])
+    expect(observer.values.inputToFirstTextFrameMs).toEqual([25])
+    await paint()
+    expect(observer.values.deltaToContentFrameMs).toEqual([25])
+    unsubscribe()
+  })
+
+  it("keeps a deferred publisher commit on the ordinary frame fallback", async () => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const row = answer(0)
+    row.querySelector(".markdown")!.textContent = ""
+    observer.receive("text-delta", 3)
+    requestAnimationFrame(() => observer.publicationFrame())
+    await paint()
+    await Promise.resolve()
+    expect(observer.pendingDeltas()).toBe(1)
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+    // A later task commits, after the publisher's rendering opportunity.
+    row.querySelector<HTMLElement>("[data-perf-text-length]")!.dataset.perfTextLength = "3"
+    row.querySelector(".markdown")!.textContent = "abc"
+    await paint()
+    expect(observer.values.deltaToContentFrameMs).toEqual([32])
+  })
+
+  it("does not rescan publications without pending content measurements", async () => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    observer.receive("text-delta", 3)
+    answer(3)
+    await paint()
+    const geometry = vi.mocked(HTMLElement.prototype.getBoundingClientRect)
+    geometry.mockClear()
+    observer.publicationFrame()
+    await Promise.resolve()
+    expect(geometry).not.toHaveBeenCalled()
+  })
+
+  it("defers a publisher microtask when sidebar navigation replaces the active row", async () => {
+    const path = location.pathname
+    document.body.insertAdjacentHTML("beforeend", '<a data-sidebar-item="true" href="/c/publication-other">Other</a>')
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const current = answer(0)
+    current.querySelector(".markdown")!.textContent = ""
+    observer.receive("text-delta", 3)
+    observer.publicationFrame()
+    document.querySelector("a")!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    history.replaceState(null, "", "/c/publication-other")
+    current.remove()
+    answer(30)
+    await Promise.resolve()
+    vi.advanceTimersByTime(0)
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+    expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
+    await paint() // ordinary scan commits the navigation and clears the old send
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+    expect(observer.pendingDeltas()).toBe(0)
+    history.replaceState(null, "", path)
+  })
+
+  it.each(["reset", "dispose", "hidden", "terminal"])("does not credit a publication invalidated by %s before its microtask", async (reason) => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    observer.receive("text-delta", 3)
+    answer(3)
+    observer.publicationFrame()
+    if (reason === "reset") observer.reset()
+    if (reason === "dispose") observer.dispose()
+    if (reason === "hidden") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden")
+      document.dispatchEvent(new Event("visibilitychange"))
+    }
+    if (reason === "terminal") observer.receive("finish")
+    await Promise.resolve()
+    vi.advanceTimersByTime(0)
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+  })
+
+  it("does not notify the publication seam for synchronous or timeout publications", () => {
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const publication = vi.spyOn(observer, "publicationFrame")
+    const chat = new Chat({ id: "non-frame" })
+    const unsubscribe = subscribeToFrameAlignedMessages(chat, vi.fn())
+    chat.messages = [] // ready writes publish synchronously
+    expect(publication).not.toHaveBeenCalled()
+    vi.spyOn(chat, "status", "get").mockReturnValue("streaming")
+    vi.stubGlobal("requestAnimationFrame", undefined)
+    chat.messages = []
+    vi.advanceTimersByTime(0)
+    expect(publication).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
   it("uses prepared geometry when native scrolling precedes passive wheel delivery", async () => {
     const root = scrollRoot()
     installChatUiObserver({ requireWheelPreparation: true })
