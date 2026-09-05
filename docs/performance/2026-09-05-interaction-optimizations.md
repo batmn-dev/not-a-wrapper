@@ -370,6 +370,6 @@ element. Focus events transfer the marker; pointer input, blur, and teardown
 remove it. The CSS still requires native `:focus-visible` and retains its
 specificity through a static `html` ancestor. This removes the traced document-wide
 attribute invalidation without replacing the app’s keyboard/pointer focus policy.
-Eight focused tests, typecheck, lint, compiled-selector verification, and an
+Four focus-controller tests, typecheck, lint, compiled-selector verification, and an
 independent event-order/cleanup review pass. Fresh hosted latency evidence remains
 required; these checks establish behavior and selector scope, not a speedup.
