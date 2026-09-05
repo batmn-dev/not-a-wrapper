@@ -150,26 +150,29 @@ describe("DOM/frame observations", () => {
 
   it("defers a publisher microtask when sidebar navigation replaces the active row", async () => {
     const path = location.pathname
-    document.body.insertAdjacentHTML("beforeend", '<a data-sidebar-item="true" href="/c/publication-other">Other</a>')
-    installChatUiObserver()
-    send()
-    const observer = (window as ChatUiWindow).__chatUiPerf!
-    const current = answer(0)
-    current.querySelector(".markdown")!.textContent = ""
-    observer.receive("text-delta", 3)
-    observer.publicationFrame()
-    document.querySelector("a")!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    history.replaceState(null, "", "/c/publication-other")
-    current.remove()
-    answer(30)
-    await Promise.resolve()
-    vi.advanceTimersByTime(0)
-    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
-    expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
-    await paint() // ordinary scan commits the navigation and clears the old send
-    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
-    expect(observer.pendingDeltas()).toBe(0)
-    history.replaceState(null, "", path)
+    try {
+      document.body.insertAdjacentHTML("beforeend", '<a data-sidebar-item="true" href="/c/publication-other">Other</a>')
+      installChatUiObserver()
+      send()
+      const observer = (window as ChatUiWindow).__chatUiPerf!
+      const current = answer(0)
+      current.querySelector(".markdown")!.textContent = ""
+      observer.receive("text-delta", 3)
+      observer.publicationFrame()
+      document.querySelector("a")!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      history.replaceState(null, "", "/c/publication-other")
+      current.remove()
+      answer(30)
+      await Promise.resolve()
+      vi.advanceTimersByTime(0)
+      expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+      expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
+      await paint() // ordinary scan commits the navigation and clears the old send
+      expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+      expect(observer.pendingDeltas()).toBe(0)
+    } finally {
+      history.replaceState(null, "", path)
+    }
   })
 
   it.each(["reset", "dispose", "hidden", "terminal"])("does not credit a publication invalidated by %s before its microtask", async (reason) => {

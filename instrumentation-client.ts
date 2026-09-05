@@ -71,8 +71,12 @@ if (
             unit: "millisecond",
             attributes: {
               measurement: "dom-frame-v3",
-              contentFrameProtocol: "publisher-frame-v1",
-              menuProtocol: "activation-v1",
+              ...(metric.startsWith("deltaToContentFrame") || metric === "inputToFirstTextFrameMs"
+                ? { contentFrameProtocol: "publisher-frame-v1" }
+                : {}),
+              ...(metric.startsWith("menuToFrame")
+                ? { menuProtocol: "activation-v1" }
+                : {}),
             },
           })
         },

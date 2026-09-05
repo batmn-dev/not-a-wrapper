@@ -1,7 +1,14 @@
 import { pacingOverheadMs } from "@/convex/lib/runTimingReceipt"
 import { z } from "zod"
 import { summarize, type MetricSummary } from "./result-schema"
-import { directiveFor, RESPONSIVENESS_SUITE } from "./scenarios"
+import {
+  directiveFor,
+  DURABLE_SUITE,
+  RESPONSIVENESS_SUITE,
+  SMOKE_SUITE,
+  STANDARD_SUITE,
+  type BrowserScenarioConfig,
+} from "./scenarios"
 
 const duration = z.number().finite().nonnegative()
 const summary = z
@@ -243,6 +250,14 @@ const THREAD_SUMMARY_FIELDS = {
   querySetAddsPerSwitch: "querySetAdds",
 } as const
 
+const EXPECTED_SUITES = new Map<string, readonly BrowserScenarioConfig[]>([
+  ["standard", STANDARD_SUITE],
+  ["smoke", SMOKE_SUITE],
+  ["durable", DURABLE_SUITE],
+  ["responsiveness", RESPONSIVENESS_SUITE],
+  ["thread-switch", []],
+])
+
 function observedNumbers(values: Array<number | undefined>): number[] {
   return values.filter((value): value is number => value !== undefined)
 }
@@ -254,9 +269,11 @@ export function validateCoverage(result: ComparableResult): string[] {
   const keys = result.scenarios.map(scenarioKey)
   if (new Set(keys).size !== keys.length)
     errors.push("duplicate scenario identity")
-  if (result.suite === "responsiveness") {
+  const expectedSuite = EXPECTED_SUITES.get(result.suite)
+  if (!expectedSuite) errors.push(`unknown benchmark suite: ${result.suite}`)
+  else {
     const expected = new Set(
-      RESPONSIVENESS_SUITE.map((config) =>
+      expectedSuite.map((config) =>
         scenarioKey({
           ...config,
           directive: directiveFor(config),
@@ -276,7 +293,7 @@ export function validateCoverage(result: ComparableResult): string[] {
       [...expected].some((id) => !actual.has(id))
     )
       errors.push(
-        "responsiveness suite is incomplete or has unexpected scenarios"
+        `${result.suite} suite is incomplete or has unexpected scenarios`
       )
   }
   if (result.threadSwitch) {

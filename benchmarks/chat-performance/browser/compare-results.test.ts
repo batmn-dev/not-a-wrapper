@@ -11,13 +11,16 @@ import {
   type ComparableResult,
 } from "./result-contract"
 import { summarize } from "./result-schema"
+import { directiveFor, DURABLE_SUITE, RESPONSIVENESS_SUITE, SMOKE_SUITE, STANDARD_SUITE } from "./scenarios"
 
-function result(): ComparableResult {
-  const ui = {
-    inputToOptimisticFrameMs: [40],
-    inputToFirstTextFrameMs: [200],
-    terminalToReadyFrameMs: [20],
-  }
+const SUITES = {
+  smoke: SMOKE_SUITE,
+  standard: STANDARD_SUITE,
+  durable: DURABLE_SUITE,
+  responsiveness: RESPONSIVENESS_SUITE,
+}
+
+function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
   return {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v3",
@@ -32,38 +35,52 @@ function result(): ComparableResult {
     memoryGb: 8,
     browserVersion: "151.0",
     fixtureHash: "fixture",
-    suite: "smoke",
-    scenarios: [
-      {
-        id: "text-fixed",
-        scenario: "text-only",
-        directive: "[[perf:text-only:30:fixed]]",
-        viewport: "desktop",
-        cpuThrottle: 1,
-        network: "unthrottled",
-        cache: "warm",
-        auth: true,
-        followup: false,
+    suite,
+    scenarios: SUITES[suite].map((config) => {
+      const ui: Record<string, number[]> = {
+        inputToOptimisticFrameMs: [40],
+        inputToFirstTextFrameMs: [200],
+      }
+      if (config.action === "complete") ui.terminalToReadyFrameMs = [20]
+      if (config.action === "stop") ui.stopToReadyFrameMs = [40]
+      if (config.scenario === "mixed-markdown") ui.inputToFirstActivityFrameMs = [80]
+      if (suite === "responsiveness") {
+        ui.navigationToComposerInputMs = [100]
+        ui.navigationToSendReadyMs = [100]
+      }
+      if (config.interact) {
+        for (const metric of ["typingToFrame", "menuToFrame", "scrollToFrame", "deltaToContentFrame"])
+          for (const phase of ["", "Early", "Late"])
+            ui[`${metric}${phase}Ms`] = [20]
+      }
+      return {
+        ...config,
+        directive: directiveFor(config),
+        network: config.network ?? "unthrottled",
+        cache: config.cache ?? "warm",
+        auth: config.auth ?? false,
+        followup: config.followup ?? false,
         contentFrameProtocol: "publisher-frame-v1",
-        action: "complete",
+        wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
+        menuProtocol: config.interact ? "activation-v1" : undefined,
         sampleCount: 5,
         warmupRuns: 1,
         correctnessOk: true,
         metrics: Object.fromEntries(
-          Object.entries(ui).map(([key, values]) => [
-            key,
-            summarize(Array(5).fill(values[0])),
-          ])
+          Object.entries({ ...ui, ...(config.action === "reload" ? { reloadToAuthoritativeMs: [40] } : {}) })
+            .map(([key, values]) => [key, summarize(Array(5).fill(values[0]))])
         ),
         runs: Array.from({ length: 5 }, () => ({
-          correctness: { ok: true },
+          correctness: { ok: true, ...(config.action === "stop" ? { settlementOutcome: "aborted" } : {}) },
           hiddenDuringMeasurement: false,
           pendingDeltaSamples: 0,
           droppedUiSamples: 0,
+          ...(config.action === "stop" ? { stopSourceLengths: { atReady: 100, after250Ms: 80, afterSettlement: 60 } } : {}),
+          ...(config.action === "reload" ? { reloadToAuthoritativeMs: 40 } : {}),
           ui: structuredClone(ui),
         })),
-      },
-    ],
+      }
+    }),
   }
 }
 
@@ -175,6 +192,24 @@ describe("performance evidence contract", () => {
     expect(compareResults(result(), result())).toEqual([])
   })
 
+  it.each(["smoke", "standard", "durable", "responsiveness"] as const)("requires the exact complete %s suite", (suite) => {
+    const complete = resultContract.parse(result(suite))
+    expect(validateCoverage(complete)).toEqual([])
+    const partial = structuredClone(complete)
+    partial.scenarios.pop()
+    expect(validateCoverage(partial)).toContain(`${suite} suite is incomplete or has unexpected scenarios`)
+    const mislabeled = structuredClone(complete)
+    mislabeled.scenarios[0].auth = !mislabeled.scenarios[0].auth
+    expect(validateCoverage(mislabeled)).toContain(`${suite} suite is incomplete or has unexpected scenarios`)
+  })
+
+  it("rejects unknown suite names and scenarios attached to thread-switch", () => {
+    expect(validateCoverage({ ...result(), suite: "custom" })).toContain("unknown benchmark suite: custom")
+    const mixed = threadResult()
+    mixed.scenarios = result().scenarios
+    expect(validateCoverage(mixed)).toContain("thread-switch suite is incomplete or has unexpected scenarios")
+  })
+
   it.each([undefined, "production-sampled"])("rejects an unverified replay policy (%s)", (replayPolicy) => {
     expect(resultContract.safeParse({ ...result(), replayPolicy }).success).toBe(false)
   })
@@ -194,28 +229,24 @@ describe("performance evidence contract", () => {
     scalar.scenarios[0].runs[0].totalBlockingTimeMs = 10
     scalar.scenarios[0].metrics.totalBlockingTimeMs = summarize([10])
     expect(validateCoverage(scalar)).toEqual([
-      "text-fixed: totalBlockingTimeMs missing from an individual run",
+      "text-only-30-fixed: totalBlockingTimeMs missing from an individual run",
     ])
     const ui = result()
     ui.scenarios[0].runs[0].ui!.menuToFrameMs = [30]
     ui.scenarios[0].metrics.menuToFrameMs = summarize([30])
     expect(validateCoverage(ui)).toEqual([
-      "text-fixed: menuToFrameMs missing from an individual run",
+      "text-only-30-fixed: menuToFrameMs missing from an individual run",
     ])
   })
 
   it("distinguishes delivery shapes and never overwrites a baseline", () => {
-    const base = result()
-    const slab = structuredClone(base.scenarios[0])
-    slab.id = "text-slab"
-    slab.directive = "[[perf:text-only:30:slab]]"
-    slab.metrics.inputToFirstTextFrameMs = summarize(Array(5).fill(4000))
-    base.scenarios.push(slab)
+    const base = result("standard")
+    const slab = base.scenarios.find((scenario) => scenario.id === "mixed-markdown-30-slab")!
     const current = structuredClone(base)
-    current.scenarios[0].metrics.inputToFirstTextFrameMs = summarize(
+    current.scenarios[1].metrics.inputToFirstTextFrameMs = summarize(
       Array(5).fill(800)
     )
-    expect(scenarioKey(base.scenarios[0])).not.toBe(scenarioKey(slab))
+    expect(scenarioKey(base.scenarios[1])).not.toBe(scenarioKey(slab))
     expect(compareResults(base, current).join(" ")).toContain("200 → 800")
     current.scenarios.push(structuredClone(current.scenarios[0]))
     expect(validateCoverage(current)).toContain("duplicate scenario identity")
@@ -255,20 +286,20 @@ describe("performance evidence contract", () => {
   })
 
   it("rejects wheel captures without matching pre-input preparation", () => {
-    const before = result()
-    const current = result()
-    current.scenarios[0].wheelProtocol = "prepared-wheel-v1"
+    const before = result("responsiveness")
+    const current = result("responsiveness")
+    delete before.scenarios[3].wheelProtocol
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
-    before.scenarios[0].wheelProtocol = "prepared-wheel-v1"
+    before.scenarios[3].wheelProtocol = "prepared-wheel-v1"
     expect(compareResults(before, current)).toEqual([])
   })
 
   it("rejects menu captures using the old post-mousedown click anchor", () => {
-    const before = result()
-    const current = result()
-    current.scenarios[0].menuProtocol = "activation-v1"
+    const before = result("responsiveness")
+    const current = result("responsiveness")
+    delete before.scenarios[3].menuProtocol
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
-    before.scenarios[0].menuProtocol = "activation-v1"
+    before.scenarios[3].menuProtocol = "activation-v1"
     expect(compareResults(before, current)).toEqual([])
   })
 
@@ -420,29 +451,20 @@ describe("performance evidence contract", () => {
   })
 
   it("requires Stop feedback without inventing a received terminal event", () => {
-    const current = result()
-    current.scenarios[0].action = "stop"
-    delete current.scenarios[0].metrics.terminalToReadyFrameMs
-    current.scenarios[0].metrics.stopToReadyFrameMs = summarize(
-      Array(5).fill(40)
-    )
-    current.scenarios[0].runs.forEach((run) => {
-      delete run.ui!.terminalToReadyFrameMs
-      run.ui!.stopToReadyFrameMs = [40]
-      run.stopSourceLengths = { atReady: 100, after250Ms: 80, afterSettlement: 60 }
-      run.correctness.settlementOutcome = "aborted"
-    })
+    const current = result("durable")
+    const stopped = current.scenarios.find((scenario) => scenario.action === "stop")!
+    expect(stopped.metrics.terminalToReadyFrameMs).toBeUndefined()
     expect(validateCoverage(current)).toEqual([])
     for (const outcome of [undefined, "completed", "failed"]) {
-      current.scenarios[0].runs[0].correctness.settlementOutcome = outcome
+      stopped.runs[0].correctness.settlementOutcome = outcome
       expect(validateCoverage(current).join(" ")).toContain(
         "authenticated Stop did not settle as aborted"
       )
     }
-    current.scenarios[0].runs[0].correctness.settlementOutcome = "aborted"
-    current.scenarios[0].runs[0].stopSourceLengths!.afterSettlement = 90
+    stopped.runs[0].correctness.settlementOutcome = "aborted"
+    stopped.runs[0].stopSourceLengths!.afterSettlement = 90
     expect(validateCoverage(current).join(" ")).toContain("text grew after Stop")
-    delete current.scenarios[0].runs[0].stopSourceLengths
+    delete stopped.runs[0].stopSourceLengths
     expect(validateCoverage(current).join(" ")).toContain("Stop stability observations are missing")
   })
 })

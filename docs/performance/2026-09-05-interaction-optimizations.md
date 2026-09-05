@@ -213,6 +213,20 @@ switches. Median navigation is 45–48 ms; p95 is 601–829 ms, with the long
 Markdown fixture accounting for every sample above 150 ms. Those samples are
 retained. An independent normal comparison remains required. Runner-matched
 responsiveness, standard, and durable baselines remain pending.
+For the short-chat fixture cohort in that capture:
+
+| Pass | Samples | Median | p95 | Maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Unvisited click | 17 | 47.2 ms | omitted | 95.4 ms |
+| Unvisited hover | 18 | 47.1 ms | omitted | 74.8 ms |
+| Visited | 43 | 42.8 ms | 63.8 ms | 72.0 ms |
+
+The cohort is selected by fixture identity and deterministic traversal order,
+not by removing slow observations. Below 20 samples, p95 is omitted. These
+synthetic cohorts do not establish a real-user population percentile. Rendering
+a long destination is part of navigation responsiveness, so the combined gate
+continues to include those slower switches.
+
 Production DOM/frame reporting remains opt-in with
 `NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE` defaulting to `0`. Unit tests and this observer
 comparison do not certify release responsiveness.
