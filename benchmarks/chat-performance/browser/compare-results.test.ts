@@ -66,6 +66,7 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
         contentFrameProtocol: "publisher-frame-v1",
         wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
         menuProtocol: config.interact ? "activation-v1" : undefined,
+        interactionProtocol: config.interact ? "late-typing-wheel-menu-v1" : undefined,
         sampleCount: 5,
         warmupRuns: 1,
         correctnessOk: true,
@@ -399,6 +400,16 @@ describe("performance evidence contract", () => {
     delete before.scenarios[3].menuProtocol
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
     before.scenarios[3].menuProtocol = "activation-v1"
+    expect(compareResults(before, current)).toEqual([])
+  })
+
+  it("does not compare late probes with a different interaction order", () => {
+    const before = result("responsiveness")
+    const current = result("responsiveness")
+    delete before.scenarios[3].interactionProtocol
+    expect(assessComparison(before, current).regressions).toBeNull()
+    expect(validateCoverage(before).join(" ")).toContain("unexpected scenarios")
+    before.scenarios[3].interactionProtocol = "late-typing-wheel-menu-v1"
     expect(compareResults(before, current)).toEqual([])
   })
 

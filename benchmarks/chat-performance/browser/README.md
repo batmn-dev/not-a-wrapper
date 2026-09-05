@@ -222,3 +222,9 @@ their existing measurement modules and hook files remain byte-identical to that
 reference. After checking and applying the hook patch, the runner copies the
 head's measurement modules into the baseline before capture. Unrelated base-branch
 commits do not require a new baseline; changed hook layouts still require review.
+
+Late interactions retain the 80% content checkpoint and run typing, native wheel,
+then menu opening. The active-stream check follows the measured menu frame;
+unmeasured menu dismissal happens afterward. Captures record
+`interactionProtocol: late-typing-wheel-menu-v1` so comparisons reject the older
+order, which spent the remaining stream window closing the menu before scrolling.

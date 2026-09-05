@@ -37,6 +37,7 @@ const scenario = z
     followup: z.boolean(),
     wheelProtocol: z.literal("prepared-wheel-v1").optional(),
     menuProtocol: z.literal("activation-v1").optional(),
+    interactionProtocol: z.literal("late-typing-wheel-menu-v1").optional(),
     contentFrameProtocol: z.literal("publisher-frame-v1").optional(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
@@ -175,6 +176,7 @@ export function scenarioKey(
     | "followup"
     | "wheelProtocol"
     | "menuProtocol"
+    | "interactionProtocol"
     | "contentFrameProtocol"
   >
 ): string {
@@ -190,6 +192,7 @@ export function scenarioKey(
     value.followup,
     value.wheelProtocol,
     value.menuProtocol,
+    value.interactionProtocol,
     value.contentFrameProtocol,
   ].join("/")
 }
@@ -288,6 +291,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           followup: config.followup ?? false,
           wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
           menuProtocol: config.interact ? "activation-v1" : undefined,
+          interactionProtocol: config.interact ? "late-typing-wheel-menu-v1" : undefined,
           contentFrameProtocol: "publisher-frame-v1",
         })
       )

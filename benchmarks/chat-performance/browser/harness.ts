@@ -165,7 +165,10 @@ function spawnPerfServer(baseUrl: string): void {
             serverRouteErrors.push({
               requestId: parsed.requestId,
               errorName: parsed.errorName,
-              category: classifyChatError({ message: parsed.errorMessage }),
+              category: classifyChatError({
+                name: parsed.errorName,
+                message: parsed.errorMessage,
+              }),
             })
           }
         } catch {
@@ -618,6 +621,39 @@ async function runScenarioOnce(
         await page.keyboard.type("A draft.", {
           delay: BENCHMARK_TYPING_DELAY_MS,
         })
+        const scroll = page.locator("[data-scroll-root]")
+        if (phase === "late") {
+          interactionProbeStage = "late scroll target"
+          wheelPoint = await scroll.evaluate(findDirectTranscriptWheelPoint)
+          // Move the pointer without Playwright scrolling the root into view.
+          await page.mouse.move(wheelPoint.x, wheelPoint.y)
+          const direction = await scroll.evaluate((root) => {
+            if (document.querySelector('[data-testid="send-button"]')
+              ?.getAttribute("aria-label") !== "Stop")
+              throw new Error("late scroll missed the active stream")
+            const observer = (window as ChatUiWindow).__chatUiPerf
+            if (!observer || !(root instanceof HTMLElement))
+              throw new Error("Wheel observer unavailable")
+            const deltaY = root.scrollTop > 0 ? -400 : 400
+            observer.prepareWheel(root, deltaY)
+            return deltaY
+          })
+          interactionProbeStage = "late scroll frame"
+          await page.mouse.wheel(0, direction)
+          await page.waitForFunction(() => {
+            const observer = (window as ChatUiWindow).__chatUiPerf
+            if ((observer?.values.scrollToFrameLateMs?.length ?? 0) > 0)
+              return true
+            if (observer?.droppedSamples())
+              throw new Error("UI capture invalid before scroll frame")
+            if (
+              document.querySelector('[data-testid="send-button"]')
+                ?.getAttribute("aria-label") !== "Stop"
+            )
+              throw new Error("Stream ended before scroll frame")
+            return false
+          })
+        }
         interactionProbeStage = `${phase} menu open`
         await requireStreaming(phase, "menu")
         if (PROFILE_LATE_MENU && phase === "late") {
@@ -630,9 +666,6 @@ async function runScenarioOnce(
           tracing = true
         }
         await page.getByTestId("composer-plus-btn").click()
-        await page
-          .locator("[data-chat-composer-menu]")
-          .waitFor({ state: "visible" })
         interactionProbeStage = `${phase} menu frame`
         await page.waitForFunction(
           (value) => {
@@ -641,7 +674,13 @@ async function runScenarioOnce(
               (observer?.values[
                 value === "early" ? "menuToFrameEarlyMs" : "menuToFrameLateMs"
               ]?.length ?? 0) > 0
-            ) return true
+            ) {
+              if (value === "late" &&
+                document.querySelector('[data-testid="send-button"]')
+                  ?.getAttribute("aria-label") !== "Stop")
+                throw new Error("Stream ended before late interaction completion")
+              return true
+            }
             if (observer?.droppedSamples())
               throw new Error("UI capture invalid before menu frame")
             if (
@@ -661,40 +700,10 @@ async function runScenarioOnce(
         await page.keyboard.press("Escape")
         await page.locator("[data-chat-composer-menu]")
           .waitFor({ state: "hidden" })
-        const scroll = page.locator("[data-scroll-root]")
-        if (phase === "late") {
-          interactionProbeStage = "late scroll target"
-          wheelPoint = await scroll.evaluate(findDirectTranscriptWheelPoint)
-          // Move the pointer without Playwright scrolling the root into view.
-          await page.mouse.move(wheelPoint.x, wheelPoint.y)
-          await requireStreaming(phase, "scroll")
-          const direction = await scroll.evaluate((node) =>
-            node.scrollTop > 0 ? -400 : 400
-          )
-          interactionProbeStage = "late scroll frame"
-          await scroll.evaluate((root, deltaY) => {
-            const observer = (window as ChatUiWindow).__chatUiPerf
-            if (!observer || !(root instanceof HTMLElement))
-              throw new Error("Wheel observer unavailable")
-            observer.prepareWheel(root, deltaY)
-          }, direction)
-          await page.mouse.wheel(0, direction)
-          await page.waitForFunction(() => {
-            const observer = (window as ChatUiWindow).__chatUiPerf
-            if ((observer?.values.scrollToFrameLateMs?.length ?? 0) > 0)
-              return true
-            if (observer?.droppedSamples())
-              throw new Error("UI capture invalid before scroll frame")
-            if (
-              document.querySelector('[data-testid="send-button"]')
-                ?.getAttribute("aria-label") !== "Stop"
-            )
-              throw new Error("Stream ended before scroll frame")
-            return false
-          })
+        if (phase === "early") {
+          interactionProbeStage = "early interaction completion"
+          await requireStreaming(phase, "interaction completion")
         }
-        interactionProbeStage = `${phase} interaction completion`
-        await requireStreaming(phase, "interaction completion")
       }
     }
     if (config.action === "stop") {
@@ -1507,6 +1516,7 @@ async function main() {
       warmupRuns: WARMUPS,
       wheelProtocol: config.interact ? "prepared-wheel-v1" : undefined,
       menuProtocol: config.interact ? "activation-v1" : undefined,
+      interactionProtocol: config.interact ? "late-typing-wheel-menu-v1" : undefined,
       contentFrameProtocol: "publisher-frame-v1",
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),
