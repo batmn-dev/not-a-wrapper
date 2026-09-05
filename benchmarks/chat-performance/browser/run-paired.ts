@@ -74,7 +74,11 @@ function main() {
   const baselineRoot = path.join(temporary, "base")
   command(root, "git", ["worktree", "add", "--detach", baselineRoot, base])
 
-  const legacy = base === LEGACY_MEASUREMENT_BASE
+  // Unrelated base-branch commits can advance the product without changing its hook layout.
+  const legacy = !existsSync(path.join(baselineRoot, "lib/observability/chat-ui-observer.ts")) &&
+    spawnSync("git", ["merge-base", "--is-ancestor", LEGACY_MEASUREMENT_BASE, base], { cwd: root }).status === 0 &&
+    spawnSync("git", ["diff", "--quiet", LEGACY_MEASUREMENT_BASE, base, "--",
+      ...MEASUREMENT_FILES, ...MEASUREMENT_HOOK_FILES], { cwd: root }).status === 0
   if (legacy) {
     command(baselineRoot, "git", ["apply", "--check", path.join(root, harnessDirectory, "measurement-overlay.patch")])
     command(baselineRoot, "git", ["apply", path.join(root, harnessDirectory, "measurement-overlay.patch")])
@@ -105,6 +109,7 @@ function main() {
     protocol: "same-runner-pair-v1", baseCommit: base, headCommit: head,
     measurementCommit: head, suite, order: ["base", "head"],
     legacyOverlay: legacy,
+    legacyHookLayoutCommit: legacy ? LEGACY_MEASUREMENT_BASE : null,
     overlaySha256: legacy ? digest(path.join(root, harnessDirectory, "measurement-overlay.patch")) : null,
     measurementHashes, timingHelperSha256: digest(path.join(root, "convex/lib/runTimingReceipt.ts")),
     dependencySha256: digest(path.join(root, "bun.lock")),

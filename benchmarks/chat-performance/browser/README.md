@@ -217,3 +217,7 @@ isolated CI machine; authenticated suites remain serialized. This avoids blockin
 an authenticated PR comparison behind an unrelated guest rendering capture.
 Guest usage admission still reaches the shared deployment under a fresh anonymous
 identity; these lanes isolate browser CPU, not backend capacity.
+The legacy overlay also accepts descendants of its original reference only when
+all copied measurement modules and patched hook files remain byte-identical to
+that reference. Unrelated base-branch commits do not require a fake new baseline;
+changed hook layouts still require review before comparison.
