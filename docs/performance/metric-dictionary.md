@@ -320,6 +320,9 @@ retains raw content-free samples so budget-exceedance rates can be recomputed.
 Summaries must match their raw observations. Completed foreground runs must drain
 all sampled received content; pending counts remain explicit for Stop, reload, and
 intentional second-tab cutoffs. Any observation-buffer overflow invalidates a run.
+Eligible wheel input must produce movement in its direction within two inspected
+rendering opportunities; otherwise the invalid sample count increases and the
+capture fails. Matching slow input keeps its full duration, without a time cutoff.
 Stop correctness checks assistant source length at idle feedback, 250 ms later,
 and after the terminal/settlement wait and settling buffer. Each checkpoint must
 be no longer than the preceding one; shorter canonical snapshots remain valid.

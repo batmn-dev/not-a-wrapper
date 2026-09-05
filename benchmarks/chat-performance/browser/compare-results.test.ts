@@ -357,8 +357,16 @@ describe("performance evidence contract", () => {
       delete run.ui!.terminalToReadyFrameMs
       run.ui!.stopToReadyFrameMs = [40]
       run.stopSourceLengths = { atReady: 100, after250Ms: 80, afterSettlement: 60 }
+      run.correctness.settlementOutcome = "aborted"
     })
     expect(validateCoverage(current)).toEqual([])
+    for (const outcome of [undefined, "completed", "failed"]) {
+      current.scenarios[0].runs[0].correctness.settlementOutcome = outcome
+      expect(validateCoverage(current).join(" ")).toContain(
+        "authenticated Stop did not settle as aborted"
+      )
+    }
+    current.scenarios[0].runs[0].correctness.settlementOutcome = "aborted"
     current.scenarios[0].runs[0].stopSourceLengths!.afterSettlement = 90
     expect(validateCoverage(current).join(" ")).toContain("text grew after Stop")
     delete current.scenarios[0].runs[0].stopSourceLengths

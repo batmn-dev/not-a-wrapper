@@ -36,7 +36,10 @@ const scenario = z
     runs: z.array(
       z
         .object({
-          correctness: z.object({ ok: z.literal(true) }),
+          correctness: z.object({
+            ok: z.literal(true),
+            settlementOutcome: z.string().nullable().optional(),
+          }),
           hiddenDuringMeasurement: z.literal(false),
           pendingDeltaSamples: z.number().int().nonnegative(),
           droppedUiSamples: z.literal(0),
@@ -309,6 +312,8 @@ export function validateCoverage(result: ComparableResult): string[] {
   for (const value of result.scenarios) {
     if (value.action === "stop") {
       for (const run of value.runs) {
+        if (value.auth && run.correctness.settlementOutcome !== "aborted")
+          errors.push(`${value.id}: authenticated Stop did not settle as aborted`)
         const lengths = run.stopSourceLengths
         if (!lengths)
           errors.push(`${value.id}: Stop stability observations are missing`)

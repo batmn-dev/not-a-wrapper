@@ -737,7 +737,10 @@ async function runScenarioOnce(
         correctnessOk = false
         detail = `settle mismatches: ${settleMismatchCount}`
       } else if (config.action === "stop") {
-        if (bodyAvailable && !oracle.text.startsWith(foldedText)) {
+        if (config.auth && settlementOutcome !== "aborted") {
+          correctnessOk = false
+          detail = `settlement outcome ${settlementOutcome} (expected aborted)`
+        } else if (bodyAvailable && !oracle.text.startsWith(foldedText)) {
           correctnessOk = false
           detail = "stopped stream text is not a prefix of the oracle"
         }
@@ -956,10 +959,11 @@ async function runScenarioOnce(
         foldedTextHash: hashValue(foldedText),
         expectedTextHash: hashValue(oracle.text),
         terminalOutcome,
+        settlementOutcome,
         settleMismatchCount,
         detail:
           uiObservation.droppedSamples > 0
-            ? "UI observation capacity exceeded; samples were lost"
+            ? "UI observation was lost or could not be matched; capture invalid"
             : config.action === "complete" && uiObservation.pendingDeltas > 0
               ? "received content never reached the visible rendering watermark"
               : uiObservation.hidden

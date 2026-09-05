@@ -409,6 +409,13 @@ async function runCase(
     await page.keyboard.type(traceCase.directive)
     if (observerRun) {
       await page.waitForFunction(() => Boolean((window as ChatUiWindow).__chatUiPerf))
+      // Drain setup's DOM scan and post-frame task in both arms. A second cycle
+      // includes scans queued by DOM commits later in the first rendering step.
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => setTimeout(() => {
+          requestAnimationFrame(() => setTimeout(resolve, 0))
+        }, 0))
+      }))
       if (!observerRun.enabled) {
         await page.evaluate(() => {
           // The application's delayed import must not reinstall the off arm.

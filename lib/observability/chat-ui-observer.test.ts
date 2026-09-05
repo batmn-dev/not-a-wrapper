@@ -300,6 +300,51 @@ describe("DOM/frame observations", () => {
     await paint()
     expect(observer.values.scrollToFrameMs).toEqual([34])
   })
+  it("invalidates an unmatched wheel after two frames without crediting a later scroll", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    await paint()
+    expect(observer.droppedSamples()).toBe(0)
+    expect(frames).toHaveLength(1)
+    await paint()
+    expect(observer.droppedSamples()).toBe(1)
+    expect(frames).toHaveLength(0)
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    expect(observer.droppedSamples()).toBe(1)
+  })
+  it("rejects movement opposite to the pending wheel direction", async () => {
+    const root = scrollRoot()
+    root.scrollTop = 500
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    await paint()
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    expect(observer.droppedSamples()).toBe(1)
+  })
+  it("keeps the full latency of a slow matching scroll in the second frame", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const event = new WheelEvent("wheel", { bubbles: true, deltaY: 100 })
+    Object.defineProperty(event, "timeStamp", { value: 0 })
+    root.dispatchEvent(event)
+    await paint()
+    now = 250
+    root.scrollTop = 100
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(observer.values.scrollToFrameMs).toEqual([266])
+    expect(observer.droppedSamples()).toBe(0)
+  })
   it("does not attribute chat scrolling to a wheel event outside the transcript", async () => {
     const root = scrollRoot()
     installChatUiObserver()

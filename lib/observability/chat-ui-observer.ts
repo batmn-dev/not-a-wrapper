@@ -81,6 +81,7 @@ export function installChatUiObserver(
         phase: typeof phase
         root: HTMLElement
         event: WheelEvent
+        remainingFrames: number
       }
     | undefined
   let navigation:
@@ -168,11 +169,19 @@ export function installChatUiObserver(
         document.querySelector("[data-scroll-root]") !== wheel.root
       ) {
         pendingWheel = undefined
-      } else if (wheel.root.scrollTop !== wheel.start) {
+      } else if (
+        (wheel.root.scrollTop - wheel.start) * Math.sign(wheel.event.deltaY) > 0
+      ) {
         pendingWheel = undefined
         recordFrame("scrollToFrameMs", wheel.at)
         if (wheel.phase)
           recordFrame(phaseMetric("scrollToFrame", wheel.phase), wheel.at)
+      } else if (--wheel.remainingFrames === 0) {
+        // An unmatched wheel invalidates the capture; it cannot claim later scrolling.
+        pendingWheel = undefined
+        dropped++
+      } else {
+        schedule()
       }
     }
     const editor = document.querySelector(editorSelector)
@@ -424,6 +433,7 @@ export function installChatUiObserver(
       phase,
       root,
       event,
+      remainingFrames: 2,
     }
     schedule()
   }

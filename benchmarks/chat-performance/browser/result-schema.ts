@@ -89,6 +89,7 @@ export type RunMetrics = {
     foldedTextHash: string
     expectedTextHash: string
     terminalOutcome: string | null
+    settlementOutcome?: string | null
     settleMismatchCount: number
     detail?: string
   }
