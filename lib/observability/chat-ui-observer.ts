@@ -128,19 +128,12 @@ export function installChatUiObserver(
     { at: number; previous: Element | undefined; pathname: string } | undefined
   const once = new Set<string>()
   const editorSelector = '[contenteditable="true"]'
+  const revealDeadlines = new WeakMap<Animation, number>()
   const sendSelector = '[data-testid="send-button"]'
   const userSelector = '[data-message-author-role="user"]'
   const lastTurn = () =>
     Array.from(document.querySelectorAll("section[data-turn-id]")).at(-1)
-  const isVisible = (
-    element: Element | null | undefined
-  ): element is HTMLElement => {
-    if (!(element instanceof HTMLElement)) return false
-    if (
-      element.checkVisibility &&
-      !element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
-    )
-      return false
+  const intersectsViewport = (element: HTMLElement) => {
     const rect = element.getBoundingClientRect()
     return (
       rect.width > 0 &&
@@ -148,6 +141,29 @@ export function installChatUiObserver(
       rect.bottom > 0 &&
       rect.top < innerHeight
     )
+  }
+  const isVisible = (
+    element: Element | null | undefined
+  ): element is HTMLElement =>
+    element instanceof HTMLElement &&
+    (!element.checkVisibility ||
+      element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) &&
+    intersectsViewport(element)
+  const hasPendingReveal = (element: HTMLElement) => {
+    if (hidden || document.visibilityState !== "visible" || !intersectsViewport(element)) return false
+    const now = performance.now()
+    return (element.getAnimations?.() ?? []).some((animation) => {
+      if (!animation.pending && animation.playState !== "running") return false
+      const end = animation.effect?.getComputedTiming().endTime
+      if (typeof end !== "number" || !Number.isFinite(end) || end <= 0) return false
+      let deadline = revealDeadlines.get(animation)
+      if (deadline === undefined) {
+        const elapsed = typeof animation.currentTime === "number" ? animation.currentTime : 0
+        deadline = now + Math.max(0, end - elapsed)
+        revealDeadlines.set(animation, deadline)
+      }
+      return now < deadline
+    })
   }
   const record = (
     metric: ChatUiMetric,
@@ -291,9 +307,10 @@ export function installChatUiObserver(
     const markdown = row?.querySelector(
       '[data-message-author-role="assistant"] .markdown'
     )
+    const markdownVisible = isVisible(markdown)
     if (
       !once.has("inputToFirstTextFrameMs") &&
-      isVisible(markdown) &&
+      markdownVisible &&
       markdown.textContent?.trim()
     )
       recordOnce("inputToFirstTextFrameMs", sentAt)
@@ -305,7 +322,7 @@ export function installChatUiObserver(
       recordOnce("inputToFirstActivityFrameMs", sentAt)
     const source = row?.querySelector<HTMLElement>("[data-perf-text-length]")
     const renderedLength = Number(source?.dataset.perfTextLength ?? 0)
-    if (samples.length > 0 && isVisible(markdown)) {
+    if (samples.length > 0 && markdownVisible) {
       const ready = samples.filter((sample) => sample.length <= renderedLength)
       samples = samples.filter((sample) => sample.length > renderedLength)
       for (const sample of ready) {
@@ -318,6 +335,14 @@ export function installChatUiObserver(
             sample.at
           )
       }
+    } else if (
+      markdown instanceof HTMLElement &&
+      samples.some((sample) => sample.length <= renderedLength) &&
+      hasPendingReveal(markdown)
+    ) {
+      // Opacity animations advance without DOM mutations. Inspect their first
+      // visible frame rather than waiting for the next streamed source update.
+      schedule()
     }
   }
   const schedule = () => {

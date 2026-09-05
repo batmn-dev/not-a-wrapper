@@ -3,6 +3,9 @@ import type {
   DeterministicPerfScenario,
 } from "@/app/api/chat/deterministic-provider"
 
+/** One explicit cadence for setup and measured typing; never a zero-delay burst. */
+export const BENCHMARK_TYPING_DELAY_MS = 40
+
 export type BrowserScenarioConfig = {
   id: string
   scenario: DeterministicPerfScenario

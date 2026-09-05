@@ -30,6 +30,10 @@ baseline is never a fallback. Scenario identity, coverage, and budgets remain
 checked after selection. Do not add placeholders for environments not yet captured.
 An explicit baseline JSON path remains supported for inspecting one capture.
 
+`dom-frame-v3` captures include finite reveal-animation observation and require
+`typingCadenceMs: 40` for setup and interaction typing. Earlier zero-delay setup
+captures and v2's mutation-only reveal observations cannot seed these baselines.
+
 Interactive scrolling scenarios require `wheelProtocol: "prepared-wheel-v1"`:
 the harness captures position before native input, then measures from the actual
 wheel event to observed movement. Scenario matching rejects older scroll captures

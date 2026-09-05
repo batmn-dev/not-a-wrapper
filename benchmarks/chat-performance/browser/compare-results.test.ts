@@ -20,7 +20,8 @@ function result(): ComparableResult {
   }
   return {
     schemaVersion: 2,
-    measurementVersion: "dom-frame-v2",
+    measurementVersion: "dom-frame-v3",
+    typingCadenceMs: 40,
     replayPolicy: "disabled-v1",
     identityProtocol: "ci-isolated-v1",
     buildClass: "production",
@@ -268,6 +269,8 @@ describe("performance evidence contract", () => {
     expect(
       resultContract.safeParse({ ...result(), schemaVersion: 1 }).success
     ).toBe(false)
+    expect(resultContract.safeParse({ ...result(), measurementVersion: "dom-frame-v2" }).success).toBe(false)
+    expect(resultContract.safeParse({ ...result(), typingCadenceMs: undefined }).success).toBe(false)
     expect(() => summarize([1, NaN])).toThrow()
     expect(summarize([-1]).p50).toBe(-1) // DOM growth is a signed count.
   })

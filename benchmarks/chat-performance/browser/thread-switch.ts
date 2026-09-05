@@ -30,6 +30,7 @@ import {
   type ThreadSwitchResult,
   type ThreadSwitchSample,
 } from "./result-schema"
+import { BENCHMARK_TYPING_DELAY_MS } from "./scenarios"
 
 const ROW_SELECTOR = 'a[data-sidebar-item="true"][href^="/c/"]'
 const TURN_ROW_SELECTOR = "section[data-turn-id]"
@@ -115,7 +116,8 @@ async function createChat(page: Page, baseUrl: string, long: boolean) {
   await editor.waitFor({ state: "visible", timeout: 15_000 })
   await editor.click()
   await page.keyboard.type(
-    long ? "[[perf:long-markdown:100:fixed]]" : CREATE_DIRECTIVE
+    long ? "[[perf:long-markdown:100:fixed]]" : CREATE_DIRECTIVE,
+    { delay: BENCHMARK_TYPING_DELAY_MS }
   )
   await page.locator('[data-testid="send-button"]').click()
   await page.waitForURL(/\/c\//, { timeout: 30_000 })

@@ -22,8 +22,12 @@ fixture content, with separate early/late coverage requirements.
 An observer checks the intended DOM state in a rendering callback, then timestamps
 in a cancellable task queued from that callback, after its rendering opportunity.
 This follows the [rAF-to-timer pattern](https://web.dev/articles/optimize-inp#yield_to_allow_rendering_work_to_occur_sooner).
-Measurement version `dom-frame-v2` removes v1's extra animation-frame wait; old
-captures cannot be compared or adjusted by subtracting a fixed frame duration.
+Measurement version `dom-frame-v3` follows finite content reveal animations to
+their first visible frame, even when no new DOM mutation arrives. It retains v2's
+removal of v1's extra animation-frame wait. Old captures cannot be compared or
+adjusted by subtracting a fixed frame duration. Scripted typing uses the existing
+40 ms interaction cadence throughout setup and measurement; required
+`typingCadenceMs` metadata prevents mixing it with zero-delay automation bursts.
 These are explicitly DOM/frame proxies,
 not compositor or first-pixel measurements. Existing React-effect timings retain
 their historical definitions as diagnostic columns. Traces remain the authority

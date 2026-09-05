@@ -164,7 +164,8 @@ export type ThreadSwitchResult = {
 
 export type BenchmarkResultFile = {
   schemaVersion: 2
-  measurementVersion: "dom-frame-v2"
+  measurementVersion: "dom-frame-v3"
+  typingCadenceMs: 40
   replayPolicy: "disabled-v1"
   identityProtocol: "ci-isolated-v1" | "attached-session-v1"
   profiled?: boolean

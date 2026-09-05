@@ -131,6 +131,21 @@ instead. That trace exhausted its buffer before the terminal marker, so it is
 root-cause evidence only; it cannot provide whole-window timing or certification.
 The normal rendering probe omits this high-volume optional trace category.
 
+[Run 33955151948](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33955151948)
+at `2d36aa43`, on AMD EPYC 7763 with the same browser and fixture, still measured
+10,331 ms layout work with Smooth and 10,732 ms with Quick (25,102 and 24,917 ms
+main-thread work). Both complete stream oracles passed. This does not demonstrate
+a latency improvement from the calendar correction; layout remains a bottleneck.
+
+The standard capture also exposed a visibility-observer error: an initial scan
+at zero opacity did not rescan during the finite Markdown reveal animation, so
+sparse slabs could be attributed to the following slab, roughly 3.4 seconds later.
+`dom-frame-v3` follows the first visible animation frame and rejects older
+measurement captures. Setup now uses the same explicit 40 ms typing cadence as
+the interaction probes, recorded in environment metadata, avoiding incomparable
+zero-delay automation bursts. Neither change alters feedback budgets or product
+animations.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the

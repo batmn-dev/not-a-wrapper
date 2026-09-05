@@ -82,9 +82,17 @@ Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM
 in a rendering callback and records in a task queued after that rendering
-opportunity (`dom-frame-v2`). V1's extra animation-frame wait is removed; its
-captures are incompatible and must be repeated. These are DOM/frame
+opportunity (`dom-frame-v3`). V3 follows finite reveal animations to their first
+visible frame; v2 could wait for another stream chunk after an opacity-zero scan.
+V1's extra animation-frame wait remains removed. Earlier captures are incompatible
+and must be repeated. These are DOM/frame
 proxies, not first-pixel timestamps; old React-effect marks remain separate.
+
+All scripted typing uses the same 40 ms key cadence, including fixture setup and
+the early/late draft probes. `typingCadenceMs` is required environment metadata.
+Zero-delay automation can starve post-frame timers while frames continue, so its
+timer durations are not comparable with this interaction profile. Budgets stay
+unchanged; the timestamp still includes the entire observed interval.
 
 Continuous receipt-to-content samples match a text-source watermark, at most four
 times per second, to the current assistant's rendered source. They exclude provider

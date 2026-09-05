@@ -698,6 +698,70 @@ describe("DOM/frame observations", () => {
     ).toEqual([32])
   })
 
+  it("observes the first visible reveal frame without waiting for another slab or animation end", async () => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const markdown = answer(4096).querySelector<HTMLElement>(".markdown")!
+    let visible = false
+    const animation = {
+      pending: false, playState: "running", currentTime: 0,
+      effect: { getComputedTiming: () => ({ endTime: 180 }) },
+    }
+    Object.assign(markdown, {
+      checkVisibility: () => visible,
+      getAnimations: () => [animation],
+    })
+    now = 100
+    observer.receive("text-delta", 4096)
+    await paint()
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+    expect(frames).toHaveLength(1)
+    // CSS opacity advances without a DOM mutation or another received slab.
+    visible = true
+    await paint()
+    expect(observer.values.deltaToContentFrameMs).toEqual([32])
+    expect(observer.values.inputToFirstTextFrameMs).toEqual([132])
+    expect(observer.pendingDeltas()).toBe(0)
+    expect(frames).toHaveLength(0)
+  })
+  it.each(["offscreen", "infinite", "finished", "uncommitted"])("does not poll %s content for an opacity reveal", async (condition) => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const markdown = answer(condition === "uncommitted" ? 3 : 4096)
+      .querySelector<HTMLElement>(".markdown")!
+    Object.assign(markdown, {
+      checkVisibility: () => false,
+      getAnimations: () => [{
+        pending: false, playState: condition === "finished" ? "finished" : "running", currentTime: 0,
+        effect: { getComputedTiming: () => ({ endTime: condition === "infinite" ? Infinity : 180 }) },
+      }],
+    })
+    if (condition === "offscreen")
+      markdown.getBoundingClientRect = () => ({ width: 100, height: 100, top: 10000, bottom: 10100 }) as DOMRect
+    observer.receive("text-delta", 4096)
+    await paint()
+    expect(frames).toHaveLength(0)
+    expect(observer.pendingDeltas()).toBe(1)
+  })
+  it("bounds rescanning if a pending animation never advances", async () => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const markdown = answer(4096).querySelector<HTMLElement>(".markdown")!
+    const animation = { pending: true, currentTime: null, effect: { getComputedTiming: () => ({ endTime: 180 }) } }
+    Object.assign(markdown, { checkVisibility: () => false, getAnimations: () => [animation] })
+    observer.receive("text-delta", 4096)
+    await paint()
+    expect(frames).toHaveLength(1)
+    now = 200
+    await paint()
+    expect(frames).toHaveLength(0)
+    expect(observer.pendingDeltas()).toBe(1)
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+  })
+
   it("only acknowledges received content once its rendered source watermark catches up", async () => {
     installChatUiObserver()
     send()

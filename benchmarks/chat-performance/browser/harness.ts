@@ -65,6 +65,7 @@ import {
   type ScenarioResult,
 } from "./result-schema"
 import {
+  BENCHMARK_TYPING_DELAY_MS,
   directiveFor,
   DURABLE_SUITE,
   FOLLOWUP_SEED,
@@ -406,7 +407,7 @@ async function runScenarioOnce(
 
     if (config.followup) {
       await editor.click()
-      await page.keyboard.type(directiveFor(FOLLOWUP_SEED))
+      await page.keyboard.type(directiveFor(FOLLOWUP_SEED), { delay: BENCHMARK_TYPING_DELAY_MS })
       await waitForSendReady(page)
       await page.locator('[data-testid="send-button"]').click()
       await waitForMark(page, "stream_terminal", 60000)
@@ -444,7 +445,7 @@ async function runScenarioOnce(
     )
 
     await editor.click()
-    await page.keyboard.type(directiveFor(config))
+    await page.keyboard.type(directiveFor(config), { delay: BENCHMARK_TYPING_DELAY_MS })
     await waitForSendReady(page)
     if (process.env.PERF_PROFILE === "true") {
       await cdp.send("Profiler.enable")
@@ -538,7 +539,7 @@ async function runScenarioOnce(
         await requireStreaming(phase, "typing")
         await editor.click()
         await page.keyboard.type("A draft.", {
-          delay: 40,
+          delay: BENCHMARK_TYPING_DELAY_MS,
         })
         interactionProbeStage = `${phase} menu open`
         await requireStreaming(phase, "menu")
@@ -1521,7 +1522,8 @@ async function main() {
     .trim()
   const file: BenchmarkResultFile = {
     schemaVersion: 2,
-    measurementVersion: "dom-frame-v2",
+    measurementVersion: "dom-frame-v3",
+    typingCadenceMs: BENCHMARK_TYPING_DELAY_MS,
     replayPolicy: "disabled-v1",
     identityProtocol: process.env.PERF_CDP_URL
       ? "attached-session-v1"

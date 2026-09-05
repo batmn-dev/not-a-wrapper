@@ -33,6 +33,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { chromium, type Browser, type Page } from "playwright"
+import { BENCHMARK_TYPING_DELAY_MS } from "./scenarios"
 
 const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
@@ -400,6 +401,7 @@ function analyzeTrace(tracePath: string, caseId: string) {
 function captureMetadata(browser: Browser, traceCase: TraceCase) {
   const buildIdPath = path.join(REPO_ROOT, DIST_DIR, "BUILD_ID")
   return {
+    typingCadenceMs: BENCHMARK_TYPING_DELAY_MS,
     replayPolicy: "disabled-v1",
     commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT, encoding: "utf8" }).trim(),
     buildId: process.env.BASE_URL ? "external-unverified" : readFileSync(buildIdPath, "utf8").trim(),
@@ -477,7 +479,7 @@ async function runCase(
     const label = observerRun ? `.${observerRun.label}` : process.env.LABEL ? `.${process.env.LABEL}` : ""
     const tracePath = path.join(OUT_DIR, `${traceCase.id}${label}.trace.json`)
     await editor.click()
-    await page.keyboard.type(traceCase.directive)
+    await page.keyboard.type(traceCase.directive, { delay: BENCHMARK_TYPING_DELAY_MS })
     if (observerRun || STREAMING_PRESENTATION) {
       if (observerRun) {
         await page.waitForFunction(() => Boolean((window as ChatUiWindow).__chatUiPerf))
@@ -520,7 +522,7 @@ async function runCase(
     if (observerRun) {
       await waitForMark(page, "first_visible_text", timeoutMs)
       await editor.click()
-      await page.keyboard.type("A draft.", { delay: 40 })
+      await page.keyboard.type("A draft.", { delay: BENCHMARK_TYPING_DELAY_MS })
       if (await page.evaluate(() => performance.getEntriesByName("chat-perf:stream_terminal").length > 0)) {
         throw new Error("typing probe missed the active stream")
       }

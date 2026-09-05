@@ -292,7 +292,13 @@ calls are counted (`providerToolCalls`) because their time stays in the window.
 These names are separate from the older React-effect marks. A frame observation
 checks DOM in a rendering callback, then records in a task after that rendering
 opportunity; it is not a compositor timestamp or an upper bound on presentation.
-`dom-frame-v2` removes the old extra animation-frame wait and rejects v1 captures.
+`dom-frame-v3` retains the single-frame-plus-task proxy and rejects v1/v2 captures.
+When committed source is initially hidden by a finite reveal animation, the
+observer follows its first visible frame instead of waiting for another stream
+mutation or animation completion. Rescans require a matching source watermark,
+viewport intersection, and an active finite animation, and stop when its remaining
+duration expires. Pending content remains explicit if it never becomes visible.
+The interaction-specific `prepared-wheel-v1` protocol remains a separate condition.
 The observation tab must remain visible.
 
 | Metric | Definition |

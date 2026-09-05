@@ -69,7 +69,8 @@ const scenario = z
 export const resultContract = z
   .object({
     schemaVersion: z.literal(2),
-    measurementVersion: z.literal("dom-frame-v2"),
+    measurementVersion: z.literal("dom-frame-v3"),
+    typingCadenceMs: z.literal(40),
     replayPolicy: z.literal("disabled-v1"),
     identityProtocol: z.enum(["ci-isolated-v1", "attached-session-v1"]),
     profiled: z.literal(false).optional(),
@@ -438,6 +439,7 @@ export function checkBudgets(result: ComparableResult): string[] {
 
 export const ENVIRONMENT_FIELDS = [
   "measurementVersion",
+  "typingCadenceMs",
   "replayPolicy",
   "identityProtocol",
   "buildClass",
