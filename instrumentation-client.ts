@@ -38,6 +38,8 @@ if (posthogKey && !posthog.__loaded) {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
     person_profiles: "identified_only",
     capture_pageview: false,
+    // Document scroll-depth analytics force layout during nested chat scrolling.
+    disable_scroll_properties: true,
     ...(chatUiBenchmark ? { disable_session_recording: true } : {}),
   })
 }

@@ -7,7 +7,6 @@ export const LEGACY_MEASUREMENT_PATCH =
 
 /** Copy these exact implementations from the candidate into the legacy checkout. */
 export const MEASUREMENT_FILES = [
-  "instrumentation-client.ts",
   "lib/observability/chat-ui-observer.ts",
   "lib/observability/chat-ui-events.ts",
   "lib/observability/chat-performance.ts",
@@ -17,6 +16,7 @@ export const MEASUREMENT_FILES = [
 
 /** Audit boundary for the patch. These files retain the original product code. */
 export const MEASUREMENT_HOOK_FILES = [
+  "instrumentation-client.ts",
   "app/components/chat-input/button-plus-menu.tsx",
   "app/components/chat-input/composer.tsx",
   "app/components/chat/message-assistant.tsx",
