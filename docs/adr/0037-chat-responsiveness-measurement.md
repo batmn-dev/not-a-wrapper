@@ -14,7 +14,7 @@ One constrained CPU/network variant represents lower-headroom devices. The exist
 thread-switch suite covers visited/unvisited destinations; the scheduled standard
 and durable suites retain rendering stress and recovery correctness.
 
-Browser measurements begin at the activating click or Enter event's timestamp.
+Send measurements begin at the activating click or Enter event's timestamp.
 The guarded Composer submit handler confirms the input; consuming Enter in an
 editor menu never resets the active measurement. Coalesced typing preserves the
 oldest input awaiting a frame. Late interactions wait for 80% of deterministic
@@ -28,6 +28,15 @@ removal of v1's extra animation-frame wait. Old captures cannot be compared or
 adjusted by subtracting a fixed frame duration. Scripted typing uses the existing
 40 ms interaction cadence throughout setup and measurement; required
 `typingCadenceMs` metadata prevents mixing it with zero-delay automation bursts.
+Menu measurements begin at primary pointerdown or Enter/Space opening intent,
+before native mousedown opening work; closing and cancellation clear the intent.
+Interactive scenarios require `menuProtocol: activation-v1`.
+Streamed-content scenarios require `contentFrameProtocol: publisher-frame-v1`:
+an optional publisher callback inspects committed content inside its known rAF
+opportunity, avoiding an extra frame when the ordinary observer ran first.
+Deferred commits retain the ordinary fallback. General mutation-to-timer
+observation was rejected because mutations outside rAF could be credited before
+rendering. Production distributions tag the affected metrics with their protocol.
 These are explicitly DOM/frame proxies,
 not compositor or first-pixel measurements. Existing React-effect timings retain
 their historical definitions as diagnostic columns. Traces remain the authority
@@ -63,7 +72,8 @@ Instrumented benchmark builds disable session replay and declare the required
 recording work out of the controlled chat workload; production replay remains
 unchanged. Earlier replay-enabled captures cannot seed these baselines.
 Comparisons reject missing baselines, missing/failed samples, duplicate identities,
-and incompatible conditions. Baseline collection is an explicit operation, never
+and incompatible conditions. Every named suite must match its existing complete
+scenario list; an `ONLY` subset cannot certify a complete suite. Baseline collection is an explicit operation, never
 a silent successful comparison. Five or more measured runs are required for a
 comparison; p95 is omitted below 20 observations. Raw measurements and sample
 counts remain available, and slow input samples are never dropped for being slow.
@@ -96,7 +106,7 @@ Unit tests prove the observer and comparison contracts, not application speed.
 A production build plus authenticated-browser checks validate integration. A new
 runner-matched baseline, foreground browser capture, and instrumentation-overhead
 comparison are required before declaring release performance validated. Old v1
-artifacts must not be copied into v2 baseline files. Missing baselines fail CI.
+artifacts must not be copied into current baseline files. Missing baselines fail CI.
 
 ## Hosted-run follow-through
 

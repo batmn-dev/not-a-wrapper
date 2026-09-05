@@ -36,6 +36,13 @@ readiness fix in `8dd091f8`; the observer comparison was captured separately on
   Stop remain available; a new chat's first send bypasses existing-history
   readiness. Delivered query-cache data needs no extra fetch. This prevents a
   follow-up from sending an empty or another chat's selected-path token.
+- Shared tooltips wait for 150 ms of initial hover intent. Deliberate hover is
+  slightly delayed so passing over a control does not immediately mount and
+  position help before its primary action. Keyboard focus remains immediate,
+  quick clicks cancel pending opening, and neighboring tooltips retain the
+  existing instant discovery window. Three behavioral tests use real Base UI
+  interactions. A diagnostic Send trace identified 19.6 ms of tooltip opening
+  before click dispatch; a fresh unprofiled capture must establish any improvement.
 
 ## Earlier asset and correctness evidence
 
@@ -199,7 +206,35 @@ rendering opportunity, avoiding an otherwise unnecessary additional frame.
 Deferred commits keep the ordinary fallback. Streamed-content results require
 `contentFrameProtocol: publisher-frame-v1`; older captures cannot seed this
 protocol. This is a measurement correction, not a product speedup. A fresh
-observer-overhead control and full captures remain necessary.
+observer-overhead control and full captures were collected below.
+
+The corrected observer was compared in
+[run 33959565112](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33959565112),
+commit `36f21d1b`, build `IBdrB2f_kyOcldqKfD7nz`, Chromium `151.0.7922.34`,
+and AMD EPYC 9V74 (four logical CPUs, approximately 16 GB). The viewport was
+1440 × 900, CPU throttle 1, replay disabled, and typing cadence 40 ms. One
+warmup pair preceded five alternating observer-on/off pairs, each with a fresh
+guest and browser context. All twelve arms passed the complete SSE oracle,
+observer-state, foreground, and replay-marker checks. These checks do not prove
+rendered DOM equality or completion of pending content probes.
+
+Median paired native main-thread work increased by **156.645 ms (0.631%)** over
+24.4–25.1 seconds of work per arm. Reported TBT increased in every measured
+pair, by a median **20.321 ms (15.67%)**. Each arm supplied eight native keydown
+entries; those entries are not INP. The window and TBT definitions remain those
+described above. This is incremental observer cost during one streaming workload,
+excluding startup and production reporting. It does not establish zero overhead
+or a product speedup, and is not directly comparable with the earlier replay-on
+control on different hardware. Production DOM sampling remains off by default.
+
+The unprofiled full responsiveness capture in
+[run 33959149485](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33959149485)
+passed all seven correctness checks on AMD EPYC 7763. The long-answer content
+frame median was 29.4 ms, but 49 of 471 observations exceeded the unchanged
+50 ms budget. Late-menu median was 178.5 ms; authenticated initial Send medians
+were 103.9–117.6 ms across the affected journeys. These captures fail the
+absolute budgets and cannot be accepted as baselines. Earlier content-frame
+numbers use a different observation protocol and cannot establish a speedup.
 
 ## Remaining validation
 
