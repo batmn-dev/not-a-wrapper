@@ -107,7 +107,8 @@ old value to `_PREVIOUS`, then dropped once rows re-encrypt.
 - CSRF is enforced structurally on every migrated mutation route; forgetting it
   requires bypassing the seam. The token mechanism is no longer dead code.
 - There is one place that owns MCP SSRF policy. The `/api/mcp-servers/test`
-  hole is closed; the runtime and test paths cannot diverge again.
+  hole is closed; both paths use DNS-pinned sockets, so the transport cannot
+  re-resolve the hostname to an unvalidated address after validation.
 - BYOK keys are owner- and purpose-bound at rest and `ENCRYPTION_KEY` is
   rotatable. **Format change is not backward compatible** — pre-existing dev rows
   (unversioned) no longer decrypt and must be re-entered or wiped. This is
@@ -124,9 +125,6 @@ old value to `_PREVIOUS`, then dropped once rows re-encrypt.
   MCP servers fail closed when the owner identity, stored credential material, or
   decrypted header cannot be produced, so the loader does not silently contact
   them anonymously.
-- **DNS TOCTOU:** `assertMcpUrlAllowed` resolves, then the transport resolves
-  again — a sub-second rebind between the two still slips through. Pinning the
-  validated IP into the connection is the complete fix.
 - **CSP `script-src` still allows `'unsafe-inline'`** (the App Router emits inline
   bootstrap scripts and we have not adopted nonce injection). The non-script
   directives carry the weight today; nonce-based `script-src` is the next step.
