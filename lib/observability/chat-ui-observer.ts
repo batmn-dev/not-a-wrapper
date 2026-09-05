@@ -309,15 +309,17 @@ export function installChatUiObserver(
     )
       recordOnce("inputToOptimisticFrameMs", sentAt)
     // A disclosure means actual inspectable activity exists; bare "Thinking" is feedback only.
-    const activity = row?.querySelector(
-      'button[aria-label^="Open activity:"], button[aria-label^="Close activity:"]'
-    )
-    if (!once.has("inputToFirstActivityFrameMs") && isVisible(activity))
-      recordOnce("inputToFirstActivityFrameMs", sentAt)
+    if (!once.has("inputToFirstActivityFrameMs")) {
+      const activity = row?.querySelector(
+        'button[aria-label^="Open activity:"], button[aria-label^="Close activity:"]'
+      )
+      if (isVisible(activity)) recordOnce("inputToFirstActivityFrameMs", sentAt)
+    }
     scanContent(row)
   }
   const scanContent = (row: Element | undefined) => {
-    if (sentAt === undefined) return
+    if (sentAt === undefined ||
+      (once.has("inputToFirstTextFrameMs") && samples.length === 0)) return
     const markdown = row?.querySelector(
       '[data-message-author-role="assistant"] .markdown'
     )

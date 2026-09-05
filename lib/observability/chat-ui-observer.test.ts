@@ -148,6 +148,46 @@ describe("DOM/frame observations", () => {
     expect(geometry).not.toHaveBeenCalled()
   })
 
+  it("skips completed content and activity probes until another sampled delta needs a frame", async () => {
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const row = answer(3)
+    row.insertAdjacentHTML("beforeend", '<button aria-label="Open activity: reasoning">Activity</button>')
+    const markdown = row.querySelector<HTMLElement>(".markdown")!
+    const source = row.querySelector<HTMLElement>("[data-perf-text-length]")!
+    const visible = vi.fn(() => true)
+    Object.assign(markdown, { checkVisibility: visible })
+    const geometry = vi.spyOn(markdown, "getBoundingClientRect")
+    const queries = vi.spyOn(row, "querySelector")
+    observer.receive("text-delta", 3)
+    await paint()
+    expect(observer.values.deltaToContentFrameMs).toEqual([16])
+    expect(observer.values.inputToFirstActivityFrameMs).toEqual([16])
+    visible.mockClear()
+    geometry.mockClear()
+    queries.mockClear()
+
+    now = 100
+    observer.receive("text-delta", 1) // between sampled deltas, still schedules an ordinary scan
+    await paint()
+    expect(visible).not.toHaveBeenCalled()
+    expect(geometry).not.toHaveBeenCalled()
+    expect(queries).not.toHaveBeenCalled()
+
+    now = 300
+    observer.receive("text-delta", 2)
+    source.dataset.perfTextLength = "6"
+    markdown.textContent = "abcdef"
+    await paint()
+    expect(visible).toHaveBeenCalled()
+    expect(geometry).toHaveBeenCalled()
+    expect(observer.values.deltaToContentFrameMs).toEqual([16, 16])
+    expect(observer.values.inputToFirstTextFrameMs).toEqual([16])
+    expect(observer.values.inputToFirstActivityFrameMs).toEqual([16])
+    expect(queries.mock.calls.some(([selector]) => selector.includes("Open activity:"))).toBe(false)
+  })
+
   it("defers a publisher microtask when sidebar navigation replaces the active row", async () => {
     const path = location.pathname
     try {
