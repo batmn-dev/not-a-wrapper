@@ -1009,31 +1009,37 @@ describe("Composer primary action", () => {
     expect(promptInputMockCalls.at(-1)?.value).toBe("")
   })
 
-  it("restores the payload and keeps the persisted draft when the turn is rejected", async () => {
-    composerMocks.draftValue = "rejected send"
+  it.each(["reject", "throw"])(
+    "restores the payload and keeps the persisted draft on %s",
+    async (outcome) => {
+      composerMocks.draftValue = "rejected send"
 
-    const onTurn = vi.fn(async () => false)
-    const mounted = renderComposer({
-      onTurn,
-      isSubmitting: false,
-      status: "ready",
-    })
+      const onTurn = vi.fn(async () => {
+        if (outcome === "throw") throw new Error("Dispatch failed")
+        return false
+      })
+      const mounted = renderComposer({
+        onTurn,
+        isSubmitting: false,
+        status: "ready",
+      })
 
-    const send = mounted.querySelector(
-      '[data-testid="send-button"]'
-    ) as HTMLButtonElement | null
+      const send = mounted.querySelector(
+        '[data-testid="send-button"]'
+      ) as HTMLButtonElement | null
 
-    await act(async () => {
-      send?.click()
-      await Promise.resolve()
-    })
+      await act(async () => {
+        send?.click()
+        await Promise.resolve()
+      })
 
-    expect(onTurn).toHaveBeenCalledTimes(1)
-    expect(composerMocks.clearDraft).not.toHaveBeenCalled()
-    // The rejection toast must not fire over an emptied composer: the typed
-    // text comes back so the user can fix and resend.
-    expect(promptInputMockCalls.at(-1)?.value).toBe("rejected send")
-  })
+      expect(onTurn).toHaveBeenCalledTimes(1)
+      expect(composerMocks.clearDraft).not.toHaveBeenCalled()
+      // The rejection toast must not fire over an emptied composer: the typed
+      // text comes back so the user can fix and resend.
+      expect(promptInputMockCalls.at(-1)?.value).toBe("rejected send")
+    }
+  )
 
   it.each([0, 600])(
     "preserves the next draft when an earlier send is accepted after %sms",

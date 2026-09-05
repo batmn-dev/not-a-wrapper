@@ -371,6 +371,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           applyValue("")
           return onTurn(payload)
         })
+      } catch {
+        toast({ title: "Send failed. Please try again.", status: "error" })
       } finally {
         // Preserve any new draft typed while dispatch was pending.
         if (

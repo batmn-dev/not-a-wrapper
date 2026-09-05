@@ -61,6 +61,7 @@ export const useFilePickerState = ({
   const lockedAttachmentIdsRef = useRef<ReadonlySet<string>>(new Set())
   const activeUploadsRef = useRef(new Map<string, ActiveUpload>())
   const pendingAdmissionsRef = useRef(new Set<string>())
+  const admissionTailRef = useRef<Promise<void> | null>(null)
   const generatedPasteSequenceRef = useRef(0)
 
   const updateAttachments = useCallback(
@@ -173,8 +174,28 @@ export const useFilePickerState = ({
       pending.forEach(({ id }) => pendingAdmissionsRef.current.add(id))
       updateAttachments((current) => [...current, ...pending])
 
-      void (async () => {
+      const rejectPending = (message: string) => {
+        const rejectedIds = new Set(
+          pending
+            .filter(({ id }) => pendingAdmissionsRef.current.has(id))
+            .map(({ id }) => id)
+        )
+        if (rejectedIds.size === 0) return
+        updateAttachments((current) =>
+          current.filter(({ id }) => !rejectedIds.has(id))
+        )
+        toast({ title: message, status: "error" })
+        setAnnouncement(message)
+      }
+
+      const previousAdmission = admissionTailRef.current
+      admissionTailRef.current = (async () => {
         try {
+          // Release earlier invalid reservations before checking this batch.
+          // Transfers still run concurrently once admission completes.
+          if (previousAdmission) await previousAdmission
+          if (!pending.some(({ id }) => pendingAdmissionsRef.current.has(id)))
+            return
           try {
             const allowance = await checkFileUploadLimit(convex)
             const uploadingCount = attachmentsRef.current.filter(
@@ -197,15 +218,14 @@ export const useFilePickerState = ({
                 remaining === 0
                   ? "Daily file upload limit reached."
                   : `You can add ${remaining} more file${remaining === 1 ? "" : "s"} today.`
-              const rejectedIds = new Set(selected.map(({ id }) => id))
-              updateAttachments((current) =>
-                current.filter(({ id }) => !rejectedIds.has(id))
-              )
-              toast({ title: message, status: "error" })
-              setAnnouncement(message)
+              rejectPending(message)
               return
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof FileUploadLimitError) {
+              rejectPending("Daily file upload limit reached.")
+              return
+            }
             // The mutation remains authoritative if the admission read fails.
           }
 

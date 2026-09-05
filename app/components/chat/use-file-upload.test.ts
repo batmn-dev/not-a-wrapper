@@ -4,6 +4,7 @@ import { toast } from "@/components/ui/toast"
 import {
   checkFileUploadLimit,
   deleteUploadedAttachment,
+  FileUploadLimitError,
   uploadStagedFile,
   type UploadFileOptions,
 } from "@/lib/file-handling"
@@ -364,6 +365,32 @@ describe("useFilePickerState immediate upload lifecycle", () => {
     }
   )
 
+  it("admits a later valid selection after an earlier invalid reservation is released", async () => {
+    vi.mocked(checkFileUploadLimit).mockResolvedValue({
+      count: 4,
+      limit: 5,
+      canUpload: true,
+    })
+    let validate!: (value: Awaited<ReturnType<typeof validateFile>>) => void
+    vi.mocked(validateFile).mockReturnValueOnce(
+      new Promise((resolve) => {
+        validate = resolve
+      })
+    )
+    act(() => {
+      controls().handleFileUpload([file("invalid.txt")])
+      controls().handleFileUpload([file("valid.txt")])
+    })
+    await flush()
+    await act(async () => {
+      validate({ isValid: false, error: "bad type" })
+    })
+    expect(controls().attachments.map(({ file }) => file.name)).toEqual([
+      "valid.txt",
+    ])
+    expect(uploadCalls.map(({ file }) => file.name)).toEqual(["valid.txt"])
+  })
+
   it("reserves daily capacity in selection order across overlapping checks", async () => {
     const approvals: Array<
       (value: Awaited<ReturnType<typeof checkFileUploadLimit>>) => void
@@ -378,11 +405,13 @@ describe("useFilePickerState immediate upload lifecycle", () => {
       controls().handleFileUpload([file("first.txt")])
       controls().handleFileUpload([file("second.txt")])
     })
-    await act(async () => {
-      approvals[1]!({ count: 4, limit: 5, canUpload: true })
-    })
+    expect(approvals).toHaveLength(1)
     await act(async () => {
       approvals[0]!({ count: 4, limit: 5, canUpload: true })
+    })
+    expect(approvals).toHaveLength(2)
+    await act(async () => {
+      approvals[1]!({ count: 4, limit: 5, canUpload: true })
     })
     expect(controls().attachments.map(({ file }) => file.name)).toEqual([
       "first.txt",
@@ -415,14 +444,13 @@ describe("useFilePickerState immediate upload lifecycle", () => {
     expect(controls().attachments).toEqual([])
     expect(uploadCalls).toEqual([])
 
-    vi.mocked(checkFileUploadLimit).mockResolvedValueOnce({
-      count: 5,
-      limit: 5,
-      canUpload: false,
-    })
+    vi.mocked(checkFileUploadLimit).mockRejectedValueOnce(
+      new FileUploadLimitError("Daily file upload limit reached.")
+    )
     act(() => controls().handleFileUpload([file("over.txt")]))
     await flush()
     expect(uploadCalls).toEqual([])
+    expect(controls().attachments).toEqual([])
     expect(controls().announcement).toContain("limit")
   })
 

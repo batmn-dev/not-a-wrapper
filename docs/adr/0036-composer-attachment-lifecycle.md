@@ -20,6 +20,8 @@ files afterward. During admission, Send and another selection could not see them
 - Pending files block Send immediately. Invalid or over-capacity selections are
   removed with the existing error feedback. The server remains authoritative for
   upload allowance; the client considers earlier pending selections in its check.
+- Admission batches settle in selection order so invalid reservations are released
+  before the next capacity check. Transfers run concurrently after admission.
 - Admission completion must still belong to a selected file. Removal and unmount
   invalidate it, preventing a late validation result from starting an upload.
 - The existing Composer attachment module owns readiness, payload assembly, and
