@@ -431,6 +431,10 @@ async function runScenarioOnce(
     if (process.env.PERF_PROFILE === "true") {
       await cdp.send("Profiler.enable")
       await cdp.send("Profiler.start")
+      await cdp.send("Tracing.start", {
+        categories: "devtools.timeline,blink.user_timing",
+        transferMode: "ReturnAsStream",
+      })
       profiling = true
     }
     await page.locator('[data-testid="send-button"]').click()
@@ -520,18 +524,34 @@ async function runScenarioOnce(
         await page
           .locator("[data-chat-composer-menu]")
           .waitFor({ state: "visible" })
-        await page.waitForTimeout(100)
+        await page.waitForFunction(
+          (value) =>
+            ((window as ChatUiWindow).__chatUiPerf?.values[
+              value === "early" ? "menuToFrameEarlyMs" : "menuToFrameLateMs"
+            ]?.length ?? 0) > 0,
+          phase
+        )
         await page.keyboard.press("Escape")
         const scroll = page.locator("[data-scroll-root]")
-        await scroll.hover()
         if (phase === "late") {
+          const bounds = await scroll.boundingBox()
+          if (!bounds) throw new Error("Scroll root has no visible bounds")
+          // Move the real pointer without Playwright scrolling the root into view.
+          await page.mouse.move(
+            bounds.x + bounds.width / 2,
+            bounds.y + bounds.height / 2
+          )
           await requireStreaming(phase, "scroll")
           const direction = await scroll.evaluate((node) =>
             node.scrollTop > 0 ? -400 : 400
           )
           await page.mouse.wheel(0, direction)
+          await page.waitForFunction(
+            () =>
+              ((window as ChatUiWindow).__chatUiPerf?.values.scrollToFrameLateMs
+                ?.length ?? 0) > 0
+          )
         }
-        await page.waitForTimeout(100)
         await requireStreaming(phase, "interaction completion")
       }
     }
@@ -945,19 +965,42 @@ async function runScenarioOnce(
       },
     }
   } finally {
-    if (profiling) {
-      const { profile } = await cdp.send("Profiler.stop")
-      const directory = path.join(
-        REPO_ROOT,
-        "benchmarks/chat-performance/browser/results"
-      )
-      mkdirSync(directory, { recursive: true })
-      writeFileSync(
-        path.join(directory, `${config.id}.cpuprofile`),
-        JSON.stringify(profile)
-      )
+    try {
+      if (profiling) {
+        const { profile } = await cdp.send("Profiler.stop")
+        const directory = path.join(
+          REPO_ROOT,
+          "benchmarks/chat-performance/browser/results"
+        )
+        mkdirSync(directory, { recursive: true })
+        const capture = `${config.id}-${Date.now()}`
+        writeFileSync(
+          path.join(directory, `${capture}.cpuprofile`),
+          JSON.stringify(profile)
+        )
+        const completed = new Promise<string>((resolve) => {
+          cdp.once("Tracing.tracingComplete", (event) => resolve(event.stream!))
+        })
+        await cdp.send("Tracing.end")
+        const handle = await completed
+        const chunks: Buffer[] = []
+        let eof = false
+        while (!eof) {
+          const part = await cdp.send("IO.read", { handle })
+          chunks.push(
+            Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
+          )
+          eof = part.eof
+        }
+        await cdp.send("IO.close", { handle })
+        writeFileSync(
+          path.join(directory, `${capture}.trace.json`),
+          Buffer.concat(chunks)
+        )
+      }
+    } finally {
+      await page.close()
     }
-    await page.close()
   }
 }
 

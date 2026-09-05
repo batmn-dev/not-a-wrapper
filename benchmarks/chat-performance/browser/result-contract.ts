@@ -30,6 +30,7 @@ const scenario = z
     followup: z.boolean(),
     action: z.enum(["complete", "stop", "second-tab", "reload"]),
     sampleCount: z.number().int().min(5),
+    warmupRuns: z.number().int().nonnegative(),
     correctnessOk: z.literal(true),
     metrics: z.record(z.string(), summary),
     runs: z.array(
@@ -314,11 +315,23 @@ export function validateCoverage(result: ComparableResult): string[] {
     ])
     for (const metric of uiMetrics) {
       const samples = value.runs.flatMap((run) => run.ui?.[metric] ?? [])
+      if (
+        metric in GATES &&
+        samples.length > 0 &&
+        value.runs.some((run) => !run.ui?.[metric]?.length)
+      )
+        errors.push(`${value.id}: ${metric} missing from an individual run`)
       if (!matchesSamples(value.metrics[metric], samples))
         errors.push(`${value.id}: ${metric} summary disagrees with raw samples`)
     }
     for (const [metric, read] of Object.entries(RAW_GATED_METRICS)) {
       const samples = observedNumbers(value.runs.map(read))
+      if (
+        metric in GATES &&
+        samples.length > 0 &&
+        samples.length !== value.sampleCount
+      )
+        errors.push(`${value.id}: ${metric} missing from an individual run`)
       if (
         (samples.length > 0 || value.metrics[metric] !== undefined) &&
         !matchesSamples(value.metrics[metric], samples)
@@ -432,6 +445,8 @@ export function compareResults(
       errors.push(`scenario missing from ${a ? "current" : "baseline"}: ${key}`)
       continue
     }
+    if (a.warmupRuns !== b.warmupRuns)
+      errors.push(`${key}: warmupRuns mismatch`)
     for (const [metric, gate] of Object.entries(GATES)) {
       const before = a.metrics[metric]
       const after = b.metrics[metric]

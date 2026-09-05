@@ -129,6 +129,16 @@ async function createChat(page: Page, baseUrl: string, long: boolean) {
   if (first === "stream_terminal") {
     await tryWaitForMark(page, "durable_settlement_receipt", 15_000)
   }
+  const marks = await readMarks(page)
+  const terminal = last(marks, "stream_terminal")
+  const receipt = last(marks, "durable_settlement_receipt")
+  if (
+    (!terminal && !receipt) ||
+    (terminal && terminal.detail?.outcome !== "finish") ||
+    (receipt && receipt.detail?.outcome !== "completed")
+  ) {
+    throw new Error("thread-switch fixture did not finish successfully")
+  }
   await page.waitForTimeout(1_000)
   return new URL(page.url()).pathname
 }
@@ -376,10 +386,15 @@ export async function runThreadSwitch(
     log(`  visited: ${options.switchCount} switches`)
     await page.close()
   } finally {
-    await Promise.all(
+    const closedPages = await Promise.allSettled(
       ownedPages.filter((page) => !page.isClosed()).map((page) => page.close())
     )
-    if (!process.env.PERF_CDP_URL) await context.close()
+    if (closedPages.some((result) => result.status === "rejected"))
+      log("  cleanup: a benchmark tab could not be closed")
+    if (!process.env.PERF_CDP_URL)
+      await context.close().catch(() => {
+        log("  cleanup: benchmark context could not be closed")
+      })
   }
 
   return {

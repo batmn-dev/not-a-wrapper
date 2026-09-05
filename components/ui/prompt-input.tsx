@@ -502,6 +502,7 @@ const PromptInputTextarea = React.forwardRef<
     width: number
     className: string
     style: string
+    typography: string
     height: number
   } | null>(null)
   const applyEditorLayout = React.useCallback(
@@ -525,13 +526,33 @@ const PromptInputTextarea = React.forwardRef<
       const measuredValue = nextValue.slice(0, EXPANSION_MEASURE_CHAR_LIMIT)
       const previous = measuredLayout.current
       const style = textarea.style.cssText
+      const computed = getComputedStyle(textarea)
+      const typography = [
+        computed.font,
+        computed.fontFamily,
+        computed.fontSize,
+        computed.fontWeight,
+        computed.fontStyle,
+        computed.fontStretch,
+        computed.fontVariationSettings,
+        computed.lineHeight,
+        computed.letterSpacing,
+        computed.wordSpacing,
+        computed.textTransform,
+        computed.textIndent,
+        computed.whiteSpace,
+        computed.wordBreak,
+        computed.padding,
+        computed.boxSizing,
+      ].join("|")
       // The editor transaction and controlled-value commit measure the same input.
       const compactScrollHeight =
         previous?.textarea === textarea &&
         previous.value === measuredValue &&
         previous.width === compactWidth &&
         previous.className === textarea.className &&
-        previous.style === style
+        previous.style === style &&
+        previous.typography === typography
           ? previous.height
           : measureTextareaScrollHeight(textarea, measuredValue, compactWidth)
       measuredLayout.current = {
@@ -540,6 +561,7 @@ const PromptInputTextarea = React.forwardRef<
         width: compactWidth,
         className: textarea.className,
         style,
+        typography,
         height: compactScrollHeight,
       }
       // The expansion decision is a function of the value and the DERIVED

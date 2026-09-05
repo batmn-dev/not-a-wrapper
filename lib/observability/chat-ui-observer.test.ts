@@ -74,8 +74,13 @@ describe("DOM/frame observations", () => {
     const button = document.querySelector("button")!
     button.setAttribute("aria-disabled", "true")
     installChatUiObserver()
-    button.setAttribute("aria-label", "Send prompt")
+    document
+      .querySelector("[contenteditable]")!
+      .dispatchEvent(new InputEvent("input", { bubbles: true }))
     await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.navigationToComposerInputMs
+    ).toHaveLength(1)
     expect(
       (window as ChatUiWindow).__chatUiPerf!.values.navigationToSendReadyMs
     ).toBeUndefined()

@@ -38,7 +38,7 @@ on:
         type: boolean
         default: false
       diagnose:
-        description: "CPU profile a single run; never a performance certification"
+        description: "Profile responsiveness scenarios; never a performance certification"
         type: boolean
         default: false
       only:
@@ -73,6 +73,14 @@ jobs:
       ONLY: ${{ inputs.diagnose && inputs.only || '' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
+      - name: Validate diagnostic suite
+        if: ${{ inputs.diagnose }}
+        run: |
+          if [ "$SUITE" != "responsiveness" ]; then
+            echo "::error title=Unsupported diagnostic suite::diagnose=true supports only suite=responsiveness. Disable diagnose to run the selected suite normally."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -137,5 +145,17 @@ jobs:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
           path: |
             benchmarks/chat-performance/browser/results/*.json
+            !benchmarks/chat-performance/browser/results/*.trace.json
+          retention-days: 90
+
+      - name: Upload diagnostic artifacts
+        if: ${{ always() && inputs.diagnose }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-diagnostics-${{ env.SUITE }}-${{ github.run_id }}
+          include-hidden-files: true
+          path: |
             benchmarks/chat-performance/browser/results/*.cpuprofile
+            benchmarks/chat-performance/browser/results/*.trace.json
+            .next-perf/static/chunks/**/*.js
           retention-days: 90

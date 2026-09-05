@@ -43,6 +43,7 @@ function result(): ComparableResult {
         followup: false,
         action: "complete",
         sampleCount: 5,
+        warmupRuns: 1,
         correctnessOk: true,
         metrics: Object.fromEntries(
           Object.entries(ui).map(([key, values]) => [
@@ -129,6 +130,31 @@ describe("performance evidence contract", () => {
   it("accepts comparable, complete observations", () => {
     expect(resultContract.safeParse(result()).success).toBe(true)
     expect(compareResults(result(), result())).toEqual([])
+  })
+
+  it("preserves warmup counts and rejects incompatible warmup protocols", () => {
+    const base = resultContract.parse(result())
+    const current = result()
+    current.scenarios[0].warmupRuns = 0
+    expect(base.scenarios[0].warmupRuns).toBe(1)
+    expect(compareResults(base, resultContract.parse(current))).toEqual([
+      `${scenarioKey(base.scenarios[0])}: warmupRuns mismatch`,
+    ])
+  })
+
+  it("rejects partial gated observations even when their summaries agree", () => {
+    const scalar = result()
+    scalar.scenarios[0].runs[0].totalBlockingTimeMs = 10
+    scalar.scenarios[0].metrics.totalBlockingTimeMs = summarize([10])
+    expect(validateCoverage(scalar)).toEqual([
+      "text-fixed: totalBlockingTimeMs missing from an individual run",
+    ])
+    const ui = result()
+    ui.scenarios[0].runs[0].ui!.menuToFrameMs = [30]
+    ui.scenarios[0].metrics.menuToFrameMs = summarize([30])
+    expect(validateCoverage(ui)).toEqual([
+      "text-fixed: menuToFrameMs missing from an individual run",
+    ])
   })
 
   it("distinguishes delivery shapes and never overwrites a baseline", () => {

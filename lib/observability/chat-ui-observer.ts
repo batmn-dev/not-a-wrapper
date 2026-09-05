@@ -166,7 +166,13 @@ export function installChatUiObserver(
         recordInteractionFrame("typingToFrame", inputAt)
       inputAt = undefined
     }
-    if (isVisible(send) && send.getAttribute("aria-label") === "Send prompt") {
+    if (
+      (!once.has("navigationToSendReadyMs") ||
+        (terminalAt !== undefined && !once.has("terminalToReadyFrameMs")) ||
+        (stopAt !== undefined && !once.has("stopToReadyFrameMs"))) &&
+      send?.getAttribute("aria-label") === "Send prompt" &&
+      isVisible(send)
+    ) {
       if (!send.disabled && send.getAttribute("aria-disabled") !== "true")
         recordOnce("navigationToSendReadyMs", 0)
       if (terminalAt !== undefined)

@@ -130,6 +130,20 @@ describe("ButtonPlusMenu editor-owned interaction", () => {
     expect(scrollIntoView.mock.calls.length).toBeGreaterThan(initialScrollCalls)
     expect(document.activeElement).toBe(editor)
 
+    const highlightedScrollCalls = scrollIntoView.mock.calls.length
+    renderMenu({
+      from: 1,
+      id: 3,
+      isSynthetic: true,
+      query: "",
+      to: 1,
+      trigger: "@",
+    })
+    expect(container.querySelector("[data-highlighted]")?.textContent).toContain(
+      "Web search"
+    )
+    expect(scrollIntoView).toHaveBeenCalledTimes(highlightedScrollCalls)
+
     act(() => {
       editor.dispatchEvent(
         new KeyboardEvent("keydown", {

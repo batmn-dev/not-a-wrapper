@@ -33,7 +33,8 @@ harness. Do not restart the user's browser to obtain CDP access.
 - `smoke`: three guest stream cases for CI harness bring-up.
 
 `RUNS` defaults to 10, `WARMUPS` to 2. Five complete measured runs are the minimum
-for comparison; lower counts are diagnostic only. `ONLY` filters by scenario ID.
+for comparison; lower counts are diagnostic only. `ONLY` filters by scenario ID
+except in the `thread-switch` suite, which always runs its complete journey.
 The core suite's cold entry disables the HTTP cache. CI uses a fresh authenticated
 context for each cold sample; attached Chrome preserves the person's cookies and
 storage. Warm scenarios reuse assets across new documents. The visited-switch pass
@@ -45,10 +46,14 @@ viewport by itself is not a phone-performance simulation.
 
 ## Evidence and gates
 
-Workflow dispatch `diagnose=true` records a single CPU-profiled run for the `only`
-scenario IDs. It skips performance certification; profiled results are rejected
-as baselines. `.cpuprofile` artifacts are developer diagnostics, separate from the
-content-free measurement JSON.
+Workflow dispatch `diagnose=true` supports only `suite=responsiveness` and records
+one profiled run per `only` scenario ID (default: `new-chat-cold,interact-long-answer`).
+Other suites are rejected before setup; disable `diagnose` to run them normally.
+Diagnostics skip performance certification, and profiled results are rejected as
+baselines. The separate `perf-diagnostics` artifact contains `.cpuprofile` files,
+browser timeline `.trace.json` files, and the matching public JavaScript chunks
+for locating sampled functions. These developer diagnostics are separate from
+the content-free measurement JSON in `perf-results`.
 
 Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
