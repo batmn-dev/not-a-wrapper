@@ -13,7 +13,7 @@ index 4b512b6a..e5c563fe 100644
 @@ -453,6 +454,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
          return
        }
- 
+
 +      ;(window as ChatUiWindow).__chatUiPerf?.confirmSend()
 +
        const send = () => {
@@ -38,7 +38,7 @@ index 53910083..17fc4597 100644
 @@ -12,6 +12,8 @@
   * bottom fallback runs). No eviction and no serialization.
   */
- 
+
 +import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
 +
  type SavedThreadAnchor = {
@@ -65,7 +65,7 @@ index 85f22fec..d6c761df 100644
 @@ -85,6 +87,7 @@ export function alignThreadScrollTarget(
    const previousScrollMarginTop = message?.style.scrollMarginTop
    if (message) message.style.scrollMarginTop = `${scrollTargetTop(root)}px`
- 
+
 +  noteChatProgrammaticScroll(root)
    scrollTarget.scrollIntoView({
      behavior: options.behavior ?? resolveBehavior(behaviorTurn),
@@ -126,7 +126,7 @@ index a76b64e8..f03005e7 100644
  import { Chat } from "@ai-sdk/react"
  import {
 @@ -139,21 +143,30 @@ type TransportStream = Awaited<
- 
+
  /**
   * Marks the first parsed chunk and first text delta. Reads only the
 - * chunk's `type` discriminant, retains nothing, and is skipped entirely when
@@ -190,10 +190,10 @@ index 81519ba6..ddecb35f 100644
  import { markChatPerf } from "@/lib/observability/chat-performance"
 +import { noteChatPublicationFrame } from "@/lib/observability/chat-ui-events"
  import type { Chat, UIMessage } from "@ai-sdk/react"
- 
+
  type ScheduledPublication =
 @@ -58,10 +59,11 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
- 
+
    const publish = () => {
      cancelScheduledPublication()
 -    if (!pending) return
@@ -203,7 +203,7 @@ index 81519ba6..ddecb35f 100644
      onChange()
 +    return true
    }
- 
+
    const schedule = () => {
 @@ -71,7 +73,9 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
      if (typeof requestAnimationFrame === "function") {
