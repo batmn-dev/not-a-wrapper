@@ -223,7 +223,7 @@ jobs:
 
       - name: Upload results artifact
         if: ${{ always() && !inputs.observer_overhead && !inputs.rendering_probe }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
           path: |
@@ -234,7 +234,7 @@ jobs:
 
       - name: Upload diagnostic artifacts
         if: ${{ always() && inputs.diagnose && !inputs.observer_overhead && !inputs.rendering_probe }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: perf-diagnostics-${{ env.SUITE }}-${{ github.run_id }}
           include-hidden-files: true
@@ -246,7 +246,7 @@ jobs:
 
       - name: Upload observer comparison traces
         if: ${{ always() && inputs.observer_overhead }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: perf-observer-overhead-${{ github.run_id }}
           path: benchmarks/chat-performance/browser/results/traces/
@@ -254,7 +254,7 @@ jobs:
 
       - name: Upload rendering probe traces
         if: ${{ always() && inputs.rendering_probe }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: perf-rendering-probe-${{ github.run_id }}
           include-hidden-files: true
