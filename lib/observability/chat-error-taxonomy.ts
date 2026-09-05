@@ -31,7 +31,8 @@ function hasStatus(statuses: number[], status: number): boolean {
 }
 
 export function classifyChatError(error: unknown): ChatErrorType {
-  const { codes, names, messages, statuses } = collectChatErrorEvidence(error)
+  const { codes, errorTypes, names, messages, statuses } =
+    collectChatErrorEvidence(error)
   const hasValidationEvidence =
     hasStatus(statuses, 400) ||
     matchesAnyIn(codes, ["invalid_request", "bad_request", "validation"])
@@ -49,12 +50,30 @@ export function classifyChatError(error: unknown): ChatErrorType {
     matchesAnyIn(codes, ["rate_limit", "too_many_requests", "quota_exceeded"])
   const hasPaymentEvidence =
     hasStatus(statuses, 402) ||
-    matchesAnyIn(codes, ["payment_required", "insufficient_quota"])
+    matchesAnyIn(codes, ["payment_required", "insufficient_quota"]) ||
+    matchesAnyIn(errorTypes, ["payment_required", "token_limit_exceeded"])
 
   if (hasValidationEvidence) return "validation"
   if (hasAuthEvidence) return "auth"
   if (hasRateLimitEvidence) return "rate_limit"
   if (hasPaymentEvidence) return "provider_api"
+
+  const toolSignals =
+    matchesAnyIn(codes, ["tool"]) ||
+    matchesAnyIn(messages, ["tool", "mcp", "function call", "tool_call"])
+  if (
+    toolSignals &&
+    (matchesAnyIn(names, ["timeout"]) ||
+      matchesAnyIn(codes, ["timeout"]) ||
+      matchesAnyIn(messages, [
+        "timeout",
+        "timed out",
+        "deadline exceeded",
+        "aborterror",
+      ]))
+  ) {
+    return "tool_timeout"
+  }
 
   if (
     matchesAnyIn(messages, [
@@ -83,8 +102,6 @@ export function classifyChatError(error: unknown): ChatErrorType {
       "requires payment",
       "insufficient credit",
       "insufficient quota",
-      "billing",
-      "credits",
     ])
   ) {
     return "provider_api"
@@ -102,22 +119,6 @@ export function classifyChatError(error: unknown): ChatErrorType {
     return "auth"
   }
 
-  const toolSignals =
-    matchesAnyIn(codes, ["tool"]) ||
-    matchesAnyIn(messages, ["tool", "mcp", "function call", "tool_call"])
-  if (
-    toolSignals &&
-    (matchesAnyIn(names, ["timeout"]) ||
-      matchesAnyIn(codes, ["timeout"]) ||
-      matchesAnyIn(messages, [
-        "timeout",
-        "timed out",
-        "deadline exceeded",
-        "aborterror",
-      ]))
-  ) {
-    return "tool_timeout"
-  }
   if (toolSignals) {
     return "tool_execution"
   }

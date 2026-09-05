@@ -66,6 +66,24 @@ describe("classifyChatError", () => {
     ).toBe("rate_limit")
   })
 
+  it.each(["billing", "payment required", "insufficient quota"])(
+    "preserves a tool timeout when its name contains %s",
+    (toolName) => {
+      expect(
+        classifyChatError(new Error(`Tool "${toolName}" timed out`))
+      ).toBe("tool_timeout")
+    }
+  )
+
+  it("classifies structured provider payment metadata", () => {
+    expect(
+      classifyChatError({
+        message: "Request cannot be processed.",
+        metadata: { error_type: "payment_required" },
+      })
+    ).toBe("provider_api")
+  })
+
   it.each([
     ["lastError", { lastError: { statusCode: 429 } }, "rate_limit"],
     ["errors", { errors: [{ statusCode: 429 }] }, "rate_limit"],
