@@ -48,9 +48,9 @@ on:
         type: boolean
         default: false
       only:
-        description: "Diagnostic scenario IDs, comma-separated"
+        description: "Diagnostic scenario IDs, comma-separated; blank uses mode-specific defaults"
         type: string
-        default: "new-chat-cold,interact-long-answer"
+        default: ""
       observer_overhead:
         description: "Interleaved DOM observer on/off trace comparison (requires diagnose)"
         type: boolean
@@ -89,7 +89,7 @@ jobs:
       WARMUPS: ${{ inputs.diagnose && '0' || '1' }}
       PERF_PROFILE: ${{ inputs.diagnose && 'true' || 'false' }}
       PERF_PROFILE_LATE_MENU: ${{ inputs.late_menu_trace && 'true' || 'false' }}
-      ONLY: ${{ inputs.diagnose && inputs.only || '' }}
+      ONLY: ${{ inputs.diagnose && (inputs.only || (inputs.late_menu_trace && 'interact-long-answer' || 'new-chat-cold,interact-long-answer')) || '' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite

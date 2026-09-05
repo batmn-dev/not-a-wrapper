@@ -73,8 +73,9 @@ recording work out of the controlled chat workload; production replay remains
 unchanged. Earlier replay-enabled captures cannot seed these baselines.
 Comparisons reject missing baselines, missing/failed samples, duplicate identities,
 and incompatible conditions. Every named suite must match its existing complete
-scenario list; an `ONLY` subset cannot certify a complete suite. Baseline collection is an explicit operation, never
-a silent successful comparison. Five or more measured runs are required for a
+scenario list; an `ONLY` subset cannot certify a complete suite. Baseline
+collection is an explicit operation, never a silent successful comparison.
+Five or more measured runs are required for a
 comparison; p95 is omitted below 20 observations. Raw measurements and sample
 counts remain available, and slow input samples are never dropped for being slow.
 Summaries are checked against raw UI samples. Completed foreground runs fail on
