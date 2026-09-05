@@ -411,11 +411,38 @@ async function runCase(
       await page.waitForFunction(() => Boolean((window as ChatUiWindow).__chatUiPerf))
       // Drain setup's DOM scan and post-frame task in both arms. A second cycle
       // includes scans queued by DOM commits later in the first rendering step.
-      await page.evaluate(() => new Promise<void>((resolve) => {
-        requestAnimationFrame(() => setTimeout(() => {
-          requestAnimationFrame(() => setTimeout(resolve, 0))
-        }, 0))
-      }))
+      await page.evaluate(() => {
+        if (document.visibilityState !== "visible")
+          throw new Error("observer setup lost foreground visibility")
+        return new Promise<void>((resolve, reject) => {
+          let frame = 0
+          let task: ReturnType<typeof setTimeout> | undefined
+          const finish = (error?: Error) => {
+            cancelAnimationFrame(frame)
+            clearTimeout(task)
+            clearTimeout(deadline)
+            document.removeEventListener("visibilitychange", visibility)
+            if (error) reject(error)
+            else resolve()
+          }
+          const visibility = () => {
+            if (document.visibilityState !== "visible")
+              finish(new Error("observer setup lost foreground visibility"))
+          }
+          const deadline = setTimeout(
+            () => finish(new Error("observer setup did not drain within 5 seconds")),
+            5000
+          )
+          document.addEventListener("visibilitychange", visibility)
+          frame = requestAnimationFrame(() => {
+            task = setTimeout(() => {
+              frame = requestAnimationFrame(() => {
+                task = setTimeout(() => finish(), 0)
+              })
+            }, 0)
+          })
+        })
+      })
       if (!observerRun.enabled) {
         await page.evaluate(() => {
           // The application's delayed import must not reinstall the off arm.
