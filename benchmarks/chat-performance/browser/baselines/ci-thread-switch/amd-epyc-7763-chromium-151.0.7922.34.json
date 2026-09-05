@@ -1,0 +1,989 @@
+{
+  "schemaVersion": 2,
+  "measurementVersion": "dom-frame-v3",
+  "typingCadenceMs": 40,
+  "replayPolicy": "disabled-v1",
+  "identityProtocol": "ci-isolated-v1",
+  "profiled": false,
+  "fixtureHash": "87cb69eed4321f7b",
+  "generatedAt": "2026-09-05T10:22:22.647Z",
+  "commit": "36f21d1",
+  "buildId": "KelASso9apfbIAqom0pYJ",
+  "buildClass": "production",
+  "instrumentationBuild": true,
+  "machineClass": "linux-x64",
+  "cpuModel": "AMD EPYC 7763 64-Core Processor",
+  "cpuCount": 4,
+  "memoryGb": 16,
+  "osVersion": "Linux 6.17.0-1022-azure",
+  "browserVersion": "151.0.7922.34",
+  "baseUrl": "http://localhost:3111",
+  "suite": "thread-switch",
+  "scenarios": [],
+  "threadSwitch": {
+    "chatCount": 8,
+    "switchCount": 50,
+    "hoverMs": 250,
+    "documents": 5,
+    "passes": [
+      {
+        "kind": "unvisited-click",
+        "switches": 20,
+        "samples": [
+          {
+            "navToPaintedMs": 1045,
+            "intentToCommitMs": 40.6,
+            "commitToFirstContentMs": 86.6,
+            "firstContentToPaintedMs": 837.6,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 115.10000000000582,
+            "intentToCommitMs": 35.9,
+            "commitToFirstContentMs": 43.7,
+            "firstContentToPaintedMs": 29.6,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 76.79999999998836,
+            "intentToCommitMs": 28.4,
+            "commitToFirstContentMs": 19,
+            "firstContentToPaintedMs": 24.3,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 65.60000000000582,
+            "intentToCommitMs": 27.6,
+            "commitToFirstContentMs": 15.8,
+            "firstContentToPaintedMs": 18.9,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 66.29999999998836,
+            "intentToCommitMs": 25.4,
+            "commitToFirstContentMs": 15.7,
+            "firstContentToPaintedMs": 21.3,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 71.70000000001164,
+            "intentToCommitMs": 27.8,
+            "commitToFirstContentMs": 21.7,
+            "firstContentToPaintedMs": 28.1,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 65.09999999997672,
+            "intentToCommitMs": 25.7,
+            "commitToFirstContentMs": 14.8,
+            "firstContentToPaintedMs": 21.5,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 64.29999999998836,
+            "intentToCommitMs": 25.9,
+            "commitToFirstContentMs": 15.4,
+            "firstContentToPaintedMs": 19.8,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 1057.3999999999942,
+            "intentToCommitMs": 47.1,
+            "commitToFirstContentMs": 33.9,
+            "firstContentToPaintedMs": 16.3,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 109.5,
+            "intentToCommitMs": 33.8,
+            "commitToFirstContentMs": 40.1,
+            "firstContentToPaintedMs": 32,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 70.10000000000582,
+            "intentToCommitMs": 28,
+            "commitToFirstContentMs": 16.1,
+            "firstContentToPaintedMs": 32.9,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 66.10000000000582,
+            "intentToCommitMs": 26.8,
+            "commitToFirstContentMs": 15.2,
+            "firstContentToPaintedMs": 20.6,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 75.70000000001164,
+            "intentToCommitMs": 27.2,
+            "commitToFirstContentMs": 15.9,
+            "firstContentToPaintedMs": 28.8,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 71,
+            "intentToCommitMs": 26.2,
+            "commitToFirstContentMs": 23.1,
+            "firstContentToPaintedMs": 27.1,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 69.19999999998254,
+            "intentToCommitMs": 29.3,
+            "commitToFirstContentMs": 15.6,
+            "firstContentToPaintedMs": 21.4,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 65.79999999998836,
+            "intentToCommitMs": 29.1,
+            "commitToFirstContentMs": 15.1,
+            "firstContentToPaintedMs": 18.8,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 1062.3999999999942,
+            "intentToCommitMs": 35.2,
+            "commitToFirstContentMs": 36.3,
+            "firstContentToPaintedMs": 30.5,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 113.70000000001164,
+            "intentToCommitMs": 35.1,
+            "commitToFirstContentMs": 40.1,
+            "firstContentToPaintedMs": 32.1,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 70.5,
+            "intentToCommitMs": 28.7,
+            "commitToFirstContentMs": 17.7,
+            "firstContentToPaintedMs": 29.9,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 59.39999999999418,
+            "intentToCommitMs": 19.2,
+            "commitToFirstContentMs": 16,
+            "firstContentToPaintedMs": 34,
+            "cache": "miss",
+            "querySetAdds": 2,
+            "ok": true
+          }
+        ],
+        "navToThreadPaintedMs": {
+          "n": 20,
+          "p50": 71,
+          "p75": 113.7,
+          "p95": 1062.4,
+          "max": 1062.4
+        },
+        "intentToRouteCommitMs": {
+          "n": 20,
+          "p50": 28.4,
+          "p75": 35.1,
+          "p95": 47.1,
+          "max": 47.1
+        },
+        "commitToFirstContentMs": {
+          "n": 20,
+          "p50": 17.7,
+          "p75": 36.3,
+          "p95": 86.6,
+          "max": 86.6
+        },
+        "firstContentToPaintedMs": {
+          "n": 20,
+          "p50": 28.1,
+          "p75": 32,
+          "p95": 837.6,
+          "max": 837.6
+        },
+        "cacheHits": 0,
+        "cacheMisses": 20,
+        "querySetAddsPerSwitch": {
+          "n": 20,
+          "p50": 2,
+          "p75": 2,
+          "p95": 2,
+          "max": 2
+        }
+      },
+      {
+        "kind": "unvisited-hover",
+        "switches": 20,
+        "samples": [
+          {
+            "navToPaintedMs": 53.69999999998254,
+            "intentToCommitMs": 27,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 22.8,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 49.09999999997672,
+            "intentToCommitMs": 27.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.8,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 49.59999999997672,
+            "intentToCommitMs": 27.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.7,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 48.69999999998254,
+            "intentToCommitMs": 27.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.2,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 1060.6000000000058,
+            "intentToCommitMs": 72.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 27.5,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 91.69999999998254,
+            "intentToCommitMs": 35.2,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 54.6,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 51.5,
+            "intentToCommitMs": 28.4,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 32.4,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 48.70000000001164,
+            "intentToCommitMs": 26.3,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 18.5,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 53.60000000000582,
+            "intentToCommitMs": 27.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 22.4,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 51.40000000002328,
+            "intentToCommitMs": 28.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 20.3,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 49.89999999999418,
+            "intentToCommitMs": 27.3,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 20,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 55,
+            "intentToCommitMs": 33.4,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.7,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 1082.6000000000058,
+            "intentToCommitMs": 56.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 24.9,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 93.60000000000582,
+            "intentToCommitMs": 36.9,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 54.2,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 53.79999999998836,
+            "intentToCommitMs": 29.9,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 30.4,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 54.39999999999418,
+            "intentToCommitMs": 29.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 20.8,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 54.60000000000582,
+            "intentToCommitMs": 29.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 22,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 50.90000000002328,
+            "intentToCommitMs": 27.8,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 20.4,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 48.5,
+            "intentToCommitMs": 26.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 52.5,
+            "intentToCommitMs": 29.7,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.9,
+            "cache": "hit",
+            "querySetAdds": 2,
+            "ok": true
+          }
+        ],
+        "navToThreadPaintedMs": {
+          "n": 20,
+          "p50": 53.6,
+          "p75": 55,
+          "p95": 1082.6,
+          "max": 1082.6
+        },
+        "intentToRouteCommitMs": {
+          "n": 20,
+          "p50": 28.6,
+          "p75": 33.4,
+          "p95": 72.9,
+          "max": 72.9
+        },
+        "commitToFirstContentMs": {
+          "n": 20,
+          "p50": 0,
+          "p75": 0.1,
+          "p95": 0.1,
+          "max": 0.1
+        },
+        "firstContentToPaintedMs": {
+          "n": 20,
+          "p50": 20.8,
+          "p75": 27.5,
+          "p95": 54.6,
+          "max": 54.6
+        },
+        "cacheHits": 20,
+        "cacheMisses": 0,
+        "querySetAddsPerSwitch": {
+          "n": 20,
+          "p50": 2,
+          "p75": 2,
+          "p95": 2,
+          "max": 2
+        }
+      },
+      {
+        "kind": "visited",
+        "switches": 50,
+        "samples": [
+          {
+            "navToPaintedMs": 892.1000000000058,
+            "intentToCommitMs": 30.5,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 906.9,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 69.19999999998254,
+            "intentToCommitMs": 27.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 39.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 47.59999999997672,
+            "intentToCommitMs": 26,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.1,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 76.89999999999418,
+            "intentToCommitMs": 39.3,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 25.1,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 51.89999999999418,
+            "intentToCommitMs": 30.8,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 17.6,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.70000000001164,
+            "intentToCommitMs": 26.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 32.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 47.10000000000582,
+            "intentToCommitMs": 25.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 20.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45.10000000000582,
+            "intentToCommitMs": 23.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.7,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 726.1000000000058,
+            "intentToCommitMs": 24.2,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 762.4,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 69,
+            "intentToCommitMs": 28.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 39.8,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 57.80000000001746,
+            "intentToCommitMs": 29.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 24.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 56,
+            "intentToCommitMs": 28.3,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 23.9,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 53.20000000001164,
+            "intentToCommitMs": 28,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 21.1,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 51.20000000001164,
+            "intentToCommitMs": 27.7,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 20.3,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 48.80000000001746,
+            "intentToCommitMs": 25.5,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 19.3,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 49.5,
+            "intentToCommitMs": 25.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 20.6,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 821.9000000000233,
+            "intentToCommitMs": 25.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 840.8,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 70.60000000000582,
+            "intentToCommitMs": 28,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 41.6,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.30000000001746,
+            "intentToCommitMs": 25.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.7,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45.09999999997672,
+            "intentToCommitMs": 24,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.10000000000582,
+            "intentToCommitMs": 24.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 27.8,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 47.70000000001164,
+            "intentToCommitMs": 25.2,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.3,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 47,
+            "intentToCommitMs": 24.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 44,
+            "intentToCommitMs": 23.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 756.5999999999767,
+            "intentToCommitMs": 24.8,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 778.9,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 86.39999999999418,
+            "intentToCommitMs": 36.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 47.9,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 53.69999999998254,
+            "intentToCommitMs": 27.3,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 22.4,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 51.70000000001164,
+            "intentToCommitMs": 28.7,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 19.4,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 47.90000000002328,
+            "intentToCommitMs": 23.8,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.1,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.59999999997672,
+            "intentToCommitMs": 24.8,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 24.6,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 48.10000000000582,
+            "intentToCommitMs": 24.4,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 19.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 51.79999999998836,
+            "intentToCommitMs": 26.2,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 21.7,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 820.1999999999825,
+            "intentToCommitMs": 26,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 839,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 70.70000000001164,
+            "intentToCommitMs": 28.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 41.1,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45.5,
+            "intentToCommitMs": 24.4,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 19.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.300000000046566,
+            "intentToCommitMs": 25.2,
+            "commitToFirstContentMs": 0.1,
+            "firstContentToPaintedMs": 18.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.899999999965075,
+            "intentToCommitMs": 25.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 28.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45.09999999997672,
+            "intentToCommitMs": 24.7,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45,
+            "intentToCommitMs": 23.7,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 43.59999999997672,
+            "intentToCommitMs": 23.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 763.2999999999884,
+            "intentToCommitMs": 24.7,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 784.9,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 68.39999999996508,
+            "intentToCommitMs": 27.6,
+            "commitToFirstContentMs": 0.2,
+            "firstContentToPaintedMs": 39.2,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45.100000000034925,
+            "intentToCommitMs": 24.6,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 31.8,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 45.70000000001164,
+            "intentToCommitMs": 24.8,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 46.800000000046566,
+            "intentToCommitMs": 25.1,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 18,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 47,
+            "intentToCommitMs": 25.2,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 17.8,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 48.29999999998836,
+            "intentToCommitMs": 24.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.7,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 44.90000000002328,
+            "intentToCommitMs": 24.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 19.3,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 700.5999999999767,
+            "intentToCommitMs": 26.5,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 722.5,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          },
+          {
+            "navToPaintedMs": 73.40000000002328,
+            "intentToCommitMs": 27.9,
+            "commitToFirstContentMs": 0,
+            "firstContentToPaintedMs": 43.1,
+            "cache": "hit",
+            "querySetAdds": 0,
+            "ok": true
+          }
+        ],
+        "navToThreadPaintedMs": {
+          "n": 50,
+          "p50": 48.8,
+          "p75": 69.2,
+          "p95": 820.2,
+          "max": 892.1
+        },
+        "intentToRouteCommitMs": {
+          "n": 50,
+          "p50": 25.5,
+          "p75": 27.7,
+          "p95": 30.8,
+          "max": 39.3
+        },
+        "commitToFirstContentMs": {
+          "n": 50,
+          "p50": 0,
+          "p75": 0,
+          "p95": 0.1,
+          "max": 0.2
+        },
+        "firstContentToPaintedMs": {
+          "n": 50,
+          "p50": 21.1,
+          "p75": 39.2,
+          "p95": 839,
+          "max": 906.9
+        },
+        "cacheHits": 50,
+        "cacheMisses": 0,
+        "querySetAddsPerSwitch": {
+          "n": 50,
+          "p50": 0,
+          "p75": 0,
+          "p95": 0,
+          "max": 0
+        }
+      }
+    ],
+    "heapSamples": [
+      {
+        "switches": 0,
+        "jsHeapUsedBytes": 26625664
+      },
+      {
+        "switches": 10,
+        "jsHeapUsedBytes": 27342740
+      },
+      {
+        "switches": 25,
+        "jsHeapUsedBytes": 39311940
+      },
+      {
+        "switches": 50,
+        "jsHeapUsedBytes": 28464564
+      }
+    ],
+    "correctnessOk": true
+  }
+}

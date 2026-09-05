@@ -79,3 +79,18 @@ The long Markdown fixture accounts for every sample above 150 ms; those samples
 are retained. Median navigation is 45–48 ms and p95 is 601–829 ms. These tails
 are measured existing behavior, not proof of fast navigation. An independent
 normal comparison is still required. Other suites remain pending.
+
+Reviewed AMD EPYC 7763 capture: [run 33960196987](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33960196987),
+commit `36f21d1b`, build `KelASso9apfbIAqom0pYJ`, Chromium `151.0.7922.34`,
+Linux x64 with 4 logical CPUs and 16 GB memory. This production instrumented
+capture uses `dom-frame-v3`, `ci-isolated-v1`, `disabled-v1` replay policy,
+40 ms typing, and fixture hash `87cb69eed4321f7b`; profiling is off.
+All 90 switches pass correctness and strict collection validation
+(20 unvisited-click, 20 unvisited-hover, 50 visited across 8 chats).
+Their respective navigation p50 values are 71, 53.6, and 48.8 ms; p95 values are
+1062.4, 1082.6, and 820.2 ms. Every sample above 150 ms is the long Markdown
+fixture, and all samples are retained unchanged. Unvisited clicks have 20 cache
+misses; hovered and visited switches have 20 and 50 cache hits respectively.
+The normal workflow failed only because this exact CPU environment had no
+baseline. Reviewing and collecting that artifact does not convert the failed run
+into a comparison pass: an independent normal comparison is still required.
