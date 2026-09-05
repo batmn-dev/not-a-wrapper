@@ -15,9 +15,6 @@ import {
 type ChatSessionContextValue = {
   chatId: string | null
   isNewChatSurface: boolean
-  /** The first turn is adopting its client-minted chat id before Next has
-   * observed the pushed pathname. */
-  isChatIdHandoff: boolean
   /**
    * Send sets the active chat identity; the route follows synchronously
    * (`/c/<chatId>` via pushState) before any request leaves (ADR-0033).
@@ -38,7 +35,6 @@ type ChatSessionContextValue = {
 const ChatSessionContext = createContext<ChatSessionContextValue>({
   chatId: null,
   isNewChatSurface: false,
-  isChatIdHandoff: false,
   commitChatIdentity: () => undefined,
   resetChatIdentity: () => undefined,
   selectedModelOverride: null,
@@ -47,6 +43,10 @@ const ChatSessionContext = createContext<ChatSessionContextValue>({
 })
 
 export const useChatSession = () => useContext(ChatSessionContext)
+
+// Only effort adoption needs the transient flag after the chat id stabilizes.
+const ChatIdHandoffContext = createContext(false)
+export const useChatIdHandoff = () => useContext(ChatIdHandoffContext)
 
 type ShallowHandoff = {
   fromPathname: string
@@ -206,7 +206,6 @@ export function ChatSessionProvider({
     () => ({
       chatId,
       isNewChatSurface,
-      isChatIdHandoff,
       commitChatIdentity,
       resetChatIdentity,
       selectedModelOverride,
@@ -216,7 +215,6 @@ export function ChatSessionProvider({
     [
       chatId,
       isNewChatSurface,
-      isChatIdHandoff,
       commitChatIdentity,
       resetChatIdentity,
       selectedModelOverride,
@@ -227,7 +225,9 @@ export function ChatSessionProvider({
 
   return (
     <ChatSessionContext.Provider value={value}>
-      {children}
+      <ChatIdHandoffContext.Provider value={isChatIdHandoff}>
+        {children}
+      </ChatIdHandoffContext.Provider>
     </ChatSessionContext.Provider>
   )
 }

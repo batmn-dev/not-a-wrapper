@@ -151,6 +151,9 @@ describe("TurnContextProvider snapshot contract", () => {
     mount("chat-a", true)
     expect(contexts.at(-1)?.reasoningEffort).toBe("high")
 
+    mount("chat-a", false)
+    expect(contexts.at(-1)?.getTurnSnapshot().reasoningEffort).toBe("high")
+
     mount("chat-b")
     expect(contexts.at(-1)?.reasoningEffort).toBeUndefined()
     expect(contexts.at(-1)?.getTurnSnapshot().reasoningEffort).toBeUndefined()
