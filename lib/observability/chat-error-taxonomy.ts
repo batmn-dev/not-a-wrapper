@@ -32,10 +32,31 @@ function hasStatus(statuses: number[], status: number): boolean {
 
 export function classifyChatError(error: unknown): ChatErrorType {
   const { codes, names, messages, statuses } = collectChatErrorEvidence(error)
+  const hasValidationEvidence =
+    hasStatus(statuses, 400) ||
+    matchesAnyIn(codes, ["invalid_request", "bad_request", "validation"])
+  const hasAuthEvidence =
+    hasStatus(statuses, 401) ||
+    hasStatus(statuses, 403) ||
+    matchesAnyIn(codes, [
+      "not_authenticated",
+      "unauthorized",
+      "forbidden",
+      "missing_api_key",
+    ])
+  const hasRateLimitEvidence =
+    hasStatus(statuses, 429) ||
+    matchesAnyIn(codes, ["rate_limit", "too_many_requests", "quota_exceeded"])
+  const hasPaymentEvidence =
+    hasStatus(statuses, 402) ||
+    matchesAnyIn(codes, ["payment_required", "insufficient_quota"])
+
+  if (hasValidationEvidence) return "validation"
+  if (hasAuthEvidence) return "auth"
+  if (hasRateLimitEvidence) return "rate_limit"
+  if (hasPaymentEvidence) return "provider_api"
 
   if (
-    hasStatus(statuses, 400) ||
-    matchesAnyIn(codes, ["invalid_request", "bad_request", "validation"]) ||
     matchesAnyIn(messages, [
       "missing required",
       "invalid request",
@@ -47,14 +68,29 @@ export function classifyChatError(error: unknown): ChatErrorType {
   }
 
   if (
-    hasStatus(statuses, 401) ||
-    hasStatus(statuses, 403) ||
-    matchesAnyIn(codes, [
-      "not_authenticated",
-      "unauthorized",
-      "forbidden",
-      "missing_api_key",
-    ]) ||
+    matchesAnyIn(messages, [
+      "rate limit",
+      "too many requests",
+      "quota exceeded",
+    ])
+  ) {
+    return "rate_limit"
+  }
+
+  if (
+    matchesAnyIn(messages, [
+      "payment required",
+      "requires payment",
+      "insufficient credit",
+      "insufficient quota",
+      "billing",
+      "credits",
+    ])
+  ) {
+    return "provider_api"
+  }
+
+  if (
     matchesAnyIn(messages, [
       "not authenticated",
       "requires authentication",
@@ -64,22 +100,6 @@ export function classifyChatError(error: unknown): ChatErrorType {
     ])
   ) {
     return "auth"
-  }
-
-  if (
-    hasStatus(statuses, 429) ||
-    matchesAnyIn(codes, [
-      "rate_limit",
-      "too_many_requests",
-      "quota_exceeded",
-    ]) ||
-    matchesAnyIn(messages, [
-      "rate limit",
-      "too many requests",
-      "quota exceeded",
-    ])
-  ) {
-    return "rate_limit"
   }
 
   const toolSignals =
@@ -103,7 +123,6 @@ export function classifyChatError(error: unknown): ChatErrorType {
   }
 
   if (
-    hasStatus(statuses, 402) ||
     hasStatus(statuses, 502) ||
     hasStatus(statuses, 503) ||
     hasStatus(statuses, 504) ||
