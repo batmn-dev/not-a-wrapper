@@ -478,6 +478,9 @@ function MarkdownComponent({
     return () => settleStreamingDecay(container)
   }, [streaming])
 
+  // React retries this render before reconciling children with adjusted state.
+  if (current !== projection) return null
+
   const blocks = current.state.blocks
   return (
     <div className={className} ref={containerRef}>

@@ -26,6 +26,10 @@ readiness fix in `8dd091f8`; the observer comparison was captured separately on
   ranges after existing visible cohorts finish fading. Re-entry resumes current
   cohorts. Cohort updates still read the container's current `textContent`, so
   this does not eliminate all work proportional to answer length.
+- Markdown skips child preparation in the render that adjusts its projection
+  state. React immediately retries that render before reconciling children. A
+  focused test verifies one growing-tail preparation instead of two, with the
+  same stable paragraph node and rendered text; this is not a latency claim.
 - Existing-chat Send waits for the message provider's history readiness, the
   selected stream binding, and loaded history reaching the rendered message
   array. The same guard protects direct and automatic submission. Typing and
