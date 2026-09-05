@@ -55,6 +55,10 @@ on:
         description: "Interleaved DOM observer on/off trace comparison (requires diagnose)"
         type: boolean
         default: false
+      late_menu_trace:
+        description: "Bounded late-menu style invalidation trace (requires diagnose and an interactive scenario)"
+        type: boolean
+        default: false
       rendering_probe:
         description: "Diagnostic smooth/quick and inner text block-layout traces (requires diagnose)"
         type: boolean
@@ -84,11 +88,12 @@ jobs:
       RUNS: ${{ inputs.diagnose && 1 || 5 }}
       WARMUPS: ${{ inputs.diagnose && '0' || '1' }}
       PERF_PROFILE: ${{ inputs.diagnose && 'true' || 'false' }}
+      PERF_PROFILE_LATE_MENU: ${{ inputs.late_menu_trace && 'true' || 'false' }}
       ONLY: ${{ inputs.diagnose && inputs.only || '' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite
-        if: ${{ inputs.diagnose || inputs.observer_overhead || inputs.rendering_probe }}
+        if: ${{ inputs.diagnose || inputs.observer_overhead || inputs.rendering_probe || inputs.late_menu_trace }}
         run: |
           if { [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; } && [ "${{ inputs.diagnose }}" != "true" ]; then
             echo "::error::observer_overhead and rendering_probe require diagnose=true; these traces cannot certify a baseline."
@@ -97,6 +102,12 @@ jobs:
           if [ "${{ inputs.observer_overhead }}" = "true" ] && [ "${{ inputs.rendering_probe }}" = "true" ]; then
             echo "::error::Choose only one of observer_overhead or rendering_probe."
             exit 1
+          fi
+          if [ "${{ inputs.late_menu_trace }}" = "true" ]; then
+            if [ "${{ inputs.diagnose }}" != "true" ] || [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; then
+              echo "::error::late_menu_trace requires diagnose=true and cannot combine with another diagnostic control."
+              exit 1
+            fi
           fi
           if [ "$SUITE" != "responsiveness" ]; then
             echo "::error title=Unsupported diagnostic suite::diagnose=true supports only suite=responsiveness. Disable diagnose to run the selected suite normally."

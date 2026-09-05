@@ -81,6 +81,7 @@ const RUNS = Number(process.env.RUNS ?? 10)
 const WARMUPS = Number(process.env.WARMUPS ?? 2)
 const SUITE_NAME = process.env.SUITE ?? "standard"
 const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next-perf"
+const PROFILE_LATE_MENU = process.env.PERF_PROFILE_LATE_MENU === "true"
 const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   "../../.."
@@ -358,6 +359,20 @@ async function runScenarioOnce(
   await page.bringToFront()
   const cdp: CDPSession = await context.newCDPSession(page)
   let profiling = false
+  let tracing = false
+  let traceStream: string | undefined
+  let lateMenuTraceComplete = false
+  const stopTrace = async () => {
+    const completed = new Promise<string>((resolve, reject) => {
+      cdp.once("Tracing.tracingComplete", (event) => {
+        if (event.stream) resolve(event.stream)
+        else reject(new Error("Diagnostic trace did not return a stream"))
+      })
+    })
+    await cdp.send("Tracing.end")
+    tracing = false
+    traceStream = await completed
+  }
   let interactionProbeStage = "entry"
   let wheelPoint: { x: number; y: number } | undefined
   await cdp.send("Performance.enable")
@@ -450,11 +465,14 @@ async function runScenarioOnce(
     if (process.env.PERF_PROFILE === "true") {
       await cdp.send("Profiler.enable")
       await cdp.send("Profiler.start")
-      await cdp.send("Tracing.start", {
-        categories: "devtools.timeline,blink.user_timing",
-        transferMode: "ReturnAsStream",
-      })
       profiling = true
+      if (!PROFILE_LATE_MENU) {
+        await cdp.send("Tracing.start", {
+          categories: "devtools.timeline,blink.user_timing",
+          transferMode: "ReturnAsStream",
+        })
+        tracing = true
+      }
     }
     await page.locator('[data-testid="send-button"]').click()
 
@@ -543,6 +561,15 @@ async function runScenarioOnce(
         })
         interactionProbeStage = `${phase} menu open`
         await requireStreaming(phase, "menu")
+        if (PROFILE_LATE_MENU && phase === "late") {
+          // Invalidation tracking is intentionally limited to this interaction.
+          await cdp.send("Tracing.start", {
+            categories:
+              "devtools.timeline,blink.user_timing,disabled-by-default-devtools.timeline.invalidationTracking",
+            transferMode: "ReturnAsStream",
+          })
+          tracing = true
+        }
         await page.getByTestId("composer-plus-btn").click()
         await page
           .locator("[data-chat-composer-menu]")
@@ -567,6 +594,10 @@ async function runScenarioOnce(
           },
           phase
         )
+        if (PROFILE_LATE_MENU && phase === "late") {
+          await stopTrace()
+          lateMenuTraceComplete = true
+        }
         interactionProbeStage = `${phase} menu close`
         await page.keyboard.press("Escape")
         await page.locator("[data-chat-composer-menu]")
@@ -1080,25 +1111,26 @@ async function runScenarioOnce(
           path.join(directory, `${capture}.cpuprofile`),
           JSON.stringify(profile)
         )
-        const completed = new Promise<string>((resolve) => {
-          cdp.once("Tracing.tracingComplete", (event) => resolve(event.stream!))
-        })
-        await cdp.send("Tracing.end")
-        const handle = await completed
-        const chunks: Buffer[] = []
-        let eof = false
-        while (!eof) {
-          const part = await cdp.send("IO.read", { handle })
-          chunks.push(
-            Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
+        if (tracing) await stopTrace()
+        if (traceStream) {
+          const chunks: Buffer[] = []
+          let eof = false
+          while (!eof) {
+            const part = await cdp.send("IO.read", { handle: traceStream })
+            chunks.push(
+              Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
+            )
+            eof = part.eof
+          }
+          await cdp.send("IO.close", { handle: traceStream })
+          const scope = PROFILE_LATE_MENU
+            ? `.late-menu${lateMenuTraceComplete ? "" : ".partial"}`
+            : ""
+          writeFileSync(
+            path.join(directory, `${capture}${scope}.trace.json`),
+            Buffer.concat(chunks)
           )
-          eof = part.eof
         }
-        await cdp.send("IO.close", { handle })
-        writeFileSync(
-          path.join(directory, `${capture}.trace.json`),
-          Buffer.concat(chunks)
-        )
       }
     } finally {
       await page.close()
@@ -1254,6 +1286,13 @@ async function main() {
     if (suite.length === 0)
       fail(`ONLY matched no scenario: ${process.env.ONLY}`)
   }
+  if (
+    PROFILE_LATE_MENU &&
+    (process.env.PERF_PROFILE !== "true" ||
+      isThreadSwitch ||
+      suite.some((config) => !config.interact))
+  )
+    fail("PERF_PROFILE_LATE_MENU requires PERF_PROFILE=true and only interaction scenarios")
   if (process.env.PERF_CDP_URL && suite.some((config) => !config.auth))
     fail(
       "Guest suites need a CI browser; the attached authenticated profile must not have its storage cleared or be reported as a guest."

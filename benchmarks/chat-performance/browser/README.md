@@ -69,6 +69,14 @@ browser timeline `.trace.json` files, and the matching public JavaScript chunks
 for locating sampled functions. These developer diagnostics are separate from
 the content-free measurement JSON in `perf-results`.
 
+For focused style attribution, `diagnose=true, late_menu_trace=true` with
+`only=interact-long-answer` records invalidations only around the late menu
+opening. Local equivalent: `PERF_PROFILE=true PERF_PROFILE_LATE_MENU=true`.
+The native artifact is explicitly named `.late-menu.trace.json`; an interrupted
+capture is `.late-menu.partial.trace.json`. CPU profiling still covers the journey.
+This mode cannot combine with other diagnostic controls or non-interactive
+scenarios, and supplies no whole-journey native-work total or certification.
+
 With `diagnose=true`, `observer_overhead=true` instead runs one warmup pair and
 five alternating observer-on/off pairs through the existing trace tool. It checks
 the full stream oracle and foreground state, then compares native main-thread
