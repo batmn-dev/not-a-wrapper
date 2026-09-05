@@ -30,6 +30,15 @@ baseline is never a fallback. Scenario identity, coverage, and budgets remain
 checked after selection. Do not add placeholders for environments not yet captured.
 An explicit baseline JSON path remains supported for inspecting one capture.
 
+Captures also require `replayPolicy: "disabled-v1"`. Performance builds disable
+Sentry and PostHog session recording at initialization while retaining other
+telemetry; normal production recording behavior is unchanged. A browser marker
+verifies this policy before collection. Remote replay configuration and random
+session sampling must not vary the core benchmark workload. These captures
+exclude replay overhead; production RUM still measures the whole application.
+Collect fresh artifacts under this policy. Never add the field to an older
+capture to make it comparable.
+
 Local first-evidence validation:
 
 ```sh

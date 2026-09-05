@@ -4,6 +4,24 @@
  */
 import type { CDPSession, Page } from "playwright"
 
+/** Self-contained for page.waitForFunction; Conversation wraps each message separately. */
+export function isFollowupSeedReady(seedLength: number): boolean {
+  const rows = document.querySelectorAll("section[data-turn-id]")
+  const assistantRow = rows.item(rows.length - 1)
+  const userRow = rows.item(rows.length - 2)
+  const assistant = assistantRow?.querySelector<HTMLElement>(
+    '[data-message-author-role="assistant"][data-perf-text-length]'
+  )
+  return (
+    userRow?.getAttribute("data-turn") === "user" &&
+    Boolean(userRow.querySelector('[data-message-author-role="user"]')) &&
+    assistantRow?.getAttribute("data-turn") === "assistant" &&
+    Number(assistant?.dataset.perfTextLength) === seedLength &&
+    document.querySelector('[data-testid="send-button"]')
+      ?.getAttribute("aria-label") === "Send prompt"
+  )
+}
+
 /** A mark did not appear in time; every other failure propagates. */
 export class MarkTimeoutError extends Error {}
 

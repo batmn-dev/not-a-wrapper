@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   durationsOverlappingRun,
   findDirectTranscriptWheelPoint,
+  isFollowupSeedReady,
 } from "./marks"
 
 afterEach(() => {
@@ -37,6 +38,24 @@ it("selects an unobscured gutter instead of a nested scroller and rejects an ove
   expect(() => findDirectTranscriptWheelPoint(root)).toThrow(
     "No unobscured direct transcript wheel target"
   )
+})
+
+it("recognizes a settled follow-up seed across Conversation's separate message rows", () => {
+  document.body.innerHTML = `
+    <section data-turn-id="user-seed" data-turn="user">
+      <div data-message-author-role="user">seed prompt</div>
+    </section>
+    <section data-turn-id="assistant-seed" data-turn="assistant">
+      <div data-message-author-role="assistant" data-perf-text-length="200">${"a".repeat(200)}</div>
+    </section>
+    <button data-testid="send-button" aria-label="Send prompt" aria-disabled="true"></button>`
+  expect(isFollowupSeedReady(200)).toBe(true)
+  expect(isFollowupSeedReady(201)).toBe(false)
+  document.querySelector("button")!.setAttribute("aria-label", "Stop")
+  expect(isFollowupSeedReady(200)).toBe(false)
+  document.querySelector("button")!.setAttribute("aria-label", "Send prompt")
+  document.querySelector('[data-turn="user"]')!.remove()
+  expect(isFollowupSeedReady(200)).toBe(false)
 })
 
 describe("observed responsiveness intervals", () => {

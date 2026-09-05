@@ -21,6 +21,7 @@ function result(): ComparableResult {
   return {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v2",
+    replayPolicy: "disabled-v1",
     identityProtocol: "ci-isolated-v1",
     buildClass: "production",
     instrumentationBuild: true,
@@ -170,6 +171,10 @@ describe("performance evidence contract", () => {
   it("accepts comparable, complete observations", () => {
     expect(resultContract.safeParse(result()).success).toBe(true)
     expect(compareResults(result(), result())).toEqual([])
+  })
+
+  it.each([undefined, "production-sampled"])("rejects an unverified replay policy (%s)", (replayPolicy) => {
+    expect(resultContract.safeParse({ ...result(), replayPolicy }).success).toBe(false)
   })
 
   it("preserves warmup counts and rejects incompatible warmup protocols", () => {

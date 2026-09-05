@@ -24,7 +24,7 @@ const persistMocks = vi.hoisted(() => {
   return {
     tables,
     readFromIndexedDB: vi.fn(
-      async (table: keyof typeof tables, key?: string) => {
+      async (table: keyof typeof tables, key?: string): Promise<unknown> => {
         if (key) return tables[table].get(key) ?? null
         return Array.from(tables[table].values())
       }
@@ -52,7 +52,7 @@ const convexMocks = vi.hoisted(() => ({
 }))
 
 const sessionMocks = vi.hoisted(() => ({
-  chatId: "local-thread",
+  chatId: "local-thread" as string | null,
 }))
 
 // Persistence is derived from the server-seeded app user (ADR-0033): null is
@@ -196,6 +196,7 @@ describe("MessagesProvider local chat hydration", () => {
     }
 
     renderProvider(capture)
+    expect(capture.current?.isLoading).toBe(true)
     await flushPromises()
 
     expect(capture.current?.isLoading).toBe(false)
@@ -205,6 +206,47 @@ describe("MessagesProvider local chat hydration", () => {
     ])
     expect(capture.current?.messages[1]?.createdAt).toBeInstanceOf(Date)
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it.each([false, true])("waits for a switched guest cache read, including empty history (%s)", async (hasHistory) => {
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+    renderProvider(capture)
+    await flushPromises()
+    expect(capture.current?.isLoading).toBe(false)
+
+    let resolveRead!: (value: unknown) => void
+    persistMocks.readFromIndexedDB.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRead = resolve })
+    )
+    sessionMocks.chatId = "second-chat"
+    act(() => root?.render(
+      <MessagesProvider><MessagesSnapshot captureRef={capture} /></MessagesProvider>
+    ))
+    expect(capture.current?.isLoading).toBe(true)
+    expect(capture.current?.messages).toEqual([])
+    await flushPromises()
+    expect(capture.current?.isLoading).toBe(true)
+
+    await act(async () => resolveRead({
+      id: "second-chat",
+      messages: hasHistory ? [{ id: "stored-message", role: "assistant", parts: [] }] : [],
+    }))
+    expect(capture.current?.isLoading).toBe(false)
+    expect(capture.current?.messages.map((message) => message.id)).toEqual(
+      hasHistory ? ["stored-message"] : []
+    )
+  })
+
+  it("does not wait for IndexedDB on the new-chat route", () => {
+    sessionMocks.chatId = null
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+    renderProvider(capture)
+    expect(capture.current?.isLoading).toBe(false)
+    expect(persistMocks.readFromIndexedDB).not.toHaveBeenCalled()
   })
 
   it("does not keep a durable chat loading while the Convex auth gate is closed", async () => {

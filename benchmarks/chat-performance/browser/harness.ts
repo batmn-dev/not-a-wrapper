@@ -49,6 +49,7 @@ import {
 import {
   durationsOverlappingRun,
   findDirectTranscriptWheelPoint,
+  isFollowupSeedReady,
   readHeap,
   readMarks,
   tryWaitForMark,
@@ -228,6 +229,7 @@ async function acquireAuthState(
   const page = await context.newPage()
   try {
     await page.goto(`${baseUrl}/auth/login`, { waitUntil: "domcontentloaded" })
+    await waitForMark(page, "replay_disabled_v1", 15000)
     await page.locator("#email").fill(PERF_AUTH_EMAIL)
     await page.locator("#password").fill(password)
     await page.getByRole("button", { name: "Log in" }).click()
@@ -379,6 +381,7 @@ async function runScenarioOnce(
 
   try {
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+    await waitForMark(page, "replay_disabled_v1", 15000)
     // Fresh guest identity per run: the anonymous-user daily message limit
     // (NON_AUTH_DAILY_MESSAGE_LIMIT = 5) would otherwise block the sixth
     // send in a shared context. Clearing storage and reloading mints a new
@@ -409,28 +412,16 @@ async function runScenarioOnce(
       // The measured document is an existing conversation, not the seed turn.
       await page.reload({ waitUntil: "domcontentloaded" })
       await editor.waitFor({ state: "visible" })
+      chatResponse = null
+      chatResponseUrls.length = 0
       // A visible composer can precede history hydration. The follow-up's
       // selected-path token must include the settled seed, not an empty path.
       await waitForMark(page, "authoritative_thread_content_received", 30000)
       await page.waitForFunction(
-        (seedLength) => {
-          const turns = document.querySelectorAll("section[data-turn-id]")
-          const seed = turns.item(turns.length - 1)
-          const assistant = seed?.querySelector<HTMLElement>(
-            '[data-message-author-role="assistant"][data-perf-text-length]'
-          )
-          return (
-            Boolean(seed?.querySelector('[data-message-author-role="user"]')) &&
-            Number(assistant?.dataset.perfTextLength) === seedLength &&
-            document.querySelector('[data-testid="send-button"]')
-              ?.getAttribute("aria-label") === "Send prompt"
-          )
-        },
+        isFollowupSeedReady,
         deterministicScenarioText(FOLLOWUP_SEED.scenario).text.length,
         { timeout: 30000 }
       )
-      chatResponse = null
-      chatResponseUrls.length = 0
     }
 
     const heapBefore = await readHeap(cdp)
@@ -1522,6 +1513,7 @@ async function main() {
   const file: BenchmarkResultFile = {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v2",
+    replayPolicy: "disabled-v1",
     identityProtocol: process.env.PERF_CDP_URL
       ? "attached-session-v1"
       : "ci-isolated-v1",

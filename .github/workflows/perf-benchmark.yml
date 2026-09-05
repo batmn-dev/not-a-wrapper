@@ -53,6 +53,10 @@ on:
         description: "Interleaved DOM observer on/off trace comparison (requires diagnose)"
         type: boolean
         default: false
+      rendering_probe:
+        description: "Diagnostic smooth/quick streaming traces (requires diagnose)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -82,10 +86,14 @@ jobs:
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite
-        if: ${{ inputs.diagnose || inputs.observer_overhead }}
+        if: ${{ inputs.diagnose || inputs.observer_overhead || inputs.rendering_probe }}
         run: |
-          if [ "${{ inputs.observer_overhead }}" = "true" ] && [ "${{ inputs.diagnose }}" != "true" ]; then
-            echo "::error::observer_overhead requires diagnose=true; these traces cannot certify a baseline."
+          if { [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; } && [ "${{ inputs.diagnose }}" != "true" ]; then
+            echo "::error::observer_overhead and rendering_probe require diagnose=true; these traces cannot certify a baseline."
+            exit 1
+          fi
+          if [ "${{ inputs.observer_overhead }}" = "true" ] && [ "${{ inputs.rendering_probe }}" = "true" ]; then
+            echo "::error::Choose only one of observer_overhead or rendering_probe."
             exit 1
           fi
           if [ "$SUITE" != "responsiveness" ]; then
@@ -130,7 +138,7 @@ jobs:
       # the scenario oracle, and exits non-zero on ANY correctness failure —
       # that alone gates, baseline or not.
       - name: Run browser benchmark
-        if: ${{ !inputs.observer_overhead }}
+        if: ${{ !inputs.observer_overhead && !inputs.rendering_probe }}
         run: |
           if [ "$SUITE" != "smoke" ] && [ "$SUITE" != "standard" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
             echo "::error title=Missing PERF_AUTH_PASSWORD::Set the GitHub Actions secret PERF_AUTH_PASSWORD to a strong, unique benchmark-user password."
@@ -143,6 +151,12 @@ jobs:
       - name: Compare DOM observer overhead
         if: ${{ inputs.observer_overhead }}
         run: PERF_OBSERVER_AB=true CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+
+      - name: Diagnose streaming rendering
+        if: ${{ inputs.rendering_probe }}
+        run: |
+          STREAMING_PRESENTATION=smooth LABEL=smooth CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+          STREAMING_PRESENTATION=quick LABEL=quick CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
 
       - name: Compare against baseline
         if: ${{ !inputs.diagnose }}
@@ -163,7 +177,7 @@ jobs:
           bun run benchmarks/chat-performance/browser/compare-results.ts "$BASELINE" "$CURRENT"
 
       - name: Upload results artifact
-        if: ${{ always() && !inputs.observer_overhead }}
+        if: ${{ always() && !inputs.observer_overhead && !inputs.rendering_probe }}
         uses: actions/upload-artifact@v4
         with:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
@@ -173,7 +187,7 @@ jobs:
           retention-days: 90
 
       - name: Upload diagnostic artifacts
-        if: ${{ always() && inputs.diagnose && !inputs.observer_overhead }}
+        if: ${{ always() && inputs.diagnose && !inputs.observer_overhead && !inputs.rendering_probe }}
         uses: actions/upload-artifact@v4
         with:
           name: perf-diagnostics-${{ env.SUITE }}-${{ github.run_id }}
@@ -190,4 +204,15 @@ jobs:
         with:
           name: perf-observer-overhead-${{ github.run_id }}
           path: benchmarks/chat-performance/browser/results/traces/
+          retention-days: 90
+
+      - name: Upload rendering probe traces
+        if: ${{ always() && inputs.rendering_probe }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-rendering-probe-${{ github.run_id }}
+          include-hidden-files: true
+          path: |
+            benchmarks/chat-performance/browser/results/traces/
+            .next-perf/static/chunks/**/*.js
           retention-days: 90

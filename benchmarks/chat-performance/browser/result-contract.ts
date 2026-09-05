@@ -69,6 +69,7 @@ export const resultContract = z
   .object({
     schemaVersion: z.literal(2),
     measurementVersion: z.literal("dom-frame-v2"),
+    replayPolicy: z.literal("disabled-v1"),
     identityProtocol: z.enum(["ci-isolated-v1", "attached-session-v1"]),
     profiled: z.literal(false).optional(),
     buildClass: z.literal("production"),
@@ -433,6 +434,7 @@ export function checkBudgets(result: ComparableResult): string[] {
 
 export const ENVIRONMENT_FIELDS = [
   "measurementVersion",
+  "replayPolicy",
   "identityProtocol",
   "buildClass",
   "instrumentationBuild",

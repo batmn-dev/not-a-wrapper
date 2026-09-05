@@ -45,6 +45,10 @@ inspectable reasoning/tool activity.
 
 Result schema v2 carries complete scenario identity, fixture script hash, browser,
 hardware, cache, network, authentication, and measurement-version dimensions.
+Instrumented benchmark builds disable session replay and declare the required
+`replayPolicy: disabled-v1` dimension. This holds remotely configured and sampled
+recording work out of the controlled chat workload; production replay remains
+unchanged. Earlier replay-enabled captures cannot seed these baselines.
 Comparisons reject missing baselines, missing/failed samples, duplicate identities,
 and incompatible conditions. Baseline collection is an explicit operation, never
 a silent successful comparison. Five or more measured runs are required for a

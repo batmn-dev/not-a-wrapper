@@ -154,8 +154,6 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     })
   }, [canSubscribeToMessages, convexMessages])
 
-  const isLoading = isDurableChat && isMessagesLoading
-
   const subscribeToCachedMessages = useCallback(
     (listener: () => void) => {
       if (!chatId || messagePersistenceMode !== "localOnly") return () => {}
@@ -171,6 +169,9 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       ),
     getCachedMessagesServerSnapshot
   )
+  const isLoading =
+    (isDurableChat && isMessagesLoading) ||
+    (messagePersistenceMode === "localOnly" && localMessages === undefined)
 
   const [optimisticMessagesMap, setOptimisticMessagesMap] = useState<
     Map<string, ExtendedUIMessage[]>
@@ -185,7 +186,7 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     if (chatId === null) return []
 
     const storedMessages =
-      messagePersistenceMode === "localOnly" ? localMessages : serverMessages
+      messagePersistenceMode === "localOnly" ? (localMessages ?? []) : serverMessages
 
     // Deduplicate by ID to prevent duplicate-key React errors when optimistic
     // messages overlap with stored messages or with each other (e.g. rapid submissions)

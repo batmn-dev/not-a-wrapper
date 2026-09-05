@@ -7,6 +7,9 @@ import {
 } from "./lib/observability/sentry-scrubbing"
 import { sentryTracesSampler } from "./lib/observability/sentry-tracing"
 
+const chatUiBenchmark =
+  process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
@@ -16,15 +19,16 @@ Sentry.init({
   beforeSend: sentryBeforeSend,
   beforeSendSpan: sentryBeforeSendSpan,
   beforeBreadcrumb: sentryBeforeBreadcrumb,
-  integrations: [
+  // Deterministic captures exclude remotely configured/random replay work.
+  integrations: chatUiBenchmark ? [] : [
     Sentry.replayIntegration({
       maskAllText: true,
       maskAllInputs: true,
       blockAllMedia: true,
     }),
   ],
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
+  replaysSessionSampleRate: chatUiBenchmark ? 0 : 0.1,
+  replaysOnErrorSampleRate: chatUiBenchmark ? 0 : 1,
 })
 
 const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
@@ -34,8 +38,11 @@ if (posthogKey && !posthog.__loaded) {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
     person_profiles: "identified_only",
     capture_pageview: false,
+    ...(chatUiBenchmark ? { disable_session_recording: true } : {}),
   })
 }
+
+if (chatUiBenchmark) performance.mark("chat-perf:replay_disabled_v1")
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
 
@@ -44,8 +51,6 @@ export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
 const chatUiSampleRate = Number(
   process.env.NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE ?? 0
 )
-const chatUiBenchmark =
-  process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"
 if (
   chatUiBenchmark ||
   (Number.isFinite(chatUiSampleRate) &&

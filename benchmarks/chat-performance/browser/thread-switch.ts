@@ -20,6 +20,7 @@ import {
   readMarks,
   tryWaitForMark,
   waitForAnyMark,
+  waitForMark,
   type CollectedMark,
 } from "./marks"
 import {
@@ -109,6 +110,7 @@ async function waitForRows(page: Page, count: number, timeoutMs: number) {
 /** Creates a durable chat with a short answer or the long Markdown fixture. */
 async function createChat(page: Page, baseUrl: string, long: boolean) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+  await waitForMark(page, "replay_disabled_v1", 15_000)
   const editor = page.locator('[contenteditable="true"]').first()
   await editor.waitFor({ state: "visible", timeout: 15_000 })
   await editor.click()
@@ -324,6 +326,7 @@ export async function runThreadSwitch(
       await page.bringToFront()
       const querySet = installQuerySetCounter(page)
       await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+      await waitForMark(page, "replay_disabled_v1", 15_000)
       await waitForRows(page, hrefs.length, 15_000)
       // Alternate which half is hovered so the row set does not bias a pass.
       const hoverFirst = document % 2 === 1
@@ -355,6 +358,7 @@ export async function runThreadSwitch(
     await cdp.send("HeapProfiler.enable")
     const querySet = installQuerySetCounter(page)
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+    await waitForMark(page, "replay_disabled_v1", 15_000)
     await waitForRows(page, hrefs.length, 15_000)
     for (const href of hrefs) {
       const sample = await switchTo(page, href, 0, querySet)

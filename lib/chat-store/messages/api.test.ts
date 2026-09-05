@@ -4,6 +4,7 @@ import {
   getCachedMessagesSnapshot,
   hydrateCachedMessages,
   resetCachedMessagesSnapshot,
+  subscribeCachedMessages,
   type ExtendedUIMessage,
 } from "./api"
 
@@ -94,15 +95,30 @@ describe("cached messages API", () => {
     const hydration = hydrateCachedMessages("chat-1")
     await cacheMessages("chat-1", newerMessages)
 
-    expect(getCachedMessagesSnapshot("chat-1").map((item) => item.id)).toEqual([
+    expect(getCachedMessagesSnapshot("chat-1")?.map((item) => item.id)).toEqual([
       "newer",
     ])
 
     deferredRead.resolve({ id: "chat-1", messages: staleMessages })
     await hydration
 
-    expect(getCachedMessagesSnapshot("chat-1").map((item) => item.id)).toEqual([
+    expect(getCachedMessagesSnapshot("chat-1")?.map((item) => item.id)).toEqual([
       "newer",
     ])
+  })
+
+  it("publishes completed hydration before notifying cache-write subscribers", async () => {
+    const deferredRead = createDeferred<unknown>()
+    persistMocks.deferredRead = deferredRead
+    const snapshots: ReturnType<typeof getCachedMessagesSnapshot>[] = []
+    const unsubscribe = subscribeCachedMessages("chat-1", () => {
+      snapshots.push(getCachedMessagesSnapshot("chat-1"))
+    })
+    expect(getCachedMessagesSnapshot("chat-1")).toBeUndefined()
+    await cacheMessages("chat-1", [])
+    expect(snapshots).toEqual([[]])
+    deferredRead.resolve(null)
+    await hydrateCachedMessages("chat-1")
+    unsubscribe()
   })
 })
