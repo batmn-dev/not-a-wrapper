@@ -25,7 +25,7 @@ export function parseNativeScroll(trace: unknown, input: z.input<typeof wheelAnc
   }).parse(trace)
   const events = traceEvents.filter((event) =>
     event.name === anchor.name || event.name === "EventLatency" ||
-    event.name === "SwapEndToPresentationCompositorFrame"
+    event.name === "SwapEndToPresentationCompositorFrame" || event.name === "GenerationToBrowserMain"
   ).map((event) => traceEvent.parse(event))
   const marks = events.filter((event) => event.name === anchor.name && event.ph === "I")
   if (marks.length !== 1) throw new Error("Missing or ambiguous wheel anchor")
@@ -64,6 +64,14 @@ export function parseNativeScroll(trace: unknown, input: z.input<typeof wheelAnc
   const finishes = presentations.filter((event) => event.ph === "e")
   if (starts.length !== 1 || finishes.length !== 1 || finishes[0].ts < starts[0].ts)
     throw new Error("Missing or ambiguous compositor presentation")
+  const dispatch = track.filter((event) =>
+    event.name === "GenerationToBrowserMain" && event.ts >= begin.ts && event.ts <= ends[0].ts
+  )
+  const dispatchStarts = dispatch.filter((event) => event.ph === "b")
+  const dispatchEnds = dispatch.filter((event) => event.ph === "e")
+  if (dispatchStarts.length !== 1 || dispatchEnds.length !== 1 ||
+    dispatchStarts[0].ts !== begin.ts || dispatchEnds[0].ts <= dispatchStarts[0].ts)
+    throw new Error("Missing, incomplete, or ambiguous browser dispatch interval")
   const menuInputs = events.filter((event) =>
     event.name === "EventLatency" && event.ph === "b" && event.ts > begin.ts &&
     event.args?.event_latency?.event_type === "MOUSE_PRESSED"
@@ -74,5 +82,11 @@ export function parseNativeScroll(trace: unknown, input: z.input<typeof wheelAnc
   const inputToPresentationMs = (finishes[0].ts - begin.ts) / 1000
   if (!Number.isFinite(inputToPresentationMs) || inputToPresentationMs <= 0)
     throw new Error("Presentation must follow native input")
-  return { inputToPresentationMs }
+  // CDP timestamps before its visual-state barrier, so this includes automation work:
+  // https://chromium.googlesource.com/chromium/src/+/refs/tags/151.0.7922.34/content/browser/devtools/protocol/input_handler.cc#1425
+  const automationDispatchMs = (dispatchEnds[0].ts - begin.ts) / 1000
+  const browserToPresentationMs = (finishes[0].ts - dispatchEnds[0].ts) / 1000
+  if (!Number.isFinite(browserToPresentationMs) || browserToPresentationMs <= 0)
+    throw new Error("Presentation must follow browser dispatch")
+  return { inputToPresentationMs, automationDispatchMs, browserToPresentationMs }
 }

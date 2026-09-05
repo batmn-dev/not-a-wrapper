@@ -320,7 +320,9 @@ The observation tab must remain visible.
 | `typingToFrameMs` | Oldest unobserved key/beforeinput timestamp to an editor update observed across a frame opportunity. Coalesced input retains the oldest delay; no slow-sample cutoff. |
 | `menuToFrameMs` | Primary pointerdown or Enter/Space opening intent to visible composer menu across a frame opportunity; standalone accessibility activation clicks fall back to click. Includes native mousedown opening work. Closing/cancelling clears intent (`menuProtocol: activation-v1`). |
 | `scrollToFrameMs` | Production DOM/frame proxy from eligible vertical wheel input to observed thread movement. The benchmark disables this geometry-reading wheel observer. |
-| `scrollInputToPresentationMs` | Benchmark Chromium EventLatency input to the explicit `SwapEndToPresentationCompositorFrame` endpoint on the uniquely matched native scroll interval; not a physical-pixel timestamp. |
+| `scrollInputToPresentationMs` | Diagnostic total from synthetic wheel generation through explicit native presentation. Includes CDP visual-state synchronization before forwarding; not physical-wheel latency. |
+| `scrollAutomationDispatchMs` | Diagnostic synthetic-generation to `GenerationToBrowserMain` endpoint. Includes the CDP pre-forward visual-state barrier. |
+| `scrollBrowserToPresentationMs` | Gated browser-forwarding endpoint to explicit native presentation on the uniquely matched scroll interval. Excludes automation dispatch and OS input queuing; not a physical-pixel timestamp. |
 | `deltaToContentFrameMs` | A sampled received-text watermark to an at-least-equal rendered-source watermark in a visible Markdown container across a frame opportunity. Four samples/sec maximum; no provider gaps included. |
 | `typingToFrameEarlyMs` / `typingToFrameLateMs`, `menuToFrameEarlyMs` / `menuToFrameLateMs`, `deltaToContentFrameEarlyMs` / `deltaToContentFrameLateMs` | Harness phases: early interaction after first text; late interaction after at least 80% of the deterministic fixture source is rendered while the stream remains active. Each phase must produce samples in every run. |
 | `terminalToReadyFrameMs` | Transport finish/error to idle composer state across a frame opportunity. Local Stop without a transport finish does not invent a terminal event. |
@@ -352,7 +354,7 @@ intentional second-tab cutoffs. Any observation-buffer overflow invalidates a ru
 Readiness requires global `accountReadinessProtocol: matching-account-v1`.
 The original-base overlay publishes the same observation-only admission predicate
 without changing its product gate; earlier readiness captures are incompatible.
-Native benchmark scrolling requires `wheelProtocol: native-presentation-v1` and
+Native benchmark scrolling requires `wheelProtocol: native-browser-presentation-v1` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`. The isolated wheel's
 event timestamp and UserTiming anchor select a unique process/string-local async
 track and complete bounded presentation interval. Lost, missing, ambiguous, or

@@ -1085,17 +1085,19 @@ async function runScenarioOnce(
       .filter((mark) => mark.name === "stream_publication_summary")
       .at(-1)
 
-    let scrollInputToPresentationMs: number | undefined
+    let nativeScroll: ReturnType<typeof parseNativeScroll> | undefined
     if (config.interact) {
       if (!nativeWheel) throw new Error("Native wheel anchor missing")
       if (tracing) await stopTrace()
       const trace = await readTrace()
       if (traceDataLoss) throw new Error("Native trace lost events")
-      scrollInputToPresentationMs = parseNativeScroll(JSON.parse(trace.toString()), nativeWheel).inputToPresentationMs
+      nativeScroll = parseNativeScroll(JSON.parse(trace.toString()), nativeWheel)
     }
 
     const result: RunMetrics = {
-      scrollInputToPresentationMs,
+      scrollInputToPresentationMs: nativeScroll?.inputToPresentationMs,
+      scrollAutomationDispatchMs: nativeScroll?.automationDispatchMs,
+      scrollBrowserToPresentationMs: nativeScroll?.browserToPresentationMs,
       ui: uiObservation.values,
       hiddenDuringMeasurement: uiObservation.hidden,
       pendingDeltaSamples: uiObservation.pendingDeltas,
@@ -1583,14 +1585,18 @@ async function main() {
       action: config.action,
       sampleCount: RUNS,
       warmupRuns: WARMUPS,
-      wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
+      wheelProtocol: config.interact ? "native-browser-presentation-v1" : undefined,
       menuProtocol: config.interact ? "activation-v1" : undefined,
       interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
       contentFrameProtocol: "publisher-frame-v1",
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),
       metrics: {
-        ...(config.interact ? { scrollInputToPresentationMs: summarize(numeric((run) => run.scrollInputToPresentationMs)) } : {}),
+        ...(config.interact ? {
+          scrollInputToPresentationMs: summarize(numeric((run) => run.scrollInputToPresentationMs)),
+          scrollAutomationDispatchMs: summarize(numeric((run) => run.scrollAutomationDispatchMs)),
+          scrollBrowserToPresentationMs: summarize(numeric((run) => run.scrollBrowserToPresentationMs)),
+        } : {}),
         ...Object.fromEntries(
           [...new Set(runs.flatMap((run) => Object.keys(run.ui ?? {})))].map(
             (metric) => [

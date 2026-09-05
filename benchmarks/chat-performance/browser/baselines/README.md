@@ -22,10 +22,12 @@ Measurement changes require a reviewed overlay; never relabel older captures.
 
 Current protocols include `dom-frame-v3`, 40 ms typing, `disabled-v1` replay,
 `matching-account-v1` admission readiness, `publisher-frame-v1` streamed content,
-`native-presentation-v1` scrolling, `activation-v1` menus, and
+`native-browser-presentation-v1` scrolling, `activation-v1` menus, and
 `late-typing-native-wheel-menu-v2` probe order. Older captures cannot be relabeled.
 Send control enablement is distinct from simultaneous enabled/admitted readiness.
-Scroll uses a complete, uniquely anchored native compositor presentation interval;
+Scroll gates browser-forwarding to native presentation; CDP pre-forward delay and
+the generation-to-presentation total remain separate diagnostics. All intervals
+require a complete, uniquely anchored native trace;
 lost, missing, or ambiguous trace evidence fails. Native traces are retained as CI
 artifacts in normal runs, without CPU profiling. DOM/frame proxies and Chromium
 presentation signals do not establish physical pixel timing or INP.

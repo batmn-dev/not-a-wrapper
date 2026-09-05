@@ -35,7 +35,7 @@ const scenario = z
     cache: z.enum(["cold", "warm"]),
     auth: z.boolean(),
     followup: z.boolean(),
-    wheelProtocol: z.literal("native-presentation-v1").optional(),
+    wheelProtocol: z.literal("native-browser-presentation-v1").optional(),
     menuProtocol: z.literal("activation-v1").optional(),
     interactionProtocol: z.literal("late-typing-native-wheel-menu-v2").optional(),
     contentFrameProtocol: z.literal("publisher-frame-v1").optional(),
@@ -61,6 +61,8 @@ const scenario = z
           }).optional(),
           ui: z.record(z.string(), z.array(duration)).optional(),
           scrollInputToPresentationMs: z.number().finite().positive().optional(),
+          scrollAutomationDispatchMs: duration.optional(),
+          scrollBrowserToPresentationMs: z.number().finite().positive().optional(),
           sendToFirstVisibleTextMs: duration.optional(),
           totalBlockingTimeMs: duration.optional(),
           reloadToAuthoritativeMs: duration.optional(),
@@ -226,7 +228,7 @@ const GATES: Record<string, { relative: number; floor: number }> = {
   menuToFrameMs: { relative: 0.35, floor: 20 },
   menuToFrameEarlyMs: { relative: 0.35, floor: 20 },
   menuToFrameLateMs: { relative: 0.35, floor: 20 },
-  scrollInputToPresentationMs: { relative: 0.35, floor: 20 },
+  scrollBrowserToPresentationMs: { relative: 0.35, floor: 20 },
   terminalToReadyFrameMs: { relative: 0.35, floor: 30 },
   stopToReadyFrameMs: { relative: 0.35, floor: 20 },
   sendToFirstVisibleTextMs: { relative: 0.35, floor: 150 },
@@ -239,8 +241,13 @@ const GATES: Record<string, { relative: number; floor: number }> = {
 }
 
 type RawRun = ComparableResult["scenarios"][number]["runs"][number]
-const RAW_GATED_METRICS = {
+const NATIVE_SCROLL_METRICS = [
+  "scrollInputToPresentationMs", "scrollAutomationDispatchMs", "scrollBrowserToPresentationMs",
+] as const
+const RAW_RUN_METRICS = {
   scrollInputToPresentationMs: (run: RawRun) => run.scrollInputToPresentationMs,
+  scrollAutomationDispatchMs: (run: RawRun) => run.scrollAutomationDispatchMs,
+  scrollBrowserToPresentationMs: (run: RawRun) => run.scrollBrowserToPresentationMs,
   sendToFirstVisibleTextMs: (run: RawRun) => run.sendToFirstVisibleTextMs,
   totalBlockingTimeMs: (run: RawRun) => run.totalBlockingTimeMs,
   reloadToAuthoritativeMs: (run: RawRun) => run.reloadToAuthoritativeMs,
@@ -292,7 +299,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           cache: config.cache ?? "warm",
           auth: config.auth ?? false,
           followup: config.followup ?? false,
-          wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
+          wheelProtocol: config.interact ? "native-browser-presentation-v1" : undefined,
           menuProtocol: config.interact ? "activation-v1" : undefined,
           interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
           contentFrameProtocol: "publisher-frame-v1",
@@ -363,11 +370,22 @@ export function validateCoverage(result: ComparableResult): string[] {
   }
   for (const value of result.scenarios) {
     if (expectedSuite?.some((config) => config.id === value.id && config.interact)) {
-      if (value.runs.some((run) => {
-        const sample = run.scrollInputToPresentationMs
-        return sample === undefined || !Number.isFinite(sample) || sample <= 0
-      }))
-        errors.push(`${value.id}: scrollInputToPresentationMs missing or invalid in an individual run`)
+      for (const metric of NATIVE_SCROLL_METRICS) {
+        if (value.runs.some((run) => {
+          const sample = run[metric]
+          return sample === undefined || !Number.isFinite(sample) || sample < 0 ||
+            (sample === 0 && metric !== "scrollAutomationDispatchMs")
+        }))
+          errors.push(`${value.id}: ${metric} missing or invalid in an individual run`)
+      }
+      for (const run of value.runs) {
+        const { scrollInputToPresentationMs: total, scrollAutomationDispatchMs: dispatch,
+          scrollBrowserToPresentationMs: browser } = run
+        // Raw trace timestamps have microsecond precision; aggregates are rounded separately.
+        if (total !== undefined && dispatch !== undefined && browser !== undefined &&
+          Math.abs(total - dispatch - browser) > 0.001)
+          errors.push(`${value.id}: native scroll intervals do not add up`)
+      }
     }
     if (value.action === "stop") {
       for (const run of value.runs) {
@@ -392,7 +410,7 @@ export function validateCoverage(result: ComparableResult): string[] {
       ...value.runs.flatMap((run) => Object.keys(run.ui ?? {})),
       ...Object.keys(GATES).filter(
         (metric) =>
-          !(metric in RAW_GATED_METRICS) && value.metrics[metric] !== undefined
+          !(metric in RAW_RUN_METRICS) && value.metrics[metric] !== undefined
       ),
     ])
     for (const metric of uiMetrics) {
@@ -406,7 +424,7 @@ export function validateCoverage(result: ComparableResult): string[] {
       if (!matchesSamples(value.metrics[metric], samples))
         errors.push(`${value.id}: ${metric} summary disagrees with raw samples`)
     }
-    for (const [metric, read] of Object.entries(RAW_GATED_METRICS)) {
+    for (const [metric, read] of Object.entries(RAW_RUN_METRICS)) {
       const samples = observedNumbers(value.runs.map(read))
       if (
         metric in GATES &&
@@ -448,7 +466,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           "menuToFrameMs",
           "menuToFrameEarlyMs",
           "menuToFrameLateMs",
-          "scrollInputToPresentationMs",
+          ...NATIVE_SCROLL_METRICS,
           "deltaToContentFrameEarlyMs",
           "deltaToContentFrameLateMs"
         )
@@ -460,7 +478,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           `${value.id}: ${metric} missing samples (${count}/${value.sampleCount})`
         )
       if (
-        !(metric in RAW_GATED_METRICS) &&
+        !(metric in RAW_RUN_METRICS) &&
         value.runs.some((run) => !run.ui?.[metric]?.length)
       ) {
         errors.push(`${value.id}: ${metric} missing from an individual run`)

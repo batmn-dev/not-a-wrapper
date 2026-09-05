@@ -66,14 +66,16 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
         auth: config.auth ?? false,
         followup: config.followup ?? false,
         contentFrameProtocol: "publisher-frame-v1",
-        wheelProtocol: config.interact ? "native-presentation-v1" : undefined,
+        wheelProtocol: config.interact ? "native-browser-presentation-v1" : undefined,
         menuProtocol: config.interact ? "activation-v1" : undefined,
         interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
         sampleCount: 5,
         warmupRuns: 1,
         correctnessOk: true,
         metrics: Object.fromEntries(
-          Object.entries({ ...ui, ...(config.interact ? { scrollInputToPresentationMs: [20] } : {}), ...(config.action === "reload" ? { reloadToAuthoritativeMs: [40] } : {}) })
+          Object.entries({ ...ui, ...(config.interact ? {
+            scrollInputToPresentationMs: [25], scrollAutomationDispatchMs: [5], scrollBrowserToPresentationMs: [20],
+          } : {}), ...(config.action === "reload" ? { reloadToAuthoritativeMs: [40] } : {}) })
             .map(([key, values]) => [key, summarize(Array(5).fill(values[0]))])
         ),
         runs: Array.from({ length: 5 }, () => ({
@@ -81,7 +83,9 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
           hiddenDuringMeasurement: false,
           pendingDeltaSamples: 0,
           droppedUiSamples: 0,
-          ...(config.interact ? { scrollInputToPresentationMs: 20 } : {}),
+          ...(config.interact ? {
+            scrollInputToPresentationMs: 25, scrollAutomationDispatchMs: 5, scrollBrowserToPresentationMs: 20,
+          } : {}),
           ...(config.action === "stop" ? { stopSourceLengths: { atReady: 100, after250Ms: 80, afterSettlement: 60 } } : {}),
           ...(config.action === "reload" ? { reloadToAuthoritativeMs: 40 } : {}),
           ui: structuredClone(ui),
@@ -393,29 +397,34 @@ describe("performance evidence contract", () => {
     const current = result("responsiveness")
     delete before.scenarios[3].wheelProtocol
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
-    before.scenarios[3].wheelProtocol = "native-presentation-v1"
+    before.scenarios[3].wheelProtocol = "native-browser-presentation-v1"
     expect(compareResults(before, current)).toEqual([])
   })
 
-  it("requires native scroll samples in every interactive run and matching aggregates", () => {
+  it.each([
+    "scrollInputToPresentationMs", "scrollAutomationDispatchMs", "scrollBrowserToPresentationMs",
+  ] as const)("requires per-run %s samples and matching aggregates", (metric) => {
     const current = result("responsiveness")
     const scenario = current.scenarios.find((value) => value.wheelProtocol)!
     expect(validateCoverage(current)).toEqual([]) // No DOM scroll proxy is required.
-    delete scenario.runs[0].scrollInputToPresentationMs
-    scenario.metrics.scrollInputToPresentationMs = summarize(Array(4).fill(20))
-    expect(validateCoverage(current).join(" ")).toContain("scrollInputToPresentationMs missing")
-    scenario.runs[0].scrollInputToPresentationMs = 80
-    scenario.metrics.scrollInputToPresentationMs = summarize(Array(5).fill(20))
-    expect(validateCoverage(current).join(" ")).toContain("scrollInputToPresentationMs summary disagrees")
-    scenario.runs.forEach((run) => { delete run.scrollInputToPresentationMs })
-    delete scenario.metrics.scrollInputToPresentationMs
-    expect(validateCoverage(current).join(" ")).toContain("scrollInputToPresentationMs missing")
+    const sample = scenario.runs[0][metric]!
+    delete scenario.runs[0][metric]
+    scenario.metrics[metric] = summarize(Array(4).fill(sample))
+    expect(validateCoverage(current).join(" ")).toContain(`${metric} missing`)
+    scenario.runs[0][metric] = 80
+    scenario.metrics[metric] = summarize(Array(5).fill(sample))
+    expect(validateCoverage(current).join(" ")).toContain(`${metric} summary disagrees`)
+    scenario.runs.forEach((run) => { delete run[metric] })
+    delete scenario.metrics[metric]
+    expect(validateCoverage(current).join(" ")).toContain(`${metric} missing`)
   })
 
   it.each([0, -1, NaN, Infinity])("rejects invalid native scroll duration %s", (duration) => {
-    const current = result("responsiveness")
-    current.scenarios.find((value) => value.wheelProtocol)!.runs[0].scrollInputToPresentationMs = duration
-    expect(resultContract.safeParse(current).success).toBe(false)
+    for (const metric of ["scrollInputToPresentationMs", "scrollAutomationDispatchMs", "scrollBrowserToPresentationMs"] as const) {
+      const current = result("responsiveness")
+      current.scenarios.find((value) => value.wheelProtocol)!.runs[0][metric] = duration
+      expect(resultContract.safeParse(current).success).toBe(duration === 0 && metric === "scrollAutomationDispatchMs")
+    }
   })
 
   it("retains the same relative allowance for native scroll timing", () => {
@@ -423,13 +432,33 @@ describe("performance evidence contract", () => {
     const current = result("responsiveness")
     const scenario = current.scenarios.find((value) => value.wheelProtocol)!
     for (const ms of [40, 41]) {
-      scenario.runs.forEach((run) => { run.scrollInputToPresentationMs = ms })
-      scenario.metrics.scrollInputToPresentationMs = summarize(Array(5).fill(ms))
+      scenario.runs.forEach((run) => {
+        run.scrollBrowserToPresentationMs = ms
+        run.scrollInputToPresentationMs = ms + run.scrollAutomationDispatchMs!
+      })
+      scenario.metrics.scrollBrowserToPresentationMs = summarize(Array(5).fill(ms))
+      scenario.metrics.scrollInputToPresentationMs = summarize(Array(5).fill(ms + 5))
       const report = assessComparison(before, current)
       expect(report.measurementErrors).toEqual([])
       expect(report.regressions).toHaveLength(ms === 40 ? 0 : 1)
-      if (ms === 41) expect(report.regressions![0]).toContain("scrollInputToPresentationMs: 20 → 41ms")
+      if (ms === 41) expect(report.regressions![0]).toContain("scrollBrowserToPresentationMs: 20 → 41ms")
     }
+  })
+
+  it("keeps automation delay diagnostic while requiring an additive raw breakdown", () => {
+    const before = result("responsiveness")
+    const current = result("responsiveness")
+    const scenario = current.scenarios.find((value) => value.wheelProtocol)!
+    scenario.runs.forEach((run) => {
+      run.scrollAutomationDispatchMs = 500
+      run.scrollInputToPresentationMs = 520
+    })
+    scenario.metrics.scrollAutomationDispatchMs = summarize(Array(5).fill(500))
+    scenario.metrics.scrollInputToPresentationMs = summarize(Array(5).fill(520))
+    expect(compareResults(before, current)).toEqual([])
+    scenario.runs[0].scrollAutomationDispatchMs = 501
+    scenario.metrics.scrollAutomationDispatchMs = summarize([501, 500, 500, 500, 500])
+    expect(validateCoverage(current)).toContain(`${scenario.id}: native scroll intervals do not add up`)
   })
 
   it("requires raw enabled-control and joint readiness observations independently", () => {
@@ -445,6 +474,7 @@ describe("performance evidence contract", () => {
     expect(resultContract.safeParse({ ...current, accountReadinessProtocol: undefined }).success).toBe(false)
     for (const protocol of [
       { wheelProtocol: "prepared-wheel-v1" },
+      { wheelProtocol: "native-presentation-v1" },
       { interactionProtocol: "late-typing-wheel-menu-v1" },
     ]) {
       const legacy = structuredClone(current)

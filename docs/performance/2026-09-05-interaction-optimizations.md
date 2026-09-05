@@ -75,12 +75,22 @@ at `e29c9fa8` also failed the old relative gate: constrained scroll proxy
 The approved correction retains the account safety guard and reports raw button
 enablement separately from simultaneous account-and-button readiness. Both arms
 observe the same predicate without changing the original product's Send behavior.
-Benchmark scrolling now uses an explicitly matched native presentation trace;
-the old wheel observer forced layout during measurement. New protocols reject
-old captures, retain raw traces, and preserve the relative thresholds. Neither a
-protocol change nor a profiled diagnostic establishes a passing comparison.
-Late probes still run typing, wheel, then menu at the 80% content checkpoint while
-streaming. Final-head validity and regression checks remain required.
+
+[Run 33987016632](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33987016632)
+at `52e3f8c3` has 35 correct measured runs per arm. Its generation-to-presentation
+scroll gate failed (196.668→404.925 ms constrained). Native stages exposed CDP's
+pre-forward visual-state barrier: the median total sample spent 20.978 ms there
+in the baseline versus 365.417 ms in the candidate. This automation delay is not
+proof of equivalent physical-wheel latency (ADR-0037).
+
+Reanalysis of all 20 measured scroll traces gives browser-forwarding-to-presentation
+medians of 181.824→39.508 ms constrained and 75.487→75.807 ms normal. The
+candidate's 717.790 ms constrained outlier remains. The corrected protocol gates
+that browser interval with the same thresholds and retains both automation delay
+and total as diagnostics; raw components must add up. This reanalysis is separate
+from final-head capture certification. Late probes retain the 80% checkpoint,
+eight keys at 40 ms, native wheel, and one menu click while streaming. Final-head
+validity and regression checks remain required.
 
 ## Correctness, observer overhead, and retained heap
 

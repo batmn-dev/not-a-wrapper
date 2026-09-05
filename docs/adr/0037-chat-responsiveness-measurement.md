@@ -62,11 +62,20 @@ Each stream binds to the active measurement turn so a detached stream cannot
 contaminate a later send. Generic Thinking feedback is distinct from actual
 inspectable reasoning/tool activity.
 
-Benchmark `scrollInputToPresentationMs` uses Chromium EventLatency input through
-the explicit `SwapEndToPresentationCompositorFrame` endpoint. An isolated wheel's
+Benchmark `scrollBrowserToPresentationMs` uses the explicit native
+`GenerationToBrowserMain` endpoint through `SwapEndToPresentationCompositorFrame`.
+CDP timestamps synthetic wheel input before waiting on a visual-state callback
+([Chromium151 source](https://chromium.googlesource.com/chromium/src/+/refs/tags/151.0.7922.34/content/browser/devtools/protocol/input_handler.cc#1425)).
+We retain that pre-forward interval as `scrollAutomationDispatchMs` and the whole
+`scrollInputToPresentationMs` total as diagnostics. Gating the post-forward browser
+interval avoids classifying CDP synchronization as physical input delay; this does
+not measure operating-system input queuing. Components must sum to the raw total.
+Changing gesture injection would change the input workload; retaining the wheel
+and separating its native stages preserves the existing user journey.
+An isolated wheel's
 event timestamp and UserTiming anchor select one process/string-local async track
 and its bounded interval. Missing, ambiguous, incomplete, or lost trace evidence
-fails. Required protocols are `wheelProtocol: native-presentation-v1` and
+fails. Required protocols are `wheelProtocol: native-browser-presentation-v1` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`; earlier scroll captures
 are incompatible. Normal runs retain native traces in CI artifacts without CPU
 profiling and disable the old geometry-reading wheel observer. Chromium's native

@@ -14,12 +14,16 @@ const fixture = () => [
   event(anchor.name, "I", 290623824, "anchor"),
   begin(289000000), event("EventLatency", "e", 289500000),
   begin(290223824),
+  event("GenerationToBrowserMain", "b", 290223824),
+  event("GenerationToBrowserMain", "e", 290585547),
   event("LatchToSwapEnd", "e", 291078167),
   event("SwapEndToPresentationCompositorFrame", "b", 291078167),
   event("SwapEndToPresentationCompositorFrame", "e", 291078272),
   event("EventLatency", "e", 291078272),
   { ...begin(291900000, "MOUSE_PRESSED"), id2: { local: "0x3" } },
   begin(292000000),
+  event("GenerationToBrowserMain", "b", 292000000),
+  event("GenerationToBrowserMain", "e", 292100000),
   event("SwapEndToPresentationCompositorFrame", "b", 292400000),
   event("SwapEndToPresentationCompositorFrame", "e", 292500000),
   event("EventLatency", "e", 292500000),
@@ -30,14 +34,19 @@ describe("native scroll presentation", () => {
     const traceEvents = fixture()
     traceEvents.push(
       { ...begin(290223824, "MOUSE_WHEEL"), id2: { local: "0x21" } },
+      event("GenerationToBrowserMain", "e", 290585548, "0x21"),
       event("SwapEndToPresentationCompositorFrame", "e", 291100000, "0x2"),
     )
-    expect(parseNativeScroll({ traceEvents }, anchor)).toEqual({ inputToPresentationMs: 854.448 })
+    expect(parseNativeScroll({ traceEvents }, anchor)).toEqual({
+      inputToPresentationMs: 854.448, automationDispatchMs: 361.723, browserToPresentationMs: 492.725,
+    })
   })
 
   it.each([-200, -122, 153, 200])("matches a %iµs two-clamp residual without changing native duration", (residual) => {
     const traceEvents = fixture().map((e) => e.name === anchor.name ? { ...e, ts: e.ts - residual } : e)
-    expect(parseNativeScroll({ traceEvents }, anchor)).toEqual({ inputToPresentationMs: 854.448 })
+    expect(parseNativeScroll({ traceEvents }, anchor)).toEqual({
+      inputToPresentationMs: 854.448, automationDispatchMs: 361.723, browserToPresentationMs: 492.725,
+    })
   })
 
   it.each([-201, 201])("rejects a %iµs residual outside the precision bound", (residual) => {
@@ -59,6 +68,11 @@ describe("native scroll presentation", () => {
   })
 
   it.each([
+    ["absent dispatch", (events: ReturnType<typeof fixture>) => events.filter((e) => e.name !== "GenerationToBrowserMain")],
+    ["incomplete dispatch", (events: ReturnType<typeof fixture>) => events.filter((e) => !(e.name === "GenerationToBrowserMain" && e.ph === "e"))],
+    ["duplicate dispatch", (events: ReturnType<typeof fixture>) => [...events, event("GenerationToBrowserMain", "e", 290585548)]],
+    ["late dispatch start", (events: ReturnType<typeof fixture>) => events.map((e) => e.name === "GenerationToBrowserMain" && e.ph === "b" ? { ...e, ts: e.ts + 1 } : e)],
+    ["nonpositive browser duration", (events: ReturnType<typeof fixture>) => events.map((e) => e.name === "GenerationToBrowserMain" && e.ph === "e" ? { ...e, ts: 291078272 } : e)],
     ["absent presentation", (events: ReturnType<typeof fixture>) => events.filter((e) => !e.name.startsWith("SwapEnd"))],
     ["incomplete interval", (events: ReturnType<typeof fixture>) => events.filter((e) => !(e.name === "EventLatency" && e.ph === "e" && e.ts === 291078272))],
     ["duplicate gesture", (events: ReturnType<typeof fixture>) => [...events, begin(290223824)]],

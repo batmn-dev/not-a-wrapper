@@ -16,8 +16,12 @@ export type MetricSummary = {
 
 export type RunMetrics = {
   ui?: Record<string, number[]>
-  /** Native wheel generation to the first matching browser presentation feedback. */
+  /** CDP event timestamp to matching browser presentation feedback, retained raw. */
   scrollInputToPresentationMs?: number
+  /** CDP-generated input to browser forwarding, including its visual-state barrier. */
+  scrollAutomationDispatchMs?: number
+  /** Browser forwarding to the matching presentation, excluding automation dispatch. */
+  scrollBrowserToPresentationMs?: number
   /** Foreground loss invalidates interactive timings. */
   hiddenDuringMeasurement?: boolean
   pendingDeltaSamples?: number
@@ -104,7 +108,7 @@ export type ScenarioResult = {
   auth: boolean
   followup: boolean
   /** Native input/frame trace joins replace the DOM scroll proxy. */
-  wheelProtocol?: "native-presentation-v1"
+  wheelProtocol?: "native-browser-presentation-v1"
   /** Opening intent precedes native menu mousedown handling. */
   menuProtocol?: "activation-v1"
   /** Late probes finish before unmeasured menu dismissal. */
