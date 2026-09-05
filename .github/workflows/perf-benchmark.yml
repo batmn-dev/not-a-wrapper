@@ -40,6 +40,10 @@ on:
         type: choice
         default: responsiveness
         options: [responsiveness, smoke, standard, durable, thread-switch]
+      comparison_ref:
+        description: "Paired product baseline; blank uses the PR base or current commit's first parent"
+        type: string
+        default: ""
       collect_baseline:
         description: "Collect first evidence; does not certify relative regression protection"
         type: boolean
@@ -83,7 +87,7 @@ jobs:
         suite: ${{ fromJSON(github.event_name == 'schedule' && '["standard","durable","thread-switch"]' || format('["{0}"]', inputs.suite || 'responsiveness')) }}
     name: Browser benchmark (${{ matrix.suite }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       SUITE: ${{ matrix.suite }}
       RUNS: ${{ inputs.diagnose && 1 || 5 }}
@@ -95,6 +99,7 @@ jobs:
           (inputs.late_menu_trace && 'interact-long-answer' ||
            inputs.suite == 'standard' && 'mixed-markdown-30-slab' ||
            'new-chat-cold,interact-long-answer')) || '' }}
+      PERF_COMPARE_REF: ${{ github.event.pull_request.base.sha || inputs.comparison_ref || 'HEAD^' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite
@@ -123,6 +128,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -149,14 +156,21 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
 
+      - name: Compare base and head on the same runner
+        if: ${{ !inputs.diagnose && !inputs.collect_baseline }}
+        run: bun run benchmarks/chat-performance/browser/run-paired.ts
+        env:
+          PERF_AUTH_PASSWORD: ${{ secrets.PERF_AUTH_PASSWORD }}
+
       - name: Build instrumented bundle
+        if: ${{ inputs.diagnose || inputs.collect_baseline }}
         run: NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf bun run build:next
 
       # The harness spawns the perf server itself, folds every stream against
       # the scenario oracle, and exits non-zero on ANY correctness failure —
       # that alone gates, baseline or not.
       - name: Run browser benchmark
-        if: ${{ !inputs.observer_overhead && !inputs.rendering_probe }}
+        if: ${{ (inputs.diagnose || inputs.collect_baseline) && !inputs.observer_overhead && !inputs.rendering_probe }}
         run: |
           if [ "$SUITE" != "smoke" ] && [ "$SUITE" != "standard" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
             echo "::error title=Missing PERF_AUTH_PASSWORD::Set the GitHub Actions secret PERF_AUTH_PASSWORD to a strong, unique benchmark-user password."
@@ -178,8 +192,8 @@ jobs:
           printf '%s\n' '.text-message, .text-message > div { display: flow-root !important; }' > /tmp/chat-inner-block-layout-probe.css
           STREAMING_PRESENTATION=smooth INJECT_CSS_FILE=/tmp/chat-inner-block-layout-probe.css LABEL=inner-block-layout CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
 
-      - name: Compare against baseline
-        if: ${{ !inputs.diagnose }}
+      - name: Validate collected measurements and report targets
+        if: ${{ !inputs.diagnose && inputs.collect_baseline }}
         run: |
           CURRENT=$(bun -e '
             import { readdirSync } from "node:fs";
@@ -190,11 +204,7 @@ jobs:
             console.log(join(directory, latest));
           ')
           echo "current results: $CURRENT"
-          BASELINE="benchmarks/chat-performance/browser/baselines/ci-${SUITE}/"
-          if [ "$COLLECT_BASELINE" = "true" ]; then
-            BASELINE="--collect-baseline"
-          fi
-          bun run benchmarks/chat-performance/browser/compare-results.ts "$BASELINE" "$CURRENT"
+          bun run benchmarks/chat-performance/browser/compare-results.ts --regression-only --collect-baseline "$CURRENT"
 
       - name: Upload results artifact
         if: ${{ always() && !inputs.observer_overhead && !inputs.rendering_probe }}
@@ -203,6 +213,7 @@ jobs:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
           path: |
             benchmarks/chat-performance/browser/results/*.json
+            benchmarks/chat-performance/browser/results/paired/
             !benchmarks/chat-performance/browser/results/*.trace.json
           retention-days: 90
 

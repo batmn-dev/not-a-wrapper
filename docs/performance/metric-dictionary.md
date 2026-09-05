@@ -330,6 +330,18 @@ The observation tab must remain visible.
 
 The fixed normal-profile budgets are defined in `result-contract.ts`. Result JSON
 retains raw content-free samples so budget-exceedance rates can be recomputed.
+Under the 2026-09-05 ADR-0037 policy clarification, capture validity/compatibility,
+relative regression, and these absolute targets are reported independently.
+Strict comparison remains the default and gates all three. Explicit
+`--regression-only` still gates validity and regressions while separately reporting
+unchanged target failures; a valid but slow reference is permitted only under that
+policy. Its success does not mean the interface meets the absolute targets.
+PR comparisons pair original main product code and the candidate on the same
+runner/browser with identical measurement hooks, fixtures, and configuration.
+Scheduled and default manual comparisons capture the current revision's first
+parent on that same runner; stored CPU baselines are not a workflow prerequisite.
+Missing or incompatible reference evidence fails and leaves regression
+**NOT EVALUATED**; collecting one capture cannot establish regression protection.
 Summaries must match their raw observations. Every text scenario requires a
 content-latency sample per run. Early/late typing, menu, and content phases use
 the same absolute budgets independently, so setup samples cannot dilute a slow

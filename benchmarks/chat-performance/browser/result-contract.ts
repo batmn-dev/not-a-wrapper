@@ -491,15 +491,15 @@ export const ENVIRONMENT_FIELDS = [
   "suite",
 ] as const satisfies readonly (keyof ComparableResult)[]
 
-export function compareResults(
+export function assessComparison(
   base: ComparableResult,
   current: ComparableResult
-): string[] {
+) {
   const errors = [
-    ...validateCoverage(base),
-    ...validateCoverage(current),
-    ...checkBudgets(current),
+    ...validateCoverage(base).map((error) => `baseline: ${error}`),
+    ...validateCoverage(current).map((error) => `current: ${error}`),
   ]
+  const regressions: string[] = []
   for (const field of ENVIRONMENT_FIELDS) {
     if (base[field] !== current[field])
       errors.push(`${field} mismatch; collect a matching baseline`)
@@ -531,7 +531,7 @@ export function compareResults(
         after.p50 - before.p50 >
         Math.max(before.p50 * gate.relative, gate.floor)
       )
-        errors.push(`${key} ${metric}: ${before.p50} → ${after.p50}ms`)
+        regressions.push(`${key} ${metric}: ${before.p50} → ${after.p50}ms`)
     }
   }
   if (Boolean(base.threadSwitch) !== Boolean(current.threadSwitch))
@@ -556,7 +556,24 @@ export function compareResults(
       after.navToThreadPaintedMs.p50 - before.navToThreadPaintedMs.p50 >
       Math.max(30, before.navToThreadPaintedMs.p50 * 0.35)
     )
-      errors.push(`thread-switch ${before.kind}: navigation regressed`)
+      regressions.push(`thread-switch ${before.kind}: navigation regressed`)
   }
-  return errors
+  return {
+    measurementErrors: errors,
+    // Invalid or incompatible observations cannot establish a regression result.
+    regressions: errors.length ? null : regressions,
+    targetFailures: checkBudgets(current),
+  }
+}
+
+export function compareResults(
+  base: ComparableResult,
+  current: ComparableResult
+): string[] {
+  const report = assessComparison(base, current)
+  return [
+    ...report.measurementErrors,
+    ...(report.regressions ?? []),
+    ...report.targetFailures,
+  ]
 }

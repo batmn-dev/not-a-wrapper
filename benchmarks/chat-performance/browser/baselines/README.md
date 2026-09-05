@@ -4,14 +4,38 @@ The comparator now **fails when a baseline is missing**. A green correctness run
 alone is never proof of speed. Reviewed captures are stored below by suite and exact runner environment.
 A capture alone does not prove an independent comparison passes.
 
+Policy clarification, 2026-09-05: validity/compatibility, relative regression, and
+absolute responsiveness targets are separate results. Strict CLI mode remains the
+default. Explicit `--regression-only` still fails invalid or incompatible evidence
+and actual regressions, but reports unchanged absolute targets separately. A valid
+but slow main reference is allowed in that mode; a regression-policy pass is not
+a target-compliance pass. Missing references fail, with regression **NOT EVALUATED**.
+
+PR regression evidence pairs original main product code and the candidate on the
+same runner/browser with identical measurement hooks, fixtures, and configuration.
+Both revision/build identities and raw captures must be retained. The following
+stored-baseline procedure remains available for reviewed environment-specific
+references; it does not replace the paired PR evidence requirement. Historical
+capture records below retain their original policy and outcomes.
+
+The workflow collects a fresh same-runner reference for each comparison, so a
+stored capture for the current CPU is not required. PRs use the exact PR base;
+scheduled and manual runs default to the current revision's first parent. Manual
+`comparison_ref` may name another ancestor, but cannot name the candidate itself.
+Measurement-source changes need a reviewed overlay. Paired artifacts preserve
+both captures and their provenance; missing or failed reference acquisition blocks
+the comparison rather than falling back to a historical capture.
+
 1. Dispatch `perf-benchmark.yml` with the desired suite and `collect_baseline=true`.
 2. Review the uploaded JSON, correctness, sample coverage, and absolute budgets.
-   Failed budgets remain failures even during collection; investigate them rather
-   than raising thresholds to normalize a slow baseline.
+   Strict collection fails target violations. Explicit regression-only collection
+   may retain valid slow evidence, with target failures still reported. Never raise
+   thresholds or remove slow observations to normalize the reference.
 3. Commit the reviewed artifact as `ci-<suite>/<environment>.json` in this
    directory. Choose a descriptive filename for the captured CPU and browser;
    matching uses the parsed metadata, never the filename or timing values.
-4. Run the workflow normally to prove the strict comparison passes.
+4. Run an independent comparison under the selected explicit policy. Report its
+   regression and target outcomes separately.
 
 Suites: `responsiveness`, `standard`, `durable`, `thread-switch`, and optional
 `smoke`. Never use a local Mac result as a Linux CI baseline. Schema version,
@@ -69,8 +93,14 @@ Local first-evidence validation:
 bun run benchmarks/chat-performance/browser/compare-results.ts --collect-baseline path/to/current.json
 ```
 
-This explicitly checks correctness, coverage, and absolute budgets but performs no
-relative comparison. It cannot be used to report regression protection as armed.
+This strictly checks correctness, coverage, and absolute targets but performs no
+relative comparison. Adding `--regression-only` permits valid slow first evidence
+while retaining the target report. Neither collection mode can report regression
+protection as armed. An actual comparison requires both reference and candidate:
+
+```sh
+bun run benchmarks/chat-performance/browser/compare-results.ts --regression-only path/to/base.json path/to/current.json
+```
 
 Reviewed thread-switch capture: [run 33958084155](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33958084155),
 commit `7026cbad`, AMD EPYC 9V74, Chromium `151.0.7922.34`. All 90 switches pass

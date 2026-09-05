@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   compareResults,
+  assessComparison,
   checkBudgets,
   resultContract,
   scenarioKey,
@@ -127,6 +128,70 @@ function threadResult(): ComparableResult {
 }
 
 describe("performance evidence contract", () => {
+  it("separates valid slow collection, actual regression, targets, and unavailable comparisons", () => {
+    const directory = mkdtempSync(join(tmpdir(), "chat-perf-policy-"))
+    try {
+      const baseline = join(directory, "baseline.json")
+      const current = join(directory, "current.json")
+      const slow = result()
+      const setLatency = (value: ComparableResult, ms: number) => {
+        value.scenarios[0].runs.forEach((run) => { run.ui!.inputToOptimisticFrameMs = [ms] })
+        value.scenarios[0].metrics.inputToOptimisticFrameMs = summarize(Array(5).fill(ms))
+      }
+      setLatency(slow, 500)
+      writeFileSync(baseline, JSON.stringify(slow))
+      writeFileSync(current, JSON.stringify(slow))
+      const run = (path: string, regressionOnly = true) => spawnSync("bun", [
+        "run", "benchmarks/chat-performance/browser/compare-results.ts",
+        ...(regressionOnly ? ["--regression-only"] : []), path, current,
+      ], { encoding: "utf8" })
+      const collected = run("--collect-baseline")
+      expect(collected.status).toBe(0)
+      expect(collected.stdout).toContain("relative regression: NOT EVALUATED")
+      expect(collected.stdout).toContain("responsiveness targets: FAIL")
+      expect(run("--collect-baseline", false).status).toBe(1)
+      const compared = run(baseline)
+      expect(compared.status).toBe(0)
+      expect(compared.stdout).toContain("relative regression: PASS")
+      expect(compared.stdout).toContain("responsiveness targets: FAIL")
+      expect(run(baseline, false).status).toBe(1)
+
+      const worse = structuredClone(slow)
+      setLatency(worse, 800)
+      writeFileSync(current, JSON.stringify(worse))
+      const regressed = run(baseline)
+      expect(regressed.status).toBe(1)
+      expect(regressed.stdout).toContain("relative regression: FAIL")
+      const withinTarget = result()
+      setLatency(withinTarget, 80)
+      const report = assessComparison(result(), withinTarget)
+      expect(report.targetFailures).toEqual([])
+      expect(report.regressions?.join(" ")).toContain("40 → 80ms")
+
+      writeFileSync(current, JSON.stringify(result()))
+      const absent = run(join(directory, "absent.json"))
+      expect(absent.status).toBe(1)
+      expect(absent.stdout).toContain("relative regression: NOT EVALUATED")
+      expect(absent.stdout).toContain("responsiveness targets: PASS")
+      slow.cpuModel = "different-cpu"
+      writeFileSync(baseline, JSON.stringify(slow))
+      const mismatched = run(baseline)
+      expect(mismatched.status).toBe(1)
+      expect(mismatched.stdout).toContain("relative regression: NOT EVALUATED")
+      writeFileSync(baseline, "{}")
+      expect(run(baseline).status).toBe(1)
+      const incomplete = result()
+      incomplete.scenarios.pop()
+      writeFileSync(current, JSON.stringify(incomplete))
+      expect(run("--collect-baseline").status).toBe(1)
+      expect(assessComparison(result(), incomplete).regressions).toBeNull()
+      writeFileSync(current, JSON.stringify(threadResult()))
+      expect(run("--collect-baseline").stdout).toContain("responsiveness targets: NOT APPLICABLE")
+    } finally {
+      rmSync(directory, { recursive: true })
+    }
+  })
+
   it("selects one exact environment from a directory and rejects missing, duplicate, or invalid candidates", () => {
     const directory = mkdtempSync(join(tmpdir(), "chat-perf-baselines-"))
     try {
@@ -262,6 +327,7 @@ describe("performance evidence contract", () => {
     current.scenarios[1].metrics.inputToFirstTextFrameMs = summarize(
       Array(5).fill(800)
     )
+    current.scenarios[1].runs.forEach((run) => { run.ui!.inputToFirstTextFrameMs = [800] })
     expect(scenarioKey(base.scenarios[1])).not.toBe(scenarioKey(slab))
     expect(compareResults(base, current).join(" ")).toContain("200 → 800")
     current.scenarios.push(structuredClone(current.scenarios[0]))

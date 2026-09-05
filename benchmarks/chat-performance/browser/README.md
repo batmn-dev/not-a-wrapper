@@ -166,14 +166,37 @@ not claims that the current app passes.
 
 `compare-results.ts` validates schema, sample coverage, correctness, complete
 scenario identity (including delivery shape), fixture hash, and matching hardware
-and browser. Missing baselines fail. Explicit `--collect-baseline` validates first
-evidence without claiming a relative comparison. Follow `baselines/README.md`;
+and browser. It reports validity/compatibility, relative regression, and absolute
+responsiveness targets separately. Strict mode remains the default and fails on
+any of these categories. The approved CI regression policy uses the explicit mode:
+
+```sh
+bun run benchmarks/chat-performance/browser/compare-results.ts --regression-only path/to/base.json path/to/current.json
+```
+
+This mode still fails invalid captures and actual regressions. Unchanged absolute
+targets remain visible as PASS/FAIL, but do not control its exit status; a policy
+pass does not certify target compliance. PR evidence pairs original main product
+code and the candidate on the same runner/browser with identical measurement
+hooks, fixtures, and configuration, retaining both revision and build identities.
+A valid but slow main reference is allowed for this explicit regression policy.
+
+Missing, invalid, or incompatible baselines fail in both modes; relative regression
+is **NOT EVALUATED** when it cannot be established. Explicit `--collect-baseline`
+validates first evidence without claiming a relative comparison. Collection is
+strict unless `--regression-only` is also supplied. Follow `baselines/README.md`;
 old schema-v1 artifacts cannot arm this gate.
 
-Same-repository relevant PRs run the core suite. Weekly CI runs standard, durable,
-and thread-switch suites. Fork PRs receive no credentials. Setup requires the
-existing `PERF_ENV_FILE` and `PERF_AUTH_PASSWORD` GitHub secrets and fresh reviewed
-runner-specific baselines. Results upload even on failure.
+Same-repository relevant PRs run the core suite. Standard, durable, and thread-switch
+suites run weekly. PRs compare the exact PR base; scheduled and manual runs default
+to the checked-out revision's first parent. Manual `comparison_ref` can select a
+different ancestor; self-comparison fails. Both builds run in one job, so the
+workflow needs no previously stored CPU baseline. Changes to measurement sources
+require a reviewed overlay before comparing. Paired artifacts retain `base.json`,
+`head.json`, the provenance manifest, instrumentation diff, and comparison report.
+Fork PRs receive no credentials. Setup requires the
+existing `PERF_ENV_FILE` and `PERF_AUTH_PASSWORD` GitHub secrets and valid reference
+captures under the selected policy. Results upload even on failure.
 
 ## Diagnostics outside the core gate
 

@@ -87,6 +87,33 @@ Relative comparisons additionally catch changes to preparation, load, first outp
 and navigation. Constrained-device results have their own relative baselines;
 the normal-profile absolute budgets do not silently become phone guarantees.
 
+### Gate policy clarification, 2026-09-05
+
+This supersedes the earlier policy that treated absolute target compliance as
+an inseparable condition of the CI regression gate. Report three independent
+results: measurement validity and compatibility, relative regression, and
+responsiveness targets. Invalid captures or incompatible/missing baselines fail
+the gate; an unavailable comparison is **NOT EVALUATED**, never a regression pass.
+
+The comparator remains strict by default: validity, regression, and absolute
+target failures all block. The explicitly approved `--regression-only` mode
+still blocks validity failures and regressions, while reporting unchanged
+absolute targets separately. A valid but slow main capture can serve as a
+regression reference in this mode; that does not certify either revision as fast.
+Baseline collection alone never establishes regression protection.
+
+PR regression evidence must pair the original main product code and candidate
+on the same runner with the same browser, fixtures, configuration, and measurement
+hooks. The measurement overlay must preserve the base product behavior. Keep both
+revision/build identities and raw results; do not substitute a different runner's
+historical capture or select a reference by its timings. This policy authorizes
+the comparison method, not a claim that a qualifying paired capture exists.
+Scheduled runs and manual runs without an override compare the checked-out
+revision with its first parent on that same runner. Manual `comparison_ref` may
+select another ancestor, but self-comparison is rejected. The workflow captures
+its reference each time; it does not require a stored baseline for that CPU.
+Measurement changes require a reviewed overlay rather than mixing protocols.
+
 Production DOM observation uses the existing Sentry metric transport, with only
 closed metric names and durations. `NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE` defaults to
 zero until observer overhead has been measured and reviewed. Instrumented builds
