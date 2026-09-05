@@ -125,6 +125,14 @@ export function createComposerPaintController(
         return
       }
 
+      // An input with no editor transaction is not a committed keystroke.
+      if (
+        pendingComposerStartedAt === undefined &&
+        pendingInputStartedAt !== undefined &&
+        performance.now() - pendingInputStartedAt > 1000
+      ) {
+        pendingInputStartedAt = undefined
+      }
       const startedAt = pendingComposerStartedAt ?? pendingInputStartedAt
       if (startedAt === undefined) return
 

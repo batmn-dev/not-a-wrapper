@@ -71,3 +71,20 @@ A production build plus authenticated-browser checks validate integration. A new
 runner-matched baseline, foreground browser capture, and instrumentation-overhead
 comparison are required before declaring release performance validated. Old v1
 artifacts must not be copied into v2 baseline files. Missing baselines fail CI.
+
+## Hosted-run follow-through
+
+The first CI run exposed observer blind spots (popup positioning style changes and
+ARIA-disabled Send), not just application latency. Stop correctness now records
+current-assistant source lengths and rejects actual growth; a shorter canonical
+terminal snapshot remains valid. Terminal feedback is measured only from a real
+terminal event, separately from Stop feedback. Receipt-to-terminal ordering is a
+signed diagnostic because the durable receipt can arrive first.
+
+First-send motion uses the existing Composer lifecycle module to animate the live
+form after its synchronous update, retaining the 500 ms shared spring. This avoids
+blocking Send on full-document View Transition capture. Removing motion entirely
+was considered; keeping the live-element slide preserves the interaction while
+letting feedback begin immediately. Hidden/reduced-motion documents skip animation.
+The composer also reuses identical sizing measurements across editor transactions
+and controlled-value commits, invalidating on value, width, node, class or style.

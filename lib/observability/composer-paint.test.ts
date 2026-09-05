@@ -103,6 +103,11 @@ describe("composer paint controller", () => {
 })
 
 describe("stalled composer input", () => {
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
   it("retains a multi-second input delay instead of discarding the slowest observation", () => {
     process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION = "true"
     const mark = vi.spyOn(performance, "mark")
@@ -122,8 +127,5 @@ describe("stalled composer input", () => {
       { detail: { durationMs: 2500 } }
     )
     controller.dispose()
-    delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
-    vi.restoreAllMocks()
-    vi.unstubAllGlobals()
   })
 })

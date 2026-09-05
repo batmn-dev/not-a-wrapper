@@ -15,8 +15,7 @@
  *   2. bun run bench:browser            # spawns `next start` on PERF_PORT
  * Env: SUITE=standard|smoke|durable|thread-switch (default standard),
  *      RUNS (default 10), WARMUPS (default 2), PERF_PORT (default 3111),
- *      BASE_URL (reuse a running perf server instead of spawning; server-span
- *      join unavailable), PW_CHANNEL (e.g. "chrome" to use installed Chrome).
+ *      PW_CHANNEL (CI only, e.g. "chrome" to use installed Chrome).
  *      thread-switch knobs: THREAD_SWITCH_CHATS (8), THREAD_SWITCH_COUNT (50),
  *      THREAD_SWITCH_DOCUMENTS (5), THREAD_SWITCH_HOVER_MS (250).
  */
@@ -65,6 +64,7 @@ import {
 import {
   directiveFor,
   DURABLE_SUITE,
+  FOLLOWUP_SEED,
   RESPONSIVENESS_SUITE,
   SMOKE_SUITE,
   STANDARD_SUITE,
@@ -178,6 +178,15 @@ function readDeliveredMarkdownLength(): number {
     (total, element) => total + (element.textContent?.length ?? 0),
     0
   )
+}
+
+function readCurrentAssistantSourceLength(): number {
+  const turn = Array.from(
+    document.querySelectorAll("section[data-turn-id]")
+  ).at(-1)
+  const source = turn?.querySelector<HTMLElement>("[data-perf-text-length]")
+  if (!source) throw new Error("current assistant source marker is missing")
+  return Number(source.dataset.perfTextLength)
 }
 
 /** Clears storage and reloads so the next send mints a fresh guest id. */
@@ -376,9 +385,19 @@ async function runScenarioOnce(
     await editor.waitFor({ state: "visible", timeout: 15000 })
 
     if (config.followup) {
-      await editor.fill("[[perf:short-prose:100:fixed]]")
+      await editor.fill(directiveFor(FOLLOWUP_SEED))
       await page.locator('[data-testid="send-button"]').click()
       await waitForMark(page, "stream_terminal", 60000)
+      if (
+        markAt(await readMarks(page), "durable_settlement_receipt") ===
+        undefined
+      )
+        await waitForMark(page, "durable_settlement_receipt", 15000)
+      const seedTerminal = (await readMarks(page)).find(
+        (mark) => mark.name === "stream_terminal"
+      )
+      if (seedTerminal?.detail?.outcome !== "finish")
+        throw new Error("follow-up seed did not finish successfully")
       await page
         .locator('[data-testid="send-button"][aria-label="Send prompt"]')
         .waitFor()
@@ -401,6 +420,7 @@ async function runScenarioOnce(
       return (
         button &&
         !button.disabled &&
+        button.getAttribute("aria-disabled") !== "true" &&
         Boolean(
           (window as ChatUiWindow).__chatUiPerf?.values.navigationToSendReadyMs
             ?.length
@@ -433,6 +453,7 @@ async function runScenarioOnce(
     // falls back to the settlement rules.
     let liveStreamNotAdopted = false
     let stoppedTextStable = true
+    let stopSourceLengths: RunMetrics["stopSourceLengths"]
     const awaitFirstVisible = async (): Promise<boolean> => {
       if (!config.auth) {
         await waitForMark(page, "first_visible_text", timeoutMs)
@@ -485,7 +506,7 @@ async function runScenarioOnce(
         )
         await requireStreaming(phase, "typing")
         await editor.click()
-        await page.keyboard.type("A draft while the response streams.", {
+        await page.keyboard.type("A draft.", {
           delay: 40,
         })
         await requireStreaming(phase, "menu")
@@ -499,7 +520,10 @@ async function runScenarioOnce(
         await scroll.hover()
         if (phase === "late") {
           await requireStreaming(phase, "scroll")
-          await page.mouse.wheel(0, -400)
+          const direction = await scroll.evaluate((node) =>
+            node.scrollTop > 0 ? -400 : 400
+          )
+          await page.mouse.wheel(0, direction)
         }
         await page.waitForTimeout(100)
         await requireStreaming(phase, "interaction completion")
@@ -516,10 +540,12 @@ async function runScenarioOnce(
               ?.length
           )
         )
-        const length = await page.evaluate(readDeliveredMarkdownLength)
+        const atReady = await page.evaluate(readCurrentAssistantSourceLength)
         await page.waitForTimeout(250)
-        stoppedTextStable =
-          length === (await page.evaluate(readDeliveredMarkdownLength))
+        const after250Ms = await page.evaluate(readCurrentAssistantSourceLength)
+        stopSourceLengths = { atReady, after250Ms }
+        // Terminal reconciliation can replace a local draft with a shorter snapshot.
+        stoppedTextStable = after250Ms <= atReady
       }
     } else if (config.action === "second-tab") {
       if (await awaitFirstVisible()) {
@@ -550,6 +576,14 @@ async function runScenarioOnce(
         // joins still find the run. (The /c/<chatId> hop is a pushState,
         // so marks survive it.)
         preReloadCorrelationId = correlationIdOf(await readMarks(page))
+        foregroundUi = await page.evaluate(() => ({
+          values: (window as ChatUiWindow).__chatUiPerf?.values ?? {},
+          hidden: (window as ChatUiWindow).__chatUiPerf?.hidden ?? true,
+          pendingDeltas:
+            (window as ChatUiWindow).__chatUiPerf?.pendingDeltas() ?? 0,
+          droppedSamples:
+            (window as ChatUiWindow).__chatUiPerf?.droppedSamples() ?? 0,
+        }))
         await page.reload({ waitUntil: "domcontentloaded" })
         reloadedMidStream = true
       }
@@ -840,6 +874,7 @@ async function runScenarioOnce(
         config.action === "stop"
           ? diff(marks, "stop_intent", "stream_terminal")
           : undefined,
+      stopSourceLengths,
       longTaskCount: longTasks.length,
       longTaskMaxMs: round2(Math.max(0, ...longTasks)),
       totalBlockingTimeMs: round2(
@@ -1061,9 +1096,14 @@ async function main() {
       "Guest suites need a CI browser; the attached authenticated profile must not have its storage cleared or be reported as a guest."
     )
 
-  const externalBaseUrl = process.env.BASE_URL
-  const baseUrl = externalBaseUrl ?? `http://localhost:${PERF_PORT}`
-  if (!externalBaseUrl) spawnPerfServer(baseUrl)
+  if (process.env.BASE_URL)
+    fail(
+      "BASE_URL is unsupported: the harness must own its deterministic production server"
+    )
+  if (PERF_PORT === 3000)
+    fail("PERF_PORT must not use the developer server port 3000")
+  const baseUrl = `http://localhost:${PERF_PORT}`
+  spawnPerfServer(baseUrl)
   await waitForServer(baseUrl, 60_000)
 
   let browser: Browser
@@ -1328,7 +1368,12 @@ async function main() {
               shape: "fixed",
             })
           )
-        : suite.map((config) => buildDeterministicPartScript(config))
+        : suite.flatMap((config) => [
+            buildDeterministicPartScript(config),
+            ...(config.followup
+              ? [buildDeterministicPartScript(FOLLOWUP_SEED)]
+              : []),
+          ])
     ),
     generatedAt: new Date().toISOString(),
     commit,
@@ -1359,7 +1404,8 @@ async function main() {
   writeFileSync(outPath, JSON.stringify(file, null, 2))
   log(`results written to ${outPath}`)
 
-  if (!process.env.PERF_CDP_URL) await browser.close()
+  // Playwright closes its CDP transport here; attached Chrome is not terminated.
+  await browser.close()
   stopPerfServer()
   if (anyCorrectnessFailure) {
     fail("one or more scenarios failed correctness — timings are invalid")

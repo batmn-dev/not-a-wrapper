@@ -106,7 +106,7 @@ async function waitForRows(page: Page, count: number, timeoutMs: number) {
   return readRowHrefs(page)
 }
 
-/** Sends one short deterministic turn from the home surface: a new durable chat. */
+/** Creates a durable chat with a short answer or the long Markdown fixture. */
 async function createChat(page: Page, baseUrl: string, long: boolean) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
   const editor = page.locator('[contenteditable="true"]').first()
@@ -203,7 +203,7 @@ async function switchTo(
   let detail: string | undefined
   if (ui.hidden) detail = "tab became hidden"
   else if (!painted) detail = "destination DOM/frame observation missing"
-  else if (!urlOk) detail = `url ${new URL(page.url()).pathname} != ${href}`
+  else if (!urlOk) detail = "navigation reached an unexpected destination"
   else if (rows === 0) detail = "no message row rendered"
 
   return {
@@ -286,8 +286,15 @@ export async function runThreadSwitch(
   const heapSamples: ThreadSwitchResult["heapSamples"] = []
   const failures: string[] = []
 
+  const ownedPages: Page[] = []
+  const newPage = async () => {
+    const page = await context.newPage()
+    ownedPages.push(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    return page
+  }
   try {
-    const fixturePage = await context.newPage()
+    const fixturePage = await newPage()
     await fixturePage.bringToFront()
     const hrefs = await ensureChats(
       fixturePage,
@@ -302,7 +309,7 @@ export async function runThreadSwitch(
     // half by plain click, half by hover-then-click.
     const half = Math.floor(hrefs.length / 2)
     for (let document = 0; document < options.documents; document++) {
-      const page = await context.newPage()
+      const page = await newPage()
       await page.addInitScript(installChatUiObserver)
       await page.bringToFront()
       const querySet = installQuerySetCounter(page)
@@ -330,7 +337,7 @@ export async function runThreadSwitch(
 
     // Visited pass: one document, every chat opened once, then
     // `switchCount` switches cycling through them with heap samples.
-    const page = await context.newPage()
+    const page = await newPage()
     await page.addInitScript(installChatUiObserver)
     await page.bringToFront()
     const cdp = await context.newCDPSession(page)
@@ -369,6 +376,9 @@ export async function runThreadSwitch(
     log(`  visited: ${options.switchCount} switches`)
     await page.close()
   } finally {
+    await Promise.all(
+      ownedPages.filter((page) => !page.isClosed()).map((page) => page.close())
+    )
     if (!process.env.PERF_CDP_URL) await context.close()
   }
 

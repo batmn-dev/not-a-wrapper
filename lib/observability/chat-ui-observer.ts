@@ -159,7 +159,7 @@ export function installChatUiObserver(
         navigation = undefined
       }
     }
-    if (isVisible(editor) && inputPending) {
+    if (inputPending && isVisible(editor)) {
       inputPending = false
       recordOnce("navigationToComposerInputMs", 0)
       if (inputAt !== undefined)
@@ -167,13 +167,12 @@ export function installChatUiObserver(
       inputAt = undefined
     }
     if (isVisible(send) && send.getAttribute("aria-label") === "Send prompt") {
-      if (!send.disabled) recordOnce("navigationToSendReadyMs", 0)
+      if (!send.disabled && send.getAttribute("aria-disabled") !== "true")
+        recordOnce("navigationToSendReadyMs", 0)
       if (terminalAt !== undefined)
         recordOnce("terminalToReadyFrameMs", terminalAt)
       if (stopAt !== undefined) {
         recordOnce("stopToReadyFrameMs", stopAt)
-        // A local Stop may cancel the transport before its finish frame arrives.
-        recordOnce("terminalToReadyFrameMs", stopAt)
       }
     }
     if (
@@ -186,7 +185,10 @@ export function installChatUiObserver(
     if (sentAt === undefined) return
     const users = document.querySelectorAll(userSelector)
     if (users.length === 0 || users[users.length - 1] === previousUser) return
-    if (isVisible(users[users.length - 1]))
+    if (
+      !once.has("inputToOptimisticFrameMs") &&
+      isVisible(users[users.length - 1])
+    )
       recordOnce("inputToOptimisticFrameMs", sentAt)
     const markdown = row?.querySelector(
       '[data-message-author-role="assistant"] .markdown'
@@ -201,10 +203,11 @@ export function installChatUiObserver(
     const activity = row?.querySelector(
       'button[aria-label^="Open activity:"], button[aria-label^="Close activity:"]'
     )
-    if (isVisible(activity)) recordOnce("inputToFirstActivityFrameMs", sentAt)
+    if (!once.has("inputToFirstActivityFrameMs") && isVisible(activity))
+      recordOnce("inputToFirstActivityFrameMs", sentAt)
     const source = row?.querySelector<HTMLElement>("[data-perf-text-length]")
     const renderedLength = Number(source?.dataset.perfTextLength ?? 0)
-    if (isVisible(markdown)) {
+    if (samples.length > 0 && isVisible(markdown)) {
       const ready = samples.filter((sample) => sample.length <= renderedLength)
       samples = samples.filter((sample) => sample.length > renderedLength)
       for (const sample of ready) {
@@ -359,7 +362,10 @@ export function installChatUiObserver(
     attributes: true,
     attributeFilter: [
       "disabled",
+      "aria-disabled",
       "aria-label",
+      "style",
+      "hidden",
       "data-perf-text-length",
       "aria-expanded",
     ],
@@ -382,11 +388,12 @@ export function installChatUiObserver(
           }
           if (
             interaction.interactionId &&
-            !seenInteractions.has(interaction.interactionId) &&
-            seenInteractions.size < 1024
+            !seenInteractions.has(interaction.interactionId)
           ) {
-            seenInteractions.add(interaction.interactionId)
-            record("interactionMs", 0, entry.duration)
+            if (seenInteractions.size < 1024) {
+              seenInteractions.add(interaction.interactionId)
+              record("interactionMs", 0, entry.duration)
+            } else dropped++
           }
         }
       }

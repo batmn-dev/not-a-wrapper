@@ -62,6 +62,46 @@ function result(): ComparableResult {
   }
 }
 
+function threadResult(): ComparableResult {
+  const value = result()
+  value.suite = "thread-switch"
+  value.scenarios = []
+  value.threadSwitch = {
+    correctnessOk: true,
+    chatCount: 2,
+    switchCount: 5,
+    hoverMs: 250,
+    documents: 5,
+    heapSamples: [
+      { switches: 0, jsHeapUsedBytes: 1000 },
+      { switches: 5, jsHeapUsedBytes: 1100 },
+    ],
+    passes: (["unvisited-click", "unvisited-hover", "visited"] as const).map(
+      (kind) => ({
+        kind,
+        switches: 5,
+        samples: Array.from({ length: 5 }, (_, index) => ({
+          navToPaintedMs: 40,
+          intentToCommitMs: 10,
+          commitToFirstContentMs: 5,
+          firstContentToPaintedMs: 25,
+          cache: index === 0 ? undefined : ("hit" as const),
+          querySetAdds: 2,
+          ok: true as const,
+        })),
+        navToThreadPaintedMs: summarize(Array(5).fill(40)),
+        intentToRouteCommitMs: summarize(Array(5).fill(10)),
+        commitToFirstContentMs: summarize(Array(5).fill(5)),
+        firstContentToPaintedMs: summarize(Array(5).fill(25)),
+        querySetAddsPerSwitch: summarize(Array(5).fill(2)),
+        cacheHits: 4,
+        cacheMisses: 0,
+      })
+    ),
+  }
+  return value
+}
+
 describe("performance evidence contract", () => {
   it("the CLI fails instead of reporting success when its baseline is absent", () => {
     const directory = mkdtempSync(join(tmpdir(), "chat-perf-contract-"))
@@ -150,6 +190,9 @@ describe("performance evidence contract", () => {
     const invalid = result()
     invalid.scenarios[0].runs.pop()
     expect(resultContract.safeParse(invalid).success).toBe(false)
+    const missingP95 = result()
+    missingP95.scenarios[0].metrics.inputToFirstTextFrameMs.n = 20
+    expect(resultContract.safeParse(missingP95).success).toBe(false)
   })
 
   it("rejects summaries that conceal the raw observations", () => {
@@ -166,5 +209,119 @@ describe("performance evidence contract", () => {
     expect(validateCoverage(current).join(" ")).toContain(
       "never observed rendering"
     )
+  })
+
+  it.each([
+    ["sendToFirstVisibleTextMs", { sendToFirstVisibleTextMs: 4000 }],
+    ["totalBlockingTimeMs", { totalBlockingTimeMs: 4000 }],
+    ["reloadToAuthoritativeMs", { reloadToAuthoritativeMs: 4000 }],
+    ["prepareMs", { timingReceipt: { prepareMs: 4000 } }],
+    ["firstWriteDelayMs", { timingReceipt: { firstWriteDelayMs: 4000 } }],
+    [
+      "pacingOverheadMs",
+      {
+        timingReceipt: {
+          wireStreamMs: 4100,
+          modelResponseMs: 200,
+          providerFirstOutputMs: 100,
+          toolExecutionMs: 0,
+        },
+      },
+    ],
+    ["settlementTotalMs", { serverSpans: { settlement_total: 4000 } }],
+  ])("checks %s against its raw observations", (metric, raw) => {
+    const current = result()
+    current.scenarios[0].runs.forEach((run) => Object.assign(run, raw))
+    current.scenarios[0].metrics[metric] = summarize(Array(5).fill(40))
+    expect(validateCoverage(resultContract.parse(current)).join(" ")).toContain(
+      `${metric} summary disagrees`
+    )
+    current.scenarios[0].metrics[metric] = summarize(Array(5).fill(4000))
+    expect(validateCoverage(resultContract.parse(current))).toEqual([])
+  })
+
+  it("rejects gated summaries with no raw observation", () => {
+    const current = result()
+    current.scenarios[0].metrics.reloadToAuthoritativeMs = summarize(
+      Array(5).fill(40)
+    )
+    expect(validateCoverage(current).join(" ")).toContain(
+      "reloadToAuthoritativeMs summary disagrees"
+    )
+    current.scenarios[0].metrics.menuToFrameMs = summarize(Array(5).fill(40))
+    expect(validateCoverage(current).join(" ")).toContain(
+      "menuToFrameMs summary disagrees"
+    )
+    current.scenarios[0].runs[0].totalBlockingTimeMs = NaN
+    expect(resultContract.safeParse(current).success).toBe(false)
+  })
+
+  it("preserves complete thread-switch evidence and checks all summaries", () => {
+    const current = threadResult()
+    expect(resultContract.parse(current).threadSwitch).toEqual(
+      current.threadSwitch
+    )
+    expect(validateCoverage(current)).toEqual([])
+    for (const field of [
+      "navToThreadPaintedMs",
+      "intentToRouteCommitMs",
+      "commitToFirstContentMs",
+      "firstContentToPaintedMs",
+      "querySetAddsPerSwitch",
+    ] as const) {
+      const invalid = threadResult()
+      invalid.threadSwitch!.passes[0][field].p50 = 9000
+      expect(validateCoverage(invalid).join(" ")).toContain(
+        `${field} summary disagrees`
+      )
+    }
+    current.threadSwitch!.passes[0].cacheHits = 5
+    expect(validateCoverage(current).join(" ")).toContain(
+      "cache counts disagree"
+    )
+    current.threadSwitch!.heapSamples[0].jsHeapUsedBytes = -1
+    expect(resultContract.safeParse(current).success).toBe(false)
+  })
+
+  it("rejects an undersampled visited pass and invalid heap checkpoints", () => {
+    const current = threadResult()
+    current.threadSwitch!.switchCount = 50
+    expect(validateCoverage(current).join(" ")).toContain(
+      "visited count differs"
+    )
+    current.threadSwitch!.heapSamples.push({
+      switches: 51,
+      jsHeapUsedBytes: 2000,
+    })
+    expect(validateCoverage(current).join(" ")).toContain("heap checkpoints")
+  })
+
+  it("allows only the signed terminal-to-receipt ordering offset to be negative", () => {
+    const current = result()
+    current.scenarios[0].runs.forEach((run) => {
+      run.terminalToSettlementReceiptMs = -25
+    })
+    current.scenarios[0].metrics.terminalToSettlementReceiptMs = summarize(
+      Array(5).fill(-25)
+    )
+    expect(validateCoverage(resultContract.parse(current))).toEqual([])
+    current.scenarios[0].metrics.otherDurationMs = summarize(Array(5).fill(-25))
+    expect(validateCoverage(current).join(" ")).toContain(
+      "otherDurationMs has a negative duration"
+    )
+  })
+
+  it("requires Stop feedback without inventing a received terminal event", () => {
+    const current = result()
+    current.scenarios[0].action = "stop"
+    delete current.scenarios[0].metrics.terminalToReadyFrameMs
+    current.scenarios[0].metrics.stopToReadyFrameMs = summarize(
+      Array(5).fill(40)
+    )
+    current.scenarios[0].runs.forEach((run) => {
+      delete run.ui!.terminalToReadyFrameMs
+      run.ui!.stopToReadyFrameMs = [40]
+    })
+    expect(validateCoverage(current)).toEqual([])
   })
 })

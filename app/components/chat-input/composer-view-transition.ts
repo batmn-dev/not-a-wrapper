@@ -1,18 +1,27 @@
-import { runViewTransition } from "@/components/ui/view-transition"
-
-const COMPOSER_SLIDE_TRANSITION_CLASS = "composer-slide-transition"
-
-/**
- * Runs the first-turn surface flip through the browser's view-transition
- * callback. Unsupported browsers take the same synchronous update path and
- * receive no transition-only CSS variables.
- */
+/** Keep first-send motion off the critical path: update before animating live DOM. */
 function runComposerSlideTransition(update: () => void) {
-  return runViewTransition({
-    update,
-    className: COMPOSER_SLIDE_TRANSITION_CLASS,
-    types: ["composer"],
-  })
+  const selector = 'form[data-type="unified-composer"]'
+  const before = document.querySelector<HTMLElement>(selector)
+  const animate =
+    document.visibilityState === "visible" &&
+    !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches &&
+    typeof before?.animate === "function"
+  const start = animate ? before.getBoundingClientRect() : undefined
+
+  update()
+
+  const after = document.querySelector<HTMLElement>(selector)
+  if (!start || !after?.animate) return
+  const end = after.getBoundingClientRect()
+  const deltaY = start.top - end.top
+  if (!deltaY) return
+  const easing = getComputedStyle(after)
+    .getPropertyValue("--spring-fast")
+    .trim()
+  after.animate(
+    [{ transform: `translateY(${deltaY}px)` }, { transform: "translateY(0)" }],
+    { duration: 500, easing: easing || "ease-out" }
+  )
 }
 
-export { COMPOSER_SLIDE_TRANSITION_CLASS, runComposerSlideTransition }
+export { runComposerSlideTransition }

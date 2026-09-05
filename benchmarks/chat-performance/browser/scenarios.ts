@@ -257,6 +257,14 @@ export const DURABLE_SUITE: BrowserScenarioConfig[] = [
   },
 ]
 
-export function directiveFor(config: BrowserScenarioConfig): string {
+export const FOLLOWUP_SEED = {
+  scenario: "short-prose",
+  chunksPerSecond: 100,
+  shape: "fixed",
+} as const
+
+export function directiveFor(
+  config: Pick<BrowserScenarioConfig, "scenario" | "chunksPerSecond" | "shape">
+): string {
   return `[[perf:${config.scenario}:${config.chunksPerSecond}:${config.shape}]]`
 }

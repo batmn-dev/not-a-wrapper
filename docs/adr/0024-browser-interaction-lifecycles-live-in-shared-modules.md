@@ -21,7 +21,9 @@ changing. This decision is about where browser lifecycle knowledge lives.
 1. `components/ui/view-transition.ts` is the one **View transition** Module.
    Product callers provide an atomic update plus optional scoped class and
    transition types. The Module owns hidden-tab/reduced-motion bypass, feature detection,
-   document lifecycle state, rejection handling, and cleanup.
+   document lifecycle state, rejection handling, and cleanup. First-send Composer
+   motion uses its existing local module to animate live DOM after the update
+   instead of capturing document snapshots (ADR-0037).
 2. `app/components/layout/public-chat-share.ts` is the **Public chat share**
    Module. It publishes before presenting a share target, delegates browser
    capability handling to `lib/browser/share-target.ts`, treats an aborted

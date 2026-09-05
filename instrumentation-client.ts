@@ -1,6 +1,5 @@
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
-import { installChatUiObserver } from "./lib/observability/chat-ui-observer"
 import {
   sentryBeforeBreadcrumb,
   sentryBeforeSend,
@@ -52,19 +51,23 @@ if (
   (Number.isFinite(chatUiSampleRate) &&
     Math.random() < Math.min(1, Math.max(0, chatUiSampleRate)))
 ) {
-  installChatUiObserver({
-    resumeOnVisible: !chatUiBenchmark,
-    report(metric, durationMs) {
-      if (chatUiBenchmark) {
-        console.info(
-          JSON.stringify({ _tag: "chat_ui_perf", metric, durationMs })
-        )
-        return
-      }
-      Sentry.metrics.distribution(`chat.ui.${metric}`, durationMs, {
-        unit: "millisecond",
-        attributes: { measurement: "dom-frame-v1" },
+  void import("./lib/observability/chat-ui-observer")
+    .then(({ installChatUiObserver }) =>
+      installChatUiObserver({
+        resumeOnVisible: !chatUiBenchmark,
+        report(metric, durationMs) {
+          if (chatUiBenchmark) {
+            console.info(
+              JSON.stringify({ _tag: "chat_ui_perf", metric, durationMs })
+            )
+            return
+          }
+          Sentry.metrics.distribution(`chat.ui.${metric}`, durationMs, {
+            unit: "millisecond",
+            attributes: { measurement: "dom-frame-v1" },
+          })
+        },
       })
-    },
-  })
+    )
+    .catch((error) => Sentry.captureException(error))
 }

@@ -70,6 +70,47 @@ afterEach(() => {
 })
 
 describe("DOM/frame observations", () => {
+  it("waits for semantic Send readiness and observes aria-disabled changes", async () => {
+    const button = document.querySelector("button")!
+    button.setAttribute("aria-disabled", "true")
+    installChatUiObserver()
+    button.setAttribute("aria-label", "Send prompt")
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.navigationToSendReadyMs
+    ).toBeUndefined()
+    button.setAttribute("aria-disabled", "false")
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.navigationToSendReadyMs
+    ).toHaveLength(1)
+  })
+
+  it("observes popup positioning without waiting for unrelated stream mutations", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<button data-testid="composer-plus-btn">Add</button><div data-chat-composer-menu style="opacity:0">Menu</div>'
+    )
+    const popup = document.querySelector<HTMLElement>(
+      "[data-chat-composer-menu]"
+    )!
+    Object.assign(popup, { checkVisibility: () => popup.style.opacity !== "0" })
+    installChatUiObserver()
+    document
+      .querySelector<HTMLElement>('[data-testid="composer-plus-btn"]')!
+      .click()
+    popup.textContent = "Positioning"
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.menuToFrameMs
+    ).toBeUndefined()
+    popup.style.opacity = "1"
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.menuToFrameMs
+    ).toHaveLength(1)
+  })
+
   it("menu-consumed Enter does not reset the active stream", async () => {
     installChatUiObserver()
     send()

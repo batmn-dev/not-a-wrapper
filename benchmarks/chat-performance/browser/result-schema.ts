@@ -30,6 +30,8 @@ export type RunMetrics = {
   sendToFirstVisibleTextMs?: number
   streamDurationMs?: number
   stopToTerminalMs?: number
+  /** Source lengths distinguish actual growth from shorter terminal reconciliation. */
+  stopSourceLengths?: { atReady: number; after250Ms: number }
   /** Responsiveness (from app-emitted marks during the run window). */
   longTaskCount: number
   longTaskMaxMs: number
@@ -73,7 +75,7 @@ export type RunMetrics = {
   /** Reload runs: navigation start → authoritative content / settlement receipt. */
   reloadToAuthoritativeMs?: number
   reloadToSettlementReceiptMs?: number
-  /** Client-observed terminal → durable settlement receipt (durable runs). */
+  /** Signed receipt offset from local terminal; negative means already settled. */
   terminalToSettlementReceiptMs?: number
   /**
    * Durable send lost live-stream adoption after the hard navigation — the

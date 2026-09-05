@@ -14,8 +14,6 @@ import {
   createPromptInputDocument,
   createPromptInputPlugins,
   endPromptInputActionQuery,
-  type PromptInputActionQuery,
-  type PromptInputEntity,
   promptInputEntitiesEqual,
   promptInputSchema,
   readPromptInputDocument,
@@ -24,6 +22,8 @@ import {
   replacePromptInputDocument,
   setPromptInputSelection,
   toggleSyntheticPromptInputActionQuery,
+  type PromptInputActionQuery,
+  type PromptInputEntity,
 } from "@/components/ui/prompt-input-editor"
 import { useOptionalScrollRoot } from "@/components/ui/scroll-root"
 import {
@@ -496,6 +496,14 @@ const PromptInputTextarea = React.forwardRef<
     value,
   ])
 
+  const measuredLayout = React.useRef<{
+    textarea: HTMLTextAreaElement
+    value: string
+    width: number
+    className: string
+    style: string
+    height: number
+  } | null>(null)
   const applyEditorLayout = React.useCallback(
     (textarea: HTMLTextAreaElement | null, nextValue: string) => {
       if (disableAutosize || !textarea) {
@@ -508,12 +516,32 @@ const PromptInputTextarea = React.forwardRef<
       // the nested scroller below, not the textarea, owns the height cap.
       textarea.style.removeProperty("height")
 
+      if (!nextValue || nextValue.includes("\n")) {
+        setTextareaExpanded(Boolean(nextValue))
+        return
+      }
+
       const compactWidth = getCompactEditorWidth(textarea)
-      const compactScrollHeight = measureTextareaScrollHeight(
+      const measuredValue = nextValue.slice(0, EXPANSION_MEASURE_CHAR_LIMIT)
+      const previous = measuredLayout.current
+      const style = textarea.style.cssText
+      // The editor transaction and controlled-value commit measure the same input.
+      const compactScrollHeight =
+        previous?.textarea === textarea &&
+        previous.value === measuredValue &&
+        previous.width === compactWidth &&
+        previous.className === textarea.className &&
+        previous.style === style
+          ? previous.height
+          : measureTextareaScrollHeight(textarea, measuredValue, compactWidth)
+      measuredLayout.current = {
         textarea,
-        nextValue.slice(0, EXPANSION_MEASURE_CHAR_LIMIT),
-        compactWidth
-      )
+        value: measuredValue,
+        width: compactWidth,
+        className: textarea.className,
+        style,
+        height: compactScrollHeight,
+      }
       // The expansion decision is a function of the value and the DERIVED
       // compact width only. It must not read layout that `textareaExpanded`
       // itself influences (e.g. the live textarea scrollHeight, which changes

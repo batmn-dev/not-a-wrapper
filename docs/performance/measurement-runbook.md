@@ -118,7 +118,7 @@ its first-output observations before intentionally transferring tab focus; it
 makes no claim about subsequent foreground interactivity in the original tab.
 
 Relevant same-repository PRs run the core suite. Weekly CI runs the rendering,
-durability, and thread-switch suites serially against the benchmark deployment.
+durability, and thread-switch suites serially against the runner's locally built production server.
 Fork PRs do not receive credentials. Missing baselines fail; use the explicit
 collection process in `browser/baselines/README.md`. CI records five measured runs
 per scenario after a warmup; use longer captures for tail-distribution analysis.

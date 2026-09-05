@@ -1193,16 +1193,6 @@
   pointer-events: none;
 }
 
-.composer-slide-transition {
-  --vt-composer: composer;
-}
-
-.composer-slide-transition::view-transition-old(composer),
-.composer-slide-transition::view-transition-group(composer) {
-  animation-duration: 0.5s;
-  animation-timing-function: var(--spring-fast);
-}
-
 /* Composer-part identities stay dormant until a surface transition explicitly
    activates them. Ordinary sends continue to use the stable live DOM. */
 .composer-parts-transition {

@@ -11,9 +11,9 @@ PERF_CDP_URL=http://localhost:9222 SUITE=responsiveness RUNS=5 bun run bench:bro
 
 Local runs attach an existing authenticated Chrome session; no separate browser is
 launched. The app must be signed in at the benchmark origin. The harness starts an
-isolated production server on `PERF_PORT` (default 3111); `BASE_URL` instead reuses
-an existing server and cannot join its server logs. It never uses the developer's
-port 3000. A Chrome extension alone supports manual validation, not this terminal
+isolated production server on `PERF_PORT` (default 3111) with the deterministic
+provider enabled. `BASE_URL` and port 3000 are rejected, preventing accidental
+real-provider requests to an ordinary app server. A Chrome extension alone supports manual validation, not this terminal
 harness. Do not restart the user's browser to obtain CDP access.
 
 ## Suites
@@ -55,7 +55,7 @@ Continuous receipt-to-content samples match a text-source watermark, at most fou
 times per second, to the current assistant's rendered source. They exclude provider
 silence but do not prove off-screen characters painted. A known fixture checks
 stream byte fidelity; a 250 ms post-Stop observation checks text no longer grows.
-Hidden tabs invalidate interactive observations. Do not remove slow/failed runs.
+Hidden tabs invalidate the entire run; do not interpret any of its timings. Do not remove slow/failed runs.
 Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
 the oldest waiting input. Completed foreground runs fail if any sampled content
 never reaches the rendered watermark; buffer overflow also fails explicitly.

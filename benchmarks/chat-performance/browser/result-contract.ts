@@ -1,3 +1,4 @@
+import { pacingOverheadMs } from "@/convex/lib/runTimingReceipt"
 import { z } from "zod"
 import { summarize, type MetricSummary } from "./result-schema"
 import { directiveFor, RESPONSIVENESS_SUITE } from "./scenarios"
@@ -12,8 +13,8 @@ const summary = z
     max: z.number().finite(),
   })
   .refine(
-    (value) => value.n >= 20 || value.p95 === undefined,
-    "p95 needs 20 samples"
+    (value) => value.n >= 20 === (value.p95 !== undefined),
+    "p95 must be present exactly when n >= 20"
   )
 
 const scenario = z
@@ -39,6 +40,13 @@ const scenario = z
           pendingDeltaSamples: z.number().int().nonnegative(),
           droppedUiSamples: z.literal(0),
           ui: z.record(z.string(), z.array(duration)).optional(),
+          sendToFirstVisibleTextMs: duration.optional(),
+          totalBlockingTimeMs: duration.optional(),
+          reloadToAuthoritativeMs: duration.optional(),
+          // Signed ordering offset: a durable receipt can precede local terminal.
+          terminalToSettlementReceiptMs: z.number().finite().optional(),
+          timingReceipt: z.record(z.string(), duration).optional(),
+          serverSpans: z.record(z.string(), duration).optional(),
         })
         .passthrough()
     ),
@@ -76,13 +84,35 @@ export const resultContract = z
                 kind: z.enum(["unvisited-click", "unvisited-hover", "visited"]),
                 switches: z.number().int().min(5),
                 navToThreadPaintedMs: summary,
+                intentToRouteCommitMs: summary,
+                commitToFirstContentMs: summary,
+                firstContentToPaintedMs: summary,
+                querySetAddsPerSwitch: summary,
+                cacheHits: z.number().int().nonnegative(),
+                cacheMisses: z.number().int().nonnegative(),
                 samples: z.array(
-                  z.object({ navToPaintedMs: duration, ok: z.literal(true) })
+                  z.object({
+                    navToPaintedMs: duration,
+                    intentToCommitMs: duration.optional(),
+                    commitToFirstContentMs: duration.optional(),
+                    firstContentToPaintedMs: duration.optional(),
+                    cache: z.enum(["hit", "miss"]).optional(),
+                    querySetAdds: z.number().int().nonnegative(),
+                    ok: z.literal(true),
+                    detail: z.string().optional(),
+                  })
                 ),
               })
               .passthrough()
           )
           .length(3),
+        heapSamples: z.array(
+          z.object({
+            switches: z.number().int().nonnegative(),
+            jsHeapUsedBytes: z.number().int().nonnegative(),
+          })
+        ),
+        detail: z.string().optional(),
       })
       .optional(),
   })
@@ -169,6 +199,32 @@ const GATES: Record<string, { relative: number; floor: number }> = {
   reloadToAuthoritativeMs: { relative: 0.35, floor: 150 },
 }
 
+type RawRun = ComparableResult["scenarios"][number]["runs"][number]
+const RAW_GATED_METRICS = {
+  sendToFirstVisibleTextMs: (run: RawRun) => run.sendToFirstVisibleTextMs,
+  totalBlockingTimeMs: (run: RawRun) => run.totalBlockingTimeMs,
+  reloadToAuthoritativeMs: (run: RawRun) => run.reloadToAuthoritativeMs,
+  prepareMs: (run: RawRun) => run.timingReceipt?.prepareMs,
+  firstWriteDelayMs: (run: RawRun) => run.timingReceipt?.firstWriteDelayMs,
+  pacingOverheadMs: (run: RawRun) =>
+    run.timingReceipt ? pacingOverheadMs(run.timingReceipt) : undefined,
+  settlementTotalMs: (run: RawRun) => run.serverSpans?.settlement_total,
+  terminalToSettlementReceiptMs: (run: RawRun) =>
+    run.terminalToSettlementReceiptMs,
+}
+
+const THREAD_SUMMARY_FIELDS = {
+  navToThreadPaintedMs: "navToPaintedMs",
+  intentToRouteCommitMs: "intentToCommitMs",
+  commitToFirstContentMs: "commitToFirstContentMs",
+  firstContentToPaintedMs: "firstContentToPaintedMs",
+  querySetAddsPerSwitch: "querySetAdds",
+} as const
+
+function observedNumbers(values: Array<number | undefined>): number[] {
+  return values.filter((value): value is number => value !== undefined)
+}
+
 export function validateCoverage(result: ComparableResult): string[] {
   const errors: string[] = []
   const keys = result.scenarios.map(scenarioKey)
@@ -198,21 +254,49 @@ export function validateCoverage(result: ComparableResult): string[] {
   }
   if (result.threadSwitch) {
     const passes = result.threadSwitch.passes
+    if (
+      passes.find((pass) => pass.kind === "visited")?.switches !==
+      result.threadSwitch.switchCount
+    )
+      errors.push(
+        "thread-switch visited count differs from declared switchCount"
+      )
     if (new Set(passes.map((pass) => pass.kind)).size !== 3)
       errors.push("thread-switch pass identities are incomplete or duplicated")
     if (passes.some((pass) => pass.navToThreadPaintedMs.n !== pass.switches))
       errors.push("thread-switch sample count mismatch")
-    if (
-      passes.some(
-        (pass) =>
-          pass.samples.length !== pass.switches ||
+    for (const pass of passes) {
+      if (pass.samples.length !== pass.switches)
+        errors.push(`thread-switch ${pass.kind}: raw sample count mismatch`)
+      for (const [metric, field] of Object.entries(THREAD_SUMMARY_FIELDS)) {
+        if (
           !matchesSamples(
-            pass.navToThreadPaintedMs,
-            pass.samples.map((sample) => sample.navToPaintedMs)
+            pass[metric as keyof typeof THREAD_SUMMARY_FIELDS],
+            observedNumbers(pass.samples.map((sample) => sample[field]))
           )
+        )
+          errors.push(
+            `thread-switch ${pass.kind}: ${metric} summary disagrees with raw samples`
+          )
+      }
+      if (
+        pass.cacheHits !==
+          pass.samples.filter((sample) => sample.cache === "hit").length ||
+        pass.cacheMisses !==
+          pass.samples.filter((sample) => sample.cache === "miss").length
       )
+        errors.push(
+          `thread-switch ${pass.kind}: cache counts disagree with raw samples`
+        )
+    }
+    const heap = result.threadSwitch.heapSamples
+    if (
+      new Set(heap.map((sample) => sample.switches)).size !== heap.length ||
+      heap.some((sample) => sample.switches > result.threadSwitch!.switchCount)
     )
-      errors.push("thread-switch summary disagrees with raw samples")
+      errors.push(
+        "thread-switch heap checkpoints are duplicated or outside the visited pass"
+      )
   }
   for (const value of result.scenarios) {
     if (
@@ -220,18 +304,33 @@ export function validateCoverage(result: ComparableResult): string[] {
       value.runs.some((run) => run.pendingDeltaSamples > 0)
     )
       errors.push(`${value.id}: received content was never observed rendering`)
-    const uiMetrics = new Set(
-      value.runs.flatMap((run) => Object.keys(run.ui ?? {}))
-    )
+    const uiMetrics = new Set([
+      ...value.runs.flatMap((run) => Object.keys(run.ui ?? {})),
+      ...Object.keys(GATES).filter(
+        (metric) =>
+          !(metric in RAW_GATED_METRICS) && value.metrics[metric] !== undefined
+      ),
+    ])
     for (const metric of uiMetrics) {
       const samples = value.runs.flatMap((run) => run.ui?.[metric] ?? [])
       if (!matchesSamples(value.metrics[metric], samples))
         errors.push(`${value.id}: ${metric} summary disagrees with raw samples`)
     }
+    for (const [metric, read] of Object.entries(RAW_GATED_METRICS)) {
+      const samples = observedNumbers(value.runs.map(read))
+      if (
+        (samples.length > 0 || value.metrics[metric] !== undefined) &&
+        !matchesSamples(value.metrics[metric], samples)
+      )
+        errors.push(`${value.id}: ${metric} summary disagrees with raw samples`)
+    }
     for (const [metric, summary] of Object.entries(value.metrics)) {
       if (
         metric.endsWith("Ms") &&
-        [summary.p50, summary.p75, summary.max].some((duration) => duration < 0)
+        metric !== "terminalToSettlementReceiptMs" &&
+        [summary.p50, summary.p75, summary.p95 ?? 0, summary.max].some(
+          (duration) => duration < 0
+        )
       )
         errors.push(`${value.id}: ${metric} has a negative duration`)
     }
@@ -239,8 +338,7 @@ export function validateCoverage(result: ComparableResult): string[] {
       value.action === "reload"
         ? ["reloadToAuthoritativeMs"]
         : ["inputToOptimisticFrameMs", "inputToFirstTextFrameMs"]
-    if (value.action === "complete" || value.action === "stop")
-      required.push("terminalToReadyFrameMs")
+    if (value.action === "complete") required.push("terminalToReadyFrameMs")
     if (value.action === "stop") required.push("stopToReadyFrameMs")
     if (value.scenario === "mixed-markdown")
       required.push("inputToFirstActivityFrameMs")
