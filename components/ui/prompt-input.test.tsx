@@ -191,6 +191,7 @@ describe("PromptInput responsive expansion", () => {
     expect(observer).toBeTruthy()
     expect(form?.hasAttribute("data-expanded")).toBe(false)
 
+    expect(scrollHeightReads).toBe(1)
     const readsAfterInitialLayout = scrollHeightReads
     act(() => observer?.trigger())
     expect(scrollHeightReads).toBe(readsAfterInitialLayout)

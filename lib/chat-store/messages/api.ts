@@ -114,13 +114,17 @@ function updateCachedMessagesSnapshot(
 
 export function getCachedMessagesSnapshot(
   chatId: string | null | undefined
-): ExtendedUIMessage[] {
+): ExtendedUIMessage[] | undefined {
   if (!chatId) return emptyMessages
+  // An empty hydrated conversation is distinct from a pending IndexedDB read.
+  if (!hydratedCachedMessages.has(chatId)) return undefined
   return cachedMessagesSnapshots.get(chatId) ?? emptyMessages
 }
 
-export function getCachedMessagesServerSnapshot(): ExtendedUIMessage[] {
-  return emptyMessages
+export function getCachedMessagesServerSnapshot(
+  chatId: string | null | undefined
+): ExtendedUIMessage[] | undefined {
+  return chatId ? undefined : emptyMessages
 }
 
 export function subscribeCachedMessages(
@@ -171,8 +175,8 @@ export async function cacheMessages(
   chatId: string,
   messages: ExtendedUIMessage[]
 ): Promise<void> {
-  updateCachedMessagesSnapshot(chatId, messages)
   hydratedCachedMessages.add(chatId)
+  updateCachedMessagesSnapshot(chatId, messages)
 
   await writeToIndexedDB("messages", { id: chatId, messages })
 }

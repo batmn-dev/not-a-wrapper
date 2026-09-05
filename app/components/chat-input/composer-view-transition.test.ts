@@ -1,61 +1,56 @@
 /** @vitest-environment jsdom */
-
 import { afterEach, describe, expect, it, vi } from "vitest"
-import {
-  COMPOSER_SLIDE_TRANSITION_CLASS,
-  runComposerSlideTransition,
-} from "./composer-view-transition"
-
-type StartViewTransition = (update: () => void) => {
-  finished: Promise<unknown>
-}
+import { runComposerSlideTransition } from "./composer-view-transition"
 
 afterEach(() => {
-  document.documentElement.classList.remove(COMPOSER_SLIDE_TRANSITION_CLASS)
-  Reflect.deleteProperty(
-    document as Document & { startViewTransition?: StartViewTransition },
-    "startViewTransition"
-  )
+  document.body.innerHTML = ""
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
-describe("runComposerSlideTransition", () => {
-  it("runs the update immediately when view transitions are unavailable", () => {
+describe("first-send composer motion", () => {
+  it("updates synchronously without browser animation support", () => {
     const update = vi.fn()
-
     runComposerSlideTransition(update)
-
     expect(update).toHaveBeenCalledOnce()
-    expect(document.documentElement.classList).not.toContain(
-      COMPOSER_SLIDE_TRANSITION_CLASS
+  })
+
+  it("commits the send before animating the live composer", () => {
+    document.body.innerHTML = '<form data-type="unified-composer"></form>'
+    const form = document.querySelector("form")!
+    vi.spyOn(form, "getBoundingClientRect")
+      .mockReturnValueOnce({ top: 100 } as DOMRect)
+      .mockReturnValueOnce({ top: 400 } as DOMRect)
+    const events: string[] = []
+    const animate = vi.fn(() => {
+      events.push("animate")
+    })
+    Object.assign(form, { animate })
+
+    runComposerSlideTransition(() => {
+      events.push("send")
+    })
+
+    expect(events).toEqual(["send", "animate"])
+    expect(animate).toHaveBeenCalledWith(
+      [{ transform: "translateY(-300px)" }, { transform: "translateY(0)" }],
+      { duration: 500, easing: "ease-out" }
     )
   })
 
-  it("scopes transition variables until the browser transition settles", async () => {
-    let finishTransition: (() => void) | undefined
-    const finished = new Promise<void>((resolve) => {
-      finishTransition = resolve
-    })
-    const startViewTransition = vi.fn((update: () => void) => {
-      update()
-      return { finished }
-    })
-    Object.assign(document, { startViewTransition })
+  it("skips layout and motion for reduced motion", () => {
+    document.body.innerHTML = '<form data-type="unified-composer"></form>'
+    const form = document.querySelector("form")!
+    const rect = vi.spyOn(form, "getBoundingClientRect")
+    const animate = vi.fn()
+    Object.assign(form, { animate })
+    vi.stubGlobal("matchMedia", () => ({ matches: true }))
     const update = vi.fn()
 
     runComposerSlideTransition(update)
 
-    expect(startViewTransition).toHaveBeenCalledOnce()
     expect(update).toHaveBeenCalledOnce()
-    expect(document.documentElement.classList).toContain(
-      COMPOSER_SLIDE_TRANSITION_CLASS
-    )
-
-    finishTransition?.()
-    await finished
-    await Promise.resolve()
-
-    expect(document.documentElement.classList).not.toContain(
-      COMPOSER_SLIDE_TRANSITION_CLASS
-    )
+    expect(rect).not.toHaveBeenCalled()
+    expect(animate).not.toHaveBeenCalled()
   })
 })

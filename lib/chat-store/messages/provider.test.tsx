@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 
 import React, { act } from "react"
-import { createRoot, type Root } from "react-dom/client"
+import { createRoot, hydrateRoot, type Root } from "react-dom/client"
+import { renderToString } from "react-dom/server"
 import {
   afterEach,
   beforeAll,
@@ -12,7 +13,7 @@ import {
   vi,
 } from "vitest"
 import { resetCachedMessagesSnapshot } from "./api"
-import { MessagesProvider, useMessages } from "./provider"
+import { MessagesProvider, useMessages, useResetMessages } from "./provider"
 
 const persistMocks = vi.hoisted(() => {
   const tables = {
@@ -24,7 +25,7 @@ const persistMocks = vi.hoisted(() => {
   return {
     tables,
     readFromIndexedDB: vi.fn(
-      async (table: keyof typeof tables, key?: string) => {
+      async (table: keyof typeof tables, key?: string): Promise<unknown> => {
         if (key) return tables[table].get(key) ?? null
         return Array.from(tables[table].values())
       }
@@ -52,7 +53,7 @@ const convexMocks = vi.hoisted(() => ({
 }))
 
 const sessionMocks = vi.hoisted(() => ({
-  chatId: "local-thread",
+  chatId: "local-thread" as string | null,
 }))
 
 // Persistence is derived from the server-seeded app user (ADR-0033): null is
@@ -196,6 +197,7 @@ describe("MessagesProvider local chat hydration", () => {
     }
 
     renderProvider(capture)
+    expect(capture.current?.isLoading).toBe(true)
     await flushPromises()
 
     expect(capture.current?.isLoading).toBe(false)
@@ -205,6 +207,67 @@ describe("MessagesProvider local chat hydration", () => {
     ])
     expect(capture.current?.messages[1]?.createdAt).toBeInstanceOf(Date)
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it.each([false, true])("waits for a switched guest cache read, including empty history (%s)", async (hasHistory) => {
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+    renderProvider(capture)
+    await flushPromises()
+    expect(capture.current?.isLoading).toBe(false)
+
+    let resolveRead!: (value: unknown) => void
+    persistMocks.readFromIndexedDB.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRead = resolve })
+    )
+    sessionMocks.chatId = "second-chat"
+    act(() => root?.render(
+      <MessagesProvider><MessagesSnapshot captureRef={capture} /></MessagesProvider>
+    ))
+    expect(capture.current?.isLoading).toBe(true)
+    expect(capture.current?.messages).toEqual([])
+    await flushPromises()
+    expect(capture.current?.isLoading).toBe(true)
+
+    await act(async () => resolveRead({
+      id: "second-chat",
+      messages: hasHistory ? [{ id: "stored-message", role: "assistant", parts: [] }] : [],
+    }))
+    expect(capture.current?.isLoading).toBe(false)
+    expect(capture.current?.messages.map((message) => message.id)).toEqual(
+      hasHistory ? ["stored-message"] : []
+    )
+  })
+
+  it("does not wait for IndexedDB on the new-chat route", () => {
+    sessionMocks.chatId = null
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+    renderProvider(capture)
+    expect(capture.current?.isLoading).toBe(false)
+    expect(persistMocks.readFromIndexedDB).not.toHaveBeenCalled()
+  })
+
+  it.each([null, "durable-chat"])("hydrates %s without an unrelated local-cache commit", async (chatId) => {
+    sessionMocks.chatId = chatId
+    userMocks.user = { id: "user-1" }
+    const capture: { current: ReturnType<typeof useMessages> | null } = { current: null }
+    const onRender = vi.fn()
+    const tree = (
+      <React.Profiler id="messages" onRender={onRender}>
+        <MessagesProvider><MessagesSnapshot captureRef={capture} /></MessagesProvider>
+      </React.Profiler>
+    )
+    container = document.createElement("div")
+    container.innerHTML = renderToString(tree)
+    document.body.appendChild(container)
+    await act(async () => { root = hydrateRoot(container!, tree) })
+    expect(onRender).toHaveBeenCalledOnce()
+    expect(capture.current?.isLoading).toBe(chatId !== null)
+    expect(capture.current?.messages).toEqual([])
+    expect(persistMocks.readFromIndexedDB).not.toHaveBeenCalled()
   })
 
   it("does not keep a durable chat loading while the Convex auth gate is closed", async () => {
@@ -222,5 +285,61 @@ describe("MessagesProvider local chat hydration", () => {
     expect(capture.current?.isLoading).toBe(false)
     expect(capture.current?.messages).toEqual([])
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it("isolates reset consumers from message updates and resets only the current chat", async () => {
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+    const commandRender = vi.fn()
+    function ResetControl() {
+      const reset = useResetMessages()
+      commandRender()
+      return <button onClick={() => void reset()}>Reset</button>
+    }
+    const children = (
+      <>
+        <MessagesSnapshot captureRef={capture} />
+        <ResetControl />
+      </>
+    )
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const render = () =>
+      act(() => root?.render(<MessagesProvider>{children}</MessagesProvider>))
+    render()
+    await flushPromises()
+    const initialRenders = commandRender.mock.calls.length
+    act(() =>
+      capture.current?.setMessages([
+        { id: "first-chat-draft", role: "user", parts: [] },
+      ])
+    )
+    expect(
+      container.querySelector("[data-messages]")?.getAttribute("data-messages")
+    ).toBe("first-chat-draft")
+    expect(commandRender).toHaveBeenCalledTimes(initialRenders)
+
+    sessionMocks.chatId = "second-chat"
+    render()
+    await flushPromises()
+    const switchedRenders = commandRender.mock.calls.length
+    act(() =>
+      capture.current?.setMessages([
+        { id: "second-chat-draft", role: "user", parts: [] },
+      ])
+    )
+    expect(commandRender).toHaveBeenCalledTimes(switchedRenders)
+    await act(async () => container?.querySelector("button")?.click())
+    expect(capture.current?.messages).toEqual([])
+    expect(commandRender).toHaveBeenCalledTimes(switchedRenders)
+
+    sessionMocks.chatId = "local-thread"
+    render()
+    await flushPromises()
+    expect(capture.current?.messages.map((message) => message.id)).toEqual([
+      "first-chat-draft",
+    ])
   })
 })

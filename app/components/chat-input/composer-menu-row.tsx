@@ -28,6 +28,10 @@ type ComposerMenuRowOptions = {
   children: ReactNode
 }
 
+function scrollHighlightedRowIntoView(node: HTMLDivElement | null) {
+  node?.scrollIntoView?.({ block: "nearest" })
+}
+
 function composerMenuRow({
   itemId,
   disabled,
@@ -39,15 +43,8 @@ function composerMenuRow({
 }: ComposerMenuRowOptions) {
   return (
     <div
-      ref={(node) => {
-        if (
-          node &&
-          highlighted &&
-          typeof node.scrollIntoView === "function"
-        ) {
-          node.scrollIntoView({ block: "nearest" })
-        }
-      }}
+      // A stable ref scrolls on mount/highlight changes, not every streamed render.
+      ref={highlighted ? scrollHighlightedRowIntoView : undefined}
       aria-disabled={disabled || undefined}
       aria-checked={selected}
       data-fill=""

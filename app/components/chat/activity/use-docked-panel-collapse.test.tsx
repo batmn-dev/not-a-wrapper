@@ -41,7 +41,7 @@ function Harness(props: {
   onResult({
     dockedPresent,
   })
-  return dockedPresent ? (
+  return dockedPresent && params.slotElement ? (
     <div ref={onDockedContentRef} data-testid="docked-content" />
   ) : null
 }
@@ -55,6 +55,7 @@ beforeAll(() => {
 describe("useDockedPanelCollapse", () => {
   let container: HTMLDivElement | null = null
   let slot: HTMLDivElement | null = null
+  let host: HTMLDivElement | null = null
   let root: Root | null = null
   let latest: {
     dockedPresent: boolean
@@ -65,7 +66,10 @@ describe("useDockedPanelCollapse", () => {
     container = document.createElement("div")
     slot = document.createElement("div")
     slot.dataset.state = "closed"
-    document.body.append(container, slot)
+    host = document.createElement("div")
+    host.className = "side-pane-shell-host"
+    host.append(slot)
+    document.body.append(container, host)
     root = createRoot(container)
   })
 
@@ -74,9 +78,11 @@ describe("useDockedPanelCollapse", () => {
     if (r) act(() => r.unmount())
     container?.remove()
     slot?.remove()
+    host?.remove()
     root = null
     container = null
     slot = null
+    host = null
     latest = null
   })
 
@@ -105,11 +111,13 @@ describe("useDockedPanelCollapse", () => {
     expect(latest?.dockedPresent).toBe(true)
     expect(slot?.hasAttribute("data-expanded")).toBe(true)
     expect(slot?.getAttribute("data-state")).toBe("open")
+    expect(host?.hasAttribute("data-activity-expanded")).toBe(true)
 
     render(false)
     expect(latest?.dockedPresent).toBe(true) // still mounted, collapsing
     expect(slot?.hasAttribute("data-expanded")).toBe(false)
     expect(slot?.getAttribute("data-state")).toBe("closed")
+    expect(host?.hasAttribute("data-activity-expanded")).toBe(false)
     expect(
       container?.querySelector('[data-testid="docked-content"]')
     ).toBeTruthy()
@@ -122,6 +130,36 @@ describe("useDockedPanelCollapse", () => {
       )
     })
     expect(latest?.dockedPresent).toBe(false)
+  })
+
+  it("clears the expanded host on unmount, slot replacement, and a missing slot", () => {
+    stubReducedMotion(false)
+    render(true)
+    act(() => root?.render(null))
+    expect(host?.hasAttribute("data-activity-expanded")).toBe(false)
+
+    render(true)
+    expect(host?.hasAttribute("data-activity-expanded")).toBe(true)
+    const previousHost = host
+    const previousSlot = slot
+    previousSlot?.remove()
+    host = document.createElement("div")
+    host.className = "side-pane-shell-host"
+    slot = document.createElement("div")
+    host.append(slot)
+    document.body.append(host)
+    render(true)
+    expect(previousHost?.hasAttribute("data-activity-expanded")).toBe(false)
+    expect(previousSlot?.hasAttribute("data-expanded")).toBe(false)
+    expect(host.hasAttribute("data-activity-expanded")).toBe(true)
+    expect(slot.hasAttribute("data-expanded")).toBe(true)
+    previousHost?.remove()
+
+    const mountedSlot = slot
+    slot = null
+    render(true)
+    expect(host.hasAttribute("data-activity-expanded")).toBe(false)
+    expect(mountedSlot.hasAttribute("data-expanded")).toBe(false)
   })
 
   // If the browser drops transitionend (interrupted resize/CSS change/already-0

@@ -20,6 +20,10 @@ import {
   markChatPerfRequestDispatched,
   takeChatPerfHeader,
 } from "@/lib/observability/chat-performance-client"
+import type {
+  ChatUiObserver,
+  ChatUiWindow,
+} from "@/lib/observability/chat-ui-observer"
 import type { UIMessage } from "@ai-sdk/react"
 import { Chat } from "@ai-sdk/react"
 import {
@@ -139,21 +143,30 @@ type TransportStream = Awaited<
 
 /**
  * Marks the first parsed chunk and first text delta. Reads only the
- * chunk's `type` discriminant, retains nothing, and is skipped entirely when
- * instrumentation is off — the SDK then consumes the original stream.
+ * chunk type and text length, retains no content, and is skipped entirely
+ * when neither benchmark instrumentation nor sampled UI observation is enabled.
  */
-function instrumentAcceptedStream(stream: TransportStream): TransportStream {
-  if (!isChatPerfClientEnabled()) return stream
+function instrumentAcceptedStream(
+  stream: TransportStream,
+  receiveUi: ReturnType<ChatUiObserver["bindStream"]> | undefined
+): TransportStream {
+  const instrumented = isChatPerfClientEnabled()
+  if (!instrumented && !receiveUi) return stream
   let sawFirstChunk = false
   let sawFirstTextDelta = false
   return stream.pipeThrough(
     new TransformStream({
       transform(chunk, controller) {
-        if (!sawFirstChunk) {
+        receiveUi?.(
+          chunk.type,
+          chunk.type === "text-delta" ? chunk.delta.length : 0
+        )
+        if (instrumented && !sawFirstChunk) {
           sawFirstChunk = true
           markChatPerfFirstStreamChunk()
         }
         if (
+          instrumented &&
           !sawFirstTextDelta &&
           (chunk as { type?: string } | null)?.type === "text-delta"
         ) {
@@ -201,6 +214,11 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
     try {
       // The next statement performs the HTTP request.
       markChatPerfRequestDispatched()
+      // Bind before awaiting headers: a stopped request can resolve after another send begins.
+      const receiveUi =
+        typeof window !== "undefined"
+          ? (window as ChatUiWindow).__chatUiPerf?.bindStream()
+          : undefined
       // HttpChatTransport resolves here only after fetch returned an OK
       // response with a body. The route performs durable prepareGeneration —
       // including the idempotent first-message claim — before constructing
@@ -208,7 +226,7 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
       // itself remains unconsumed and can continue independently.
       const stream = await super.sendMessages(dispatchOptions)
       this.acceptances.accept(options.messageId)
-      return instrumentAcceptedStream(stream)
+      return instrumentAcceptedStream(stream, receiveUi)
     } catch (error) {
       this.acceptances.reject(options.messageId, error)
       throw error

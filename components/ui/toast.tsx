@@ -71,7 +71,7 @@ function Toast({ title, description, button, id, status }: ToastProps) {
   )
 }
 
-function toast(toast: Omit<ToastProps, "id">) {
+function toast(toast: Omit<ToastProps, "id"> & { duration?: number }) {
   return sonnerToast.custom(
     (id) => (
       <Toast
@@ -84,6 +84,7 @@ function toast(toast: Omit<ToastProps, "id">) {
     ),
     {
       position: "top-center",
+      duration: toast.duration,
     }
   )
 }

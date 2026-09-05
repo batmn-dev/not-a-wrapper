@@ -16,11 +16,18 @@
  * bytes (each block's text is re-parsed by the renderer), and settlement
  * stays byte-exact. Seeds are embedded in failure labels for reproduction.
  */
+import remarkParse from "remark-parse"
+import { unified } from "unified"
+import { describe, expect, it } from "vitest"
 import {
   buildLongMarkdownPayload,
   buildManyShortBlocksPayload,
 } from "../../benchmarks/chat-performance/fixtures"
-import { describe, expect, it } from "vitest"
+import {
+  blocksCoverageEnd,
+  lineClippedBlockView,
+  type BlockView,
+} from "./growing-block-tail"
 import {
   advanceMarkdownProjection,
   isSafeRestartBoundary,
@@ -34,13 +41,78 @@ import {
   everyPrefixOffsets,
   seededPrefixOffsets,
 } from "./markdown-equivalence-corpus"
-import {
-  blocksCoverageEnd,
-  lineClippedBlockView,
-  type BlockView,
-} from "./growing-block-tail"
+import { remarkParsedBlock } from "./remark-parsed-block"
 
 const IDENTITY = "message-under-test"
+
+it("restores retained syntax after a zero-parse list extension settles", () => {
+  const first = advanceMarkdownProjection({
+    previous: null,
+    source: "- first",
+    streaming: true,
+    identity: IDENTITY,
+  })
+  const source = "- first\n- second"
+  const extended = advanceMarkdownProjection({
+    previous: first.state,
+    source,
+    streaming: true,
+    identity: IDENTITY,
+  })
+  expect(extended.parsedCharacters).toBe(0)
+  expect(extended.state.blocks[0]!.parsedBlock).toBeUndefined()
+  const settled = advanceMarkdownProjection({
+    previous: extended.state,
+    source,
+    streaming: false,
+    identity: IDENTITY,
+  })
+  expect(settled.state.blocks[0]!.id).toBe(extended.state.blocks[0]!.id)
+  expect(settled.state.blocks[0]!.parsedBlock?.source).toBe(source)
+})
+
+it("rebases retained syntax and isolates transform mutations, with canonical fallback on source changes", () => {
+  const source = "Earlier block.\n\n# A **heading**"
+  const result = advanceMarkdownProjection({
+    previous: null,
+    source,
+    streaming: false,
+    identity: IDENTITY,
+  })
+  const block = result.state.blocks[1]!.parsedBlock!
+  const retained = structuredClone(block.node)
+  const processor = unified().use(remarkParse).use(remarkParsedBlock, block)
+  const first = processor.parse(block.source)
+  expect(first).toEqual(unified().use(remarkParse).parse(block.source))
+  first.children[0]!.data = { hProperties: { annotated: true } }
+  expect(block.node).toEqual(retained)
+  expect(processor.parse(block.source).children[0]!.data).toBeUndefined()
+  expect(processor.parse("Different source")).toEqual(
+    unified().use(remarkParse).parse("Different source")
+  )
+})
+
+it.each([
+  "Uses [link][ref].\n\n[ref]: /target",
+  "Uses a note[^note].\n\n[^note]: content",
+  "> [ref]: /target",
+  "\tindented\n\n2. two\n===",
+  "[x]: https://a.b\n2. a",
+  "[x]: https://a.b\nfoo\n===",
+])(
+  "keeps document-context and indented syntax on the canonical renderer: %s",
+  (source) => {
+    const result = advanceMarkdownProjection({
+      previous: null,
+      source,
+      streaming: false,
+      identity: IDENTITY,
+    })
+    expect(
+      result.state.blocks.every((block) => block.parsedBlock === undefined)
+    ).toBe(true)
+  }
+)
 
 function rawView(blocks: readonly MarkdownProjectionBlock[]) {
   return blocks.map(({ text, nodeType, startOffset, endOffset }) => ({
@@ -439,9 +511,11 @@ describe("resets and lifecycle", () => {
       identity: IDENTITY,
     })
     expect(rawView(result.state.blocks)).toEqual(splitMarkdownSource(after))
-    expect(
-      result.state.blocks.map((block) => block.nodeType)
-    ).toEqual(["code", "heading", "paragraph"])
+    expect(result.state.blocks.map((block) => block.nodeType)).toEqual([
+      "code",
+      "heading",
+      "paragraph",
+    ])
   })
 })
 

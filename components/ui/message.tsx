@@ -11,9 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
-import dynamic from "next/dynamic"
-
-const Markdown = dynamic(() => import("./markdown").then((mod) => mod.Markdown))
+import { LazyMarkdown as Markdown } from "./lazy-markdown"
 
 export type MessageProps = {
   children: React.ReactNode

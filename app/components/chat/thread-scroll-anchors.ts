@@ -12,6 +12,8 @@
  * bottom fallback runs). No eviction and no serialization.
  */
 
+import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
+
 type SavedThreadAnchor = {
   turnId: string
   offsetFromTopPx: number
@@ -115,6 +117,7 @@ export function restoreThreadAnchor(
   if (!turn) return false
   const rootTop = root.getBoundingClientRect().top
   const desiredTurnTop = rootTop - saved.offsetFromTopPx
+  noteChatProgrammaticScroll(root)
   root.scrollTop += turn.getBoundingClientRect().top - desiredTurnTop
   return true
 }

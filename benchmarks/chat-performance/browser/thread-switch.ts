@@ -1,23 +1,26 @@
 /**
  * Thread-switch flow (`SUITE=thread-switch`): sidebar row click → first
- * message row painted, measured through the app's own
- * `chat_navigation_intent` → `nav_to_thread_painted` mark pair, for chats the
+ * destination content observed across a DOM/frame opportunity, for chats the
  * document has not opened yet (unvisited: click, and hover-then-click) and
  * for chats it has (visited). Alongside each switch: the Convex query-set
  * `Add` count sent on the WebSocket, the commit-time cache hit/miss mark, and
  * a forced-GC JS heap sample at fixed switch counts so growth per switch is
  * visible.
  *
- * Fixtures: the signed-in harness user's own chats. When the sidebar shows
- * fewer than `THREAD_SWITCH_CHATS` rows, short deterministic turns create the
- * rest (durable path, so the rows persist across harness runs).
+ * Fixtures: freshly seeded deterministic chats, including one long answer.
+ * React navigation marks remain diagnostic breakdowns, separate from the browser observation.
  */
-import type { Browser, BrowserContext, CDPSession, Page } from "playwright"
 import {
-  readHeap,
+  installChatUiObserver,
+  type ChatUiWindow,
+} from "@/lib/observability/chat-ui-observer"
+import type { Browser, BrowserContext, Page } from "playwright"
+import { readForcedGcHeap } from "./forced-gc-heap"
+import {
   readMarks,
   tryWaitForMark,
   waitForAnyMark,
+  waitForMark,
   type CollectedMark,
 } from "./marks"
 import {
@@ -27,6 +30,7 @@ import {
   type ThreadSwitchResult,
   type ThreadSwitchSample,
 } from "./result-schema"
+import { BENCHMARK_TYPING_DELAY_MS } from "./scenarios"
 
 const ROW_SELECTOR = 'a[data-sidebar-item="true"][href^="/c/"]'
 const TURN_ROW_SELECTOR = "section[data-turn-id]"
@@ -104,13 +108,17 @@ async function waitForRows(page: Page, count: number, timeoutMs: number) {
   return readRowHrefs(page)
 }
 
-/** Sends one short deterministic turn from the home surface: a new durable chat. */
-async function createChat(page: Page, baseUrl: string) {
+/** Creates a durable chat with a short answer or the long Markdown fixture. */
+async function createChat(page: Page, baseUrl: string, long: boolean) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+  await waitForMark(page, "replay_disabled_v1", 15_000)
   const editor = page.locator('[contenteditable="true"]').first()
   await editor.waitFor({ state: "visible", timeout: 15_000 })
   await editor.click()
-  await page.keyboard.type(CREATE_DIRECTIVE)
+  await page.keyboard.type(
+    long ? "[[perf:long-markdown:100:fixed]]" : CREATE_DIRECTIVE,
+    { delay: BENCHMARK_TYPING_DELAY_MS }
+  )
   await page.locator('[data-testid="send-button"]').click()
   await page.waitForURL(/\/c\//, { timeout: 30_000 })
   // A turn that lost live-stream adoption emits only the receipt; one that
@@ -125,7 +133,18 @@ async function createChat(page: Page, baseUrl: string) {
   if (first === "stream_terminal") {
     await tryWaitForMark(page, "durable_settlement_receipt", 15_000)
   }
+  const marks = await readMarks(page)
+  const terminal = last(marks, "stream_terminal")
+  const receipt = last(marks, "durable_settlement_receipt")
+  if (
+    (!terminal && !receipt) ||
+    (terminal && terminal.detail?.outcome !== "finish") ||
+    (receipt && receipt.detail?.outcome !== "completed")
+  ) {
+    throw new Error("thread-switch fixture did not finish successfully")
+  }
   await page.waitForTimeout(1_000)
+  return new URL(page.url()).pathname
 }
 
 async function ensureChats(
@@ -134,13 +153,10 @@ async function ensureChats(
   chatCount: number,
   log: ThreadSwitchOptions["log"]
 ): Promise<string[]> {
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
-  let hrefs = await waitForRows(page, chatCount, 10_000)
+  const hrefs: string[] = []
   while (hrefs.length < chatCount) {
     log(`  fixtures: ${hrefs.length}/${chatCount} chats, creating one`)
-    await createChat(page, baseUrl)
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
-    hrefs = await waitForRows(page, chatCount, 10_000)
+    hrefs.push(await createChat(page, baseUrl, hrefs.length === 0))
   }
   return hrefs.slice(0, chatCount)
 }
@@ -152,7 +168,9 @@ async function switchTo(
   querySet: { adds: () => number }
 ): Promise<SwitchSample> {
   const paintedBefore = await page.evaluate(
-    () => performance.getEntriesByName("chat-perf:nav_to_thread_painted").length
+    () =>
+      (window as ChatUiWindow).__chatUiPerf?.values.threadSwitchToFrameMs
+        ?.length ?? 0
   )
   const addsBefore = querySet.adds()
   const row = page
@@ -169,7 +187,8 @@ async function switchTo(
   while (Date.now() < deadline) {
     const count = await page.evaluate(
       () =>
-        performance.getEntriesByName("chat-perf:nav_to_thread_painted").length
+        (window as ChatUiWindow).__chatUiPerf?.values.threadSwitchToFrameMs
+          ?.length ?? 0
     )
     if (count > paintedBefore) {
       painted = true
@@ -188,17 +207,21 @@ async function switchTo(
   const cacheDetail = last(marks, "navigation_cache_hit_or_miss")?.detail?.cache
   const urlOk = new URL(page.url()).pathname === href
   const rows = await page.locator(TURN_ROW_SELECTOR).count()
+  const ui = await page.evaluate(() => ({
+    duration: (
+      window as ChatUiWindow
+    ).__chatUiPerf?.values.threadSwitchToFrameMs?.at(-1),
+    hidden: (window as ChatUiWindow).__chatUiPerf?.hidden ?? true,
+  }))
 
   let detail: string | undefined
-  if (!painted) detail = "nav_to_thread_painted never fired"
-  else if (!urlOk) detail = `url ${new URL(page.url()).pathname} != ${href}`
+  if (ui.hidden) detail = "tab became hidden"
+  else if (!painted) detail = "destination DOM/frame observation missing"
+  else if (!urlOk) detail = "navigation reached an unexpected destination"
   else if (rows === 0) detail = "no message row rendered"
 
   return {
-    navToPaintedMs:
-      painted && intent && paintedMark
-        ? round2(paintedMark.startTime - intent.startTime)
-        : undefined,
+    navToPaintedMs: painted ? ui.duration : undefined,
     intentToCommitMs:
       intent && committed && committed.startTime >= intent.startTime
         ? round2(committed.startTime - intent.startTime)
@@ -217,12 +240,6 @@ async function switchTo(
     ok: detail === undefined,
     detail,
   }
-}
-
-async function sampleHeap(cdp: CDPSession): Promise<number | undefined> {
-  // Forced GC first, so the sample reads retained state, not garbage.
-  await cdp.send("HeapProfiler.collectGarbage").catch(() => undefined)
-  return readHeap(cdp)
 }
 
 function summarizePass(pass: PassAccumulator): ThreadSwitchPassResult {
@@ -263,10 +280,12 @@ export async function runThreadSwitch(
     // second chat to switch to.
     throw new Error("thread-switch needs THREAD_SWITCH_CHATS >= 2")
   }
-  const context: BrowserContext = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    storageState: authState,
-  })
+  const context: BrowserContext = process.env.PERF_CDP_URL
+    ? browser.contexts()[0]
+    : await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        storageState: authState,
+      })
   const passes: Record<ThreadSwitchPassResult["kind"], PassAccumulator> = {
     "unvisited-click": { kind: "unvisited-click", samples: [] },
     "unvisited-hover": { kind: "unvisited-hover", samples: [] },
@@ -275,8 +294,16 @@ export async function runThreadSwitch(
   const heapSamples: ThreadSwitchResult["heapSamples"] = []
   const failures: string[] = []
 
+  const ownedPages: Page[] = []
+  const newPage = async () => {
+    const page = await context.newPage()
+    ownedPages.push(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    return page
+  }
   try {
-    const fixturePage = await context.newPage()
+    const fixturePage = await newPage()
+    await fixturePage.bringToFront()
     const hrefs = await ensureChats(
       fixturePage,
       baseUrl,
@@ -290,9 +317,12 @@ export async function runThreadSwitch(
     // half by plain click, half by hover-then-click.
     const half = Math.floor(hrefs.length / 2)
     for (let document = 0; document < options.documents; document++) {
-      const page = await context.newPage()
+      const page = await newPage()
+      await page.addInitScript(installChatUiObserver)
+      await page.bringToFront()
       const querySet = installQuerySetCounter(page)
       await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+      await waitForMark(page, "replay_disabled_v1", 15_000)
       await waitForRows(page, hrefs.length, 15_000)
       // Alternate which half is hovered so the row set does not bias a pass.
       const hoverFirst = document % 2 === 1
@@ -316,21 +346,21 @@ export async function runThreadSwitch(
 
     // Visited pass: one document, every chat opened once, then
     // `switchCount` switches cycling through them with heap samples.
-    const page = await context.newPage()
+    const page = await newPage()
+    await page.addInitScript(installChatUiObserver)
+    await page.bringToFront()
     const cdp = await context.newCDPSession(page)
     await cdp.send("Performance.enable")
     await cdp.send("HeapProfiler.enable")
     const querySet = installQuerySetCounter(page)
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
+    await waitForMark(page, "replay_disabled_v1", 15_000)
     await waitForRows(page, hrefs.length, 15_000)
     for (const href of hrefs) {
       const sample = await switchTo(page, href, 0, querySet)
       if (!sample.ok) failures.push(`visited warmup: ${sample.detail}`)
     }
-    const heapAtStart = await sampleHeap(cdp)
-    if (heapAtStart !== undefined) {
-      heapSamples.push({ switches: 0, jsHeapUsedBytes: heapAtStart })
-    }
+    heapSamples.push({ switches: 0, jsHeapUsedBytes: await readForcedGcHeap(cdp) })
     for (
       let switchIndex = 1;
       switchIndex <= options.switchCount;
@@ -344,16 +374,23 @@ export async function runThreadSwitch(
       passes.visited.samples.push(sample)
       if (!sample.ok) failures.push(`visited #${switchIndex}: ${sample.detail}`)
       if (options.heapSampleAt.includes(switchIndex)) {
-        const heap = await sampleHeap(cdp)
-        if (heap !== undefined) {
-          heapSamples.push({ switches: switchIndex, jsHeapUsedBytes: heap })
-        }
+        heapSamples.push({
+          switches: switchIndex,
+          jsHeapUsedBytes: await readForcedGcHeap(cdp),
+        })
       }
     }
     log(`  visited: ${options.switchCount} switches`)
-    await page.close()
   } finally {
-    await context.close()
+    const closedPages = await Promise.allSettled(
+      ownedPages.filter((page) => !page.isClosed()).map((page) => page.close())
+    )
+    if (closedPages.some((result) => result.status === "rejected"))
+      log("  cleanup: a benchmark tab could not be closed")
+    if (!process.env.PERF_CDP_URL)
+      await context.close().catch(() => {
+        log("  cleanup: benchmark context could not be closed")
+      })
   }
 
   return {
@@ -367,6 +404,7 @@ export async function runThreadSwitch(
       summarizePass(passes.visited),
     ],
     heapSamples,
+    heapProtocol: "forced-gc-v1",
     correctnessOk: failures.length === 0,
     ...(failures.length > 0 ? { detail: failures.slice(0, 5).join("; ") } : {}),
   }
@@ -379,13 +417,13 @@ export function formatThreadSwitch(result: ThreadSwitchResult): string[] {
   for (const pass of result.passes) {
     const paint = pass.navToThreadPaintedMs
     lines.push(
-      `  ${pass.kind.padEnd(16)} n=${paint.n} navToPainted p50=${paint.p50}ms p95=${paint.p95}ms max=${paint.max}ms ` +
+      `  ${pass.kind.padEnd(16)} n=${paint.n} navToPainted p50=${paint.p50}ms p95=${paint.p95 === undefined ? "n/a" : `${paint.p95}ms`} max=${paint.max}ms ` +
         `(commit p50=${pass.intentToRouteCommitMs.p50}ms, commit→rows p50=${pass.commitToFirstContentMs.p50}ms, rows→painted p50=${pass.firstContentToPaintedMs.p50}ms) ` +
         `cache hit/miss=${pass.cacheHits}/${pass.cacheMisses} querySetAdds p50=${pass.querySetAddsPerSwitch.p50}`
     )
   }
   lines.push(
-    `  heap (MB after GC): ${result.heapSamples
+    `  heap (MiB, confirmed GC): ${result.heapSamples
       .map(
         (sample) =>
           `@${sample.switches}=${round2(sample.jsHeapUsedBytes / 1024 / 1024)}`

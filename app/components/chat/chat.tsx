@@ -12,7 +12,10 @@ import { getReasoningEffort } from "@/lib/chat-messages/metadata"
 import { useChats } from "@/lib/chat-store/chats/provider"
 import { useChat } from "@/lib/chat-store/chats/use-chat"
 import { useMessages } from "@/lib/chat-store/messages/provider"
-import { useChatSession } from "@/lib/chat-store/session/provider"
+import {
+  useChatIdHandoff,
+  useChatSession,
+} from "@/lib/chat-store/session/provider"
 import {
   useMarkChatReadOnView,
   usePublishActiveChatStatus,
@@ -23,7 +26,7 @@ import { useUser } from "@/lib/user-store/provider"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
 import { notFound } from "next/navigation"
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActivityPanel } from "./activity/activity-panel"
 import {
   ActivityPanelStoreProvider,
@@ -68,7 +71,8 @@ export type ChatProjectContext = {
  * empty project chats.
  */
 export function Chat({ project }: { project?: ChatProjectContext }) {
-  const { chatId, isChatIdHandoff } = useChatSession()
+  const { chatId } = useChatSession()
+  const isChatIdHandoff = useChatIdHandoff()
   // Resolve the current chat even when it is outside the bounded sidebar window
   // (deep-links to old chats). In-window chats resolve synchronously; out-of-
   // window chats load via the chats.getById fallback (isChatLoading).
@@ -91,7 +95,7 @@ export function Chat({ project }: { project?: ChatProjectContext }) {
   )
 }
 
-function ChatInner({
+const ChatInner = memo(function ChatInner({
   chatId,
   currentChat,
   isChatLoading,
@@ -114,7 +118,7 @@ function ChatInner({
     cacheAndAddMessage,
     selectMessageBranch,
   } = useMessages()
-  const { user } = useUser()
+  const { user, isChatAdmissionReady } = useUser()
 
   // Turn inputs — reactive reads for rendering; the turn runners read the
   // same values at run time through the context's snapshot getter.
@@ -165,6 +169,7 @@ function ChatInner({
     presentation,
     hasSentFirstMessage,
     isSubmitting,
+    isSendReady,
     lastFinishReason,
     scrollToMessageId,
     submit,
@@ -176,12 +181,18 @@ function ChatInner({
     cacheAndAddMessage,
     chatId,
     user,
+    isChatAdmissionReady,
     checkLimitsAndNotify,
     ensureChatExists,
     firstTurn: { begin: beginFirstTurn, rollback: rollbackFirstTurn },
     bumpChat,
     setComposerText,
   })
+
+  const handleLockedGuestModelSelect = useCallback(
+    () => setHasDialogAuth(true),
+    [setHasDialogAuth]
+  )
 
   // Conversation effort readback (ADR-0026): the last assistant message's
   // applied effort restores the selector when a chat is reopened — messages
@@ -397,10 +408,11 @@ function ChatInner({
       bottomSpacing="none"
       onTurn={submit}
       isSubmitting={isSubmitting}
+      isSendReady={isSendReady}
       status={effectiveStatus}
       stop={stop}
       stoppable={presentation.stoppable}
-      onLockedGuestModelSelect={() => setHasDialogAuth(true)}
+      onLockedGuestModelSelect={handleLockedGuestModelSelect}
     />
   )
 
@@ -495,4 +507,4 @@ function ChatInner({
       </div>
     </ActivityPanelStoreProvider>
   )
-}
+})

@@ -177,8 +177,6 @@ describe("event schema allow-list", () => {
     for (const event of [
       "markdown_projection_advance",
       "shiki_highlight",
-      "long_task",
-      "raf_gap",
     ]) {
       expect(validateChatPerfEvent(event, { durationMs: 2 })).toEqual({
         ok: true,
@@ -186,6 +184,15 @@ describe("event schema allow-list", () => {
       expect(validateChatPerfEvent(event, {})).toEqual({
         ok: false,
         reason: "missing required field: durationMs",
+      })
+    }
+    for (const event of ["long_task", "raf_gap"]) {
+      expect(
+        validateChatPerfEvent(event, { durationMs: 60, observedStartMs: 10 })
+      ).toEqual({ ok: true })
+      expect(validateChatPerfEvent(event, { durationMs: 60 })).toEqual({
+        ok: false,
+        reason: "missing required field: observedStartMs",
       })
     }
   })

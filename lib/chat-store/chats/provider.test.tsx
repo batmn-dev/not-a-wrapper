@@ -14,7 +14,12 @@ import {
 import { resetCachedMessagesSnapshot } from "../messages/api"
 import type { Chats } from "../types"
 import { resetCachedChatsSnapshot } from "./api"
-import { ChatsProvider, useChats, type FirstTurnChatResult } from "./provider"
+import {
+  ChatsProvider,
+  useChatActions,
+  useChats,
+  type FirstTurnChatResult,
+} from "./provider"
 
 const persistMocks = vi.hoisted(() => {
   const tables = {
@@ -236,6 +241,38 @@ describe("ChatsProvider guest local chats", () => {
       "local-existing",
     ])
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it("keeps row command consumers stable while chat data updates", async () => {
+    persistMocks.tables.chats.set("local-existing", localChat())
+    const capture: { current: ReturnType<typeof useChats> | null } = {
+      current: null,
+    }
+    const actionRender = vi.fn()
+    function Actions() {
+      actionRender(useChatActions())
+      return null
+    }
+    container = document.createElement("div")
+    root = createRoot(container)
+    act(() =>
+      root?.render(
+        <ChatsProvider>
+          <ChatsSnapshot captureRef={capture} />
+          <Actions />
+        </ChatsProvider>
+      )
+    )
+    await flushPromises()
+    const initialRenders = actionRender.mock.calls.length
+    const actions: ReturnType<typeof useChatActions> =
+      actionRender.mock.lastCall![0]
+    await act(async () => actions.updateTitle("local-existing", "Renamed"))
+    expect(capture.current?.chats[0].title).toBe("Renamed")
+    await act(async () => actions.togglePinned("local-existing", true))
+    expect(capture.current?.chats[0].pinned).toBe(true)
+    expect(actionRender).toHaveBeenCalledTimes(initialRenders)
+    expect(actions.deleteChat).toBe(capture.current?.deleteChat)
   })
 
   it("keeps initial and loading-more states distinct", async () => {
@@ -728,7 +765,7 @@ describe("ChatsProvider guest local chats", () => {
     await act(async () => {
       await expect(
         capture.current?.createFirstTurnChat({
-        publicId: "chat-public-1",
+          publicId: "chat-public-1",
           message: { clientMessageId: "optimistic-1", text: "Question" },
           attachmentIds: [],
         })

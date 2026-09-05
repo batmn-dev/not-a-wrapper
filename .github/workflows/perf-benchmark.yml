@@ -1,26 +1,35 @@
-# Scheduled + on-demand performance benchmark (measurement plan Phase 6).
-#
-# Separate from ci-cd.yml on purpose: this needs a real Convex deployment and
-# a server env (secret PERF_ENV_FILE), takes minutes of browser time, and its
-# numbers are runner-class-relative — none of which belongs in the per-PR
-# gate. Per-PR protection stays in ci-cd.yml's `bun run test`, which covers
-# branch semantics, Markdown projection correctness, and pinned fixture hashes.
-#
-# Setup (one-time):
-#   1. Secret PERF_ENV_FILE — the contents of a .env.local for the perf
-#      server: NEXT_PUBLIC_CONVEX_URL (a dev/CI Convex deployment), the
-#      platform provider keys the admission path expects, and — only if you
-#      run SUITE=durable — the WorkOS envs the harness auth user needs.
-#   2. Secret PERF_AUTH_PASSWORD — a strong, unique password for the WorkOS
-#      benchmark user. Required only for SUITE=durable.
-#   3. After the first green run, download the results artifact and commit it
-#      as benchmarks/chat-performance/browser/baselines/ci-<suite>.json to
-#      arm regression gating (compare-results.ts reports-only until then).
-#      Regenerate that baseline whenever fixtures change (the pinned-hash
-#      test in fixtures.test.ts will remind you).
 name: Perf benchmark
 
 on:
+  pull_request:
+    paths:
+      - "app/components/chat/**"
+      - "app/components/chat-input/**"
+      - "app/components/layout/chat-actions-menu.tsx"
+      - "app/components/layout/sidebar/**"
+      - "app/api/chat/**"
+      - "app/globals.css"
+      - "components/ui/prompt-input.tsx"
+      - "components/ui/calendar.tsx"
+      - "components/ui/tooltip.tsx"
+      - "components/ui/focus-mode.tsx"
+      - "components/ui/message.tsx"
+      - "components/ui/lazy-markdown.ts"
+      - "components/ui/markdown.tsx"
+      - "components/ui/markdown-link.tsx"
+      - "components/ui/code-block.tsx"
+      - "components/ui/intent-prefetch.ts"
+      - "components/ui/reasoning.tsx"
+      - "components/ui/view-transition.ts"
+      - "package.json"
+      - "bun.lock"
+      - "lib/markdown/**"
+      - "lib/chat-store/messages/**"
+      - "lib/chat-store/chats/**"
+      - "lib/observability/**"
+      - "benchmarks/chat-performance/**"
+      - "instrumentation-client.ts"
+      - ".github/workflows/perf-benchmark.yml"
   schedule:
     # Weekly, Monday 09:13 UTC (off the top-of-hour crunch).
     - cron: "13 9 * * 1"
@@ -29,28 +38,108 @@ on:
       suite:
         description: "Benchmark suite"
         type: choice
-        default: smoke
-        options: [smoke, standard, durable]
+        default: responsiveness
+        options: [responsiveness, smoke, standard, durable, thread-switch]
+      comparison_ref:
+        description: "Paired product baseline; PRs use their merge base, other runs default to the first parent"
+        type: string
+        default: ""
+      collect_baseline:
+        description: "Collect first evidence; does not certify relative regression protection"
+        type: boolean
+        default: false
+      diagnose:
+        description: "Profile responsiveness or standard scenarios; never a performance certification"
+        type: boolean
+        default: false
+      only:
+        description: "Diagnostic scenario IDs, comma-separated; blank uses mode-specific defaults"
+        type: string
+        default: ""
+      observer_overhead:
+        description: "Interleaved DOM observer on/off trace comparison (requires diagnose)"
+        type: boolean
+        default: false
+      late_menu_trace:
+        description: "Bounded late-menu style invalidation trace (requires diagnose and an interactive scenario)"
+        type: boolean
+        default: false
+      rendering_probe:
+        description: "Diagnostic smooth/quick and inner text block-layout traces (requires diagnose)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: perf-benchmark
+  # Guest rendering runs use separate identities; credentialed runs stay serialized.
+  # Each before/after pair remains sequential on one isolated runner.
+  group: perf-benchmark-${{ github.event_name == 'workflow_dispatch' && (inputs.suite == 'standard' || inputs.suite == 'smoke') && 'guest' || 'authenticated' }}
   cancel-in-progress: false
 
 jobs:
   benchmark:
-    name: Browser benchmark (${{ github.event_name == 'schedule' && 'durable' || inputs.suite || 'smoke' }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Fork PRs cannot access benchmark credentials. Never use pull_request_target.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: ${{ fromJSON(github.event_name == 'schedule' && '["standard","durable","thread-switch"]' || format('["{0}"]', inputs.suite || 'responsiveness')) }}
+    name: Browser benchmark (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     env:
-      SUITE: ${{ github.event_name == 'schedule' && 'durable' || inputs.suite || 'smoke' }}
+      SUITE: ${{ matrix.suite }}
+      RUNS: ${{ inputs.diagnose && 1 || 5 }}
+      WARMUPS: ${{ inputs.diagnose && '0' || '1' }}
+      PERF_PROFILE: ${{ inputs.diagnose && 'true' || 'false' }}
+      PERF_PROFILE_LATE_MENU: ${{ inputs.late_menu_trace && 'true' || 'false' }}
+      ONLY: >-
+        ${{ inputs.diagnose && (inputs.only ||
+          (inputs.late_menu_trace && 'interact-long-answer' ||
+           inputs.suite == 'standard' && 'mixed-markdown-30-slab' ||
+           'new-chat-cold,interact-long-answer')) || '' }}
+      PERF_COMPARE_REF: ${{ inputs.comparison_ref || 'HEAD^' }}
+      COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
+      - name: Validate diagnostic suite
+        if: ${{ inputs.diagnose || inputs.observer_overhead || inputs.rendering_probe || inputs.late_menu_trace }}
+        run: |
+          if { [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; } && [ "${{ inputs.diagnose }}" != "true" ]; then
+            echo "::error::observer_overhead and rendering_probe require diagnose=true; these traces cannot certify a baseline."
+            exit 1
+          fi
+          if [ "${{ inputs.observer_overhead }}" = "true" ] && [ "${{ inputs.rendering_probe }}" = "true" ]; then
+            echo "::error::Choose only one of observer_overhead or rendering_probe."
+            exit 1
+          fi
+          if [ "${{ inputs.late_menu_trace }}" = "true" ]; then
+            if [ "${{ inputs.diagnose }}" != "true" ] || [ "$SUITE" != "responsiveness" ] || [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; then
+              echo "::error::late_menu_trace requires diagnose=true, suite=responsiveness, and cannot combine with another diagnostic control."
+              exit 1
+            fi
+          fi
+          if [ "$SUITE" != "responsiveness" ] && { [ "$SUITE" != "standard" ] || [ "${{ inputs.observer_overhead }}" = "true" ] || [ "${{ inputs.rendering_probe }}" = "true" ]; }; then
+            echo "::error title=Unsupported diagnostic suite::Ordinary profiling supports responsiveness and standard. Observer/rendering controls require responsiveness. Disable diagnose to run other suites normally."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve PR comparison revision
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          COMMON_BASE=$(git merge-base "$PR_BASE_SHA" HEAD)
+          echo "PERF_COMPARE_REF=$COMMON_BASE" >> "$GITHUB_ENV"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -59,6 +148,11 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Validate anonymous lane isolation
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.suite == 'standard' || inputs.suite == 'smoke') }}
+        run: |
+          bun -e 'import { STANDARD_SUITE, SMOKE_SUITE } from "./benchmarks/chat-performance/browser/scenarios"; if ([...STANDARD_SUITE, ...SMOKE_SUITE].some(scenario => scenario.auth)) throw new Error("The guest lane must not contain authenticated scenarios")'
 
       # Branch timing runs only in this controlled lane, never ordinary CI.
       - name: Micro-benchmark timing gates
@@ -77,15 +171,23 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
 
+      - name: Compare base and head on the same runner
+        if: ${{ !inputs.diagnose && !inputs.collect_baseline }}
+        run: bun run benchmarks/chat-performance/browser/run-paired.ts
+        env:
+          PERF_AUTH_PASSWORD: ${{ secrets.PERF_AUTH_PASSWORD }}
+
       - name: Build instrumented bundle
+        if: ${{ inputs.diagnose || inputs.collect_baseline }}
         run: NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf bun run build:next
 
       # The harness spawns the perf server itself, folds every stream against
       # the scenario oracle, and exits non-zero on ANY correctness failure —
       # that alone gates, baseline or not.
       - name: Run browser benchmark
+        if: ${{ (inputs.diagnose || inputs.collect_baseline) && !inputs.observer_overhead && !inputs.rendering_probe }}
         run: |
-          if [ "$SUITE" = "durable" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
+          if [ "$SUITE" != "smoke" ] && [ "$SUITE" != "standard" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
             echo "::error title=Missing PERF_AUTH_PASSWORD::Set the GitHub Actions secret PERF_AUTH_PASSWORD to a strong, unique benchmark-user password."
             exit 1
           fi
@@ -93,18 +195,70 @@ jobs:
         env:
           PERF_AUTH_PASSWORD: ${{ secrets.PERF_AUTH_PASSWORD }}
 
-      - name: Compare against baseline
+      - name: Compare DOM observer overhead
+        if: ${{ inputs.observer_overhead }}
+        run: PERF_OBSERVER_AB=true CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+
+      - name: Diagnose streaming rendering
+        if: ${{ inputs.rendering_probe }}
         run: |
-          CURRENT=$(ls -t benchmarks/chat-performance/browser/results/*.json | head -1)
+          STREAMING_PRESENTATION=smooth LABEL=smooth CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+          STREAMING_PRESENTATION=quick LABEL=quick CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+          printf '%s\n' '.text-message, .text-message > div { display: flow-root !important; }' > /tmp/chat-inner-block-layout-probe.css
+          STREAMING_PRESENTATION=smooth INJECT_CSS_FILE=/tmp/chat-inner-block-layout-probe.css LABEL=inner-block-layout CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+
+      - name: Validate collected measurements and report targets
+        if: ${{ !inputs.diagnose && inputs.collect_baseline }}
+        run: |
+          CURRENT=$(bun -e '
+            import { readdirSync } from "node:fs";
+            import { join } from "node:path";
+            const directory = "benchmarks/chat-performance/browser/results";
+            const latest = readdirSync(directory).filter(name => name.endsWith(".json") && !name.endsWith(".trace.json")).sort().at(-1);
+            if (!latest) throw new Error("No benchmark result was produced");
+            console.log(join(directory, latest));
+          ')
           echo "current results: $CURRENT"
-          bun run benchmarks/chat-performance/browser/compare-results.ts \
-            "benchmarks/chat-performance/browser/baselines/ci-${SUITE}.json" \
-            "$CURRENT"
+          bun run benchmarks/chat-performance/browser/compare-results.ts --regression-only --collect-baseline "$CURRENT"
 
       - name: Upload results artifact
-        if: always()
+        if: ${{ always() && !inputs.observer_overhead && !inputs.rendering_probe }}
         uses: actions/upload-artifact@v4
         with:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
-          path: benchmarks/chat-performance/browser/results/*.json
+          path: |
+            benchmarks/chat-performance/browser/results/*.json
+            benchmarks/chat-performance/browser/results/paired/
+            !benchmarks/chat-performance/browser/results/*.trace.json
+          retention-days: 90
+
+      - name: Upload diagnostic artifacts
+        if: ${{ always() && inputs.diagnose && !inputs.observer_overhead && !inputs.rendering_probe }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-diagnostics-${{ env.SUITE }}-${{ github.run_id }}
+          include-hidden-files: true
+          path: |
+            benchmarks/chat-performance/browser/results/*.cpuprofile
+            benchmarks/chat-performance/browser/results/*.trace.json
+            .next-perf/static/chunks/**/*.js
+          retention-days: 90
+
+      - name: Upload observer comparison traces
+        if: ${{ always() && inputs.observer_overhead }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-observer-overhead-${{ github.run_id }}
+          path: benchmarks/chat-performance/browser/results/traces/
+          retention-days: 90
+
+      - name: Upload rendering probe traces
+        if: ${{ always() && inputs.rendering_probe }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-rendering-probe-${{ github.run_id }}
+          include-hidden-files: true
+          path: |
+            benchmarks/chat-performance/browser/results/traces/
+            .next-perf/static/chunks/**/*.js
           retention-days: 90

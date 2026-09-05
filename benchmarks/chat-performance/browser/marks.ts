@@ -4,6 +4,24 @@
  */
 import type { CDPSession, Page } from "playwright"
 
+/** Self-contained for page.waitForFunction; Conversation wraps each message separately. */
+export function isFollowupSeedReady(seedLength: number): boolean {
+  const rows = document.querySelectorAll("section[data-turn-id]")
+  const assistantRow = rows.item(rows.length - 1)
+  const userRow = rows.item(rows.length - 2)
+  const assistant = assistantRow?.querySelector<HTMLElement>(
+    '[data-message-author-role="assistant"][data-perf-text-length]'
+  )
+  return (
+    userRow?.getAttribute("data-turn") === "user" &&
+    Boolean(userRow.querySelector('[data-message-author-role="user"]')) &&
+    assistantRow?.getAttribute("data-turn") === "assistant" &&
+    Number(assistant?.dataset.perfTextLength) === seedLength &&
+    document.querySelector('[data-testid="send-button"]')
+      ?.getAttribute("aria-label") === "Send prompt"
+  )
+}
+
 /** A mark did not appear in time; every other failure propagates. */
 export class MarkTimeoutError extends Error {}
 
@@ -11,6 +29,54 @@ export type CollectedMark = {
   name: string
   startTime: number
   detail: Record<string, unknown> | null
+}
+
+/** Self-contained for page.evaluate; matches the observer's direct-root wheel scope. */
+export function findDirectTranscriptWheelPoint(root: Element): {
+  x: number
+  y: number
+} {
+  const bounds = root.getBoundingClientRect()
+  const left = Math.max(0, bounds.left)
+  const right = Math.min(innerWidth, bounds.right)
+  const top = Math.max(0, bounds.top)
+  const bottom = Math.min(innerHeight, bounds.bottom)
+  if (right - left <= 8 || bottom <= top)
+    throw new Error("Scroll root has no visible bounds")
+  // Prefer the gutter; the center can hit a nested code scroller.
+  for (const x of [left + 4, right - 4, (left + right) / 2]) {
+    for (const fraction of [0.5, 0.35, 0.65]) {
+      const y = top + (bottom - top) * fraction
+      const target = document.elementFromPoint(x, y)
+      if (target === root) return { x, y }
+    }
+  }
+  throw new Error("No unobscured direct transcript wheel target")
+}
+
+/** Full durations of observed intervals overlapping the run, regardless of callback delivery time. */
+export function durationsOverlappingRun(
+  marks: CollectedMark[],
+  name: "long_task" | "raf_gap",
+  runStart: number,
+  runEnd: number
+): number[] {
+  return marks
+    .filter((mark) => mark.name === name)
+    .flatMap((mark) => {
+      const start = mark.detail?.observedStartMs
+      const duration = mark.detail?.durationMs
+      if (
+        typeof start !== "number" ||
+        !Number.isFinite(start) ||
+        start < 0 ||
+        typeof duration !== "number" ||
+        !Number.isFinite(duration) ||
+        duration < 0
+      )
+        throw new Error(`${name} is missing a valid observed interval`)
+      return start < runEnd && start + duration > runStart ? [duration] : []
+    })
 }
 
 export async function readMarks(page: Page): Promise<CollectedMark[]> {

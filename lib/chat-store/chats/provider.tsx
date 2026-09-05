@@ -150,7 +150,8 @@ export type FirstTurnChat =
  * CHAT_PUBLIC_ID_CONFLICT_CODE) — the caller re-mints once. `undefined`: the
  * creation failed and was already reported.
  */
-export type FirstTurnChatResult = FirstTurnChat | { kind: "conflict" } | undefined
+export type FirstTurnChatResult =
+  FirstTurnChat | { kind: "conflict" } | undefined
 
 function isChatPublicIdConflict(error: unknown): boolean {
   return (
@@ -188,10 +189,22 @@ type ChatsContextType = {
   pinnedChats: Chats[]
 }
 const ChatsContext = createContext<ChatsContextType | null>(null)
+const ChatActionsContext = createContext<Pick<
+  ChatsContextType,
+  "updateTitle" | "togglePinned" | "deleteChat"
+> | null>(null)
 
 export function useChats() {
   const context = useContext(ChatsContext)
   if (!context) throw new Error("useChats must be used within ChatsProvider")
+  return context
+}
+
+/** Row commands stay stable when another chat changes the list. */
+export function useChatActions() {
+  const context = useContext(ChatActionsContext)
+  if (!context)
+    throw new Error("useChatActions must be used within ChatsProvider")
   return context
 }
 
@@ -622,6 +635,10 @@ export function ChatsProvider({
     () => partitionSidebarChats(chats).pinned,
     [chats]
   )
+  const chatActions = useMemo(
+    () => ({ updateTitle, togglePinned, deleteChat }),
+    [updateTitle, togglePinned, deleteChat]
+  )
 
   const loadMore = useCallback(() => {
     recentWindow.loadMore(SIDEBAR_WINDOW_PAGE_SIZE)
@@ -656,7 +673,9 @@ export function ChatsProvider({
           canLoadMore,
         }}
       >
-        {children}
+        <ChatActionsContext.Provider value={chatActions}>
+          {children}
+        </ChatActionsContext.Provider>
       </ChatsContext.Provider>
     </>
   )

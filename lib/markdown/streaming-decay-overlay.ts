@@ -4,12 +4,11 @@
  * Streaming color-decay overlay (ADR-0016).
  *
  * Newly arrived words paint near-transparent and materialize to full foreground
- * color without owning any DOM: cohorts of appended rendered text are painted
+ * color without changing content DOM: cohorts of appended rendered text are painted
  * through the CSS Custom Highlight API (`CSS.highlights` +
  * `::highlight(naw-stream-decay-N)` rules this module injects as a constructed
- * stylesheet). The DOM the React tree renders is untouched, so settled content
- * is canonical by construction and the rendered-DOM equivalence corpus is
- * unaffected.
+ * stylesheet). A temporary root attribute scopes the rules; settlement removes
+ * it, leaving canonical DOM and the rendered-DOM equivalence corpus unaffected.
  *
  * The `::highlight` rules live here rather than in globals.css because
  * Turbopack's CSS parser rejects the pseudo-element and warns on every
@@ -21,8 +20,8 @@
  *
  * Invariant boundaries:
  * - Paint only. Text is never gated, reordered, or delayed — this is not a
- *   reveal scheduler. The only state is per-container append cohorts
- *   ({start, end, arrivedAt} over rendered textContent), pruned by age.
+ *   reveal scheduler. Per-container append cohorts
+ *   ({start, end, arrivedAt} over rendered textContent) are pruned by age.
  * - Append detection diffs RENDERED text between commits, so the mend pass
  *   needs no offset mapping: mended completions and a table proven out of
  *   `clipUnprovenTableTail` simply arrive as one cohort and fade together.
@@ -62,8 +61,8 @@ export const DECAY_TOTAL_MS = DECAY_BUCKET_COUNT * DECAY_BUCKET_MS
 export const MAX_WORD_MERGE_CHARS = 16
 /**
  * The rAF loop repaints at this cadence, not per frame: bucket assignments
- * only change every DECAY_BUCKET_MS, and each paint walks every text node of
- * every live container to rebuild StaticRanges — per-frame rebuilds on a
+ * only change every DECAY_BUCKET_MS, and each paint rebuilds StaticRanges
+ * for the live text tail — per-frame rebuilds on a
  * 100KB-class message would burn frame budget for identical output. Appends
  * still paint immediately via observe().
  */
@@ -79,6 +78,7 @@ export const PAINT_MIN_INTERVAL_MS = 24
 export const MAX_FLIP_WINDOW_CHARS = 64
 
 const highlightName = (bucket: number) => `naw-stream-decay-${bucket}`
+const decayRootAttribute = "data-streaming-decay-root"
 
 /**
  * The bucket ramp paints each bucket at the midpoint of its slice of the
@@ -86,9 +86,11 @@ const highlightName = (bucket: number) => `naw-stream-decay-${bucket}`
  * near-opaque (96%) instead of pinning the endpoints to 0%/100%.
  */
 export function decayStylesheetText(): string {
+  // Highlight color inherits through descendants independently of their text
+  // color: https://drafts.csswg.org/css-pseudo-4/#highlight-cascade
   const rules = Array.from({ length: DECAY_BUCKET_COUNT }, (_, bucket) => {
     const alpha = Math.round(((bucket + 0.5) / DECAY_BUCKET_COUNT) * 100)
-    return `  ::highlight(${highlightName(bucket)}) { color: color-mix(in oklab, var(--foreground) ${alpha}%, transparent); }`
+    return `  [${decayRootAttribute}]::highlight(${highlightName(bucket)}) { color: color-mix(in oklab, var(--foreground) ${alpha}%, transparent); }`
   }).join("\n")
   return `@media (prefers-reduced-motion: no-preference) {\n${rules}\n}`
 }
@@ -220,6 +222,10 @@ export function decayBucketOf(cohort: DecayCohort, now: number): number {
 type ContainerState = {
   baseline: string | null
   cohorts: DecayCohort[]
+  tail: Element
+  visible: boolean
+  offscreenGraceUntil: number
+  observer: IntersectionObserver | null
 }
 
 function isSupported(): boolean {
@@ -245,6 +251,39 @@ class StreamingDecayManager {
   private rafHandle: number | null = null
   private lastPaintAt = Number.NEGATIVE_INFINITY
   private bucketHighlights: Highlight[] | null = null
+  private hasPaintedRanges = false
+
+  // Observe the growing block without layout reads or DOM wrappers. A large
+  // intersecting block stays eligible even when its trailing text is off-screen.
+  private createState(container: Element): ContainerState {
+    const state: ContainerState = {
+      baseline: null,
+      cohorts: [],
+      tail: container.lastElementChild ?? container,
+      visible: true,
+      offscreenGraceUntil: 0,
+      observer: null,
+    }
+    if (typeof IntersectionObserver !== "undefined") {
+      state.observer = new IntersectionObserver((entries) => {
+        if (this.states.get(container) !== state) return
+        const entry = entries.findLast(({ target }) => target === state.tail)
+        if (!entry || entry.isIntersecting === state.visible) return
+        state.visible = entry.isIntersecting
+        const now = performance.now()
+        // Let preceding visible cohorts finish; repeated off-screen updates
+        // keep this deadline so unseen streaming cannot sustain the loop.
+        state.offscreenGraceUntil = state.visible ? 0 : now + DECAY_TOTAL_MS
+        state.cohorts = state.cohorts.filter(
+          (cohort) => now - cohort.arrivedAt < DECAY_TOTAL_MS
+        )
+        if (!container.ownerDocument.hidden) this.paint(now)
+        this.ensureLoop()
+      })
+      state.observer.observe(state.tail)
+    }
+    return state
+  }
 
   /**
    * Register bucket Highlights once and mutate their ranges. Replacing registry
@@ -272,9 +311,15 @@ class StreamingDecayManager {
     if (!isSupported() || prefersReducedMotion()) return
     ensureDecayStylesheet(container.ownerDocument)
     const now = performance.now()
-    const state = this.states.get(container) ?? {
-      baseline: null,
-      cohorts: [],
+    const existing = this.states.get(container)
+    if (!existing) container.setAttribute(decayRootAttribute, "")
+    const state = existing ?? this.createState(container)
+    const tail = container.lastElementChild ?? container
+    if (tail !== state.tail) {
+      state.observer?.unobserve(state.tail)
+      state.tail = tail
+      // Keep known visibility until the new block's asynchronous observation.
+      state.observer?.observe(tail)
     }
     const nextText = container.textContent ?? ""
     state.cohorts = advanceDecayCohorts({
@@ -285,17 +330,32 @@ class StreamingDecayManager {
     })
     state.baseline = nextText
     this.states.set(container, state)
-    // A hidden tab keeps streaming commits flowing, but building StaticRanges
-    // nobody can see is waste — cohorts still advance above, and the rAF loop
-    // (paused while hidden) prunes and repaints on the first visible frame.
-    if (!container.ownerDocument.hidden) this.paint(now)
+    const graceExpired = state.offscreenGraceUntil > 0 && now >= state.offscreenGraceUntil
+    if (graceExpired) {
+      state.offscreenGraceUntil = 0
+      container.removeAttribute(decayRootAttribute)
+    }
+    // After the bounded fade grace, invisible tails only advance cohorts.
+    // Re-entry resumes current cohorts; hidden tabs also skip unseen ranges.
+    if (
+      (this.isPaintEligible(state, now) ||
+        (graceExpired && this.hasPaintedRanges)) &&
+      !container.ownerDocument.hidden
+    ) {
+      this.paint(now)
+    }
     this.ensureLoop()
   }
 
   /** Settlement/unmount: drop the container and repaint without it. */
   settle(container: Element): void {
-    if (!this.states.delete(container)) return
+    const state = this.states.get(container)
+    if (!state) return
+    state.observer?.disconnect()
+    this.states.delete(container)
+    container.removeAttribute(decayRootAttribute)
     this.paint(performance.now())
+    this.ensureLoop()
   }
 
   /** Preference off: drop everything and clear every bucket immediately. */
@@ -305,6 +365,10 @@ class StreamingDecayManager {
       this.rafHandle = null
     }
     if (this.states.size > 0) {
+      for (const [container, state] of this.states) {
+        state.observer?.disconnect()
+        container.removeAttribute(decayRootAttribute)
+      }
       this.states.clear()
       this.paint(performance.now())
     }
@@ -318,11 +382,29 @@ class StreamingDecayManager {
       }
     }
     this.bucketHighlights = null
+    this.hasPaintedRanges = false
+  }
+
+  private isPaintEligible(state: ContainerState, now: number): boolean {
+    return state.visible || now < state.offscreenGraceUntil
   }
 
   private ensureLoop(): void {
+    const now = performance.now()
+    if (
+      ![...this.states.values()].some(
+        (state) => this.isPaintEligible(state, now) && state.cohorts.length > 0
+      )
+    ) {
+      if (this.rafHandle !== null) {
+        cancelAnimationFrame(this.rafHandle)
+        // Observe may cross the grace deadline before this pending tick runs.
+        if (this.hasPaintedRanges) this.paint(now)
+      }
+      this.rafHandle = null
+      return
+    }
     if (this.rafHandle !== null) return
-    if (![...this.states.values()].some((s) => s.cohorts.length > 0)) return
     this.rafHandle = requestAnimationFrame(this.tick)
   }
 
@@ -330,16 +412,21 @@ class StreamingDecayManager {
     this.rafHandle = null
     const now = performance.now()
     let live = false
+    let graceExpired = false
     for (const state of this.states.values()) {
+      if (state.offscreenGraceUntil > 0 && now >= state.offscreenGraceUntil) {
+        state.offscreenGraceUntil = 0
+        graceExpired = true
+      }
       state.cohorts = state.cohorts.filter(
         (c) => now - c.arrivedAt < DECAY_TOTAL_MS
       )
-      live ||= state.cohorts.length > 0
+      live ||= this.isPaintEligible(state, now) && state.cohorts.length > 0
     }
     // Throttled: bucket assignments change on a DECAY_BUCKET_MS grid, so
     // rebuilding ranges every frame produces identical output most frames.
     // The terminal tick always paints so expiry clears every bucket.
-    if (!live || now - this.lastPaintAt >= PAINT_MIN_INTERVAL_MS) {
+    if (graceExpired || !live || now - this.lastPaintAt >= PAINT_MIN_INTERVAL_MS) {
       this.paint(now)
     }
     if (live) this.rafHandle = requestAnimationFrame(this.tick)
@@ -354,7 +441,19 @@ class StreamingDecayManager {
       () => []
     )
     for (const [container, state] of this.states) {
-      if (!container.isConnected || state.cohorts.length === 0) continue
+      const eligible = this.isPaintEligible(state, now)
+      // Empty ranges do not remove inherited highlight styles. Release the
+      // off-screen scope and restore it before painting a visible tail again.
+      if (!eligible) container.removeAttribute(decayRootAttribute)
+      else if (!container.hasAttribute(decayRootAttribute)) {
+        container.setAttribute(decayRootAttribute, "")
+      }
+      if (
+        !container.isConnected ||
+        !eligible ||
+        state.cohorts.length === 0
+      )
+        continue
       collectCohortRanges(
         container,
         state.baseline ?? "",
@@ -364,6 +463,7 @@ class StreamingDecayManager {
       )
     }
     const highlights = this.ensureBucketHighlights()
+    this.hasPaintedRanges = buckets.some((ranges) => ranges.length > 0)
     for (let bucket = 0; bucket < DECAY_BUCKET_COUNT; bucket++) {
       const highlight = highlights[bucket]!
       highlight.clear()
@@ -404,15 +504,21 @@ function collectCohortRanges(
   const maxEnd = Math.max(...spans.map((s) => s.end))
   const document = container.ownerDocument
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-  let offset = 0
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+  // Count current rendered characters natively, then walk backward only as far
+  // as the live cohorts. Re-reading length also handles DOM shrink between commits.
+  let offset = container.textContent?.length ?? 0
+  for (
+    let node = walker.lastChild();
+    node !== null;
+    node = walker.previousNode()
+  ) {
     const text = node as Text
     const length = text.data.length
-    const nodeStart = offset
-    const nodeEnd = offset + length
-    offset = nodeEnd
-    if (nodeStart >= maxEnd) break
-    if (nodeEnd <= minStart) continue
+    const nodeEnd = offset
+    const nodeStart = offset - length
+    offset = nodeStart
+    if (nodeEnd <= minStart) break
+    if (nodeStart >= maxEnd) continue
     for (const span of spans) {
       const start = Math.max(span.start, nodeStart)
       const end = Math.min(span.end, nodeEnd)

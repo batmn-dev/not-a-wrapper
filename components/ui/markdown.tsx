@@ -21,6 +21,10 @@ import {
   remarkCodeBlockAnnotation,
 } from "@/lib/markdown/remark-code-block-annotation"
 import { remarkLinkPresentation } from "@/lib/markdown/remark-link-presentation"
+import {
+  remarkParsedBlock,
+  type ParsedMarkdownBlock,
+} from "@/lib/markdown/remark-parsed-block"
 import { remarkUnwrapLinkParens } from "@/lib/markdown/remark-unwrap-link-parens"
 import {
   observeStreamingDecay,
@@ -48,6 +52,8 @@ import rehypeKatex from "rehype-katex"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
+import type { PluggableList } from "unified"
+import { shallow } from "zustand/shallow"
 import { ButtonCopy } from "./button-copy"
 import { CodeBlock, CodeBlockCode, CodeBlockGroup } from "./code-block"
 import { Icon } from "./icon"
@@ -317,10 +323,12 @@ const MemoizedMarkdownBlock = memo(
     content,
     stability,
     components = INITIAL_COMPONENTS,
+    parsedBlock,
   }: {
     content: string
     stability: MarkdownBlockStability
     components?: Partial<Components>
+    parsedBlock?: ParsedMarkdownBlock
   }) {
     return (
       <MarkdownBlockStabilityContext.Provider value={stability}>
@@ -332,6 +340,9 @@ const MemoizedMarkdownBlock = memo(
             remarkCodeBlockAnnotation,
             remarkLinkPresentation,
             remarkUnwrapLinkParens,
+            ...(parsedBlock
+              ? ([[remarkParsedBlock, parsedBlock]] satisfies PluggableList)
+              : []),
           ]}
           rehypePlugins={[rehypeKatex]}
           urlTransform={markdownUrlTransform}
@@ -347,7 +358,8 @@ const MemoizedMarkdownBlock = memo(
     // (growing → stable) — the moment its code block must highlight.
     return (
       prevProps.content === nextProps.content &&
-      prevProps.stability === nextProps.stability
+      prevProps.stability === nextProps.stability &&
+      shallow(prevProps.components, nextProps.components)
     )
   }
 )
@@ -478,6 +490,9 @@ function MarkdownComponent({
     return () => settleStreamingDecay(container)
   }, [streaming])
 
+  // React retries this render before reconciling children with adjusted state.
+  if (current !== projection) return null
+
   const blocks = current.state.blocks
   return (
     <div className={className} ref={containerRef}>
@@ -521,6 +536,9 @@ function MarkdownComponent({
             content={content}
             stability={growing ? "growing" : "stable"}
             components={mergedComponents}
+            parsedBlock={
+              !growing && !components ? block.parsedBlock : undefined
+            }
           />
         )
       })}

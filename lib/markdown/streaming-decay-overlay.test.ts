@@ -21,7 +21,8 @@ describe("decayStylesheetText", () => {
     expect(
       css.startsWith("@media (prefers-reduced-motion: no-preference)")
     ).toBe(true)
-    const rules = css.match(/::highlight\(naw-stream-decay-\d+\)/g) ?? []
+    const rules =
+      css.match(/\[data-streaming-decay-root\]::highlight\(naw-stream-decay-\d+\)/g) ?? []
     expect(rules.length).toBe(DECAY_BUCKET_COUNT)
     expect(css).toContain(
       "::highlight(naw-stream-decay-0) { color: color-mix(in oklab, var(--foreground) 4%, transparent); }"
@@ -259,6 +260,7 @@ describe("manager without CSS Custom Highlight support (jsdom)", () => {
       observeStreamingDecay(container)
       settleStreamingDecay(container)
     }).not.toThrow()
+    expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
   })
 })
 
@@ -277,6 +279,132 @@ describe("setStreamingDecayEnabled preference gate", () => {
 })
 
 describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
+  it.each(["frame", "append", "deadline crossing"] as const)(
+    "pauses off-screen tails on %s expiry and resumes only current cohorts",
+    (expiry) => {
+    class FakeHighlight extends Set<unknown> {}
+    class FakeStaticRange {
+      constructor(readonly init: StaticRangeInit) {}
+    }
+    class FakeIntersectionObserver {
+      static instances: FakeIntersectionObserver[] = []
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+      constructor(readonly callback: (entries: Array<{
+        target: Element
+        isIntersecting: boolean
+      }>) => void) {
+        FakeIntersectionObserver.instances.push(this)
+      }
+      emit(target: Element, isIntersecting: boolean) {
+        this.callback([{ target, isIntersecting }])
+      }
+    }
+    const highlights = new Map<string, FakeHighlight>()
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0)
+    const clears = vi.spyOn(FakeHighlight.prototype, "clear")
+    let nextFrame: FrameRequestCallback | undefined
+    const raf = vi.fn((callback: FrameRequestCallback) => {
+      nextFrame = callback
+      return 1
+    })
+    const cancel = vi.fn(() => { nextFrame = undefined })
+    vi.stubGlobal("CSS", { highlights })
+    vi.stubGlobal("Highlight", FakeHighlight)
+    vi.stubGlobal("StaticRange", FakeStaticRange)
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver)
+    vi.stubGlobal("requestAnimationFrame", raf)
+    vi.stubGlobal("cancelAnimationFrame", cancel)
+    const container = document.createElement("div")
+    const otherContainer = document.createElement("div")
+    container.innerHTML = "<p>Ready</p>"
+    document.body.append(container)
+    try {
+      observeStreamingDecay(container)
+      const observer = FakeIntersectionObserver.instances[0]!
+      const originalTail = container.lastElementChild!
+      expect(observer.observe).toHaveBeenCalledWith(originalTail)
+      originalTail.append(" new")
+      observeStreamingDecay(container)
+      expect(highlights.get("naw-stream-decay-0")!.size).toBeGreaterThan(0)
+      observer.emit(originalTail, false)
+      // A preceding visible cohort keeps its normal fade after the tail exits.
+      expect(highlights.get("naw-stream-decay-0")!.size).toBeGreaterThan(0)
+      expect(cancel).not.toHaveBeenCalled()
+
+      clock.mockReturnValue(100)
+      originalTail.append(" hidden")
+      observeStreamingDecay(container)
+      clock.mockReturnValue(200)
+      container.insertAdjacentHTML("beforeend", "<p> latest</p>")
+      observeStreamingDecay(container)
+      const newTail = container.lastElementChild!
+      expect(observer.unobserve).toHaveBeenCalledWith(originalTail)
+      expect(observer.observe).toHaveBeenLastCalledWith(newTail)
+      clock.mockReturnValue(300)
+      observer.emit(newTail, false)
+      // Target replacement and repeated off-screen reports must not extend grace.
+      clock.mockReturnValue(DECAY_TOTAL_MS + 1)
+      if (expiry === "frame") {
+        const finalGraceFrame = nextFrame!
+        nextFrame = undefined
+        finalGraceFrame(DECAY_TOTAL_MS + 1)
+      } else {
+        if (expiry === "deadline crossing") {
+          clock.mockReturnValueOnce(DECAY_TOTAL_MS - 1)
+        }
+        newTail.append(" at expiry")
+        observeStreamingDecay(container)
+      }
+      expect([...highlights.values()].every((bucket) => bucket.size === 0)).toBe(true)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
+      expect(nextFrame).toBeUndefined()
+      const clearsWhileHidden = clears.mock.calls.length
+      const framesWhileHidden = raf.mock.calls.length
+      clock.mockReturnValue(500)
+      newTail.append(" offscreen")
+      observeStreamingDecay(container)
+      observer.emit(originalTail, true)
+      expect(clears).toHaveBeenCalledTimes(clearsWhileHidden)
+      expect(raf).toHaveBeenCalledTimes(framesWhileHidden)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
+
+      clock.mockReturnValue(550)
+      observer.emit(newTail, true)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(true)
+      expect(highlights.get("naw-stream-decay-0")!.size).toBe(0)
+      expect(highlights.get("naw-stream-decay-1")!.size).toBeGreaterThan(0)
+      expect(raf).toHaveBeenCalledTimes(framesWhileHidden + 1)
+      document.body.append(otherContainer)
+      otherContainer.textContent = "Another"
+      observeStreamingDecay(otherContainer)
+      otherContainer.append(" tail")
+      observeStreamingDecay(otherContainer)
+      settleStreamingDecay(container)
+      expect(observer.disconnect).toHaveBeenCalledTimes(1)
+      expect(otherContainer.hasAttribute("data-streaming-decay-root")).toBe(true)
+      expect(highlights.get("naw-stream-decay-0")!.size).toBeGreaterThan(0)
+      const clearsAfterSettle = clears.mock.calls.length
+      observer.emit(newTail, false)
+      expect(clears).toHaveBeenCalledTimes(clearsAfterSettle)
+      settleStreamingDecay(otherContainer)
+
+      observeStreamingDecay(container)
+      setStreamingDecayEnabled(false)
+      expect(FakeIntersectionObserver.instances.at(-1)!.disconnect)
+        .toHaveBeenCalledTimes(1)
+    } finally {
+      setStreamingDecayEnabled(false)
+      setStreamingDecayEnabled(true)
+      container.remove()
+      otherContainer.remove()
+      clock.mockRestore()
+      clears.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("registers bucket highlights over appended text and clears on settle", () => {
     class FakeHighlight {
       ranges: unknown[]
@@ -313,8 +441,9 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
     vi.stubGlobal("StaticRange", FakeStaticRange)
     vi.stubGlobal("requestAnimationFrame", () => 1)
     vi.stubGlobal("cancelAnimationFrame", () => {})
+    const container = document.createElement("div")
+    const setAttribute = vi.spyOn(container, "setAttribute")
     try {
-      const container = document.createElement("div")
       document.body.appendChild(container)
       container.textContent = "Hello"
       // First observation seeds the baseline — the persistent bucket
@@ -322,6 +451,7 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       // KEYS must never churn per paint (Chromium invalidates ::highlight
       // matching document-wide on registry mutation — the B1 layout storm).
       observeStreamingDecay(container)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(true)
       const emptyRangeCount = () =>
         [...highlights.values()].reduce(
           (total, highlight) => total + highlight.ranges.length,
@@ -332,6 +462,10 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
 
       container.textContent = "Hello world"
       observeStreamingDecay(container)
+      expect(setAttribute).toHaveBeenCalledExactlyOnceWith(
+        "data-streaming-decay-root",
+        ""
+      )
       const newest = highlights.get("naw-stream-decay-0")
       expect(newest).toBeDefined()
       // The appended suffix (offsets 5–11) is fully covered by newest-bucket
@@ -345,10 +479,53 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       // Settlement clears every bucket's ranges synchronously; the
       // registered highlights persist (mutated in place, never re-keyed).
       settleStreamingDecay(container)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
       expect(highlights.size).toBe(12)
       expect(emptyRangeCount()).toBe(0)
+      // A long settled prefix must not multiply JS range-construction work.
+      container.innerHTML =
+        "<p>Settled text. </p>".repeat(1000) + "<p>Ready </p>"
+      observeStreamingDecay(container)
+      container.lastElementChild!.insertAdjacentHTML(
+        "beforeend",
+        "<b>new</b> words"
+      )
+      const forward = vi.spyOn(TreeWalker.prototype, "nextNode")
+      const backward = vi.spyOn(TreeWalker.prototype, "previousNode")
+      const last = vi.spyOn(TreeWalker.prototype, "lastChild")
+      try {
+        observeStreamingDecay(container)
+        const tailRanges = [...highlights.values()].flatMap(
+          (highlight) => highlight.ranges as FakeStaticRange[]
+        )
+        expect(
+          tailRanges
+            .map((range) =>
+              range.startContainer.textContent!.slice(
+                range.startOffset,
+                range.endOffset
+              )
+            )
+            .sort()
+        ).toEqual([" words", "new"])
+        expect(
+          forward.mock.calls.length +
+            backward.mock.calls.length +
+            last.mock.calls.length
+        ).toBeLessThan(8)
+      } finally {
+        forward.mockRestore()
+        backward.mockRestore()
+        last.mockRestore()
+      }
+      // Preference cleanup also releases roots that have already disconnected.
       container.remove()
+      setStreamingDecayEnabled(false)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
+      expect(highlights.size).toBe(0)
     } finally {
+      setAttribute.mockRestore()
+      container.remove()
       // The manager is a module singleton: reset its rAF handle (armed with
       // the stubbed requestAnimationFrame above) so later observes can
       // schedule a real loop.

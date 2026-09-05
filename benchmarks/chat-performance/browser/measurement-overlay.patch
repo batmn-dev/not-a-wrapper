@@ -1,0 +1,377 @@
+diff --git a/app/components/chat-input/button-plus-menu.tsx b/app/components/chat-input/button-plus-menu.tsx
+index 516dc3cf..1edceb2a 100644
+--- a/app/components/chat-input/button-plus-menu.tsx
++++ b/app/components/chat-input/button-plus-menu.tsx
+@@ -162,6 +162,7 @@ function NativeMobileMenuContent({
+
+   return (
+     <DropdownMenuContent
++      data-chat-composer-menu=""
+       side="top"
+       sideOffset={touchOptimized ? -45 : 0}
+       align="start"
+@@ -501,6 +502,7 @@ export function ButtonPlusMenu({
+
+   const editorOwnedContent = (
+     <PopoverContent
++      data-chat-composer-menu=""
+       anchor={composerAnchor}
+       portalContainer={overlayContainerRef}
+       side="bottom"
+diff --git a/app/components/chat-input/composer.tsx b/app/components/chat-input/composer.tsx
+index 4b512b6a..e5c563fe 100644
+--- a/app/components/chat-input/composer.tsx
++++ b/app/components/chat-input/composer.tsx
+@@ -39,6 +39,7 @@ import { TooltipShortcut } from "@/components/ui/tooltip"
+ import { type Attachment } from "@/lib/file-handling"
+ import { StopBulkRoundedIcon } from "@/lib/icons"
+ import { getLogicalModelInfo } from "@/lib/models"
++import type { ChatUiWindow } from "@/lib/observability/chat-ui-observer"
+ import { isReasoningEffortControlEnabled } from "@/lib/reasoning-effort"
+ import { useUser } from "@/lib/user-store/provider"
+ import { cn, debounce } from "@/lib/utils"
+@@ -453,6 +454,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
+         return
+       }
+
++      ;(window as ChatUiWindow).__chatUiPerf?.confirmSend()
++
+       const send = () => {
+         void handleSend()
+       }
+diff --git a/app/components/chat/message-assistant.tsx b/app/components/chat/message-assistant.tsx
+index f024e8f3..229f50d4 100644
+--- a/app/components/chat/message-assistant.tsx
++++ b/app/components/chat/message-assistant.tsx
+@@ -238,6 +238,7 @@ export function MessageAssistant({
+             // Inner data-message-id for quote selection — closest() finds this before the outer section
+             data-message-id={messageId}
+             data-message-author-role="assistant"
++            data-perf-text-length={children.length}
+             data-turn-start-message={
+               isLast && !showInlineBusyPlaceholder ? "true" : undefined
+             }
+diff --git a/app/components/chat/thread-scroll-anchors.ts b/app/components/chat/thread-scroll-anchors.ts
+index 53910083..17fc4597 100644
+--- a/app/components/chat/thread-scroll-anchors.ts
++++ b/app/components/chat/thread-scroll-anchors.ts
+@@ -12,6 +12,8 @@
+  * bottom fallback runs). No eviction and no serialization.
+  */
+
++import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
++
+ type SavedThreadAnchor = {
+   turnId: string
+   offsetFromTopPx: number
+@@ -115,6 +117,7 @@ export function restoreThreadAnchor(
+   if (!turn) return false
+   const rootTop = root.getBoundingClientRect().top
+   const desiredTurnTop = rootTop - saved.offsetFromTopPx
++  noteChatProgrammaticScroll(root)
+   root.scrollTop += turn.getBoundingClientRect().top - desiredTurnTop
+   return true
+ }
+diff --git a/app/components/chat/thread-scroll-target.ts b/app/components/chat/thread-scroll-target.ts
+index 85f22fec..d6c761df 100644
+--- a/app/components/chat/thread-scroll-target.ts
++++ b/app/components/chat/thread-scroll-target.ts
+@@ -1,3 +1,5 @@
++import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
++
+ export type ThreadScrollTarget = {
+   turnId: string
+   messageId?: string
+@@ -85,6 +87,7 @@ export function alignThreadScrollTarget(
+   const previousScrollMarginTop = message?.style.scrollMarginTop
+   if (message) message.style.scrollMarginTop = `${scrollTargetTop(root)}px`
+
++  noteChatProgrammaticScroll(root)
+   scrollTarget.scrollIntoView({
+     behavior: options.behavior ?? resolveBehavior(behaviorTurn),
+     block: "start",
+@@ -98,6 +101,7 @@ export function alignThreadScrollTarget(
+     root.getBoundingClientRect().top -
+     scrollTargetTop(root)
+   if (Math.abs(alignmentDelta) > THREAD_TARGET_ALIGNMENT_EPSILON_PX) {
++    noteChatProgrammaticScroll(root)
+     root.scrollTo({
+       left: root.scrollLeft,
+       top: root.scrollTop + alignmentDelta,
+diff --git a/app/components/chat/thread-scroll.tsx b/app/components/chat/thread-scroll.tsx
+index 3fccf6a4..da73c1c2 100644
+--- a/app/components/chat/thread-scroll.tsx
++++ b/app/components/chat/thread-scroll.tsx
+@@ -8,6 +8,7 @@
+  * negative CSS min-height values are ignored.
+  */
+ import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
++import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
+ import { useCallback, useRef, useState } from "react"
+ import { ThreadTail } from "./thread-bottom-container"
+ import { restoreThreadAnchor, saveThreadAnchor } from "./thread-scroll-anchors"
+@@ -217,7 +218,10 @@ function scheduleSubmitTurnScroll(turn: HTMLElement) {
+     innerFrame = requestAnimationFrame(() => {
+       innerFrame = null
+       const root = closestScrollRoot(turn)
+-      if (root) setScrollFromEnd(root, false)
++      if (root) {
++        setScrollFromEnd(root, false)
++        noteChatProgrammaticScroll(root)
++      }
+       turn.scrollIntoView({
+         behavior: SUBMIT_TURN_SCROLL_BEHAVIOR,
+         block: "end",
+@@ -412,6 +416,7 @@ export function ThreadScrollEdge({
+     if (!rootEl) return
+     if (chatId !== null && restoreThreadAnchor(chatId, rootEl)) return
+     const toBottom = () => {
++      noteChatProgrammaticScroll(rootEl)
+       rootEl.scrollTop = rootEl.scrollHeight
+     }
+     let frame: number | null = requestAnimationFrame(() => {
+diff --git a/app/components/chat/use-detachable-chat-stream.ts b/app/components/chat/use-detachable-chat-stream.ts
+index a76b64e8..f03005e7 100644
+--- a/app/components/chat/use-detachable-chat-stream.ts
++++ b/app/components/chat/use-detachable-chat-stream.ts
+@@ -20,6 +20,10 @@ import {
+   markChatPerfRequestDispatched,
+   takeChatPerfHeader,
+ } from "@/lib/observability/chat-performance-client"
++import type {
++  ChatUiObserver,
++  ChatUiWindow,
++} from "@/lib/observability/chat-ui-observer"
+ import type { UIMessage } from "@ai-sdk/react"
+ import { Chat } from "@ai-sdk/react"
+ import {
+@@ -139,21 +143,30 @@ type TransportStream = Awaited<
+
+ /**
+  * Marks the first parsed chunk and first text delta. Reads only the
+- * chunk's `type` discriminant, retains nothing, and is skipped entirely when
+- * instrumentation is off — the SDK then consumes the original stream.
++ * chunk type and text length, retains no content, and is skipped entirely
++ * when neither benchmark instrumentation nor sampled UI observation is enabled.
+  */
+-function instrumentAcceptedStream(stream: TransportStream): TransportStream {
+-  if (!isChatPerfClientEnabled()) return stream
++function instrumentAcceptedStream(
++  stream: TransportStream,
++  receiveUi: ReturnType<ChatUiObserver["bindStream"]> | undefined
++): TransportStream {
++  const instrumented = isChatPerfClientEnabled()
++  if (!instrumented && !receiveUi) return stream
+   let sawFirstChunk = false
+   let sawFirstTextDelta = false
+   return stream.pipeThrough(
+     new TransformStream({
+       transform(chunk, controller) {
+-        if (!sawFirstChunk) {
++        receiveUi?.(
++          chunk.type,
++          chunk.type === "text-delta" ? chunk.delta.length : 0
++        )
++        if (instrumented && !sawFirstChunk) {
+           sawFirstChunk = true
+           markChatPerfFirstStreamChunk()
+         }
+         if (
++          instrumented &&
+           !sawFirstTextDelta &&
+           (chunk as { type?: string } | null)?.type === "text-delta"
+         ) {
+@@ -201,6 +214,11 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
+     try {
+       // The next statement performs the HTTP request.
+       markChatPerfRequestDispatched()
++      // Bind before awaiting headers: a stopped request can resolve after another send begins.
++      const receiveUi =
++        typeof window !== "undefined"
++          ? (window as ChatUiWindow).__chatUiPerf?.bindStream()
++          : undefined
+       // HttpChatTransport resolves here only after fetch returned an OK
+       // response with a body. The route performs durable prepareGeneration —
+       // including the idempotent first-message claim — before constructing
+@@ -208,7 +226,7 @@ class AcceptanceAwareChatTransport extends DefaultChatTransport<UIMessage> {
+       // itself remains unconsumed and can continue independently.
+       const stream = await super.sendMessages(dispatchOptions)
+       this.acceptances.accept(options.messageId)
+-      return instrumentAcceptedStream(stream)
++      return instrumentAcceptedStream(stream, receiveUi)
+     } catch (error) {
+       this.acceptances.reject(options.messageId, error)
+       throw error
+diff --git a/lib/chat-performance/message-throttle.ts b/lib/chat-performance/message-throttle.ts
+index 81519ba6..ddecb35f 100644
+--- a/lib/chat-performance/message-throttle.ts
++++ b/lib/chat-performance/message-throttle.ts
+@@ -1,4 +1,5 @@
+ import { markChatPerf } from "@/lib/observability/chat-performance"
++import { noteChatPublicationFrame } from "@/lib/observability/chat-ui-events"
+ import type { Chat, UIMessage } from "@ai-sdk/react"
+
+ type ScheduledPublication =
+@@ -58,10 +59,11 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
+
+   const publish = () => {
+     cancelScheduledPublication()
+-    if (!pending) return
++    if (!pending) return false
+     pending = false
+     if (chat.status === "streaming") streamingPublicationCount++
+     onChange()
++    return true
+   }
+
+   const schedule = () => {
+@@ -71,7 +73,9 @@ export function subscribeToFrameAlignedMessages<UI_MESSAGE extends UIMessage>(
+     if (typeof requestAnimationFrame === "function") {
+       scheduled = {
+         kind: "frame",
+-        id: requestAnimationFrame(publish),
++        id: requestAnimationFrame(() => {
++          if (publish()) noteChatPublicationFrame()
++        }),
+       }
+       return
+     }
+diff --git a/instrumentation-client.ts b/instrumentation-client.ts
+index 622750f8..376d6fad 100644
+--- a/instrumentation-client.ts
++++ b/instrumentation-client.ts
+@@ -7,6 +7,9 @@ import {
+ } from "./lib/observability/sentry-scrubbing"
+ import { sentryTracesSampler } from "./lib/observability/sentry-tracing"
+
++const chatUiBenchmark =
++  process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"
++
+ Sentry.init({
+   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+   environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
+@@ -16,15 +19,16 @@ Sentry.init({
+   beforeSend: sentryBeforeSend,
+   beforeSendSpan: sentryBeforeSendSpan,
+   beforeBreadcrumb: sentryBeforeBreadcrumb,
+-  integrations: [
++  // Deterministic captures exclude remotely configured/random replay work.
++  integrations: chatUiBenchmark ? [] : [
+     Sentry.replayIntegration({
+       maskAllText: true,
+       maskAllInputs: true,
+       blockAllMedia: true,
+     }),
+   ],
+-  replaysSessionSampleRate: 0.1,
+-  replaysOnErrorSampleRate: 1,
++  replaysSessionSampleRate: chatUiBenchmark ? 0 : 0.1,
++  replaysOnErrorSampleRate: chatUiBenchmark ? 0 : 1,
+ })
+
+ const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
+@@ -34,7 +38,52 @@ if (posthogKey && !posthog.__loaded) {
+     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+     person_profiles: "identified_only",
+     capture_pageview: false,
++    ...(chatUiBenchmark ? { disable_session_recording: true } : {}),
+   })
+ }
+
++if (chatUiBenchmark) performance.mark("chat-perf:replay_disabled_v1")
++
+ export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
++
++// Opt-in until the instrumented/uninstrumented browser comparison is reviewed.
++// Browser INP remains Sentry's native metric; these are named chat DOM/frame proxies.
++const chatUiSampleRate = Number(
++  process.env.NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE ?? 0
++)
++if (
++  chatUiBenchmark ||
++  (Number.isFinite(chatUiSampleRate) &&
++    Math.random() < Math.min(1, Math.max(0, chatUiSampleRate)))
++) {
++  void import("./lib/observability/chat-ui-observer")
++    .then(({ installChatUiObserver }) =>
++      installChatUiObserver({
++        resumeOnVisible: !chatUiBenchmark,
++        report(metric, durationMs) {
++          if (chatUiBenchmark) {
++            console.info(
++              JSON.stringify({ _tag: "chat_ui_perf", metric, durationMs })
++            )
++            return
++          }
++          Sentry.metrics.distribution(`chat.ui.${metric}`, durationMs, {
++            unit: "millisecond",
++            attributes: {
++              measurement: "dom-frame-v3",
++              ...(metric.startsWith("deltaToContentFrame") || metric === "inputToFirstTextFrameMs"
++                ? { contentFrameProtocol: "publisher-frame-v1" }
++                : {}),
++              ...(metric.startsWith("navigationToSend")
++                ? { accountReadinessProtocol: "matching-account-v1" }
++                : {}),
++              ...(metric.startsWith("menuToFrame")
++                ? { menuProtocol: "activation-v1" }
++                : {}),
++            },
++          })
++        },
++      })
++    )
++    .catch((error) => Sentry.captureException(error))
++}
+diff --git a/lib/user-store/provider.tsx b/lib/user-store/provider.tsx
+--- a/lib/user-store/provider.tsx
++++ b/lib/user-store/provider.tsx
+@@ -8,6 +8,7 @@
+
+ import { api } from "@/convex/_generated/api"
+ import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
++import { noteChatAccountReadiness } from "@/lib/observability/chat-ui-events"
+ import { defaultPreferences } from "@/lib/user-preference-store/utils"
+ import type { UserProfile } from "@/lib/user/types"
+ import { useAuth } from "@workos-inc/authkit-nextjs/components"
+@@ -18,6 +19,7 @@
+   useCallback,
+   useContext,
+   useEffect,
++  useLayoutEffect,
+   useRef,
+   useState,
+   type PropsWithChildren,
+@@ -55,7 +57,10 @@
+   const updateProfileMutation = useMutation(api.users.updateProfile)
+   const createOrUpdateMutation = useMutation(api.users.createOrUpdate)
+   const { user: workosUser, loading: isAuthLoading } = useAuth()
+-  const { isAuthenticated: isConvexAuthenticated } = useConvexAuth()
++  const {
++    isAuthenticated: isConvexAuthenticated,
++    isLoading: isConvexAuthLoading,
++  } = useConvexAuth()
+
+   const { data: convexUser } = usePerUserQuery(api.users.getCurrent)
+
+@@ -195,6 +200,20 @@
+     [user?.id, updateProfileMutation]
+   )
+
++  const isChatAdmissionReady =
++    !isAuthLoading &&
++    (user?.id
++      ? workosUser?.id === user.id &&
++        isConvexAuthenticated &&
++        convexUser?.workosUserId === user.id
++      : !workosUser && !isConvexAuthLoading && !isConvexAuthenticated)
++
++  // Publish committed state before the external frame observer can sample it.
++  useLayoutEffect(() => {
++    noteChatAccountReadiness(isChatAdmissionReady)
++    return () => noteChatAccountReadiness(undefined)
++  }, [isChatAdmissionReady])
++
+   return (
+     <UserContext.Provider value={{ user, isLoading, updateUser }}>
+       {children}

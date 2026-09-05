@@ -1,3 +1,5 @@
+import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
+
 export type ThreadScrollTarget = {
   turnId: string
   messageId?: string
@@ -85,6 +87,7 @@ export function alignThreadScrollTarget(
   const previousScrollMarginTop = message?.style.scrollMarginTop
   if (message) message.style.scrollMarginTop = `${scrollTargetTop(root)}px`
 
+  noteChatProgrammaticScroll(root)
   scrollTarget.scrollIntoView({
     behavior: options.behavior ?? resolveBehavior(behaviorTurn),
     block: "start",
@@ -98,6 +101,7 @@ export function alignThreadScrollTarget(
     root.getBoundingClientRect().top -
     scrollTargetTop(root)
   if (Math.abs(alignmentDelta) > THREAD_TARGET_ALIGNMENT_EPSILON_PX) {
+    noteChatProgrammaticScroll(root)
     root.scrollTo({
       left: root.scrollLeft,
       top: root.scrollTop + alignmentDelta,

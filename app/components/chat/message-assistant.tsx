@@ -238,6 +238,7 @@ export function MessageAssistant({
             // Inner data-message-id for quote selection — closest() finds this before the outer section
             data-message-id={messageId}
             data-message-author-role="assistant"
+            data-perf-text-length={children.length}
             data-turn-start-message={
               isLast && !showInlineBusyPlaceholder ? "true" : undefined
             }

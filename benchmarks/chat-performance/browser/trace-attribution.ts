@@ -12,7 +12,13 @@
  *
  * Usage:
  *   NEXT_DIST_DIR=.next-perf build present, then
- *   bun run benchmarks/chat-performance/browser/trace-attribution.ts
+ *   CI=true bun run benchmarks/chat-performance/browser/trace-attribution.ts
+ * Observer overhead: add PERF_OBSERVER_AB=true CASE=b1-long-markdown-100-fixed.
+ * One warmup pair and five alternating measured pairs use fresh guest contexts.
+ * Native trace evidence and observer-overhead-*.json go to OUT_DIR; this compares
+ * the benchmark DOM observer, without production telemetry reporting overhead.
+ * Rendering control: STREAMING_PRESENTATION=smooth|quick uses the existing
+ * guest preference; each labeled capture is diagnostic, never a baseline.
  * Env: BASE_URL (reuse a running perf server), CASE (one case id), OUT_DIR
  * (default: this directory's results/traces, gitignored with results/),
  * INJECT_CSS_FILE (stylesheet injected into the page before the send —
@@ -20,16 +26,22 @@
  * LABEL suffixes the output filenames so variants don't overwrite baseline).
  */
 import { deterministicScenarioText } from "@/app/api/chat/deterministic-provider"
-import { spawn, type ChildProcess } from "node:child_process"
+import { installChatUiObserver, type ChatUiWindow } from "@/lib/observability/chat-ui-observer"
+import { execFileSync, spawn, type ChildProcess } from "node:child_process"
+import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import os from "node:os"
 import { chromium, type Browser, type Page } from "playwright"
+import { BENCHMARK_TYPING_DELAY_MS } from "./scenarios"
 
 const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   "../../.."
 )
 const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next-perf"
+const OBSERVER_AB = process.env.PERF_OBSERVER_AB === "true"
+const STREAMING_PRESENTATION = process.env.STREAMING_PRESENTATION
 const PERF_PORT = Number(process.env.PERF_PORT ?? 3111)
 const OUT_DIR =
   process.env.OUT_DIR ??
@@ -160,6 +172,41 @@ async function waitForMark(
   throw new Error(`timed out waiting for mark ${name} (${timeoutMs}ms)`)
 }
 
+async function drainSetupFrames(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    if (document.visibilityState !== "visible")
+      throw new Error("trace setup lost foreground visibility")
+    return new Promise<void>((resolve, reject) => {
+      let frame = 0
+      let task: ReturnType<typeof setTimeout> | undefined
+      const finish = (error?: Error) => {
+        cancelAnimationFrame(frame)
+        clearTimeout(task)
+        clearTimeout(deadline)
+        document.removeEventListener("visibilitychange", visibility)
+        if (error) reject(error)
+        else resolve()
+      }
+      const visibility = () => {
+        if (document.visibilityState !== "visible")
+          finish(new Error("trace setup lost foreground visibility"))
+      }
+      const deadline = setTimeout(
+        () => finish(new Error("trace setup did not drain within 5 seconds")),
+        5000
+      )
+      document.addEventListener("visibilitychange", visibility)
+      frame = requestAnimationFrame(() => {
+        task = setTimeout(() => {
+          frame = requestAnimationFrame(() => {
+            task = setTimeout(() => finish(), 0)
+          })
+        }, 0)
+      })
+    })
+  })
+}
+
 async function clearGuestIdentity(page: Page): Promise<void> {
   await page.evaluate(async () => {
     localStorage.clear()
@@ -255,9 +302,9 @@ function analyzeTrace(tracePath: string, caseId: string) {
         event.pid === mainPid &&
         event.tid === mainTid
     )?.ts
-  const windowStart = markTs("chat_send_intent") ?? markTs("first_visible_text")
+  const windowStart = markTs("chat_send_intent")
   const windowEnd = markTs("stream_terminal")
-  if (windowStart === undefined || windowEnd === undefined) {
+  if (windowStart === undefined || windowEnd === undefined || windowEnd <= windowStart) {
     throw new Error("send/terminal marks missing from trace window")
   }
 
@@ -272,6 +319,35 @@ function analyzeTrace(tracePath: string, caseId: string) {
       event.ts >= windowStart &&
       event.ts <= windowEnd
   )
+
+  // Clip and union native intervals over the full window, including short work.
+  const nativeWorkMs = (events: TraceEvent[]) => {
+    const spans = events
+      .filter((event) => event.ph === "X" && event.ts < windowEnd &&
+        event.ts + (event.dur ?? 0) > windowStart)
+      .map((event) => [Math.max(windowStart, event.ts),
+        Math.min(windowEnd, event.ts + (event.dur ?? 0))] as const)
+      .sort((a, b) => a[0] - b[0])
+    let coveredUntil = windowStart
+    let total = 0
+    for (const [start, end] of spans) {
+      total += Math.max(0, end - Math.max(start, coveredUntil)) / 1000
+      coveredUntil = Math.max(coveredUntil, end)
+    }
+    return total
+  }
+  const mainThreadWorkMs = nativeWorkMs(main.filter((event) =>
+    event.name.endsWith("RunTask") && (event.cat ?? "").includes("toplevel")))
+  if (mainThreadWorkMs <= 0) throw new Error("native scheduler work missing from trace")
+  const eventTimingEntries = main.flatMap((event) => {
+    if (event.name !== "EventTiming" || event.ph !== "b") return []
+    const data = event.args?.data as Record<string, unknown> | undefined
+    if (typeof data?.duration !== "number" || data.duration <= 0 ||
+      typeof data.type !== "string" || typeof data.interactionId !== "number" ||
+      data.interactionId === 0 || event.ts >= windowEnd ||
+      event.ts + data.duration * 1000 <= windowStart) return []
+    return [{ type: data.type, durationMs: data.duration }]
+  })
 
   const attributions: TaskAttribution[] = tasks.map((task) => {
     const spanEnd = task.ts + (task.dur ?? 0)
@@ -307,6 +383,10 @@ function analyzeTrace(tracePath: string, caseId: string) {
   return {
     caseId,
     streamWindowMs: (windowEnd - windowStart) / 1000,
+    mainThreadWorkMs,
+    layoutWorkMs: nativeWorkMs(main.filter((event) => event.name === "Layout")),
+    styleWorkMs: nativeWorkMs(main.filter((event) => event.name === "UpdateLayoutTree")),
+    eventTimingEntries,
     longTaskCount: attributions.length,
     longTaskTotalMs: attributions.reduce((sum, a) => sum + a.durMs, 0),
     tbtMs,
@@ -318,15 +398,49 @@ function analyzeTrace(tracePath: string, caseId: string) {
   }
 }
 
+function captureMetadata(browser: Browser, traceCase: TraceCase) {
+  const buildIdPath = path.join(REPO_ROOT, DIST_DIR, "BUILD_ID")
+  return {
+    typingCadenceMs: BENCHMARK_TYPING_DELAY_MS,
+    injectedCssHash: process.env.INJECT_CSS_FILE
+      ? createHash("sha256").update(readFileSync(process.env.INJECT_CSS_FILE)).digest("hex")
+      : null,
+    replayPolicy: "disabled-v1",
+    commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT, encoding: "utf8" }).trim(),
+    buildId: process.env.BASE_URL ? "external-unverified" : readFileSync(buildIdPath, "utf8").trim(),
+    browser: browser.version(),
+    platform: `${os.platform()} ${os.release()} ${os.arch()}`,
+    cpuModel: os.cpus()[0]?.model,
+    logicalCpus: os.cpus().length,
+    memoryBytes: os.totalmem(),
+    viewport: { width: 1440, height: 900 },
+    cpuThrottle: traceCase.cpuThrottle,
+    authentication: "fresh guest per sample",
+    httpCache: "fresh browser context per sample",
+    fixture: traceCase.directive,
+    fixtureHash: createHash("sha256").update(JSON.stringify(deterministicScenarioText(traceCase.scenario))).digest("hex"),
+    traceCategories: TRACE_CATEGORIES,
+  }
+}
+
 async function runCase(
   browser: Browser,
   baseUrl: string,
-  traceCase: TraceCase
+  traceCase: TraceCase,
+  observerRun?: { enabled: boolean; label: string }
 ) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
   })
   const page = await context.newPage()
+  if (observerRun || STREAMING_PRESENTATION) {
+    await context.addInitScript(installChatUiObserver)
+    await context.addInitScript(() => {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") performance.mark("trace:hidden")
+      })
+    })
+  }
   const cdp = await context.newCDPSession(page)
   if (traceCase.cpuThrottle > 1) {
     await cdp.send("Emulation.setCPUThrottlingRate", {
@@ -349,27 +463,108 @@ async function runCase(
 
   try {
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
-    await clearGuestIdentity(page)
+    await waitForMark(page, "replay_disabled_v1", 15000)
+    // newContext is already a fresh guest; do not mint another guest for A/B.
+    if (!observerRun) await clearGuestIdentity(page)
     const editor = page.locator('[contenteditable="true"]').first()
     await editor.waitFor({ state: "visible", timeout: 15000 })
+    if (STREAMING_PRESENTATION) {
+      await page.evaluate((presentation) => {
+        localStorage.setItem("user-preferences", JSON.stringify({ streamingPresentation: presentation }))
+        window.dispatchEvent(new Event("user-preferences-change"))
+      }, STREAMING_PRESENTATION)
+    }
     // After the reload above, so an injected probe stylesheet survives the run.
     if (process.env.INJECT_CSS_FILE) {
       await page.addStyleTag({ path: process.env.INJECT_CSS_FILE })
     }
 
-    const label = process.env.LABEL ? `.${process.env.LABEL}` : ""
+    const label = observerRun ? `.${observerRun.label}` : process.env.LABEL ? `.${process.env.LABEL}` : ""
     const tracePath = path.join(OUT_DIR, `${traceCase.id}${label}.trace.json`)
+    await editor.click()
+    await page.keyboard.type(traceCase.directive, { delay: BENCHMARK_TYPING_DELAY_MS })
+    if (observerRun || STREAMING_PRESENTATION) {
+      if (observerRun) {
+        await page.waitForFunction(() => Boolean((window as ChatUiWindow).__chatUiPerf))
+      }
+      // Drain setup's DOM scan and post-frame task in both arms. A second cycle
+      // includes scans queued by DOM commits later in the first rendering step.
+      await drainSetupFrames(page)
+      if (observerRun && !observerRun.enabled) {
+        await page.evaluate(() => {
+          // The application's delayed import must not reinstall the off arm.
+          const observedWindow = window as ChatUiWindow
+          observedWindow.__chatUiPerfDisabled = true
+          observedWindow.__chatUiPerf!.dispose()
+        })
+      }
+    }
+    const responsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/chat" && response.request().method() === "POST",
+    { timeout: timeoutMs })
+    // Observe rejection immediately while the independent terminal wait runs.
+    const bodyPromise = responsePromise.then(async (response) => {
+      if (!response.ok()) throw new Error(`chat response status ${response.status()}`)
+      return response.text()
+    })
+    void bodyPromise.catch(() => {})
     await browser.startTracing(page, {
       path: tracePath,
       screenshots: false,
       categories: TRACE_CATEGORIES,
     })
-    await editor.click()
-    await page.keyboard.type(traceCase.directive)
     await page.locator('[data-testid="send-button"]').click()
+    if (STREAMING_PRESENTATION) {
+      await waitForMark(page, "first_visible_text", timeoutMs)
+      // Observe the actual overlay gate after text renders, not just storage.
+      await page.waitForFunction((presentation) => {
+        const registered = Array.from(CSS.highlights.keys()).some((name) => name.startsWith("naw-stream-decay-"))
+        return registered === (presentation === "smooth")
+      }, STREAMING_PRESENTATION, { timeout: 5000 })
+    }
+    if (observerRun) {
+      await waitForMark(page, "first_visible_text", timeoutMs)
+      await editor.click()
+      await page.keyboard.type("A draft.", { delay: BENCHMARK_TYPING_DELAY_MS })
+      if (await page.evaluate(() => performance.getEntriesByName("chat-perf:stream_terminal").length > 0)) {
+        throw new Error("typing probe missed the active stream")
+      }
+    }
     await waitForMark(page, "stream_terminal", timeoutMs)
     await page.waitForTimeout(750)
     await browser.stopTracing()
+
+    let bodyTimer: ReturnType<typeof setTimeout> | undefined
+    let body: string
+    try {
+      body = await Promise.race([bodyPromise, new Promise<never>((_, reject) => {
+        bodyTimer = setTimeout(() => reject(new Error("SSE capture timed out")), 10_000)
+      })])
+    } finally {
+      clearTimeout(bodyTimer)
+    }
+    let text = ""
+    let reasoning = ""
+    let finished = false
+    for (const line of body.split("\n")) {
+      if (!line.startsWith("data:")) continue
+      const payload = line.slice(5).trim()
+      if (!payload || payload === "[DONE]") continue
+      const part: { type?: string; delta?: string } = JSON.parse(payload)
+      if (part.type === "error") throw new Error("stream returned an error")
+      if (part.type === "finish") finished = true
+      if (part.type === "text-delta") text += part.delta ?? ""
+      if (part.type === "reasoning-delta") reasoning += part.delta ?? ""
+    }
+    const validPage = await page.evaluate((expectedObserver) => {
+      const terminal = performance.getEntriesByName("chat-perf:stream_terminal").at(-1) as PerformanceMark | undefined
+      return terminal?.detail?.outcome === "finish" && document.visibilityState === "visible" &&
+        performance.getEntriesByName("trace:hidden").length === 0 &&
+        (expectedObserver === null || Boolean((window as ChatUiWindow).__chatUiPerf) === expectedObserver)
+    }, observerRun?.enabled ?? null)
+    if (!validPage || !finished || text !== oracle.text || reasoning !== oracle.reasoning) {
+      throw new Error("invalid sample: terminal, foreground, observer state, or full stream oracle mismatch")
+    }
 
     // The app's own measures, for the join: per-advance/highlight durations.
     const measures = await page.evaluate(() =>
@@ -393,12 +588,33 @@ async function runCase(
 
     const analysis = {
       ...analyzeTrace(tracePath, traceCase.id),
+      correctnessOk: true,
+      diagnosticOnly: true,
+      metadata: captureMetadata(browser, traceCase),
+      geometry: await page.evaluate(() => {
+        const markdown = document.querySelector(".markdown")?.getBoundingClientRect()
+        const root = document.querySelector<HTMLElement>("[data-scroll-root]")
+        return {
+          markdownWidth: markdown?.width,
+          markdownHeight: markdown?.height,
+          scrollWidth: root?.scrollWidth,
+          scrollHeight: root?.scrollHeight,
+          clientWidth: root?.clientWidth,
+          clientHeight: root?.clientHeight,
+        }
+      }),
+      streamingPresentation: STREAMING_PRESENTATION ?? "smooth",
+      replayPolicy: "disabled-v1",
+      observerEnabled: observerRun?.enabled,
       appMeasures: {
         projectionAdvanceCount: count("markdown_projection_advance"),
         projectionAdvanceTotalMs: sum("markdown_projection_advance"),
         shikiHighlightCount: count("shiki_highlight"),
         shikiHighlightTotalMs: sum("shiki_highlight"),
       },
+    }
+    if (observerRun && !analysis.eventTimingEntries.some((entry) => entry.type === "keydown")) {
+      throw new Error("native trace did not capture the typing probe")
     }
     const outPath = path.join(OUT_DIR, `${traceCase.id}${label}.analysis.json`)
     writeFileSync(outPath, JSON.stringify(analysis, null, 2))
@@ -417,22 +633,90 @@ async function runCase(
         `(app-measured ${Math.round(analysis.appMeasures.projectionAdvanceTotalMs)}ms), ` +
         `shiki app-measured ${Math.round(analysis.appMeasures.shikiHighlightTotalMs)}ms → ${outPath}`
     )
+    return analysis
   } finally {
+    await browser.stopTracing().catch(() => {})
     await context.close()
   }
 }
 
 async function main() {
+  if (process.env.CI !== "true") {
+    throw new Error("This isolated-browser trace tool is CI-only; use authenticated Chrome locally")
+  }
+  if (!Number.isInteger(PERF_PORT) || PERF_PORT < 1 || PERF_PORT > 65535 || PERF_PORT === 3000) {
+    throw new Error("PERF_PORT must be a valid isolated port other than 3000")
+  }
+  if (STREAMING_PRESENTATION && !["smooth", "quick"].includes(STREAMING_PRESENTATION)) {
+    throw new Error("STREAMING_PRESENTATION must be smooth or quick")
+  }
+  if (STREAMING_PRESENTATION && (OBSERVER_AB || process.env.EMULATE_REDUCED_MOTION || process.env.BASE_URL)) {
+    throw new Error("Rendering control requires an owned server and cannot combine with observer A/B or reduced motion")
+  }
+  if (OBSERVER_AB && ["BASE_URL", "INJECT_CSS_FILE", "EMULATE_REDUCED_MOTION", "EXTRA_CATEGORIES"].some((key) => process.env[key])) {
+    throw new Error("Observer A/B requires the owned perf server and unmodified tracing/rendering configuration")
+  }
+  const wanted = process.env.CASE ?? (OBSERVER_AB ? CASES[0].id : undefined)
+  const selected = CASES.filter((traceCase) => !wanted || traceCase.id === wanted)
+  if (selected.length === 0) throw new Error(`unknown CASE: ${wanted}`)
   mkdirSync(OUT_DIR, { recursive: true })
   const externalBaseUrl = process.env.BASE_URL
   const baseUrl = externalBaseUrl ?? `http://localhost:${PERF_PORT}`
   await ensureServer(baseUrl, Boolean(externalBaseUrl))
   const browser = await chromium.launch({ channel: process.env.PW_CHANNEL })
   try {
-    const wanted = process.env.CASE
-    for (const traceCase of CASES) {
-      if (wanted && traceCase.id !== wanted) continue
-      await runCase(browser, baseUrl, traceCase)
+    for (const traceCase of selected) {
+      if (!OBSERVER_AB) {
+        await runCase(browser, baseUrl, traceCase)
+        continue
+      }
+      const captureId = `${traceCase.id}-${Date.now()}`
+      type Result = Awaited<ReturnType<typeof runCase>>
+      const pairs: Array<{
+        pair: number
+        order: string[]
+        on: Result
+        off: Result
+        mainThreadWorkDeltaMs: number
+        mainThreadWorkDeltaPercent: number
+      }> = []
+      for (let pair = 0; pair <= 5; pair++) {
+        const order = pair % 2 === 0 ? [true, false] : [false, true]
+        const results = new Map<boolean, Result>()
+        for (const enabled of order) {
+          const label = `${captureId}.${pair === 0 ? "warmup" : `pair-${pair}`}.${enabled ? "on" : "off"}`
+          results.set(enabled, await runCase(browser, baseUrl, traceCase, { enabled, label }))
+        }
+        if (pair === 0) continue
+        const on = results.get(true)!
+        const off = results.get(false)!
+        pairs.push({
+          pair,
+          order: order.map((enabled) => enabled ? "on" : "off"),
+          on,
+          off,
+          mainThreadWorkDeltaMs: on.mainThreadWorkMs - off.mainThreadWorkMs,
+          mainThreadWorkDeltaPercent: (on.mainThreadWorkMs / off.mainThreadWorkMs - 1) * 100,
+        })
+      }
+      const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+      const summaryPath = path.join(OUT_DIR, `observer-overhead-${captureId}.json`)
+      writeFileSync(summaryPath, JSON.stringify({
+        schema: "observer-overhead-v1",
+        scope: "incremental benchmark DOM observer during Send-to-terminal, excluding startup, session replay, and production reporting",
+        diagnosticOnly: true,
+        nativeWorkWindow: "chat_send_intent through stream_terminal; overlapping RunTask intervals clipped and unioned",
+        inputMetric: "individual native trace EventTiming durations; not logical interaction maxima or INP",
+        metadata: {
+          ...captureMetadata(browser, traceCase),
+          warmupPairs: 1,
+          measuredPairs: pairs.length,
+        },
+        medianPairedMainThreadWorkDeltaMs: median(pairs.map((pair) => pair.mainThreadWorkDeltaMs)),
+        medianPairedMainThreadWorkDeltaPercent: median(pairs.map((pair) => pair.mainThreadWorkDeltaPercent)),
+        pairs,
+      }, null, 2))
+      log(`observer A/B: ${pairs.length} valid pairs; median native main-thread work delta ${median(pairs.map((pair) => pair.mainThreadWorkDeltaPercent)).toFixed(2)}% → ${summaryPath}`)
     }
   } finally {
     await browser.close()

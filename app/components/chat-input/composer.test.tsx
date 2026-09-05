@@ -441,6 +441,22 @@ describe("Composer primary action", () => {
     })
   }
 
+  it("skips unchanged parent renders while keeping draft and status updates live", () => {
+    const props = { onTurn: vi.fn(() => true), stop: vi.fn(), status: "ready" as const }
+    const mounted = renderComposer(props)
+    const initialRenders = modelSelectorMockCalls.length
+
+    rerenderComposer(props)
+    expect(modelSelectorMockCalls).toHaveLength(initialRenders)
+
+    changeComposerValue("new draft")
+    expect(promptInputMockCalls.at(-1)?.value).toBe("new draft")
+    expect(modelSelectorMockCalls.length).toBeGreaterThan(initialRenders)
+
+    rerenderComposer({ ...props, status: "streaming" })
+    expect(mounted.querySelector('[data-testid="send-button"]')?.getAttribute("aria-label")).toBe("Stop")
+  })
+
   it("keeps search outside the editor document and preserves the surface placeholder", () => {
     composerMocks.enableSearch = true
     renderComposer({ placeholder: "Message this project" })
@@ -482,6 +498,7 @@ describe("Composer primary action", () => {
       stop,
       isSubmitting: false,
       status: "streaming",
+      isSendReady: false,
     })
 
     const button = mounted.querySelector(
@@ -559,6 +576,21 @@ describe("Composer primary action", () => {
     renderComposer({ isSubmitting: false, status: "ready" })
 
     expect(promptInputActionMockCalls.at(-1)?.tooltip).toBe("Message is empty")
+  })
+
+  it("keeps the draft writable while Send waits for history, then sends the retained draft", async () => {
+    const onTurn = vi.fn(async () => true)
+    const mounted = renderComposer({ onTurn, isSendReady: false, status: "ready" })
+    changeComposerValue("draft while loading")
+    expect(mounted.querySelector("textarea")?.disabled).toBe(false)
+    expect(mounted.querySelector('[aria-label="Send prompt"]')?.getAttribute("aria-disabled")).toBe("true")
+    await act(async () => { promptInputMockCalls.at(-1)?.onSubmit?.() })
+    expect(onTurn).not.toHaveBeenCalled()
+    expect(promptInputMockCalls.at(-1)?.value).toBe("draft while loading")
+
+    rerenderComposer({ onTurn, isSendReady: true, status: "ready" })
+    await act(async () => { promptInputMockCalls.at(-1)?.onSubmit?.() })
+    expect(onTurn).toHaveBeenCalledWith(expect.objectContaining({ text: "draft while loading" }))
   })
 
   it("routes native form submission through the guarded send contract", async () => {

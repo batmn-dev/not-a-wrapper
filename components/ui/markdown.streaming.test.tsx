@@ -11,6 +11,7 @@
 // unclosed terminal fence settles the moment the message does.
 
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
+import * as growingBlockTail from "@/lib/markdown/growing-block-tail"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -236,6 +237,20 @@ describe("Markdown terminal-block stability", () => {
     renderedParagraphs.length = 0
     render(settledPrefix + "Growing tail with more words")
     expect(renderedParagraphs.length).toBe(1)
+  })
+
+  it("prepares the growing tail once per appended source update", () => {
+    const view = mount("Stable paragraph.\n\nGrowing tail", true)
+    const stableParagraph = container?.querySelector("p")
+    const mend = vi.spyOn(growingBlockTail, "mendGrowingBlockTail")
+    try {
+      view.rerender("Stable paragraph.\n\nGrowing tail with **more**", true)
+      expect(mend).toHaveBeenCalledExactlyOnceWith("Growing tail with **more**")
+      expect(container?.querySelector("p")).toBe(stableParagraph)
+      expect(container?.querySelector("strong")?.textContent).toBe("more")
+    } finally {
+      mend.mockRestore()
+    }
   })
 
   it("non-prefix corrections reset block identity (remount) while appends preserve DOM nodes", () => {

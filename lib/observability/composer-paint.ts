@@ -4,7 +4,6 @@ import {
   type ChatPerfEventName,
 } from "./chat-performance"
 
-const INPUT_STALE_AFTER_MS = 1000
 const NEXT_PAINT_EVENT = "composer.keystroke_to_next_paint"
 const SETTLED_PAINT_EVENT = "composer.keystroke_to_settled_paint"
 
@@ -49,8 +48,7 @@ const MEASURED_INPUT_TYPES = new Set([
 /**
  * Measures the browser-sensitive editor → React Composer paint handoff without
  * recording draft content. The controller uses keydown/beforeinput
- * classification, a one-frame editor mark, a two-frame settled mark, and a
- * stale cap.
+ * classification, a one-frame editor mark, and a two-frame settled mark.
  */
 export function createComposerPaintController(
   editor: HTMLElement
@@ -62,14 +60,32 @@ export function createComposerPaintController(
   let carryInputToNextComposer = false
   let skipNextComposerMeasure = false
   const frames = new Set<number>()
+  let visibilityGeneration = 0
+  const clearPending = () => {
+    visibilityGeneration++
+    pendingInputStartedAt = pendingComposerStartedAt = undefined
+    carryInputToNextComposer = skipNextComposerMeasure = false
+    frames.forEach(cancelAnimationFrame)
+    frames.clear()
+  }
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== "visible") clearPending()
+  }
+  document.addEventListener("visibilitychange", onVisibilityChange)
 
   const measureAfterFrames = (
     event: ChatPerfEventName,
     startedAt: number,
     remainingFrames: number
   ) => {
+    const generation = visibilityGeneration
     const frame = requestAnimationFrame((paintedAt) => {
       frames.delete(frame)
+      if (
+        generation !== visibilityGeneration ||
+        document.visibilityState !== "visible"
+      )
+        return
       if (remainingFrames > 1) {
         measureAfterFrames(event, startedAt, remainingFrames - 1)
         return
@@ -108,10 +124,6 @@ export function createComposerPaintController(
       if (pendingInputStartedAt === undefined) return
       const startedAt = pendingInputStartedAt
       pendingInputStartedAt = undefined
-      if (performance.now() - startedAt > INPUT_STALE_AFTER_MS) {
-        carryInputToNextComposer = false
-        return
-      }
 
       if (carryInputToNextComposer) {
         carryInputToNextComposer = false
@@ -131,14 +143,16 @@ export function createComposerPaintController(
         return
       }
 
+      // An input with no editor transaction is not a committed keystroke.
+      if (
+        pendingComposerStartedAt === undefined &&
+        pendingInputStartedAt !== undefined &&
+        performance.now() - pendingInputStartedAt > 1000
+      ) {
+        pendingInputStartedAt = undefined
+      }
       const startedAt = pendingComposerStartedAt ?? pendingInputStartedAt
       if (startedAt === undefined) return
-      if (performance.now() - startedAt > INPUT_STALE_AFTER_MS) {
-        pendingInputStartedAt = undefined
-        pendingComposerStartedAt = undefined
-        carryInputToNextComposer = false
-        return
-      }
 
       carryInputToNextComposer = pendingComposerStartedAt === undefined
       pendingComposerStartedAt = undefined
@@ -147,8 +161,8 @@ export function createComposerPaintController(
     dispose() {
       editor.removeEventListener("keydown", onKeyDown, true)
       editor.removeEventListener("beforeinput", onBeforeInput, true)
-      for (const frame of frames) cancelAnimationFrame(frame)
-      frames.clear()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      clearPending()
     },
   }
 }

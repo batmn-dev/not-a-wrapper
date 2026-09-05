@@ -27,6 +27,15 @@ function Harness({ prefetch }: { prefetch: () => void | Promise<unknown> }) {
   return <button ref={intentRef}>Open</button>
 }
 
+function ComposerHarness({ prefetch }: { prefetch: () => Promise<unknown> }) {
+  const ref = useIntentPrefetch<HTMLDivElement>(prefetch)
+  return (
+    <div ref={ref}>
+      <div contentEditable />
+    </div>
+  )
+}
+
 describe("intent prefetch", () => {
   let container: HTMLDivElement
   let root: Root
@@ -98,6 +107,21 @@ describe("intent prefetch", () => {
     act(() => button.dispatchEvent(new FocusEvent("focus")))
     expect(prefetch).toHaveBeenCalledOnce()
 
+    root = createRoot(container)
+  })
+
+  it("warms from nested editor focus and allows focus to proceed while loading", () => {
+    const prefetch = vi.fn(() => new Promise(() => {}))
+    act(() => root.render(<ComposerHarness prefetch={prefetch} />))
+    const editor = container.querySelector<HTMLElement>("[contenteditable]")!
+    act(() => editor.focus())
+    expect(document.activeElement).toBe(editor)
+    expect(prefetch).toHaveBeenCalledOnce()
+    const remove = vi.spyOn(editor.parentElement!, "removeEventListener")
+    act(() => root.unmount())
+    expect(remove).toHaveBeenCalledWith("focus", expect.any(Function), true)
+    editor.dispatchEvent(new FocusEvent("focus"))
+    expect(prefetch).toHaveBeenCalledOnce()
     root = createRoot(container)
   })
 })

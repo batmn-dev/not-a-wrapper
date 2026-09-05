@@ -44,7 +44,11 @@ function runViewTransition({
   const transitionDocument = document as ViewTransitionDocument
   const startViewTransition = transitionDocument.startViewTransition
 
-  if (document.visibilityState === "hidden" || !startViewTransition) {
+  if (
+    document.visibilityState === "hidden" ||
+    !startViewTransition ||
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  ) {
     update()
     return settledTransition()
   }

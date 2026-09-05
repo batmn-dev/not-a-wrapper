@@ -20,21 +20,28 @@ changing. This decision is about where browser lifecycle knowledge lives.
 
 1. `components/ui/view-transition.ts` is the one **View transition** Module.
    Product callers provide an atomic update plus optional scoped class and
-   transition types. The Module owns hidden-tab bypass, feature detection,
-   document lifecycle state, rejection handling, and cleanup.
+   transition types. The Module owns hidden-tab/reduced-motion bypass, feature detection,
+   document lifecycle state, rejection handling, and cleanup. First-send Composer
+   motion uses its existing local module to animate live DOM after the update
+   instead of capturing document snapshots (ADR-0037).
 2. `app/components/layout/public-chat-share.ts` is the **Public chat share**
    Module. It publishes before presenting a share target, delegates browser
    capability handling to `lib/browser/share-target.ts`, treats an aborted
    system sheet as user dismissal, and opens the custom fallback only when the
    native path is unavailable or fails. Dialog and Drawer share one body.
 3. `components/ui/intent-prefetch.ts` is the **Intent prefetch** Module. A
-   callback ref owns focus, pointer, touch, coarse-pointer visibility, and
+   callback ref owns descendant focus, pointer, touch, coarse-pointer visibility, and
    cleanup. A retryable loader deduplicates imports. Product actions may invoke
    that same loader on activation as the final no-waterfall guarantee.
 4. `lib/observability/composer-paint.ts` is the **Composer paint probe**. The
    ProseMirror callback-ref lifecycle creates and disposes it; editor updates
    and committed Composer updates are its only two signals. It stays behind
    the existing off-by-default, content-free Chat-performance allow-list.
+5. `components/ui/focus-mode.tsx` owns input modality for the shared focus
+   variants. Its callback-ref lifecycle tracks keyboard/pointer events and focus
+   transfer, publishing state on the focused element. The selector still requires
+   native `:focus-visible`; moving the state off `html` avoids invalidating every
+   descendant when the user switches input methods.
 No Module introduces a React `useEffect`; browser ownership is event-driven or
 callback-ref-owned.
 

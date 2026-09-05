@@ -133,7 +133,7 @@ function TooltipProvider(
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
       {...props}
-      delay={0}
+      delay={150}
     />
   )
 }

@@ -22,9 +22,9 @@
 @custom-variant keyboard-open (&:where(.keyboard-open *));
 /* Tailwind requires each custom-variant name and selector on one physical line. */
 /* prettier-ignore */
-@custom-variant keyboard-focused (&:is(html[data-focus-mode="keyboard"] :focus-visible));
+@custom-variant keyboard-focused (&:is(html [data-focus-mode="keyboard"]:focus-visible));
 /* prettier-ignore */
-@custom-variant not-keyboard-focused (&:not(:is(html[data-focus-mode="keyboard"] :focus-visible)));
+@custom-variant not-keyboard-focused (&:not(:is(html [data-focus-mode="keyboard"]:focus-visible)));
 
 @custom-variant tall (@media (min-height: 40rem));
 @custom-variant not-tall (@media (max-height: 39.99rem));
@@ -964,7 +964,7 @@
     box-shadow: none;
   }
   /* Textareas match :focus-visible on every focus, so keyboard mode owns the visible indicator (same outline as Button). */
-  html[data-focus-mode="keyboard"] textarea:focus-visible {
+  html textarea[data-focus-mode="keyboard"]:focus-visible {
     outline: 1.5px solid var(--interactive-outline-color, var(--text-primary));
     outline-offset: 2.5px;
   }
@@ -1163,15 +1163,14 @@
     content-visibility: visible;
   }
 
-  /* The persistent dock slot already owns open state. The shell host wraps
-     both the scroll column and the dock, so it is the :has() subject: the
-     scroll root inside it hides its scrollbar without copying state into React. */
-  .side-pane-shell-host:has(> [data-slot="activity-panel-dock"][data-expanded])
+  /* The dock controller publishes its expanded state on the host so unrelated
+     transcript/menu mutations do not invalidate the host through :has(). */
+  .side-pane-shell-host[data-activity-expanded]
     [data-scroll-root] {
     scrollbar-width: none;
   }
 
-  .side-pane-shell-host:has(> [data-slot="activity-panel-dock"][data-expanded])
+  .side-pane-shell-host[data-activity-expanded]
     [data-scroll-root]::-webkit-scrollbar {
     display: none;
   }
@@ -1191,16 +1190,6 @@
 ::view-transition-old(*),
 ::view-transition-new(*) {
   pointer-events: none;
-}
-
-.composer-slide-transition {
-  --vt-composer: composer;
-}
-
-.composer-slide-transition::view-transition-old(composer),
-.composer-slide-transition::view-transition-group(composer) {
-  animation-duration: 0.5s;
-  animation-timing-function: var(--spring-fast);
 }
 
 /* Composer-part identities stay dormant until a surface transition explicitly

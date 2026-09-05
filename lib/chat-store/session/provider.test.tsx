@@ -3,7 +3,7 @@
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { ChatSessionProvider, useChatSession } from "./provider"
+import { ChatSessionProvider, useChatIdHandoff, useChatSession } from "./provider"
 
 const navigationMocks = vi.hoisted(() => ({ pathname: "/" }))
 
@@ -15,10 +15,10 @@ function SessionProbe() {
   const {
     chatId,
     isNewChatSurface,
-    isChatIdHandoff,
     commitChatIdentity,
     resetChatIdentity,
   } = useChatSession()
+  const isChatIdHandoff = useChatIdHandoff()
 
   return (
     <div>
@@ -55,7 +55,7 @@ describe("ChatSessionProvider route identity", () => {
     root = null
   })
 
-  function renderSession() {
+  function renderSession(children: React.ReactNode = <SessionProbe />) {
     if (!container) {
       container = document.createElement("div")
       document.body.appendChild(container)
@@ -65,7 +65,7 @@ describe("ChatSessionProvider route identity", () => {
     act(() => {
       root?.render(
         <ChatSessionProvider>
-          <SessionProbe />
+          {children}
         </ChatSessionProvider>
       )
     })
@@ -117,6 +117,34 @@ describe("ChatSessionProvider route identity", () => {
     expect(window.history.length).toBe(historyLength)
     expect(probe().textContent).toBe("new-chat")
     expect(probe().dataset.chatIdHandoff).toBe("false")
+  })
+
+  it("does not broadcast handoff-only adoption to ordinary session consumers", () => {
+    const sessions: Array<ReturnType<typeof useChatSession>> = []
+    function OrdinarySessionConsumer() {
+      sessions.push(useChatSession())
+      return null
+    }
+    const children = (
+      <>
+        <SessionProbe />
+        <OrdinarySessionConsumer />
+      </>
+    )
+    renderSession(children)
+    click("commit")
+    expect(sessions.at(-1)?.chatId).toBe("chat-minted")
+    expect(probe().dataset.chatIdHandoff).toBe("true")
+    const afterCommit = sessions.length
+
+    navigationMocks.pathname = "/c/chat-minted"
+    renderSession(children)
+    expect(probe().dataset.chatIdHandoff).toBe("false")
+    expect(sessions).toHaveLength(afterCommit)
+
+    click("reset")
+    expect(sessions.at(-1)?.chatId).toBeNull()
+    expect(sessions.length).toBeGreaterThan(afterCommit)
   })
 
   it("rolls back after Next observed the pushed pathname and masks its lag", () => {

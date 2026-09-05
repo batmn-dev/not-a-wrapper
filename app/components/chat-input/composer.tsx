@@ -25,6 +25,8 @@ import { ModelSelector } from "@/components/common/model-selector/base"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { Kbd } from "@/components/ui/kbd"
+import { useIntentPrefetch } from "@/components/ui/intent-prefetch"
+import { preloadMarkdown } from "@/components/ui/lazy-markdown"
 import {
   PromptInput,
   PromptInputAction,
@@ -39,6 +41,7 @@ import { TooltipShortcut } from "@/components/ui/tooltip"
 import { type Attachment } from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getLogicalModelInfo } from "@/lib/models"
+import type { ChatUiWindow } from "@/lib/observability/chat-ui-observer"
 import { isReasoningEffortControlEnabled } from "@/lib/reasoning-effort"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
@@ -46,6 +49,7 @@ import { RiArrowUpLine } from "@remixicon/react"
 import { useConvex } from "convex/react"
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -93,6 +97,8 @@ type ComposerProps = {
    * restore-payload path after every successful send. */
   onTurn: (payload: ComposerTurnPayload) => Promise<boolean> | boolean
   isSubmitting?: boolean
+  /** Holds Send while the surface loads required context; typing and Stop remain available. */
+  isSendReady?: boolean
   status?: "submitted" | "streaming" | "ready" | "error"
   stop?: () => void
   /** Resolver-driven Stop affordance beyond the local transport: a stoppable
@@ -201,12 +207,13 @@ function useComposerDraftDisplay(
   return { localValue, valueRef, applyValue, isCurrentDraft }
 }
 
-export const Composer = forwardRef<ComposerHandle, ComposerProps>(
+export const Composer = memo(forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
     {
       chatId,
       onTurn,
       isSubmitting,
+      isSendReady = true,
       status,
       stop,
       stoppable,
@@ -425,6 +432,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         isStreaming: presentStop,
         isAbortable: presentStop,
         canSend:
+          isSendReady &&
           !isSubmitting &&
           attachmentsReady &&
           (!isOnlyWhitespace(localValue) || attachments.length > 0),
@@ -434,6 +442,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       attachments,
       attachmentsReady,
       isSubmitting,
+      isSendReady,
       localValue,
       status,
       stop,
@@ -448,10 +457,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       stop?.()
     }, [primaryAction.disabled, primaryAction.intent, stop])
 
+    const rendererIntentRef = useIntentPrefetch<HTMLDivElement>(preloadMarkdown)
     const handleComposerSubmit = useCallback(() => {
       if (primaryAction.disabled || primaryAction.intent !== "send") {
         return
       }
+
+      ;(window as ChatUiWindow).__chatUiPerf?.confirmSend()
+      void preloadMarkdown().catch(() => undefined)
 
       const send = () => {
         void handleSend()
@@ -577,6 +590,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     return (
       <div
+        ref={rendererIntentRef}
         className="relative flex w-full flex-col gap-4"
         data-has-thread-error={status === "error" ? "" : undefined}
       >
@@ -764,4 +778,4 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       </div>
     )
   }
-)
+))

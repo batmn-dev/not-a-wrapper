@@ -47,7 +47,7 @@ function useIntentPrefetch<ElementType extends HTMLElement>(
         }
       }
 
-      element.addEventListener("focus", warm)
+      element.addEventListener("focus", warm, true)
       element.addEventListener("pointerover", warm)
       element.addEventListener("touchstart", warm, { passive: true })
 
@@ -61,7 +61,7 @@ function useIntentPrefetch<ElementType extends HTMLElement>(
       observer?.observe(element)
 
       return () => {
-        element.removeEventListener("focus", warm)
+        element.removeEventListener("focus", warm, true)
         element.removeEventListener("pointerover", warm)
         element.removeEventListener("touchstart", warm)
         observer?.disconnect()
