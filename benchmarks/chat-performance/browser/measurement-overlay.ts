@@ -26,3 +26,12 @@ export const MEASUREMENT_HOOK_FILES = [
   "app/components/chat/use-detachable-chat-stream.ts",
   "lib/chat-performance/message-throttle.ts",
 ] as const
+
+/** Ignore only this audited product setting when comparing measurement bootstrap. */
+export function measurementBootstrap(source: string): string {
+  return source.replace(
+    "    // Document scroll-depth analytics force layout during nested chat scrolling.\n" +
+      "    disable_scroll_properties: true,\n",
+    "",
+  )
+}

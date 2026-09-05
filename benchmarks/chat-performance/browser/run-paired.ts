@@ -4,7 +4,7 @@ import { createHash } from "node:crypto"
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { LEGACY_MEASUREMENT_BASE, MEASUREMENT_FILES, MEASUREMENT_HOOK_FILES } from "./measurement-overlay"
+import { LEGACY_MEASUREMENT_BASE, MEASUREMENT_FILES, MEASUREMENT_HOOK_FILES, measurementBootstrap } from "./measurement-overlay"
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..")
 const harnessDirectory = "benchmarks/chat-performance/browser"
@@ -93,6 +93,11 @@ function main() {
         throw new Error(`Measurement source differs at ${file}; review a measurement-only overlay before comparing`)
     }
   }
+  // Product analytics may differ; observer installation and reporting must not.
+  const bootstrap = "instrumentation-client.ts"
+  if (measurementBootstrap(readFileSync(path.join(root, bootstrap), "utf8")) !==
+      measurementBootstrap(readFileSync(path.join(baselineRoot, bootstrap), "utf8")))
+    throw new Error("Measurement bootstrap differs; review a measurement-only overlay before comparing")
   // Copy the driver, not the product. Deterministic fixtures and dependencies must match.
   for (const file of ["bun.lock", "app/api/chat/deterministic-provider.ts", "benchmarks/chat-performance/fixtures.ts", "convex/lib/runTimingReceipt.ts"])
     if (digest(path.join(root, file)) !== digest(path.join(baselineRoot, file)))
