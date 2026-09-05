@@ -90,9 +90,9 @@ function main() {
     }
   }
   // Copy the driver, not the product. Deterministic fixtures and dependencies must match.
-  for (const file of ["bun.lock", "app/api/chat/deterministic-provider.ts", "benchmarks/chat-performance/fixtures.ts"])
+  for (const file of ["bun.lock", "app/api/chat/deterministic-provider.ts", "benchmarks/chat-performance/fixtures.ts", "convex/lib/runTimingReceipt.ts"])
     if (digest(path.join(root, file)) !== digest(path.join(baselineRoot, file)))
-      throw new Error(`${file} differs; this paired protocol requires identical dependencies and fixtures`)
+      throw new Error(`${file} differs; this paired protocol requires identical dependencies, fixtures, and timing helpers`)
   const harnessFiles = readdirSync(path.join(root, harnessDirectory))
     .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
   for (const file of harnessFiles)
@@ -106,7 +106,8 @@ function main() {
     measurementCommit: head, suite, order: ["base", "head"],
     legacyOverlay: legacy,
     overlaySha256: legacy ? digest(path.join(root, harnessDirectory, "measurement-overlay.patch")) : null,
-    measurementHashes, dependencySha256: digest(path.join(root, "bun.lock")),
+    measurementHashes, timingHelperSha256: digest(path.join(root, "convex/lib/runTimingReceipt.ts")),
+    dependencySha256: digest(path.join(root, "bun.lock")),
     hookSources: Object.fromEntries(MEASUREMENT_HOOK_FILES.map((file) => [file, {
       base: digest(path.join(baselineRoot, file)), head: digest(path.join(root, file)),
     }])),

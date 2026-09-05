@@ -17,6 +17,7 @@ export const MEASUREMENT_FILES = [
 
 /** Audit boundary for the patch. These files retain the original product code. */
 export const MEASUREMENT_HOOK_FILES = [
+  "app/components/chat-input/button-plus-menu.tsx",
   "app/components/chat-input/composer.tsx",
   "app/components/chat/message-assistant.tsx",
   "app/components/chat/thread-scroll-anchors.ts",

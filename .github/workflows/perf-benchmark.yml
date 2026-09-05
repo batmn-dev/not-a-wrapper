@@ -41,7 +41,7 @@ on:
         default: responsiveness
         options: [responsiveness, smoke, standard, durable, thread-switch]
       comparison_ref:
-        description: "Paired product baseline; blank uses the PR base or current commit's first parent"
+        description: "Paired product baseline; PRs use their merge base, other runs default to the first parent"
         type: string
         default: ""
       collect_baseline:
@@ -99,7 +99,7 @@ jobs:
           (inputs.late_menu_trace && 'interact-long-answer' ||
            inputs.suite == 'standard' && 'mixed-markdown-30-slab' ||
            'new-chat-cold,interact-long-answer')) || '' }}
-      PERF_COMPARE_REF: ${{ github.event.pull_request.base.sha || inputs.comparison_ref || 'HEAD^' }}
+      PERF_COMPARE_REF: ${{ inputs.comparison_ref || 'HEAD^' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite
@@ -130,6 +130,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve PR comparison revision
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          COMMON_BASE=$(git merge-base "$PR_BASE_SHA" HEAD)
+          echo "PERF_COMPARE_REF=$COMMON_BASE" >> "$GITHUB_ENV"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

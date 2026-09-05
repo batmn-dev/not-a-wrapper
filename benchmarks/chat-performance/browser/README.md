@@ -91,8 +91,8 @@ Sentry reporting and cannot be used as
 a responsiveness baseline or an INP measurement.
 
 The manual `diagnose=true, rendering_probe=true` control captures Smooth, Quick,
-and Smooth with injected `contain: inline-size` on Markdown. The third arm tests
-intrinsic-width propagation without changing product CSS. Each capture requires
+and Smooth with injected `.text-message, .text-message > div { display: flow-root !important; }`,
+labeled `inner-block-layout`. The third arm tests block layout without changing product CSS. Each capture requires
 the complete stream oracle and records the injected stylesheet hash and final
 geometry. Compare the two Smooth arms for containment; Quick isolates the fade.
 These traces are diagnostic and cannot seed performance baselines.
@@ -188,7 +188,7 @@ strict unless `--regression-only` is also supplied. Follow `baselines/README.md`
 old schema-v1 artifacts cannot arm this gate.
 
 Same-repository relevant PRs run the core suite. Standard, durable, and thread-switch
-suites run weekly. PRs compare the exact PR base; scheduled and manual runs default
+suites run weekly. PRs compare the PR merge base; scheduled and manual runs default
 to the checked-out revision's first parent. Manual `comparison_ref` can select a
 different ancestor; self-comparison fails. Both builds run in one job, so the
 workflow needs no previously stored CPU baseline. Changes to measurement sources

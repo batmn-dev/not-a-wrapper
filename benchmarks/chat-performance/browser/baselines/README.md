@@ -19,7 +19,7 @@ references; it does not replace the paired PR evidence requirement. Historical
 capture records below retain their original policy and outcomes.
 
 The workflow collects a fresh same-runner reference for each comparison, so a
-stored capture for the current CPU is not required. PRs use the exact PR base;
+stored capture for the current CPU is not required. PRs use the PR merge base;
 scheduled and manual runs default to the current revision's first parent. Manual
 `comparison_ref` may name another ancestor, but cannot name the candidate itself.
 Measurement-source changes need a reviewed overlay. Paired artifacts preserve

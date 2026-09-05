@@ -1,3 +1,23 @@
+diff --git a/app/components/chat-input/button-plus-menu.tsx b/app/components/chat-input/button-plus-menu.tsx
+index 516dc3cf..1edceb2a 100644
+--- a/app/components/chat-input/button-plus-menu.tsx
++++ b/app/components/chat-input/button-plus-menu.tsx
+@@ -162,6 +162,7 @@ function NativeMobileMenuContent({
+
+   return (
+     <DropdownMenuContent
++      data-chat-composer-menu=""
+       side="top"
+       sideOffset={touchOptimized ? -45 : 0}
+       align="start"
+@@ -501,6 +502,7 @@ export function ButtonPlusMenu({
+
+   const editorOwnedContent = (
+     <PopoverContent
++      data-chat-composer-menu=""
+       anchor={composerAnchor}
+       portalContainer={overlayContainerRef}
+       side="bottom"
 diff --git a/app/components/chat-input/composer.tsx b/app/components/chat-input/composer.tsx
 index 4b512b6a..e5c563fe 100644
 --- a/app/components/chat-input/composer.tsx
