@@ -41,6 +41,7 @@ import {
   type Response,
 } from "playwright"
 import { hashValue } from "../fixtures"
+import { waitForTraceCompletion } from "./diagnostic-trace"
 import {
   ensurePerfAuthUser,
   getPerfAuthPassword,
@@ -1112,8 +1113,7 @@ async function runScenarioOnce(
         )
         if (tracing) await stopTrace()
         if (traceResult) {
-          const traceStream = await traceResult
-          if (!traceStream) throw new Error("Diagnostic trace did not return a stream")
+          const traceStream = await waitForTraceCompletion(traceResult)
           const chunks: Buffer[] = []
           let eof = false
           while (!eof) {

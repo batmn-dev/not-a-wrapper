@@ -242,7 +242,22 @@ then captured PR head `7b9d1d8f` through GitHub's synthetic merge commit
 medians were 70.8–82.9 ms across unconstrained initial-send journeys; every
 sample met 100 ms. Warm follow-up median was 34.5 ms and Stop feedback median
 was 41 ms. Late-menu median decreased from 178.5 to 135.5 ms but still exceeded
-100 ms in every run. All seven correctness checks passed. Changes since the
+100 ms in every run. Each of these per-journey Send, follow-up, Stop, and menu
+summaries has five measured samples; p95 is omitted below 20 samples.
+The same five unconstrained initial-send journey IDs appear in both captures:
+
+| Journey | Earlier Send median | Later Send median |
+| --- | ---: | ---: |
+| new-chat-cold | 93.4 ms | 70.8 ms |
+| reasoning-first | 103.9 ms | 79.6 ms |
+| interact-long-answer | 110.6 ms | 81.4 ms |
+| stop-feedback | 113.5 ms | 82.9 ms |
+| error-recovery | 117.6 ms | 80.9 ms |
+
+The earlier 103.9–117.6 ms range described only the four affected journeys,
+excluding the already-passing cold case; the full matched range was
+93.4–117.6 ms. No population was exchanged to obtain the later passing result.
+All seven correctness checks passed. Changes since the
 preceding capture include tooltip hover intent and skipping completed observer
 probes, so this is a same-environment before/after comparison, not an isolated
 tooltip A/B experiment. The observer timing protocol and budgets are unchanged.
