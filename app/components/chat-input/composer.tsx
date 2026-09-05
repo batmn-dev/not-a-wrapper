@@ -25,6 +25,8 @@ import { ModelSelector } from "@/components/common/model-selector/base"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
 import { Kbd } from "@/components/ui/kbd"
+import { useIntentPrefetch } from "@/components/ui/intent-prefetch"
+import { preloadMarkdown } from "@/components/ui/lazy-markdown"
 import {
   PromptInput,
   PromptInputAction,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/file-handling"
 import { StopBulkRoundedIcon } from "@/lib/icons"
 import { getLogicalModelInfo } from "@/lib/models"
+import type { ChatUiWindow } from "@/lib/observability/chat-ui-observer"
 import { useUser } from "@/lib/user-store/provider"
 import { cn, debounce } from "@/lib/utils"
 import { RiArrowUpLine } from "@remixicon/react"
@@ -456,10 +459,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       stop?.()
     }, [primaryAction.disabled, primaryAction.intent, stop])
 
+    const rendererIntentRef = useIntentPrefetch<HTMLDivElement>(preloadMarkdown)
     const handleComposerSubmit = useCallback(() => {
       if (primaryAction.disabled || primaryAction.intent !== "send") {
         return
       }
+
+      ;(window as ChatUiWindow).__chatUiPerf?.confirmSend()
+      void preloadMarkdown().catch(() => undefined)
 
       const send = () => {
         void handleSend()
@@ -585,6 +592,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     return (
       <div
+        ref={rendererIntentRef}
         className="relative flex w-full flex-col gap-4"
         data-has-thread-error={status === "error" ? "" : undefined}
       >

@@ -4,7 +4,6 @@ import {
   type ChatPerfEventName,
 } from "./chat-performance"
 
-const INPUT_STALE_AFTER_MS = 1000
 const NEXT_PAINT_EVENT = "composer.keystroke_to_next_paint"
 const SETTLED_PAINT_EVENT = "composer.keystroke_to_settled_paint"
 
@@ -49,8 +48,7 @@ const MEASURED_INPUT_TYPES = new Set([
 /**
  * Measures the browser-sensitive editor → React Composer paint handoff without
  * recording draft content. The controller uses keydown/beforeinput
- * classification, a one-frame editor mark, a two-frame settled mark, and a
- * stale cap.
+ * classification, a one-frame editor mark, and a two-frame settled mark.
  */
 export function createComposerPaintController(
   editor: HTMLElement
@@ -108,10 +106,6 @@ export function createComposerPaintController(
       if (pendingInputStartedAt === undefined) return
       const startedAt = pendingInputStartedAt
       pendingInputStartedAt = undefined
-      if (performance.now() - startedAt > INPUT_STALE_AFTER_MS) {
-        carryInputToNextComposer = false
-        return
-      }
 
       if (carryInputToNextComposer) {
         carryInputToNextComposer = false
@@ -133,12 +127,6 @@ export function createComposerPaintController(
 
       const startedAt = pendingComposerStartedAt ?? pendingInputStartedAt
       if (startedAt === undefined) return
-      if (performance.now() - startedAt > INPUT_STALE_AFTER_MS) {
-        pendingInputStartedAt = undefined
-        pendingComposerStartedAt = undefined
-        carryInputToNextComposer = false
-        return
-      }
 
       carryInputToNextComposer = pendingComposerStartedAt === undefined
       pendingComposerStartedAt = undefined

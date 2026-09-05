@@ -1,26 +1,18 @@
-# Scheduled + on-demand performance benchmark (measurement plan Phase 6).
-#
-# Separate from ci-cd.yml on purpose: this needs a real Convex deployment and
-# a server env (secret PERF_ENV_FILE), takes minutes of browser time, and its
-# numbers are runner-class-relative — none of which belongs in the per-PR
-# gate. Per-PR protection stays in ci-cd.yml's `bun run test`, which covers
-# branch semantics, Markdown projection correctness, and pinned fixture hashes.
-#
-# Setup (one-time):
-#   1. Secret PERF_ENV_FILE — the contents of a .env.local for the perf
-#      server: NEXT_PUBLIC_CONVEX_URL (a dev/CI Convex deployment), the
-#      platform provider keys the admission path expects, and — only if you
-#      run SUITE=durable — the WorkOS envs the harness auth user needs.
-#   2. Secret PERF_AUTH_PASSWORD — a strong, unique password for the WorkOS
-#      benchmark user. Required only for SUITE=durable.
-#   3. After the first green run, download the results artifact and commit it
-#      as benchmarks/chat-performance/browser/baselines/ci-<suite>.json to
-#      arm regression gating (compare-results.ts reports-only until then).
-#      Regenerate that baseline whenever fixtures change (the pinned-hash
-#      test in fixtures.test.ts will remind you).
 name: Perf benchmark
 
 on:
+  pull_request:
+    paths:
+      - "app/components/chat/**"
+      - "app/components/chat-input/**"
+      - "app/api/chat/**"
+      - "components/ui/prompt-input.tsx"
+      - "components/ui/message.tsx"
+      - "lib/markdown/**"
+      - "lib/observability/**"
+      - "benchmarks/chat-performance/**"
+      - "instrumentation-client.ts"
+      - ".github/workflows/perf-benchmark.yml"
   schedule:
     # Weekly, Monday 09:13 UTC (off the top-of-hour crunch).
     - cron: "13 9 * * 1"
@@ -29,8 +21,12 @@ on:
       suite:
         description: "Benchmark suite"
         type: choice
-        default: smoke
-        options: [smoke, standard, durable]
+        default: responsiveness
+        options: [responsiveness, smoke, standard, durable, thread-switch]
+      collect_baseline:
+        description: "Collect first evidence; does not certify relative regression protection"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,11 +37,21 @@ concurrency:
 
 jobs:
   benchmark:
-    name: Browser benchmark (${{ github.event_name == 'schedule' && 'durable' || inputs.suite || 'smoke' }})
-    runs-on: ubuntu-latest
+    # Fork PRs cannot access benchmark credentials. Never use pull_request_target.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: ${{ fromJSON(github.event_name == 'schedule' && '["standard","durable","thread-switch"]' || format('["{0}"]', inputs.suite || 'responsiveness')) }}
+    name: Browser benchmark (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      SUITE: ${{ github.event_name == 'schedule' && 'durable' || inputs.suite || 'smoke' }}
+      SUITE: ${{ matrix.suite }}
+      RUNS: 5
+      WARMUPS: 1
+      COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -85,7 +91,7 @@ jobs:
       # that alone gates, baseline or not.
       - name: Run browser benchmark
         run: |
-          if [ "$SUITE" = "durable" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
+          if [ "$SUITE" != "smoke" ] && [ "$SUITE" != "standard" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
             echo "::error title=Missing PERF_AUTH_PASSWORD::Set the GitHub Actions secret PERF_AUTH_PASSWORD to a strong, unique benchmark-user password."
             exit 1
           fi
@@ -97,9 +103,11 @@ jobs:
         run: |
           CURRENT=$(ls -t benchmarks/chat-performance/browser/results/*.json | head -1)
           echo "current results: $CURRENT"
-          bun run benchmarks/chat-performance/browser/compare-results.ts \
-            "benchmarks/chat-performance/browser/baselines/ci-${SUITE}.json" \
-            "$CURRENT"
+          BASELINE="benchmarks/chat-performance/browser/baselines/ci-${SUITE}.json"
+          if [ "$COLLECT_BASELINE" = "true" ]; then
+            BASELINE="--collect-baseline"
+          fi
+          bun run benchmarks/chat-performance/browser/compare-results.ts "$BASELINE" "$CURRENT"
 
       - name: Upload results artifact
         if: always()

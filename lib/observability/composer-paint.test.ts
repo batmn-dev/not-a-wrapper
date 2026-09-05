@@ -101,3 +101,29 @@ describe("composer paint controller", () => {
     expect(mark).not.toHaveBeenCalled()
   })
 })
+
+describe("stalled composer input", () => {
+  it("retains a multi-second input delay instead of discarding the slowest observation", () => {
+    process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION = "true"
+    const mark = vi.spyOn(performance, "mark")
+    const callbacks: FrameRequestCallback[] = []
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callbacks.push(callback)
+      return callbacks.length
+    })
+    vi.spyOn(performance, "now").mockReturnValue(2500)
+    const editor = document.createElement("div")
+    const controller = createComposerPaintController(editor)
+    dispatchTimedEvent(editor, "keydown", { key: "a", timeStamp: 10 })
+    controller.onEditorUpdate()
+    callbacks.shift()?.(2510)
+    expect(mark).toHaveBeenCalledWith(
+      "chat-perf:composer.keystroke_to_next_paint",
+      { detail: { durationMs: 2500 } }
+    )
+    controller.dispose()
+    delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+})

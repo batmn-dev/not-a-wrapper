@@ -9,11 +9,17 @@ export type MetricSummary = {
   n: number
   p50: number
   p75: number
-  p95: number
+  /** Omitted below 20 samples; ten observations do not establish a tail percentile. */
+  p95?: number
   max: number
 }
 
 export type RunMetrics = {
+  ui?: Record<string, number[]>
+  /** Foreground loss invalidates interactive timings. */
+  hiddenDuringMeasurement?: boolean
+  pendingDeltaSamples?: number
+  droppedUiSamples?: number
   /** Client-mark-derived intervals (ms). Missing when the mark pair was absent. */
   sendToOptimisticPaintMs?: number
   /** First turns only: Send → `/c/<chatId>` committed by the session (ADR-0033). */
@@ -87,6 +93,11 @@ export type RunMetrics = {
 }
 
 export type ScenarioResult = {
+  id: string
+  network: "unthrottled" | "constrained"
+  cache: "cold" | "warm"
+  auth: boolean
+  followup: boolean
   scenario: string
   directive: string
   viewport: string
@@ -147,7 +158,8 @@ export type ThreadSwitchResult = {
 }
 
 export type BenchmarkResultFile = {
-  schemaVersion: 1
+  schemaVersion: 2
+  measurementVersion: "dom-frame-v1"
   generatedAt: string
   commit: string
   buildId: string
@@ -159,6 +171,8 @@ export type BenchmarkResultFile = {
   memoryGb: number
   osVersion: string
   browserVersion: string
+  /** Hash of the complete deterministic scripts, including timing and content. */
+  fixtureHash: string
   baseUrl: string
   suite: string
   scenarios: ScenarioResult[]
@@ -166,7 +180,10 @@ export type BenchmarkResultFile = {
 }
 
 export function summarize(values: number[]): MetricSummary {
-  if (values.length === 0) return { n: 0, p50: 0, p75: 0, p95: 0, max: 0 }
+  if (values.some((value) => !Number.isFinite(value))) {
+    throw new Error("Performance samples must be finite numbers")
+  }
+  if (values.length === 0) return { n: 0, p50: 0, p75: 0, max: 0 }
   const sorted = [...values].sort((a, b) => a - b)
   const at = (q: number) =>
     sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
@@ -174,7 +191,7 @@ export function summarize(values: number[]): MetricSummary {
     n: sorted.length,
     p50: round2(at(0.5)),
     p75: round2(at(0.75)),
-    p95: round2(at(0.95)),
+    ...(sorted.length >= 20 ? { p95: round2(at(0.95)) } : {}),
     max: round2(sorted[sorted.length - 1]),
   }
 }

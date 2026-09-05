@@ -162,6 +162,7 @@ function NativeMobileMenuContent({
 
   return (
     <DropdownMenuContent
+      data-chat-composer-menu=""
       side="top"
       sideOffset={touchOptimized ? -45 : 0}
       align="start"
@@ -501,6 +502,7 @@ export function ButtonPlusMenu({
 
   const editorOwnedContent = (
     <PopoverContent
+      data-chat-composer-menu=""
       anchor={composerAnchor}
       portalContainer={overlayContainerRef}
       side="bottom"

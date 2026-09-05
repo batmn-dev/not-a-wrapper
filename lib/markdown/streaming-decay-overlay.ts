@@ -62,8 +62,8 @@ export const DECAY_TOTAL_MS = DECAY_BUCKET_COUNT * DECAY_BUCKET_MS
 export const MAX_WORD_MERGE_CHARS = 16
 /**
  * The rAF loop repaints at this cadence, not per frame: bucket assignments
- * only change every DECAY_BUCKET_MS, and each paint walks every text node of
- * every live container to rebuild StaticRanges — per-frame rebuilds on a
+ * only change every DECAY_BUCKET_MS, and each paint rebuilds StaticRanges
+ * for the live text tail — per-frame rebuilds on a
  * 100KB-class message would burn frame budget for identical output. Appends
  * still paint immediately via observe().
  */
@@ -404,15 +404,21 @@ function collectCohortRanges(
   const maxEnd = Math.max(...spans.map((s) => s.end))
   const document = container.ownerDocument
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-  let offset = 0
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+  // Count current rendered characters natively, then walk backward only as far
+  // as the live cohorts. Re-reading length also handles DOM shrink between commits.
+  let offset = container.textContent?.length ?? 0
+  for (
+    let node = walker.lastChild();
+    node !== null;
+    node = walker.previousNode()
+  ) {
     const text = node as Text
     const length = text.data.length
-    const nodeStart = offset
-    const nodeEnd = offset + length
-    offset = nodeEnd
-    if (nodeStart >= maxEnd) break
-    if (nodeEnd <= minStart) continue
+    const nodeEnd = offset
+    const nodeStart = offset - length
+    offset = nodeStart
+    if (nodeEnd <= minStart) break
+    if (nodeStart >= maxEnd) continue
     for (const span of spans) {
       const start = Math.max(span.start, nodeStart)
       const end = Math.min(span.end, nodeEnd)

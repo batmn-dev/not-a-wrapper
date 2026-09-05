@@ -19,6 +19,7 @@ const transitionWindow = window as Window & {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   document.documentElement.className = ""
   document.documentElement.removeAttribute("active-view-transition-type")
   Reflect.deleteProperty(transitionDocument, "startViewTransition")
@@ -30,6 +31,19 @@ afterEach(() => {
 })
 
 describe("runViewTransition", () => {
+  it("hands off synchronously without taking snapshots when reduced motion is requested", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true }))
+    )
+    const snapshot = vi.fn()
+    Reflect.set(transitionDocument, "startViewTransition", snapshot)
+    const update = vi.fn()
+    runViewTransition({ update, className: "surface-flip" })
+    expect(update).toHaveBeenCalledOnce()
+    expect(snapshot).not.toHaveBeenCalled()
+    expect(document.documentElement.className).toBe("")
+  })
   it("updates synchronously without transition state when unsupported or hidden", () => {
     const unsupportedUpdate = vi.fn()
     runViewTransition({ update: unsupportedUpdate, className: "surface-flip" })

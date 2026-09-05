@@ -1,111 +1,89 @@
-# Browser benchmark harness
+# Chat responsiveness benchmarks
 
-Deterministic production-browser benchmark for the chat surface (measurement
-plan Phase 3). Drives the real app — server prepare, streamText transforms,
-UI-message conversion, rendering, markdown projection, Shiki, guest
-persistence — with the model call replaced by the deterministic scripted
-provider (`app/api/chat/deterministic-provider.ts`), and emits one versioned
-JSON result file per run under `results/` (gitignored; curate summaries into
-`docs/performance/`).
+The real production application with only the provider replaced by a deterministic
+script. Stream correctness gates every timing result. See ADR-0035 and
+`docs/performance/metric-dictionary.md` group 14 for the measurement contract.
 
-## Running
-
-```bash
-# 1. One-time (or after any code change): build the instrumented perf bundle.
-#    Isolated dist dir — never touches the dev server's .next.
+```sh
 NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf bun run build:next
-
-# 2. Run the standard suite (spawns `next start` on PERF_PORT, default 3111).
-bun run bench:browser
+PERF_CDP_URL=http://localhost:9222 SUITE=responsiveness RUNS=5 bun run bench:browser
 ```
 
-Env knobs: `SUITE=standard|smoke|durable|thread-switch` · `RUNS` (default 10)
-· `WARMUPS` (default 2) · `PERF_PORT` (default 3111) · `BASE_URL` (reuse an
-already-running perf server; the server-span join is then unavailable) ·
-`PW_CHANNEL=chrome` (use installed Chrome instead of a downloaded Chromium).
+Local runs attach an existing authenticated Chrome session; no separate browser is
+launched. The app must be signed in at the benchmark origin. The harness starts an
+isolated production server on `PERF_PORT` (default 3111); `BASE_URL` instead reuses
+an existing server and cannot join its server logs. It never uses the developer's
+port 3000. A Chrome extension alone supports manual validation, not this terminal
+harness. Do not restart the user's browser to obtain CDP access.
 
-The spawned server runs with `CHAT_PERF_DETERMINISTIC_PROVIDER=1` (the
-server-side gate for the scripted provider — a client message alone can never
-activate it) and `CHAT_PERF_SAMPLE_RATE=1`, whose `_tag:"chat_perf"` lines
-the harness joins to each run by correlation id.
+## Suites
 
-## What a run measures
+- `responsiveness`: cold HTTP-cache entry; follow-up in a seeded existing chat;
+  reasoning before text; typing, menu opening, and scrolling during a long answer;
+  one mobile viewport + 4x CPU + constrained-network repeat; Stop; partial error.
+  Late typing/menu/scroll waits for 80% of fixture content while streaming remains
+  active, with separate early/late timing coverage.
+- `thread-switch`: newly seeded deterministic chats, including one long answer.
+  Unvisited clicks, hover-prefetched clicks, and visited switches. Browser-observed
+  destination frames, cache classifications, subscription counts, retained heap.
+- `standard`: existing guest rendering/delivery-shape stress cases (CI only).
+- `durable`: existing signed-in stream, second-tab, reload, Stop, and paused-stream
+  durability cases. The initial foreground observation is frozen before an
+  intentional second-tab focus transfer.
+- `smoke`: three guest stream cases for CI harness bring-up.
 
-Per scenario × (RUNS after WARMUPS): mark-derived intervals (send →
-optimistic paint / dispatch / first chunk / first visible text, stream
-duration, stop → terminal), responsiveness (long tasks, TBT, rAF gaps),
-rendering cost (projection advances, Shiki), publication accounting
-(callbacks vs publications vs coalesced), DOM/heap growth, and the sampled
-server spans. Aggregates are n/p50/p75/p95/max — treat p95 as indicative only
-at the default sample size. `n` 0 means no run produced the metric; the
-percentiles are then 0 and `compare-results.ts` treats the metric as absent.
+`RUNS` defaults to 10, `WARMUPS` to 2. Five complete measured runs are the minimum
+for comparison; lower counts are diagnostic only. `ONLY` filters by scenario ID.
+The core suite's cold entry disables the HTTP cache. CI uses a fresh authenticated
+context for each cold sample; attached Chrome preserves the person's cookies and
+storage. Warm scenarios reuse assets across new documents. The visited-switch pass
+separately tests the live in-memory conversation cache.
 
-**Correctness gates every number**: the captured SSE stream is folded and
-hash-compared against the scenario oracle (prefix rule for stopped streams,
-which may not expose a body), the terminal outcome must match, and any
-`markdown_projection_settle_mismatch` fails the scenario. A correctness
-failure exits non-zero and the timings must be discarded.
+The constrained profile is 4x CPU, 150 ms added latency, 1.6 Mbps download and
+750 Kbps upload. Its numbers compare only against that same profile. A narrow
+viewport by itself is not a phone-performance simulation.
 
-## CI (Phase 6)
+## Evidence and gates
 
-`.github/workflows/perf-benchmark.yml` runs weekly and on demand
-(`workflow_dispatch`, suite choice): micro-benchmark timing gates
-for branch and Markdown projection, the browser suite (correctness-blocking
-via this harness's exit code), and `compare-results.ts` against the checked-in
-runner-class baseline in `baselines/` (report-only until a baseline is
-committed; see `baselines/README.md`). One-time setup: the `PERF_ENV_FILE`
-secret with the perf server's `.env.local` contents, plus a dedicated
-`PERF_AUTH_PASSWORD` secret for durable runs. Per-PR CI is untouched —
-`bun run test` already covers branch semantics, Markdown projection
-correctness, and pinned fixture payload hashes.
+Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
+aggregates. p95 exists only from 20 observations. The activating click/Enter is
+the start of perceived-latency measurements. The observer checks the relevant DOM
+before a frame and records after its paint opportunity. These are DOM/frame
+proxies, not first-pixel timestamps; old React-effect marks remain separate.
 
-## Scope and known limitations
+Continuous receipt-to-content samples match a text-source watermark, at most four
+times per second, to the current assistant's rendered source. They exclude provider
+silence but do not prove off-screen characters painted. A known fixture checks
+stream byte fidelity; a 250 ms post-Stop observation checks text no longer grows.
+Hidden tabs invalidate interactive observations. Do not remove slow/failed runs.
+Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
+the oldest waiting input. Completed foreground runs fail if any sampled content
+never reaches the rendered watermark; buffer overflow also fails explicitly.
 
-- **Durable scenarios: `SUITE=durable`.** The harness provisions a WorkOS
-  test user via the API (`ensure-auth-user.ts`; `PERF_AUTH_PASSWORD` is
-  required and `PERF_AUTH_EMAIL` can override the default identity), signs in
-  once through the real `/auth/login` form, and reuses the storage state. Durable runs measure
-  settlement, per-op worker-write durations, second-tab freshness, and
-  reload recovery. Two durable caveats: the hard navigation to `/c/<chatId>`
-  flushes Chromium's network buffer, so correctness falls back to
-  settlement-outcome + settle-mismatch + rendered-length rules when the SSE
-  body is unreadable (byte fidelity is proven by the guest suite); and runs
-  that lose live-stream adoption are counted per scenario as
-  `liveStreamNotAdoptedRuns` AND fail the scenario — since the 2026-08-28
-  layout-owned-Chat fix (see
-  `docs/performance/2026-08-28-adoption-loss-root-cause.md`) the expected
-  count is 0, and any recurrence is a regression.
-  Convex-side cost sampling needs `CHAT_PERF_CONVEX_SAMPLE_RATE` set on the
-  deployment. The `durable-text-30-paused` scenario (shape `paused`: four
-  fixed-cadence segments split by three 20 s zero-delta gaps) exercises the
-  live-run-no-content event class behind ADR-0027's split subscription —
-  ~70 s wall clock per run, so trim `RUNS` when iterating; measure the
-  Convex side by capturing `bunx convex logs --success --jsonl` around the
-  run.
-- **Thread switching: `SUITE=thread-switch`** (`thread-switch.ts`; signed in
-  like the durable suite). Measures `chat_navigation_intent` →
-  `nav_to_thread_painted` per sidebar switch for three populations — chats
-  the document has not opened (plain click, and hover-then-click after
-  `THREAD_SWITCH_HOVER_MS`, default 250) across `THREAD_SWITCH_DOCUMENTS`
-  fresh documents (default 5), then `THREAD_SWITCH_COUNT` (default 50)
-  switches cycling through already-opened chats in one document — beside the
-  commit-time cache hit/miss split, the Convex `ModifyQuerySet` `Add` count
-  per switch (outgoing socket frames), and a forced-GC JS heap sample at 0,
-  10, 25, and the last switch. Fixtures are the harness user's own chats;
-  fewer than `THREAD_SWITCH_CHATS` (default 8) sidebar rows are topped up
-  with short deterministic turns. Correctness: every switch must land on its
-  URL, render a message row, and emit the painted mark. The result lands
-  under `threadSwitch` in the result file.
-- **Composer shell fidelity** (`composer-shell.ts`, standalone; `PERF_PORT`
-  default 3112): `PERF_AUTH_PASSWORD=... bun run benchmarks/chat-performance/browser/composer-shell.ts`.
-  Signs in, saves a non-default model and effort through the composer, then
-  cold-loads `/` `RUNS` times sampling the model and effort labels every
-  frame from first paint until `load` + `SETTLE_MS`, with the composer-region
-  layout shift and TTFB (ADR-0032). `OUT=file.json` writes the per-run detail.
-- Scenarios needing real tools (the fixture `interleaved` script) are not
-  replayed; the deterministic provider covers text/reasoning/code/error/stop
-  shapes plus the payload stress variants.
-- Marks are commit-time (see the measurement map §2.4); paint-truth requires
-  a tracing pass, which this harness does not yet drive.
-- Warm-state only per scenario context; cold-state (fresh browser context per
-  run) is not yet a matrix dimension.
+Normal-profile budgets allow at most 5% over 100 ms for Send/Stop/menu feedback,
+and 50 ms for typing and received-content frames. Relative gates cover load,
+first output, server preparation, settlement, and navigation. These are targets,
+not claims that the current app passes.
+
+`compare-results.ts` validates schema, sample coverage, correctness, complete
+scenario identity (including delivery shape), fixture hash, and matching hardware
+and browser. Missing baselines fail. Explicit `--collect-baseline` validates first
+evidence without claiming a relative comparison. Follow `baselines/README.md`;
+old schema-v1 artifacts cannot arm this gate.
+
+Same-repository relevant PRs run the core suite. Weekly CI runs standard, durable,
+and thread-switch suites. Fork PRs receive no credentials. Setup requires the
+existing `PERF_ENV_FILE` and `PERF_AUTH_PASSWORD` GitHub secrets and fresh reviewed
+runner-specific baselines. Results upload even on failure.
+
+## Diagnostics outside the core gate
+
+`composer-shell.ts` remains the specialized saved-label/CLS/TTFB check.
+`trace-attribution.ts` remains the detailed main-thread attribution tool. Neither
+is a substitute for ready-to-type/ready-to-send measurements. Production Sentry
+collection is opt-in (`NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE`, default 0) until overhead
+is measured; see the runbook for the A/B and actual event-arrival verification.
+Real-provider first-output/token-rate analysis stays separate, grouped by the real
+provider route, reasoning setting, tool configuration, and outcome.
+Production sampling discards interrupted turns on tab return and resumes for new
+turns; benchmark documents retain the stricter permanent visibility invalidation.

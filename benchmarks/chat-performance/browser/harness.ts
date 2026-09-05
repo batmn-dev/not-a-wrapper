@@ -30,6 +30,10 @@ import {
 } from "@/app/api/chat/deterministic-provider"
 import { pacingOverheadMs } from "@/convex/lib/runTimingReceipt"
 import {
+  installChatUiObserver,
+  type ChatUiWindow,
+} from "@/lib/observability/chat-ui-observer"
+import {
   chromium,
   type Browser,
   type BrowserContext,
@@ -61,6 +65,7 @@ import {
 import {
   directiveFor,
   DURABLE_SUITE,
+  RESPONSIVENESS_SUITE,
   SMOKE_SUITE,
   STANDARD_SUITE,
   type BrowserScenarioConfig,
@@ -318,8 +323,28 @@ async function runScenarioOnce(
   timeoutMs: number
 ): Promise<RunMetrics> {
   const page = await context.newPage()
+  await page.addInitScript(installChatUiObserver)
+  await page.setViewportSize(
+    config.viewport === "mobile"
+      ? { width: 390, height: 844 }
+      : { width: 1440, height: 900 }
+  )
+  await page.bringToFront()
   const cdp: CDPSession = await context.newCDPSession(page)
   await cdp.send("Performance.enable")
+  if (config.cache === "cold") {
+    await cdp.send("Network.enable")
+    await cdp.send("Network.setCacheDisabled", { cacheDisabled: true })
+  }
+  if (config.network === "constrained") {
+    await cdp.send("Network.enable")
+    await cdp.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 150,
+      downloadThroughput: 1_600_000 / 8,
+      uploadThroughput: 750_000 / 8,
+    })
+  }
   if (config.cpuThrottle > 1) {
     await cdp.send("Emulation.setCPUThrottlingRate", {
       rate: config.cpuThrottle,
@@ -350,6 +375,18 @@ async function runScenarioOnce(
     const editor = page.locator('[contenteditable="true"]').first()
     await editor.waitFor({ state: "visible", timeout: 15000 })
 
+    if (config.followup) {
+      await editor.fill("[[perf:short-prose:100:fixed]]")
+      await page.locator('[data-testid="send-button"]').click()
+      await waitForMark(page, "stream_terminal", 60000)
+      await page
+        .locator('[data-testid="send-button"][aria-label="Send prompt"]')
+        .waitFor()
+      // The measured document is an existing conversation, not the seed turn.
+      await page.reload({ waitUntil: "domcontentloaded" })
+      await editor.waitFor({ state: "visible" })
+    }
+
     const heapBefore = await readHeap(cdp)
     const domNodesBefore = await page.evaluate(
       () => document.querySelectorAll("*").length
@@ -357,10 +394,31 @@ async function runScenarioOnce(
 
     await editor.click()
     await page.keyboard.type(directiveFor(config))
+    await page.waitForFunction(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-testid="send-button"]'
+      )
+      return (
+        button &&
+        !button.disabled &&
+        Boolean(
+          (window as ChatUiWindow).__chatUiPerf?.values.navigationToSendReadyMs
+            ?.length
+        )
+      )
+    })
     await page.locator('[data-testid="send-button"]').click()
 
     // Durable turns navigate to the server chat URL on acceptance.
     let secondTab: Page | null = null
+    let foregroundUi:
+      | {
+          values: Record<string, number[]>
+          hidden: boolean
+          pendingDeltas: number
+          droppedSamples: number
+        }
+      | undefined
     if (config.auth) {
       await page.waitForURL(/\/c\//, { timeout: 30000 })
     }
@@ -374,6 +432,7 @@ async function runScenarioOnce(
     // fire. Measured, not fatal: such runs are counted and their correctness
     // falls back to the settlement rules.
     let liveStreamNotAdopted = false
+    let stoppedTextStable = true
     const awaitFirstVisible = async (): Promise<boolean> => {
       if (!config.auth) {
         await waitForMark(page, "first_visible_text", timeoutMs)
@@ -391,14 +450,93 @@ async function runScenarioOnce(
       return true
     }
 
+    if (config.interact) {
+      await awaitFirstVisible()
+      const requireStreaming = async (phase: string, interaction: string) => {
+        if (
+          (await page.getByTestId("send-button").getAttribute("aria-label")) !==
+          "Stop"
+        )
+          throw new Error(
+            `${config.id}: ${phase} ${interaction} missed the active stream`
+          )
+      }
+      for (const phase of ["early", "late"] as const) {
+        if (phase === "late") {
+          const expectedLength = deterministicScenarioText(config.scenario).text
+            .length
+          await page.waitForFunction(
+            (length) => {
+              const turn = Array.from(
+                document.querySelectorAll("section[data-turn-id]")
+              ).at(-1)
+              const source = turn?.querySelector<HTMLElement>(
+                "[data-perf-text-length]"
+              )
+              return Number(source?.dataset.perfTextLength ?? 0) >= length * 0.8
+            },
+            expectedLength,
+            { timeout: timeoutMs }
+          )
+        }
+        await page.evaluate(
+          (value) => (window as ChatUiWindow).__chatUiPerf?.setPhase(value),
+          phase
+        )
+        await requireStreaming(phase, "typing")
+        await editor.click()
+        await page.keyboard.type("A draft while the response streams.", {
+          delay: 40,
+        })
+        await requireStreaming(phase, "menu")
+        await page.getByTestId("composer-plus-btn").click()
+        await page
+          .locator("[data-chat-composer-menu]")
+          .waitFor({ state: "visible" })
+        await page.waitForTimeout(100)
+        await page.keyboard.press("Escape")
+        const scroll = page.locator("[data-scroll-root]")
+        await scroll.hover()
+        if (phase === "late") {
+          await requireStreaming(phase, "scroll")
+          await page.mouse.wheel(0, -400)
+        }
+        await page.waitForTimeout(100)
+        await requireStreaming(phase, "interaction completion")
+      }
+    }
     if (config.action === "stop") {
       if (await awaitFirstVisible()) {
         // Let a visible slice stream before stopping.
         await page.waitForTimeout(1000)
         await page.locator('[data-testid="send-button"]').click()
+        await page.waitForFunction(() =>
+          Boolean(
+            (window as ChatUiWindow).__chatUiPerf?.values.stopToReadyFrameMs
+              ?.length
+          )
+        )
+        const length = await page.evaluate(readDeliveredMarkdownLength)
+        await page.waitForTimeout(250)
+        stoppedTextStable =
+          length === (await page.evaluate(readDeliveredMarkdownLength))
       }
     } else if (config.action === "second-tab") {
       if (await awaitFirstVisible()) {
+        await page.waitForFunction(() =>
+          Boolean(
+            (window as ChatUiWindow).__chatUiPerf?.values
+              .inputToFirstTextFrameMs?.length
+          )
+        )
+        foregroundUi = await page.evaluate(() => ({
+          values: (window as ChatUiWindow).__chatUiPerf?.values ?? {},
+          hidden: (window as ChatUiWindow).__chatUiPerf?.hidden ?? true,
+          pendingDeltas:
+            (window as ChatUiWindow).__chatUiPerf?.pendingDeltas() ?? 0,
+          droppedSamples:
+            (window as ChatUiWindow).__chatUiPerf?.droppedSamples() ?? 0,
+        }))
         secondTab = await context.newPage()
         await secondTab.goto(page.url(), { waitUntil: "domcontentloaded" })
         await installGrowthObserver(secondTab)
@@ -438,6 +576,16 @@ async function runScenarioOnce(
     await page.waitForTimeout(config.auth ? 1500 : 750)
 
     const marks = await readMarks(page)
+    const uiObservation =
+      foregroundUi ??
+      (await page.evaluate(() => ({
+        values: (window as ChatUiWindow).__chatUiPerf?.values ?? {},
+        hidden: (window as ChatUiWindow).__chatUiPerf?.hidden ?? true,
+        pendingDeltas:
+          (window as ChatUiWindow).__chatUiPerf?.pendingDeltas() ?? 0,
+        droppedSamples:
+          (window as ChatUiWindow).__chatUiPerf?.droppedSamples() ?? 0,
+      })))
     const domNodesAfter = await page.evaluate(
       () => document.querySelectorAll("*").length
     )
@@ -639,8 +787,13 @@ async function runScenarioOnce(
       await secondTab.close()
     }
 
-    const longTasks = durations(marks, "long_task")
-    const rafGaps = durations(marks, "raf_gap")
+    const runStart = markAt(marks, "chat_send_intent") ?? 0
+    const runEnd = markAt(marks, "stream_terminal") ?? Infinity
+    const activeMarks = marks.filter(
+      (mark) => mark.startTime >= runStart && mark.startTime <= runEnd
+    )
+    const longTasks = durations(activeMarks, "long_task")
+    const rafGaps = durations(activeMarks, "raf_gap")
     const projections = durations(marks, "markdown_projection_advance")
     const shiki = durations(marks, "shiki_highlight")
     const summary = marks
@@ -648,6 +801,10 @@ async function runScenarioOnce(
       .at(-1)
 
     return {
+      ui: uiObservation.values,
+      hiddenDuringMeasurement: uiObservation.hidden,
+      pendingDeltaSamples: uiObservation.pendingDeltas,
+      droppedUiSamples: uiObservation.droppedSamples,
       sendToOptimisticPaintMs: diff(
         marks,
         "chat_send_intent",
@@ -724,12 +881,26 @@ async function runScenarioOnce(
           : undefined,
       liveStreamNotAdopted: liveStreamNotAdopted || undefined,
       correctness: {
-        ok: correctnessOk,
+        ok:
+          correctnessOk &&
+          !uiObservation.hidden &&
+          stoppedTextStable &&
+          uiObservation.droppedSamples === 0 &&
+          (config.action !== "complete" || uiObservation.pendingDeltas === 0),
         foldedTextHash: hashValue(foldedText),
         expectedTextHash: hashValue(oracle.text),
         terminalOutcome,
         settleMismatchCount,
-        detail,
+        detail:
+          uiObservation.droppedSamples > 0
+            ? "UI observation capacity exceeded; samples were lost"
+            : config.action === "complete" && uiObservation.pendingDeltas > 0
+              ? "received content never reached the visible rendering watermark"
+              : uiObservation.hidden
+                ? "tab was hidden; responsiveness measurements invalid"
+                : !stoppedTextStable
+                  ? "assistant text grew after Stop feedback"
+                  : detail,
       },
     }
   } finally {
@@ -855,6 +1026,17 @@ function scenarioTimeoutMs(config: BrowserScenarioConfig): number {
 }
 
 async function main() {
+  if (
+    !Number.isInteger(RUNS) ||
+    RUNS < 1 ||
+    !Number.isInteger(WARMUPS) ||
+    WARMUPS < 0
+  )
+    fail("RUNS must be positive and WARMUPS nonnegative integers")
+  if (!process.env.CI && !process.env.PERF_CDP_URL)
+    fail(
+      "Local benchmarks require PERF_CDP_URL for your authenticated Chrome session. No separate browser or server was launched."
+    )
   const isThreadSwitch = SUITE_NAME === "thread-switch"
   let suite =
     SUITE_NAME === "smoke"
@@ -863,15 +1045,21 @@ async function main() {
         ? STANDARD_SUITE
         : SUITE_NAME === "durable"
           ? DURABLE_SUITE
-          : isThreadSwitch
-            ? []
-            : fail(`unknown SUITE: ${SUITE_NAME}`)
+          : SUITE_NAME === "responsiveness"
+            ? RESPONSIVENESS_SUITE
+            : isThreadSwitch
+              ? []
+              : fail(`unknown SUITE: ${SUITE_NAME}`)
   if (process.env.ONLY && !isThreadSwitch) {
     const wanted = process.env.ONLY.split(",").map((id) => id.trim())
     suite = suite.filter((config) => wanted.includes(config.id))
     if (suite.length === 0)
       fail(`ONLY matched no scenario: ${process.env.ONLY}`)
   }
+  if (process.env.PERF_CDP_URL && suite.some((config) => !config.auth))
+    fail(
+      "Guest suites need a CI browser; the attached authenticated profile must not have its storage cleared or be reported as a guest."
+    )
 
   const externalBaseUrl = process.env.BASE_URL
   const baseUrl = externalBaseUrl ?? `http://localhost:${PERF_PORT}`
@@ -880,10 +1068,13 @@ async function main() {
 
   let browser: Browser
   try {
-    browser = await chromium.launch({
-      channel: process.env.PW_CHANNEL,
-    })
+    browser = process.env.PERF_CDP_URL
+      ? await chromium.connectOverCDP(process.env.PERF_CDP_URL)
+      : await chromium.launch({
+          channel: process.env.PW_CHANNEL,
+        })
   } catch (error) {
+    if (process.env.PERF_CDP_URL) throw error
     log(`chromium launch failed (${String(error).split("\n")[0]})`)
     log(`retrying with channel: chrome`)
     browser = await chromium.launch({ channel: "chrome" })
@@ -894,7 +1085,9 @@ async function main() {
 
   const authState =
     isThreadSwitch || suite.some((config) => config.auth)
-      ? await acquireAuthState(browser, baseUrl)
+      ? process.env.PERF_CDP_URL
+        ? await browser.contexts()[0].storageState()
+        : await acquireAuthState(browser, baseUrl)
       : null
 
   let threadSwitch: BenchmarkResultFile["threadSwitch"]
@@ -919,10 +1112,13 @@ async function main() {
       config.viewport === "mobile"
         ? { width: 390, height: 844 }
         : { width: 1440, height: 900 }
-    const context = await browser.newContext({
+    const contextOptions = {
       viewport,
       ...(config.auth && authState ? { storageState: authState } : {}),
-    })
+    }
+    const context = process.env.PERF_CDP_URL
+      ? browser.contexts()[0]
+      : await browser.newContext(contextOptions)
     const timeoutMs = scenarioTimeoutMs(config)
     log(
       `scenario ${config.id}: ${WARMUPS} warmups + ${RUNS} runs (timeout ${Math.round(timeoutMs / 1000)}s)`
@@ -932,8 +1128,12 @@ async function main() {
       for (let index = 0; index < WARMUPS + RUNS; index++) {
         const kind = index < WARMUPS ? "warmup" : "run"
         let run: RunMetrics
+        const runContext =
+          config.cache === "cold" && !process.env.PERF_CDP_URL
+            ? await browser.newContext(contextOptions)
+            : context
         try {
-          run = await runScenarioOnce(context, baseUrl, config, timeoutMs)
+          run = await runScenarioOnce(runContext, baseUrl, config, timeoutMs)
         } catch (error) {
           // A crashed run (timeout, navigation failure, admission rejection)
           // fails the scenario's correctness but must not abort the suite —
@@ -959,6 +1159,8 @@ async function main() {
               detail: `run crashed: ${String(error).split("\n")[0]}`,
             },
           }
+        } finally {
+          if (runContext !== context) await runContext.close()
         }
         log(
           `  ${kind} ${index + 1}/${WARMUPS + RUNS}: ` +
@@ -967,7 +1169,7 @@ async function main() {
         if (index >= WARMUPS) runs.push(run)
       }
     } finally {
-      await context.close()
+      if (!process.env.PERF_CDP_URL) await context.close()
     }
 
     let correctnessOk = runs.every((run) => run.correctness.ok)
@@ -987,6 +1189,11 @@ async function main() {
     const numeric = (pick: (run: RunMetrics) => number | undefined): number[] =>
       runs.map(pick).filter((value): value is number => Number.isFinite(value))
     results.push({
+      id: config.id,
+      network: config.network ?? "unthrottled",
+      cache: config.cache ?? "warm",
+      auth: config.auth ?? false,
+      followup: config.followup ?? false,
       scenario: config.scenario,
       directive: directiveFor(config),
       viewport: config.viewport,
@@ -997,6 +1204,14 @@ async function main() {
       correctnessOk,
       ...(liveStreamNotAdoptedRuns > 0 ? { liveStreamNotAdoptedRuns } : {}),
       metrics: {
+        ...Object.fromEntries(
+          [...new Set(runs.flatMap((run) => Object.keys(run.ui ?? {})))].map(
+            (metric) => [
+              metric,
+              summarize(runs.flatMap((run) => run.ui?.[metric] ?? [])),
+            ]
+          )
+        ),
         sendToOptimisticPaintMs: summarize(
           numeric((run) => run.sendToOptimisticPaintMs)
         ),
@@ -1088,7 +1303,7 @@ async function main() {
         `sendToRouteCommitted p50=${first?.metrics.sendToThreadRouteCommittedMs?.p50}ms ` +
         `sendToOptimisticPaint p50=${first?.metrics.sendToOptimisticPaintMs?.p50}ms ` +
         `sendToFirstVisible p50=${first?.metrics.sendToFirstVisibleTextMs?.p50}ms ` +
-        `longTaskMax p95=${first?.metrics.longTaskMaxMs?.p95}ms`
+        `longTaskMax max=${first?.metrics.longTaskMaxMs?.max}ms`
     )
   }
 
@@ -1102,7 +1317,19 @@ async function main() {
     .toString()
     .trim()
   const file: BenchmarkResultFile = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    measurementVersion: "dom-frame-v1",
+    fixtureHash: hashValue(
+      isThreadSwitch
+        ? ["short-prose", "long-markdown"].map((scenario) =>
+            buildDeterministicPartScript({
+              scenario: scenario as "short-prose" | "long-markdown",
+              chunksPerSecond: 100,
+              shape: "fixed",
+            })
+          )
+        : suite.map((config) => buildDeterministicPartScript(config))
+    ),
     generatedAt: new Date().toISOString(),
     commit,
     buildId,
@@ -1132,7 +1359,7 @@ async function main() {
   writeFileSync(outPath, JSON.stringify(file, null, 2))
   log(`results written to ${outPath}`)
 
-  await browser.close()
+  if (!process.env.PERF_CDP_URL) await browser.close()
   stopPerfServer()
   if (anyCorrectnessFailure) {
     fail("one or more scenarios failed correctness — timings are invalid")

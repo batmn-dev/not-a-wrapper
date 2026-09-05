@@ -1,29 +1,26 @@
-# CI benchmark baselines
+# Browser performance baselines
 
-Checked-in reference results for `.github/workflows/perf-benchmark.yml`'s
-regression gate (`compare-results.ts`). One file per suite, named
-`ci-<suite>.json` (e.g. `ci-smoke.json`).
+The comparator now **fails when a baseline is missing**. A green correctness run
+alone is never proof of speed. There are currently no schema-v2 CI baselines;
+collect them on the actual runner after this workflow is available on GitHub.
 
-- Baselines are **runner-class-specific**: capture them from a green CI run's
-  results artifact, never from a local machine.
-- Until a suite's baseline exists, the workflow's comparison step reports
-  and passes — correctness (the harness's own exit code) still gates.
-- Regenerate a baseline deliberately when fixtures change (the pinned
-  payload hashes in `../../fixtures.test.ts` fail on drift) or after an
-  accepted performance change moves the numbers.
+1. Dispatch `perf-benchmark.yml` with the desired suite and `collect_baseline=true`.
+2. Review the uploaded JSON, correctness, sample coverage, and absolute budgets.
+   Failed budgets remain failures even during collection; investigate them rather
+   than raising thresholds to normalize a slow baseline.
+3. Commit the reviewed artifact as `ci-<suite>.json` in this directory.
+4. Run the workflow normally to prove the strict comparison passes.
 
-## Activation status (2026-08-28)
+Suites: `responsiveness`, `standard`, `durable`, `thread-switch`, and optional
+`smoke`. Never use a local Mac result as a Linux CI baseline. Schema version,
+measurement version, exact browser version, CPU model/count, memory class, fixture
+hash, and scenario conditions must match. Refresh deliberately when those change.
 
-- `PERF_ENV_FILE` repo secret: **set** (from the perf server's `.env.local`).
-- `PERF_AUTH_PASSWORD` repo secret: **set** (dedicated benchmark credential).
-- First run + baseline: `workflow_dispatch` requires the workflow file on the
-  default branch, so this happens right after the branch merges to `main`:
+Local first-evidence validation:
 
-  ```
-  gh workflow run perf-benchmark.yml -f suite=smoke
-  gh run list --workflow=perf-benchmark.yml    # note <run-id>, wait for green
-  gh run download <run-id> -p "perf-results-smoke-*" -D /tmp/perf-results
-  cp /tmp/perf-results/*/[0-9]*-smoke.json \
-    benchmarks/chat-performance/browser/baselines/ci-smoke.json
-  # commit ci-smoke.json — the comparison step gates from the next run on
-  ```
+```sh
+bun run benchmarks/chat-performance/browser/compare-results.ts --collect-baseline path/to/current.json
+```
+
+This explicitly checks correctness, coverage, and absolute budgets but performs no
+relative comparison. It cannot be used to report regression protection as armed.

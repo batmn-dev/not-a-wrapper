@@ -3,7 +3,7 @@
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
 import { Favicon } from "@/components/ui/favicon"
 import { Icon } from "@/components/ui/icon"
-import { Markdown } from "@/components/ui/markdown"
+import { LazyMarkdown as Markdown } from "@/components/ui/lazy-markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useBreakpoint } from "@/hooks/use-breakpoint"
 import type {

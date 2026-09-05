@@ -1,17 +1,19 @@
 /**
  * Thread-switch flow (`SUITE=thread-switch`): sidebar row click → first
- * message row painted, measured through the app's own
- * `chat_navigation_intent` → `nav_to_thread_painted` mark pair, for chats the
+ * destination content observed across a DOM/frame opportunity, for chats the
  * document has not opened yet (unvisited: click, and hover-then-click) and
  * for chats it has (visited). Alongside each switch: the Convex query-set
  * `Add` count sent on the WebSocket, the commit-time cache hit/miss mark, and
  * a forced-GC JS heap sample at fixed switch counts so growth per switch is
  * visible.
  *
- * Fixtures: the signed-in harness user's own chats. When the sidebar shows
- * fewer than `THREAD_SWITCH_CHATS` rows, short deterministic turns create the
- * rest (durable path, so the rows persist across harness runs).
+ * Fixtures: freshly seeded deterministic chats, including one long answer.
+ * React navigation marks remain diagnostic breakdowns, separate from the browser observation.
  */
+import {
+  installChatUiObserver,
+  type ChatUiWindow,
+} from "@/lib/observability/chat-ui-observer"
 import type { Browser, BrowserContext, CDPSession, Page } from "playwright"
 import {
   readHeap,
@@ -105,12 +107,14 @@ async function waitForRows(page: Page, count: number, timeoutMs: number) {
 }
 
 /** Sends one short deterministic turn from the home surface: a new durable chat. */
-async function createChat(page: Page, baseUrl: string) {
+async function createChat(page: Page, baseUrl: string, long: boolean) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
   const editor = page.locator('[contenteditable="true"]').first()
   await editor.waitFor({ state: "visible", timeout: 15_000 })
   await editor.click()
-  await page.keyboard.type(CREATE_DIRECTIVE)
+  await page.keyboard.type(
+    long ? "[[perf:long-markdown:100:fixed]]" : CREATE_DIRECTIVE
+  )
   await page.locator('[data-testid="send-button"]').click()
   await page.waitForURL(/\/c\//, { timeout: 30_000 })
   // A turn that lost live-stream adoption emits only the receipt; one that
@@ -126,6 +130,7 @@ async function createChat(page: Page, baseUrl: string) {
     await tryWaitForMark(page, "durable_settlement_receipt", 15_000)
   }
   await page.waitForTimeout(1_000)
+  return new URL(page.url()).pathname
 }
 
 async function ensureChats(
@@ -134,13 +139,10 @@ async function ensureChats(
   chatCount: number,
   log: ThreadSwitchOptions["log"]
 ): Promise<string[]> {
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
-  let hrefs = await waitForRows(page, chatCount, 10_000)
+  const hrefs: string[] = []
   while (hrefs.length < chatCount) {
     log(`  fixtures: ${hrefs.length}/${chatCount} chats, creating one`)
-    await createChat(page, baseUrl)
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
-    hrefs = await waitForRows(page, chatCount, 10_000)
+    hrefs.push(await createChat(page, baseUrl, hrefs.length === 0))
   }
   return hrefs.slice(0, chatCount)
 }
@@ -152,7 +154,9 @@ async function switchTo(
   querySet: { adds: () => number }
 ): Promise<SwitchSample> {
   const paintedBefore = await page.evaluate(
-    () => performance.getEntriesByName("chat-perf:nav_to_thread_painted").length
+    () =>
+      (window as ChatUiWindow).__chatUiPerf?.values.threadSwitchToFrameMs
+        ?.length ?? 0
   )
   const addsBefore = querySet.adds()
   const row = page
@@ -169,7 +173,8 @@ async function switchTo(
   while (Date.now() < deadline) {
     const count = await page.evaluate(
       () =>
-        performance.getEntriesByName("chat-perf:nav_to_thread_painted").length
+        (window as ChatUiWindow).__chatUiPerf?.values.threadSwitchToFrameMs
+          ?.length ?? 0
     )
     if (count > paintedBefore) {
       painted = true
@@ -188,17 +193,21 @@ async function switchTo(
   const cacheDetail = last(marks, "navigation_cache_hit_or_miss")?.detail?.cache
   const urlOk = new URL(page.url()).pathname === href
   const rows = await page.locator(TURN_ROW_SELECTOR).count()
+  const ui = await page.evaluate(() => ({
+    duration: (
+      window as ChatUiWindow
+    ).__chatUiPerf?.values.threadSwitchToFrameMs?.at(-1),
+    hidden: (window as ChatUiWindow).__chatUiPerf?.hidden ?? true,
+  }))
 
   let detail: string | undefined
-  if (!painted) detail = "nav_to_thread_painted never fired"
+  if (ui.hidden) detail = "tab became hidden"
+  else if (!painted) detail = "destination DOM/frame observation missing"
   else if (!urlOk) detail = `url ${new URL(page.url()).pathname} != ${href}`
   else if (rows === 0) detail = "no message row rendered"
 
   return {
-    navToPaintedMs:
-      painted && intent && paintedMark
-        ? round2(paintedMark.startTime - intent.startTime)
-        : undefined,
+    navToPaintedMs: painted ? ui.duration : undefined,
     intentToCommitMs:
       intent && committed && committed.startTime >= intent.startTime
         ? round2(committed.startTime - intent.startTime)
@@ -263,10 +272,12 @@ export async function runThreadSwitch(
     // second chat to switch to.
     throw new Error("thread-switch needs THREAD_SWITCH_CHATS >= 2")
   }
-  const context: BrowserContext = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    storageState: authState,
-  })
+  const context: BrowserContext = process.env.PERF_CDP_URL
+    ? browser.contexts()[0]
+    : await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        storageState: authState,
+      })
   const passes: Record<ThreadSwitchPassResult["kind"], PassAccumulator> = {
     "unvisited-click": { kind: "unvisited-click", samples: [] },
     "unvisited-hover": { kind: "unvisited-hover", samples: [] },
@@ -277,6 +288,7 @@ export async function runThreadSwitch(
 
   try {
     const fixturePage = await context.newPage()
+    await fixturePage.bringToFront()
     const hrefs = await ensureChats(
       fixturePage,
       baseUrl,
@@ -291,6 +303,8 @@ export async function runThreadSwitch(
     const half = Math.floor(hrefs.length / 2)
     for (let document = 0; document < options.documents; document++) {
       const page = await context.newPage()
+      await page.addInitScript(installChatUiObserver)
+      await page.bringToFront()
       const querySet = installQuerySetCounter(page)
       await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
       await waitForRows(page, hrefs.length, 15_000)
@@ -317,6 +331,8 @@ export async function runThreadSwitch(
     // Visited pass: one document, every chat opened once, then
     // `switchCount` switches cycling through them with heap samples.
     const page = await context.newPage()
+    await page.addInitScript(installChatUiObserver)
+    await page.bringToFront()
     const cdp = await context.newCDPSession(page)
     await cdp.send("Performance.enable")
     await cdp.send("HeapProfiler.enable")
@@ -353,7 +369,7 @@ export async function runThreadSwitch(
     log(`  visited: ${options.switchCount} switches`)
     await page.close()
   } finally {
-    await context.close()
+    if (!process.env.PERF_CDP_URL) await context.close()
   }
 
   return {

@@ -347,6 +347,43 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       settleStreamingDecay(container)
       expect(highlights.size).toBe(12)
       expect(emptyRangeCount()).toBe(0)
+      // A long settled prefix must not multiply JS range-construction work.
+      container.innerHTML =
+        "<p>Settled text. </p>".repeat(1000) + "<p>Ready </p>"
+      observeStreamingDecay(container)
+      container.lastElementChild!.insertAdjacentHTML(
+        "beforeend",
+        "<b>new</b> words"
+      )
+      const forward = vi.spyOn(TreeWalker.prototype, "nextNode")
+      const backward = vi.spyOn(TreeWalker.prototype, "previousNode")
+      const last = vi.spyOn(TreeWalker.prototype, "lastChild")
+      try {
+        observeStreamingDecay(container)
+        const tailRanges = [...highlights.values()].flatMap(
+          (highlight) => highlight.ranges as FakeStaticRange[]
+        )
+        expect(
+          tailRanges
+            .map((range) =>
+              range.startContainer.textContent!.slice(
+                range.startOffset,
+                range.endOffset
+              )
+            )
+            .sort()
+        ).toEqual([" words", "new"])
+        expect(
+          forward.mock.calls.length +
+            backward.mock.calls.length +
+            last.mock.calls.length
+        ).toBeLessThan(8)
+      } finally {
+        forward.mockRestore()
+        backward.mockRestore()
+        last.mockRestore()
+      }
+      settleStreamingDecay(container)
       container.remove()
     } finally {
       // The manager is a module singleton: reset its rAF handle (armed with

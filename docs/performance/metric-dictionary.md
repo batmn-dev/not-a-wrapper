@@ -281,3 +281,41 @@ calls are counted (`providerToolCalls`) because their time stays in the window.
 - Wall-clock comparisons across different machines, build classes, or provider
   populations.
 - `p95` on sample sets smaller than 20 — report median/max only and say so.
+
+## 14. DOM/frame responsiveness contract (schema v2, ADR-0035)
+
+These names are separate from the older React-effect marks. A frame observation
+checks DOM before a frame, then records after its paint opportunity; it is not a
+compositor timestamp. The observation tab must remain visible.
+
+| Metric | Definition |
+| --- | --- |
+| `navigationToComposerInputMs` | Navigation start to the frame following the first successfully entered probe text. Includes driver scheduling; an upper bound, not an inferred hydration timestamp. |
+| `navigationToSendReadyMs` | Navigation start to an enabled Send control with the probe text present. |
+| `navigationToThreadFrameMs` | Navigation start to conversation content observed across a frame opportunity. |
+| `inputToOptimisticFrameMs` | Activating click/Enter timestamp, confirmed by the guarded Composer submit handler, to the new user message visible across a frame opportunity. Menu-consumed Enter does not begin a turn. |
+| `inputToFirstTextFrameMs` | Same input to nonempty current-turn assistant Markdown across a frame opportunity. |
+| `inputToFirstActivityFrameMs` | Same input to an inspectable activity disclosure. Bare Thinking does not satisfy it. |
+| `typingToFrameMs` | Oldest unobserved key/beforeinput timestamp to an editor update observed across a frame opportunity. Coalesced input retains the oldest delay; no slow-sample cutoff. |
+| `menuToFrameMs` | Composer plus-menu click to visible menu across a frame opportunity. |
+| `scrollToFrameMs` | Wheel event to changed thread scroll position across a frame opportunity. Not a general touch-scroll/INP metric. |
+| `deltaToContentFrameMs` | A sampled received-text watermark to an at-least-equal rendered-source watermark in a visible Markdown container across a frame opportunity. Four samples/sec maximum; no provider gaps included. |
+| `typingToFrameEarlyMs` / `typingToFrameLateMs`, `menuToFrameEarlyMs` / `menuToFrameLateMs`, `deltaToContentFrameEarlyMs` / `deltaToContentFrameLateMs` | Harness phases: early interaction after first text; late interaction after at least 80% of the deterministic fixture source is rendered while the stream remains active. Each phase must produce samples in every run. |
+| `scrollToFrameLateMs` | Scroll response during the late phase, when the long answer has overflow to scroll. |
+| `terminalToReadyFrameMs` | Transport finish/error to idle composer state across a frame opportunity. Local Stop falls back to its input timestamp when transport cancellation omits finish. |
+| `stopToReadyFrameMs` | Stop click to visible idle composer state, even when blank Send is disabled. |
+| `threadSwitchToFrameMs` | Sidebar click to changed destination content across a frame opportunity, with destination URL checked. |
+| `lcpMs` | Last observed browser LCP entry; diagnostic, not composer readiness. |
+| `interactionMs` | One Event Timing duration per interaction ID; diagnostic, not session INP. |
+
+The fixed normal-profile budgets are defined in `result-contract.ts`. Result JSON
+retains raw content-free samples so budget-exceedance rates can be recomputed.
+Summaries must match their raw observations. Completed foreground runs must drain
+all sampled received content; pending counts remain explicit for Stop, reload, and
+intentional second-tab cutoffs. Any observation-buffer overflow invalidates a run.
+`n=0` means absent. p95 is omitted below 20 observations. Repeated keystrokes from
+one run do not replace the requirement for at least five complete journey runs.
+Cold means HTTP cache disabled (CI also creates a fresh context with the benchmark
+session); authenticated Chrome preserves the person's storage and cookies. Warm
+uses cached assets in fresh documents; the visited thread-switch pass separately
+measures navigation within a live document.

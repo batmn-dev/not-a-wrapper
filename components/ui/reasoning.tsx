@@ -11,7 +11,7 @@ import { formatDuration } from "@/lib/format-duration"
 import { cn } from "@/lib/utils"
 import { RiArrowDownSLine } from "@remixicon/react"
 import React, { createContext, useContext, useState } from "react"
-import { Markdown } from "./markdown"
+import { LazyMarkdown as Markdown } from "./lazy-markdown"
 
 type ReasoningContextType = {
   isOpen: boolean

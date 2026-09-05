@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
+import { installChatUiObserver } from "./lib/observability/chat-ui-observer"
 import {
   sentryBeforeBreadcrumb,
   sentryBeforeSend,
@@ -38,3 +39,32 @@ if (posthogKey && !posthog.__loaded) {
 }
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+
+// Opt-in until the instrumented/uninstrumented browser comparison is reviewed.
+// Browser INP remains Sentry's native metric; these are named chat DOM/frame proxies.
+const chatUiSampleRate = Number(
+  process.env.NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE ?? 0
+)
+const chatUiBenchmark =
+  process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION === "true"
+if (
+  chatUiBenchmark ||
+  (Number.isFinite(chatUiSampleRate) &&
+    Math.random() < Math.min(1, Math.max(0, chatUiSampleRate)))
+) {
+  installChatUiObserver({
+    resumeOnVisible: !chatUiBenchmark,
+    report(metric, durationMs) {
+      if (chatUiBenchmark) {
+        console.info(
+          JSON.stringify({ _tag: "chat_ui_perf", metric, durationMs })
+        )
+        return
+      }
+      Sentry.metrics.distribution(`chat.ui.${metric}`, durationMs, {
+        unit: "millisecond",
+        attributes: { measurement: "dom-frame-v1" },
+      })
+    },
+  })
+}

@@ -89,3 +89,53 @@ repository, not `docs/`.
 Before treating instrumentation numbers as user-facing truth, compare an
 instrumented and uninstrumented build of the same deterministic scenario. The
 instrumented run must not introduce a new task longer than 50 ms.
+
+## Responsiveness workflow (schema v2)
+
+Read ADR-0035 and metric dictionary group 14. `SUITE=responsiveness` is the small
+signed-in core: cold entry, follow-up after reloading its seeded conversation,
+reasoning-first, long-answer interaction, one 4x CPU + constrained-network repeat,
+Stop, and error recovery. Existing thread-switch and stress/recovery suites remain
+separate. No real provider behavior is changed by the test.
+
+On local machines the harness requires `PERF_CDP_URL` for an already authenticated
+Chrome connection. It opens/closes its own tabs and never clears that profile's
+storage. Guest suites run only in the CI browser. Do not launch another profile
+or restart the user's browser to work around an unavailable connection. The Chrome
+extension can validate the production build manually and read `chat_ui_perf`
+console records, but this is not a controlled runner baseline.
+
+```sh
+# Build only; this command does not deploy Convex.
+NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION=true NEXT_DIST_DIR=.next-perf bun run build:next
+PERF_CDP_URL=http://localhost:9222 SUITE=responsiveness RUNS=5 bun run bench:browser
+```
+
+The app must already be authenticated at the benchmark's origin when attaching
+Chrome. Runs that cannot send, lose foreground visibility, omit required evidence,
+or fail correctness are failures. The second-tab durability scenario preserves
+its first-output observations before intentionally transferring tab focus; it
+makes no claim about subsequent foreground interactivity in the original tab.
+
+Relevant same-repository PRs run the core suite. Weekly CI runs the rendering,
+durability, and thread-switch suites serially against the benchmark deployment.
+Fork PRs do not receive credentials. Missing baselines fail; use the explicit
+collection process in `browser/baselines/README.md`. CI records five measured runs
+per scenario after a warmup; use longer captures for tail-distribution analysis.
+
+### Validate observer overhead before enabling production collection
+
+Use the same production commit, foreground Chrome, deterministic prompt, machine,
+and network in interleaved captures with and without the observer. Compare an
+external browser trace's input durations and main-thread work, not the observer's
+own output. Require no added >50 ms task and investigate median overhead above
+2%. Record both build IDs, observer setting, sample counts, and trace method.
+The ordinary benchmark cannot substitute for this A/B.
+
+Once validated, set `NEXT_PUBLIC_CHAT_UI_SAMPLE_RATE` to a reviewed sampling rate
+(for example 0.01) and rebuild. This sends only named duration distributions to
+existing Sentry under `chat.ui.*`; it defaults to zero. Verify event arrival in
+Sentry and compare release/device cohorts alongside native LCP/INP and the existing
+server run receipts. Never pool provider routes, reasoning settings, or tool states
+in a real-provider first-output comparison. Treat timeouts/errors as outcomes,
+not missing observations to discard.

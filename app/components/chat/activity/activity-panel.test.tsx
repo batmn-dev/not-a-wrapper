@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import type { SourceUrlUIPart } from "ai"
+import { preloadMarkdown } from "@/components/ui/lazy-markdown"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -315,8 +316,8 @@ describe("ActivityPanel coexistence", () => {
     }
   })
 
-  it("renders only a non-empty visible reasoning section", () => {
-    act(() => {
+  it("renders only a non-empty visible reasoning section", async () => {
+    await act(async () => {
       root?.render(
         <ActivityPanelHostProvider>
           <ActivityPanelDockSlot />
@@ -347,6 +348,7 @@ describe("ActivityPanel coexistence", () => {
           />
         </ActivityPanelHostProvider>
       )
+      await preloadMarkdown()
     })
 
     expect(document.body.textContent).toContain("Thinking")

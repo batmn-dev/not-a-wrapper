@@ -78,6 +78,13 @@ unauth cold load of `/` before and after recording total JS bytes (Brotli),
 request count, and `input_to_next_paint`; guard that `send_to_first_visible_text`
 and `first_text_to_visible` do not regress on the smoke suite. Expected: at
 least 250 KB br less first-load JS on `/` and no new long task at first send.
+Progress (2026-09-05): Message, Activity, and reasoning now share a lazy Markdown
+boundary, warmed through Composer intent. The production homepage's declared
+script set fell by 113,794 locally Brotli-compressed bytes (11.4%); this is not a
+hydrated-browser load/latency measurement. See
+`docs/performance/2026-09-05-interaction-optimizations.md`. Remaining: browser
+first-text validation, charts/composer extras attribution, client zod audit,
+and broader thread-route splitting.
 - **Investigate a warm client cache for chats (replicate T3 Chat's local-first
 feel):** t3.chat serves the sidebar and thread switches from a client store,
 so revisiting a thread paints without a loading state. We mount no Convex
