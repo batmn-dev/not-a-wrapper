@@ -45,6 +45,11 @@ viewport by itself is not a phone-performance simulation.
 
 ## Evidence and gates
 
+Workflow dispatch `diagnose=true` records a single CPU-profiled run for the `only`
+scenario IDs. It skips performance certification; profiled results are rejected
+as baselines. `.cpuprofile` artifacts are developer diagnostics, separate from the
+content-free measurement JSON.
+
 Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM

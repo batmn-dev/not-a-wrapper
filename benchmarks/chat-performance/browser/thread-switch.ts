@@ -405,7 +405,7 @@ export function formatThreadSwitch(result: ThreadSwitchResult): string[] {
   for (const pass of result.passes) {
     const paint = pass.navToThreadPaintedMs
     lines.push(
-      `  ${pass.kind.padEnd(16)} n=${paint.n} navToPainted p50=${paint.p50}ms p95=${paint.p95}ms max=${paint.max}ms ` +
+      `  ${pass.kind.padEnd(16)} n=${paint.n} navToPainted p50=${paint.p50}ms p95=${paint.p95 === undefined ? "n/a" : `${paint.p95}ms`} max=${paint.max}ms ` +
         `(commit p50=${pass.intentToRouteCommitMs.p50}ms, commit→rows p50=${pass.commitToFirstContentMs.p50}ms, rows→painted p50=${pass.firstContentToPaintedMs.p50}ms) ` +
         `cache hit/miss=${pass.cacheHits}/${pass.cacheMisses} querySetAdds p50=${pass.querySetAddsPerSwitch.p50}`
     )

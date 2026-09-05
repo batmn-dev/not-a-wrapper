@@ -340,6 +340,7 @@ async function runScenarioOnce(
   )
   await page.bringToFront()
   const cdp: CDPSession = await context.newCDPSession(page)
+  let profiling = false
   await cdp.send("Performance.enable")
   if (config.cache === "cold") {
     await cdp.send("Network.enable")
@@ -427,6 +428,11 @@ async function runScenarioOnce(
         )
       )
     })
+    if (process.env.PERF_PROFILE === "true") {
+      await cdp.send("Profiler.enable")
+      await cdp.send("Profiler.start")
+      profiling = true
+    }
     await page.locator('[data-testid="send-button"]').click()
 
     // Durable turns navigate to the server chat URL on acceptance.
@@ -939,6 +945,18 @@ async function runScenarioOnce(
       },
     }
   } finally {
+    if (profiling) {
+      const { profile } = await cdp.send("Profiler.stop")
+      const directory = path.join(
+        REPO_ROOT,
+        "benchmarks/chat-performance/browser/results"
+      )
+      mkdirSync(directory, { recursive: true })
+      writeFileSync(
+        path.join(directory, `${config.id}.cpuprofile`),
+        JSON.stringify(profile)
+      )
+    }
     await page.close()
   }
 }
@@ -1359,6 +1377,7 @@ async function main() {
   const file: BenchmarkResultFile = {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v1",
+    profiled: process.env.PERF_PROFILE === "true",
     fixtureHash: hashValue(
       isThreadSwitch
         ? ["short-prose", "long-markdown"].map((scenario) =>

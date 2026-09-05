@@ -37,6 +37,14 @@ on:
         description: "Collect first evidence; does not certify relative regression protection"
         type: boolean
         default: false
+      diagnose:
+        description: "CPU profile a single run; never a performance certification"
+        type: boolean
+        default: false
+      only:
+        description: "Diagnostic scenario IDs, comma-separated"
+        type: string
+        default: "new-chat-cold,interact-long-answer"
 
 permissions:
   contents: read
@@ -59,8 +67,10 @@ jobs:
     timeout-minutes: 45
     env:
       SUITE: ${{ matrix.suite }}
-      RUNS: 5
-      WARMUPS: 1
+      RUNS: ${{ inputs.diagnose && 1 || 5 }}
+      WARMUPS: ${{ inputs.diagnose && '0' || '1' }}
+      PERF_PROFILE: ${{ inputs.diagnose && 'true' || 'false' }}
+      ONLY: ${{ inputs.diagnose && inputs.only || '' }}
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Checkout repository
@@ -110,6 +120,7 @@ jobs:
           PERF_AUTH_PASSWORD: ${{ secrets.PERF_AUTH_PASSWORD }}
 
       - name: Compare against baseline
+        if: ${{ !inputs.diagnose }}
         run: |
           CURRENT=$(ls -t benchmarks/chat-performance/browser/results/*.json | head -1)
           echo "current results: $CURRENT"
@@ -124,5 +135,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
-          path: benchmarks/chat-performance/browser/results/*.json
+          path: |
+            benchmarks/chat-performance/browser/results/*.json
+            benchmarks/chat-performance/browser/results/*.cpuprofile
           retention-days: 90

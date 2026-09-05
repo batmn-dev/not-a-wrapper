@@ -168,8 +168,12 @@ describe("performance evidence contract", () => {
   it("does not let a slow baseline normalize a failed feedback budget", () => {
     const slow = result()
     slow.scenarios[0].runs.forEach((run) => {
-      run.ui = { inputToOptimisticFrameMs: [500] }
+      run.ui!.inputToOptimisticFrameMs = [500]
     })
+    slow.scenarios[0].metrics.inputToOptimisticFrameMs = summarize(
+      Array(5).fill(500)
+    )
+    expect(validateCoverage(slow)).toEqual([])
     expect(compareResults(slow, slow).join(" ")).toContain("5/5 exceed 100ms")
   })
 

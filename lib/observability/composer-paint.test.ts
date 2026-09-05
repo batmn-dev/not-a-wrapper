@@ -100,6 +100,28 @@ describe("composer paint controller", () => {
     flushFrame(30)
     expect(mark).not.toHaveBeenCalled()
   })
+
+  it("discards hidden intervals and stale inputs without editor transactions", () => {
+    const mark = vi.spyOn(performance, "mark")
+    const editor = document.createElement("div")
+    const controller = createComposerPaintController(editor)
+    dispatchTimedEvent(editor, "keydown", { key: "a", timeStamp: 10 })
+    vi.spyOn(performance, "now").mockReturnValue(2500)
+    controller.onComposerUpdate()
+    expect(frames).toHaveLength(0)
+
+    dispatchTimedEvent(editor, "keydown", { key: "b", timeStamp: 2510 })
+    controller.onEditorUpdate()
+    const delayed = frames[0]
+    const visibility = vi.spyOn(document, "visibilityState", "get")
+    visibility.mockReturnValue("hidden")
+    document.dispatchEvent(new Event("visibilitychange"))
+    expect(frames).toHaveLength(0)
+    visibility.mockReturnValue("visible")
+    delayed.callback(5000)
+    expect(mark).not.toHaveBeenCalled()
+    controller.dispose()
+  })
 })
 
 describe("stalled composer input", () => {

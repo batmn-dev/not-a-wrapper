@@ -60,14 +60,32 @@ export function createComposerPaintController(
   let carryInputToNextComposer = false
   let skipNextComposerMeasure = false
   const frames = new Set<number>()
+  let visibilityGeneration = 0
+  const clearPending = () => {
+    visibilityGeneration++
+    pendingInputStartedAt = pendingComposerStartedAt = undefined
+    carryInputToNextComposer = skipNextComposerMeasure = false
+    frames.forEach(cancelAnimationFrame)
+    frames.clear()
+  }
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== "visible") clearPending()
+  }
+  document.addEventListener("visibilitychange", onVisibilityChange)
 
   const measureAfterFrames = (
     event: ChatPerfEventName,
     startedAt: number,
     remainingFrames: number
   ) => {
+    const generation = visibilityGeneration
     const frame = requestAnimationFrame((paintedAt) => {
       frames.delete(frame)
+      if (
+        generation !== visibilityGeneration ||
+        document.visibilityState !== "visible"
+      )
+        return
       if (remainingFrames > 1) {
         measureAfterFrames(event, startedAt, remainingFrames - 1)
         return
@@ -143,8 +161,8 @@ export function createComposerPaintController(
     dispose() {
       editor.removeEventListener("keydown", onKeyDown, true)
       editor.removeEventListener("beforeinput", onBeforeInput, true)
-      for (const frame of frames) cancelAnimationFrame(frame)
-      frames.clear()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      clearPending()
     },
   }
 }
