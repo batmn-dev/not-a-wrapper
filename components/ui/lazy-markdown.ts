@@ -3,10 +3,11 @@
 import dynamic from "next/dynamic"
 import { createIntentPreloader } from "./intent-prefetch"
 
-// Keep the import inside dynamic so Next can preload the renderer for SSR content.
-export const LazyMarkdown = dynamic(() =>
-  import("./markdown").then((module) => module.Markdown)
-)
+export let preloadMarkdown: () => Promise<typeof import("./markdown").Markdown>
 
-// Intent warming and rendering share the same chunk; warming never gates input or Send.
-export const preloadMarkdown = createIntentPreloader(() => import("./markdown"))
+// Share Next's transformed loader while keeping its inline import for SSR preloads.
+export const LazyMarkdown = dynamic(
+  (preloadMarkdown = createIntentPreloader(() =>
+    import("./markdown").then((module) => module.Markdown)
+  ))
+)

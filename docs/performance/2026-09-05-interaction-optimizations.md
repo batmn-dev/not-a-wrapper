@@ -373,3 +373,26 @@ attribute invalidation without replacing the app’s keyboard/pointer focus poli
 Four focus-controller tests, typecheck, lint, compiled-selector verification, and an
 independent event-order/cleanup review pass. Fresh hosted latency evidence remains
 required; these checks establish behavior and selector scope, not a speedup.
+
+The standard syntax-reuse capture,
+[run 33964356291](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33964356291),
+uses `8ed2237d`, AMD EPYC 7763, and Chromium 151.0.7922.34. All eleven
+correctness checks pass. Large-slab content latency has median 65 ms and maximum
+134.2 ms (n=15, p95 omitted), compared with 78.5/168 ms in run 33960825679 on
+the same environment. This is a combined before/after comparison including the
+Activity selector correction, not an isolated parse-reuse experiment. It still
+fails 14/15 slab samples and 4/50 bursty samples, so it is not accepted.
+
+Bundle inspection found that the original intent preloader and `next/dynamic`
+renderer used different emitted loaders. An older cold trace fetched the
+renderer’s additional 31,396-byte decoded dependency chunk after first text
+arrived. Matching named/default export syntax did not remove Next’s generated
+manifest wrapper, so those prototypes were discarded. The retained fix captures
+one memoized loader inside the `dynamic` call and exports that exact function
+for warming. The import stays inline for Next’s SSR metadata transform.
+
+Production build `ciD7otvUdBhxkkpoXK50k` proves both callers use loader 778260,
+with no separate loader 87232; wrapper module 990530 and its required chunks
+remain in all five relevant SSR manifests. The build, typecheck, lint, and 59
+focused tests pass. This proves shared loading and preserved preload metadata,
+not a measured first-output speedup. A fresh hosted capture must quantify that.
