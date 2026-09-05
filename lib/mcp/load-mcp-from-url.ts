@@ -23,6 +23,7 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
     timeout = MCP_CONNECTION_TIMEOUT_MS,
   } = normalized
   const lifetime = new AbortController()
+  let cleanup: AbortController | undefined
   let client: Awaited<ReturnType<typeof createMCPClient>> | undefined
   let closing: Promise<void> | undefined
 
@@ -30,12 +31,14 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
     if (!client) return Promise.resolve()
     const openedClient = client
     return (closing ??= (async () => {
+      cleanup = new AbortController()
       // Bound the SDK's best-effort session DELETE as well as local teardown.
-      const timer = setTimeout(() => lifetime.abort(), timeout)
+      const timer = setTimeout(() => cleanup?.abort(), timeout)
       try {
         await openedClient.close()
       } finally {
         clearTimeout(timer)
+        cleanup.abort()
         lifetime.abort()
       }
     })())
@@ -53,14 +56,19 @@ export async function loadMCPToolsFromURL(config: string | McpTransportConfig) {
         // Keep DNS pinning and redirect rejection; cancellation also reaches
         // tool discovery and response bodies, not just the caller's wait.
         fetch: (input, init) => {
+          const request = input instanceof Request ? input : undefined
           const requestSignal =
-            init?.signal ??
-            (input instanceof Request ? input.signal : undefined)
+            init?.signal ?? request?.signal
+          // Session termination must still run after preparation was aborted.
+          const signal =
+            (init?.method ?? request?.method) === "DELETE" && cleanup
+              ? cleanup.signal
+              : lifetime.signal
           return pinnedFetch(input, {
             ...init,
             signal: requestSignal
-              ? AbortSignal.any([requestSignal, lifetime.signal])
-              : lifetime.signal,
+              ? AbortSignal.any([requestSignal, signal])
+              : signal,
           })
         },
         ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),

@@ -59,19 +59,16 @@ streams via `DefaultChatTransport`, which does not attach the header); it is
 covered by `SameSite=Lax`. Public GETs (`health`, `models`, `csrf`,
 `rate-limits`) stay open by design.
 
-### One SSRF gate for MCP (`assertMcpUrlAllowed`)
+### One SSRF gate for MCP
 
-`lib/mcp/url-validation.ts` now exports `assertMcpUrlAllowed(url)`, which runs the
-pure string check **and** the DNS-resolving rebinding check and throws on the
-first failure. It is the single sanctioned way to open an MCP connection: both
-`loadMCPToolsFromURL` (the test path) and the chat runtime call it before handing
-a URL to the transport. `redirect: "error"` on the transport stays (ADR-era SSRF
-hardening). The Convex mutation keeps its mirrored string check for the runtimes
-where `node:dns` is unavailable.
-
-Follow-up (ADR-0035): both callers now use the MCP connection module in
-`lib/mcp/load-mcp-from-url.ts`. It owns DNS-pinned transport creation and the
-complete preparation deadline, including discovery and failure cleanup.
+ADR-0035 supersedes the original direct-caller validation: settings and the
+chat runtime now delegate to `loadMCPToolsFromURL` in
+`lib/mcp/load-mcp-from-url.ts`. This shared module calls
+`resolveMcpUrlForConnection` for string and DNS-rebinding checks, then pins the
+transport to the validated addresses. It owns the complete preparation deadline,
+including discovery and failure cleanup. `redirect: "error"` remains enforced.
+The Convex mutation keeps its mirrored string check for runtimes where
+`node:dns` is unavailable.
 
 ### Per-identity rate limiting + security headers
 

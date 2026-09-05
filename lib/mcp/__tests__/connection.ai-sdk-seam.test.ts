@@ -21,13 +21,15 @@ afterEach(() => {
 })
 
 describe("MCP connection through the AI SDK", () => {
-  it.each(["discovery", "close"] as const)(
+  it.each(["discovery", "discovery error", "close"] as const)(
     "bounds the real SDK's %s request",
     async (phase) => {
       vi.useFakeTimers()
       let pendingSignal: AbortSignal | null | undefined
+      let cleanupSignal: AbortSignal | null | undefined
       let requestAborted = false
       function pendingRequest(signal: AbortSignal | null | undefined) {
+        signal?.throwIfAborted()
         pendingSignal = signal
         return new Promise<Response>((_resolve, reject) => {
           signal?.addEventListener(
@@ -41,7 +43,8 @@ describe("MCP connection through the AI SDK", () => {
         })
       }
       transportFetch.mockImplementation(async (_input, init) => {
-        if (phase === "close" && init?.method === "DELETE") {
+        if (init?.method === "DELETE") {
+          cleanupSignal = init.signal
           return pendingRequest(init.signal)
         }
         if (init?.method !== "POST") {
@@ -52,6 +55,13 @@ describe("MCP connection through the AI SDK", () => {
           method: string
         }
         if (message.method === "tools/list") {
+          if (phase === "discovery error") {
+            return Response.json({
+              jsonrpc: "2.0",
+              id: message.id,
+              error: { code: -32603, message: "Discovery failed" },
+            })
+          }
           return phase === "discovery"
             ? pendingRequest(init.signal)
             : Response.json({
@@ -86,8 +96,10 @@ describe("MCP connection through the AI SDK", () => {
         timeout: 50,
       })
       const settled =
-        phase === "discovery"
-          ? expect(pending).rejects.toThrow("MCP connection timeout")
+        phase !== "close"
+          ? expect(pending).rejects.toThrow(
+              phase === "discovery" ? "MCP connection timeout" : "Discovery failed"
+            )
           : pending.then(async (connection) => {
               await connection.close()
               await connection.close()
@@ -98,6 +110,14 @@ describe("MCP connection through the AI SDK", () => {
       await vi.advanceTimersByTimeAsync(50)
       await settled
       expect(requestAborted).toBe(true)
+      if (phase === "discovery") {
+        // Failure returns immediately; remote cleanup gets its own deadline.
+        expect(cleanupSignal).toBeInstanceOf(AbortSignal)
+        expect(cleanupSignal?.aborted).toBe(false)
+        await vi.advanceTimersByTimeAsync(50)
+      }
+      expect(cleanupSignal).toBeInstanceOf(AbortSignal)
+      expect(cleanupSignal?.aborted).toBe(true)
       expect(pendingSignal?.aborted).toBe(true)
       expect(vi.getTimerCount()).toBe(0)
     }

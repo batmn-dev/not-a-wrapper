@@ -19,10 +19,11 @@ The module returns tools and a close operation, never the raw SDK client.
 Failure cancels transport work and initiates cleanup without delaying the
 caller; a late-created client is also closed. Successful preparation clears
 its deadline, leaving the connection usable until the Tool runtime disposes it
-after turn settlement or settings closes it after discovery. Closing gives the SDK's
-session termination request a bounded best-effort window, then aborts the
-transport. Remote session reclamation remains the server's responsibility if
-that request fails.
+after turn settlement or settings closes it after discovery. Closing gives the
+SDK's session termination request its own bounded best-effort window, even
+when preparation has already been aborted. Other requests retain the connection's
+cancellation signal. Remote session reclamation remains the server's
+responsibility if termination fails.
 
 ADR-0010's DNS pinning, redirect rejection, and credential ownership remain
 intact. Tests exercise shared preparation and cancellation, including the real
