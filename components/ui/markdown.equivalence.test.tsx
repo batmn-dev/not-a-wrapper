@@ -17,6 +17,7 @@
 // the same settled DOM as the plain control — the projection advances
 // through render-phase state adjustment, which StrictMode double-invokes.
 
+import { buildMarkdownPayload } from "@/benchmarks/chat-performance/fixtures"
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
 import {
   EQUIVALENCE_FIXTURES,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/markdown/markdown-equivalence-corpus"
 import React, { act, StrictMode } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import type { Processor } from "unified"
 import {
   afterEach,
   beforeAll,
@@ -34,6 +36,42 @@ import {
   vi,
 } from "vitest"
 import { Markdown } from "./markdown"
+
+const parseSource = vi.hoisted(() => vi.fn())
+const canonicalParser = vi.hoisted(() => ({ enabled: false }))
+vi.mock("@/lib/markdown/remark-parsed-block", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/lib/markdown/remark-parsed-block")>()
+  return {
+    ...original,
+    remarkParsedBlock: function (
+      this: Processor,
+      ...args: Parameters<typeof original.remarkParsedBlock>
+    ) {
+      if (!canonicalParser.enabled)
+        return original.remarkParsedBlock.apply(this, args)
+    },
+  }
+})
+vi.mock("react-markdown", async (importOriginal) => {
+  const original = await importOriginal<typeof import("react-markdown")>()
+  function countParses(this: Processor) {
+    const parser = this.parser!
+    this.parser = (source, file) => {
+      parseSource(source)
+      return parser(source, file)
+    }
+  }
+  return {
+    ...original,
+    default: function (props: Parameters<typeof original.default>[0]) {
+      return original.default({
+        ...props,
+        remarkPlugins: [countParses, ...(props.remarkPlugins ?? [])],
+      })
+    },
+  }
+})
 
 vi.mock("@/lib/markdown/shiki-client", () => ({
   highlightCode: vi.fn(
@@ -69,19 +107,32 @@ type Mount = {
   unmount: () => void
 }
 
-function mount(strict = false): Mount {
+function mount(
+  strict = false,
+  canonical = false,
+  customComponents = false
+): Mount {
   const host = document.createElement("div")
   document.body.appendChild(host)
   const root = createRoot(host)
   const render = (markdown: string, streaming: boolean) => {
     const tree = (
-      <Markdown id="equiv" streaming={streaming}>
+      <Markdown
+        id="equiv"
+        streaming={streaming}
+        components={customComponents ? {} : undefined}
+      >
         {markdown}
       </Markdown>
     )
-    act(() => {
-      root.render(strict ? <StrictMode>{tree}</StrictMode> : tree)
-    })
+    canonicalParser.enabled = canonical
+    try {
+      act(() => {
+        root.render(strict ? <StrictMode>{tree}</StrictMode> : tree)
+      })
+    } finally {
+      canonicalParser.enabled = false
+    }
   }
   return {
     host,
@@ -125,6 +176,74 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
     vi.useRealTimers()
   })
 
+  it("reuses slab syntax without changing canonical DOM or completed block identity", async () => {
+    const source = buildMarkdownPayload()
+    const reused = mount()
+    const canonical = mount(false, true)
+    let firstParagraph: Element | null = null
+    for (const end of [4096, 8192, source.length]) {
+      const prefix = source.slice(0, end)
+      reused.render(prefix, true)
+      canonical.render(prefix, true)
+      await flushHighlights()
+      expect(normalize(reused.host.innerHTML)).toBe(
+        normalize(canonical.host.innerHTML)
+      )
+      firstParagraph ??= reused.host.querySelector("p")
+      expect(reused.host.querySelector("p")).toBe(firstParagraph)
+    }
+    reused.render(source, false)
+    canonical.render(source, false)
+    await flushHighlights()
+    expect(normalize(reused.host.innerHTML)).toBe(
+      normalize(canonical.host.innerHTML)
+    )
+    expect(reused.host.querySelector("p")).toBe(firstParagraph)
+    reused.unmount()
+    canonical.unmount()
+  })
+
+  it("skips only the eligible second parses and retains the growing and custom-component paths", () => {
+    const source = "# Heading\n\nA **strong** paragraph.\n\nGrowing tail"
+    parseSource.mockClear()
+    const reused = mount()
+    reused.render(source, true)
+    expect(parseSource.mock.calls.map(([text]) => text)).toEqual([
+      "Growing tail",
+    ])
+    reused.render(source, false)
+    expect(parseSource.mock.calls.map(([text]) => text)).toEqual([
+      "Growing tail",
+    ])
+    reused.unmount()
+
+    parseSource.mockClear()
+    const canonical = mount(false, false, true)
+    canonical.render(source, false)
+    expect(parseSource).toHaveBeenCalledTimes(3)
+    canonical.unmount()
+  })
+
+  it("refreshes a reused block when consumer components change", () => {
+    const host = document.createElement("div")
+    const root = createRoot(host)
+    const First = () => <p>First override</p>
+    const Second = () => <p>Second override</p>
+    const render = (p?: typeof First) =>
+      act(() => {
+        root.render(
+          <Markdown components={p ? { p } : undefined}>Stable source</Markdown>
+        )
+      })
+    render()
+    expect(host.textContent).toBe("Stable source")
+    render(First)
+    expect(host.textContent).toBe("First override")
+    render(Second)
+    expect(host.textContent).toBe("Second override")
+    act(() => root.unmount())
+  })
+
   for (const fixture of EQUIVALENCE_FIXTURES) {
     it(`renders identically streamed and fresh at every sampled prefix: ${fixture.name}`, async () => {
       const offsets = seededPrefixOffsets(fixture.source.length, 7)
@@ -143,7 +262,7 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
         if (!sampled.has(offset)) continue
         await flushHighlights()
 
-        const control = mount()
+        const control = mount(false, true)
         control.render(prefix, true)
         await flushHighlights()
         expect(
@@ -156,7 +275,7 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
       // Settlement: streamed-then-settled vs fresh settled mount.
       streamed.render(fixture.source, false)
       await flushHighlights()
-      const settledControl = mount()
+      const settledControl = mount(false, true)
       settledControl.render(fixture.source, false)
       await flushHighlights()
       expect(
@@ -178,7 +297,7 @@ describe("streamed vs authoritative rendered DOM (full corpus)", () => {
       strict.render(fixture.source, false)
       await flushHighlights()
 
-      const control = mount(false)
+      const control = mount(false, true)
       control.render(fixture.source, false)
       await flushHighlights()
       expect(

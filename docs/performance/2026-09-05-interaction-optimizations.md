@@ -290,6 +290,15 @@ mutations. Nineteen focused panel/controller tests pass, including detached-slot
 replacement and unmount cleanup. A fresh unprofiled capture must establish the
 latency effect; the trace alone proves the invalidation cause, not the speedup.
 
+[Run 33962766141](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33962766141)
+captured the CSS fix through PR merge commit `640ac0d` (head `fbfea89d`). All
+seven correctness checks pass. Absolute budgets fail only one menu sample:
+1/10 openings exceeded 100 ms, with a late-menu maximum of 122.6 ms and median
+71.6 ms. Long-answer content delivery has 6/485 samples above 50 ms, within the
+5% allowance; its median is 16.9 ms and p95 30.8 ms. This capture uses AMD EPYC
+9V74, unlike the preceding 7763 capture, so it is not an isolated before/after
+latency comparison. It remains rejected as a baseline because of the menu failure.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the

@@ -57,6 +57,11 @@ import {
   hasFenceCloser,
   terminalListFacts,
 } from "./growing-block-tail"
+import {
+  canReuseParsedMarkdownWindow,
+  retainParsedMarkdownBlock,
+  type ParsedMarkdownBlock,
+} from "./remark-parsed-block"
 
 /**
  * Shared remark-math options for BOTH the block splitter and the per-block
@@ -112,6 +117,7 @@ export type MarkdownProjectionBlock = {
   nodeType: string
   startOffset: number
   endOffset: number
+  parsedBlock?: ParsedMarkdownBlock
 }
 
 export type MarkdownProjectionState = {
@@ -138,9 +144,7 @@ export type MarkdownProjectionResetReason =
   | "source-diverged"
 
 export type MarkdownProjectionFallbackReason =
-  | "no-safe-restart-boundary"
-  | "tail-misaligned"
-  | "context-divergence"
+  "no-safe-restart-boundary" | "tail-misaligned" | "context-divergence"
 
 export type MarkdownProjectionResult = {
   state: MarkdownProjectionState
@@ -166,6 +170,7 @@ type RawBlock = {
   nodeType: string
   startOffset: number
   endOffset: number
+  parsedBlock?: ParsedMarkdownBlock
 }
 
 /**
@@ -178,20 +183,37 @@ export function splitMarkdownSource(source: string): RawBlock[] {
   return splitWithProcessor(source, 0)
 }
 
-function splitWithProcessor(text: string, offsetBase: number): RawBlock[] {
+function splitWithProcessor(
+  text: string,
+  offsetBase: number,
+  retainSyntax = false
+): RawBlock[] {
   const tree = markdownProcessor.parse(text)
+  const reusableWindow = retainSyntax && canReuseParsedMarkdownWindow(tree)
   const blocks: RawBlock[] = []
-  for (const node of tree.children) {
+  for (const [index, node] of tree.children.entries()) {
     const start = node.position?.start.offset
     const end = node.position?.end.offset
     if (typeof start !== "number" || typeof end !== "number") {
       continue
     }
+    const source = text.slice(start, end)
     blocks.push({
-      text: text.slice(start, end),
+      text: source,
       nodeType: node.type,
       startOffset: offsetBase + start,
       endOffset: offsetBase + end,
+      ...(retainSyntax
+        ? {
+            parsedBlock: reusableWindow
+              ? retainParsedMarkdownBlock(
+                  node,
+                  source,
+                  tree.children[index - 1]
+                )
+              : undefined,
+          }
+        : {}),
     })
   }
   return blocks
@@ -280,6 +302,7 @@ function reconcileIdentities(
         changed++
       } else {
         reused++
+        return before
       }
       return { ...block, id: before.id }
     }
@@ -354,7 +377,7 @@ function fullParseResult(args: {
   fallbackReason: MarkdownProjectionFallbackReason | null
 }): MarkdownProjectionResult {
   const { source, streaming, identity, previous } = args
-  const raw = splitMarkdownSource(source)
+  const raw = splitWithProcessor(source, 0, true)
 
   let blocks: MarkdownProjectionBlock[]
   let nextBlockIdentity: number
@@ -605,7 +628,11 @@ export function advanceMarkdownProjection(args: {
     previous.stableCount
   )
 
-  const parsed = splitWithProcessor(source.slice(parseOffset), parseOffset)
+  const parsed = splitWithProcessor(
+    source.slice(parseOffset),
+    parseOffset,
+    true
+  )
 
   // Context reproduction check: every context block must come back with the
   // same type, offsets, and text. A mismatch means parser state beyond the
@@ -735,6 +762,7 @@ function tryExtendTerminalBlock(
           ...terminal,
           endOffset: newEndOffset,
           text: source.slice(terminal.startOffset, newEndOffset),
+          parsedBlock: undefined,
         },
       ]
     : previous.blocks
