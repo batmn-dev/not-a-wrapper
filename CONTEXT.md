@@ -312,6 +312,10 @@ _Avoid_: terminal drain (implies a reveal queue), delayed trailing text, settle-
 Everything a chat request needs to use tools, prepared once per request and alive for the whole stream: the merged tool set, per-tool metadata, step gating, budget accounting, and tool outcome recording.
 _Avoid_: tool coordinator, tool orchestrator, tool loader
 
+**MCP connection**:
+The module shared by the Tool runtime and the settings connection test that owns URL validation, DNS-pinned transport creation, discovery, cancellation, and cleanup under one preparation deadline per server (ADR-0035). It returns tools and an idempotent close operation; successful chat connections stay alive until the Tool runtime disposes them.
+_Avoid_: raw SDK client ownership in callers, separate connection and discovery deadlines
+
 **Tool layer**:
 One of the sources tools come from — Layer 1 (provider-native), Layer 2 (Exa search/content fallback), Layer 3 (user-configured MCP servers). Layers are merged into the tool runtime; later layers win name collisions.
 _Avoid_: tool source (reserved for the per-tool metadata field), tier
