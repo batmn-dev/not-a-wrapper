@@ -114,7 +114,8 @@ describe("useFilePickerState immediate upload lifecycle", () => {
     await flush()
 
     expect(uploadCalls).toHaveLength(1)
-    const id = controls().attachments[0]?.id
+    const pending = controls().attachments[0]!
+    const id = pending.id
     expect(controls().attachments[0]).toMatchObject({
       status: "uploading",
       file: selected,
@@ -145,6 +146,41 @@ describe("useFilePickerState immediate upload lifecycle", () => {
       status: "ready",
       uploaded: { attachmentId: "a" },
     })
+    // A removal event may hold the pre-completion item; use its current state.
+    act(() => {
+      controls().handleFileRemove(pending)
+    })
+    expect(deleteUploadedAttachment).toHaveBeenCalledWith(convex, "a")
+  })
+
+  it("reserves a selection immediately while admission is pending", async () => {
+    let allow!: (
+      value: Awaited<ReturnType<typeof checkFileUploadLimit>>
+    ) => void
+    vi.mocked(checkFileUploadLimit).mockReturnValueOnce(
+      new Promise((resolve) => {
+        allow = resolve
+      })
+    )
+    const selected = file("pending.txt")
+    act(() => {
+      controls().handleFileUpload([selected])
+      controls().handleFileUpload([selected])
+    })
+    expect(controls().attachments).toHaveLength(1)
+    expect(controls().attachments[0]).toMatchObject({ status: "uploading" })
+    expect(checkFileUploadLimit).toHaveBeenCalledTimes(1)
+    expect(uploadCalls).toHaveLength(0)
+    const dispatch = vi.fn(async () => true)
+    await act(async () => {
+      expect(await controls().submitAttachments("hello", dispatch)).toBe(false)
+    })
+    expect(dispatch).not.toHaveBeenCalled()
+
+    await act(async () => {
+      allow({ count: 0, limit: 5, canUpload: true })
+    })
+    expect(uploadCalls).toHaveLength(1)
   })
 
   it("keeps selection order when uploads finish out of order", async () => {
@@ -179,7 +215,10 @@ describe("useFilePickerState immediate upload lifecycle", () => {
       attemptId: 1,
     })
 
-    act(() => controls().retryAttachment(failed))
+    act(() => {
+      controls().retryAttachment(failed)
+      controls().retryAttachment(failed)
+    })
     expect(controls().attachments[0]).toMatchObject({
       status: "uploading",
       attemptId: 2,
@@ -230,30 +269,125 @@ describe("useFilePickerState immediate upload lifecycle", () => {
     expect(controls().attachments).toEqual([])
   })
 
-  it("locks a submitted attachment against removal until dispatch settles", async () => {
-    act(() => controls().handleFileUpload([file("sent.txt")]))
-    await flush()
+  it.each([true, false, "throw"] as const)(
+    "owns the submitted snapshot when dispatch resolves %s",
+    async (outcome) => {
+      act(() => controls().handleFileUpload([file("sent.txt")]))
+      await flush()
+      await act(async () => {
+        uploadCalls[0]?.resolve({ fileUrl: "/sent", attachmentId: "sent" })
+      })
+      const ready = controls().attachments[0]!
+      let finish!: (value: boolean) => void
+      let fail!: (reason: Error) => void
+      const dispatch = vi.fn(
+        () =>
+          new Promise<boolean>((resolve, reject) => {
+            finish = resolve
+            fail = reject
+          })
+      )
+      let sending!: Promise<boolean>
+      act(() => {
+        sending = controls().submitAttachments("hello", dispatch)
+      })
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "hello",
+          files: [ready.file],
+        })
+      )
+      expect(controls().lockedAttachmentIds.has(ready.id)).toBe(true)
+      expect(controls().handleFileRemove(ready)).toBe(false)
+      const duplicateDispatch = vi.fn(async () => true)
+      await act(async () => {
+        expect(
+          await controls().submitAttachments("again", duplicateDispatch)
+        ).toBe(false)
+      })
+      expect(duplicateDispatch).not.toHaveBeenCalled()
+      act(() => controls().handleFileUpload([file("next.txt")]))
+      await flush()
+      const next = controls().attachments[1]!
+      await act(async () => {
+        if (outcome === "throw") {
+          const rejected = expect(sending).rejects.toThrow("dispatch failed")
+          fail(new Error("dispatch failed"))
+          await rejected
+        } else {
+          finish(outcome)
+          expect(await sending).toBe(outcome)
+        }
+      })
+      expect(controls().lockedAttachmentIds.size).toBe(0)
+      expect(controls().attachments).toEqual(
+        outcome === true ? [next] : [ready, next]
+      )
+      expect(deleteUploadedAttachment).not.toHaveBeenCalled()
+      if (outcome !== true) {
+        act(() => {
+          expect(controls().handleFileRemove(ready)).toBe(true)
+        })
+        expect(deleteUploadedAttachment).toHaveBeenCalledWith(convex, "sent")
+      }
+    }
+  )
+
+  it.each(["remove", "unmount"] as const)(
+    "does not upload after %s during validation",
+    async (action) => {
+      let validate!: (value: Awaited<ReturnType<typeof validateFile>>) => void
+      vi.mocked(validateFile).mockReturnValueOnce(
+        new Promise((resolve) => {
+          validate = resolve
+        })
+      )
+      act(() => controls().handleFileUpload([file("checking.txt")]))
+      await flush()
+      const pending = controls().attachments[0]!
+      const dispatch = vi.fn(async () => true)
+      await act(async () => {
+        expect(await controls().submitAttachments("hello", dispatch)).toBe(
+          false
+        )
+      })
+      expect(dispatch).not.toHaveBeenCalled()
+      act(() => {
+        if (action === "remove") controls().handleFileRemove(pending)
+        else root.render(null)
+      })
+      await act(async () => {
+        validate({ isValid: true })
+      })
+      expect(uploadCalls).toHaveLength(0)
+      if (action === "remove") expect(controls().attachments).toHaveLength(0)
+    }
+  )
+
+  it("reserves daily capacity in selection order across overlapping checks", async () => {
+    const approvals: Array<
+      (value: Awaited<ReturnType<typeof checkFileUploadLimit>>) => void
+    > = []
+    vi.mocked(checkFileUploadLimit).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          approvals.push(resolve)
+        })
+    )
+    act(() => {
+      controls().handleFileUpload([file("first.txt")])
+      controls().handleFileUpload([file("second.txt")])
+    })
     await act(async () => {
-      uploadCalls[0]?.resolve({ fileUrl: "/sent", attachmentId: "sent" })
-      await Promise.resolve()
+      approvals[1]!({ count: 4, limit: 5, canUpload: true })
     })
-    const ready = controls().attachments[0]!
-
-    act(() => {
-      expect(controls().lockAttachments([ready.id])).toBe(true)
+    await act(async () => {
+      approvals[0]!({ count: 4, limit: 5, canUpload: true })
     })
-    expect(controls().lockedAttachmentIds.has(ready.id)).toBe(true)
-    expect(controls().handleFileRemove(ready)).toBe(false)
-    expect(controls().attachments).toEqual([ready])
-    expect(deleteUploadedAttachment).not.toHaveBeenCalled()
-
-    act(() => controls().unlockAttachments([ready.id]))
-    expect(controls().lockedAttachmentIds.has(ready.id)).toBe(false)
-    act(() => {
-      expect(controls().handleFileRemove(ready)).toBe(true)
-    })
-    expect(deleteUploadedAttachment).toHaveBeenCalledWith(convex, "sent")
-    expect(controls().attachments).toEqual([])
+    expect(controls().attachments.map(({ file }) => file.name)).toEqual([
+      "first.txt",
+    ])
+    expect(uploadCalls.map(({ file }) => file.name)).toEqual(["first.txt"])
   })
 
   it("rejects an exact metadata duplicate but accepts the same filename with different contents", async () => {
@@ -271,7 +405,7 @@ describe("useFilePickerState immediate upload lifecycle", () => {
     expect(uploadCalls).toHaveLength(2)
   })
 
-  it("rejects validation and daily capacity before enqueueing", async () => {
+  it("removes rejected validation and daily capacity reservations before uploading", async () => {
     vi.mocked(validateFile).mockResolvedValueOnce({
       isValid: false,
       error: "bad type",
