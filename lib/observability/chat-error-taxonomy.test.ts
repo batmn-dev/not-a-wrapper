@@ -38,6 +38,52 @@ describe("classifyChatError", () => {
     expect(classifyChatError(wrapped)).toBe("provider_api")
   })
 
+  it("keeps sanitized provider payment messages out of auth telemetry", () => {
+    expect(
+      classifyChatError(
+        new Error(
+          "Your OpenRouter API account has insufficient credits or requires payment. Check OpenRouter billing or update your API key in settings."
+        )
+      )
+    ).toBe("provider_api")
+  })
+
+  it("keeps authoritative auth status ahead of payment-like copy", () => {
+    expect(
+      classifyChatError({
+        statusCode: 401,
+        message: "Authentication failed; check billing and update your API key.",
+      })
+    ).toBe("auth")
+  })
+
+  it("keeps authoritative rate-limit status ahead of payment-like copy", () => {
+    expect(
+      classifyChatError({
+        statusCode: 429,
+        message: "Rate limit reached due to insufficient credits.",
+      })
+    ).toBe("rate_limit")
+  })
+
+  it.each(["billing", "payment required", "insufficient quota"])(
+    "preserves a tool timeout when its name contains %s",
+    (toolName) => {
+      expect(
+        classifyChatError(new Error(`Tool "${toolName}" timed out`))
+      ).toBe("tool_timeout")
+    }
+  )
+
+  it("classifies structured provider payment metadata", () => {
+    expect(
+      classifyChatError({
+        message: "Request cannot be processed.",
+        metadata: { error_type: "payment_required" },
+      })
+    ).toBe("provider_api")
+  })
+
   it.each([
     ["lastError", { lastError: { statusCode: 429 } }, "rate_limit"],
     ["errors", { errors: [{ statusCode: 429 }] }, "rate_limit"],
