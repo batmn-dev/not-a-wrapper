@@ -47,6 +47,7 @@ import {
   PERF_AUTH_EMAIL,
 } from "./ensure-auth-user"
 import {
+  durationsOverlappingRun,
   readHeap,
   readMarks,
   tryWaitForMark,
@@ -629,11 +630,18 @@ async function runScenarioOnce(
     } else {
       await waitForMark(page, "stream_terminal", timeoutMs)
       if (config.auth) {
-        await tryWaitForMark(page, "durable_settlement_receipt", 15000)
+        if (config.action === "stop")
+          await waitForMark(page, "durable_settlement_receipt", 15000)
+        else await tryWaitForMark(page, "durable_settlement_receipt", 15000)
       }
     }
     // Let post-terminal effects (summary marks, settlement writes) land.
     await page.waitForTimeout(config.auth ? 1500 : 750)
+    if (stopSourceLengths) {
+      const afterSettlement = await page.evaluate(readCurrentAssistantSourceLength)
+      stoppedTextStable &&= afterSettlement <= stopSourceLengths.after250Ms
+      stopSourceLengths.afterSettlement = afterSettlement
+    }
 
     const marks = await readMarks(page)
     const uiObservation =
@@ -849,11 +857,8 @@ async function runScenarioOnce(
 
     const runStart = markAt(marks, "chat_send_intent") ?? 0
     const runEnd = markAt(marks, "stream_terminal") ?? Infinity
-    const activeMarks = marks.filter(
-      (mark) => mark.startTime >= runStart && mark.startTime <= runEnd
-    )
-    const longTasks = durations(activeMarks, "long_task")
-    const rafGaps = durations(activeMarks, "raf_gap")
+    const longTasks = durationsOverlappingRun(marks, "long_task", runStart, runEnd)
+    const rafGaps = durationsOverlappingRun(marks, "raf_gap", runStart, runEnd)
     const projections = durations(marks, "markdown_projection_advance")
     const shiki = durations(marks, "shiki_highlight")
     const summary = marks
@@ -1420,6 +1425,9 @@ async function main() {
   const file: BenchmarkResultFile = {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v2",
+    identityProtocol: process.env.PERF_CDP_URL
+      ? "attached-session-v1"
+      : "ci-isolated-v1",
     profiled: process.env.PERF_PROFILE === "true",
     fixtureHash: hashValue(
       isThreadSwitch

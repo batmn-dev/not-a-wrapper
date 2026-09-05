@@ -40,6 +40,11 @@ const scenario = z
           hiddenDuringMeasurement: z.literal(false),
           pendingDeltaSamples: z.number().int().nonnegative(),
           droppedUiSamples: z.literal(0),
+          stopSourceLengths: z.object({
+            atReady: z.number().int().nonnegative(),
+            after250Ms: z.number().int().nonnegative(),
+            afterSettlement: z.number().int().nonnegative(),
+          }).optional(),
           ui: z.record(z.string(), z.array(duration)).optional(),
           sendToFirstVisibleTextMs: duration.optional(),
           totalBlockingTimeMs: duration.optional(),
@@ -61,6 +66,7 @@ export const resultContract = z
   .object({
     schemaVersion: z.literal(2),
     measurementVersion: z.literal("dom-frame-v2"),
+    identityProtocol: z.enum(["ci-isolated-v1", "attached-session-v1"]),
     profiled: z.literal(false).optional(),
     buildClass: z.literal("production"),
     instrumentationBuild: z.boolean(),
@@ -301,6 +307,18 @@ export function validateCoverage(result: ComparableResult): string[] {
       )
   }
   for (const value of result.scenarios) {
+    if (value.action === "stop") {
+      for (const run of value.runs) {
+        const lengths = run.stopSourceLengths
+        if (!lengths)
+          errors.push(`${value.id}: Stop stability observations are missing`)
+        else if (
+          lengths.after250Ms > lengths.atReady ||
+          lengths.afterSettlement > lengths.after250Ms
+        )
+          errors.push(`${value.id}: assistant text grew after Stop feedback`)
+      }
+    }
     if (
       value.action === "complete" &&
       value.runs.some((run) => run.pendingDeltaSamples > 0)
@@ -419,6 +437,7 @@ export function compareResults(
   ]
   for (const field of [
     "measurementVersion",
+    "identityProtocol",
     "buildClass",
     "instrumentationBuild",
     "machineClass",

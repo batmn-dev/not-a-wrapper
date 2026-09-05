@@ -28,7 +28,10 @@ export function useChatResponsivenessMarks(isStreaming: boolean): void {
     try {
       observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          markChatPerf("long_task", { durationMs: entry.duration })
+          markChatPerf("long_task", {
+            durationMs: entry.duration,
+            observedStartMs: entry.startTime,
+          })
         }
       })
       // `buffered: false`: only tasks from this session forward; longtask is
@@ -51,7 +54,10 @@ export function useChatResponsivenessMarks(isStreaming: boolean): void {
       if (lastFrameAt !== null) {
         const gap = now - lastFrameAt
         if (gap > RAF_GAP_THRESHOLD_MS) {
-          markChatPerf("raf_gap", { durationMs: gap })
+          markChatPerf("raf_gap", {
+            durationMs: gap,
+            observedStartMs: lastFrameAt,
+          })
         }
       }
       lastFrameAt = now
@@ -61,6 +67,15 @@ export function useChatResponsivenessMarks(isStreaming: boolean): void {
     return () => {
       active = false
       cancelAnimationFrame(frameId)
+      // Terminal cleanup can cancel the very frame that would report this gap.
+      if (lastFrameAt !== null) {
+        const gap = performance.now() - lastFrameAt
+        if (gap > RAF_GAP_THRESHOLD_MS)
+          markChatPerf("raf_gap", {
+            durationMs: gap,
+            observedStartMs: lastFrameAt,
+          })
+      }
     }
   }, [isStreaming])
 }

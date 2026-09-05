@@ -32,6 +32,16 @@ function answer(length = 3) {
   return section
 }
 
+function scrollRoot() {
+  document.body.insertAdjacentHTML("beforeend", "<div data-scroll-root></div>")
+  const root = document.querySelector<HTMLElement>("[data-scroll-root]")!
+  Object.defineProperties(root, {
+    clientHeight: { value: 500 },
+    scrollHeight: { value: 1500 },
+  })
+  return root
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
   now = 0
@@ -64,6 +74,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   ;(window as ChatUiWindow).__chatUiPerf?.dispose()
+  delete (window as ChatUiWindow).__chatUiPerfDisabled
   vi.useRealTimers()
   document.body.innerHTML = ""
   vi.restoreAllMocks()
@@ -71,17 +82,33 @@ afterEach(() => {
 })
 
 describe("DOM/frame observations", () => {
+  it("honors the benchmark opt-out when a delayed import tries to reinstall", () => {
+    installChatUiObserver()
+    const pageWindow = window as ChatUiWindow
+    pageWindow.__chatUiPerfDisabled = true
+    pageWindow.__chatUiPerf!.dispose()
+    installChatUiObserver()
+    expect(pageWindow.__chatUiPerf).toBeUndefined()
+    delete pageWindow.__chatUiPerfDisabled
+    installChatUiObserver()
+    expect(pageWindow.__chatUiPerf).toBeDefined()
+  })
   it("retains individual EventTiming entries even when they share an interaction", () => {
     let deliver: ((list: PerformanceObserverEntryList) => void) | undefined
-    vi.stubGlobal("PerformanceObserver", class {
-      static supportedEntryTypes = ["event"]
-      constructor(callback: PerformanceObserverCallback) {
-        deliver = (list) => callback(list, this)
+    vi.stubGlobal(
+      "PerformanceObserver",
+      class {
+        static supportedEntryTypes = ["event"]
+        constructor(callback: PerformanceObserverCallback) {
+          deliver = (list) => callback(list, this)
+        }
+        observe() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
       }
-      observe() {}
-      disconnect() {}
-      takeRecords() { return [] }
-    })
+    )
     const report = vi.fn()
     installChatUiObserver({ report })
     const entries = [16, 80].map((duration) => ({
@@ -97,8 +124,9 @@ describe("DOM/frame observations", () => {
       getEntriesByName: () => entries,
       getEntriesByType: () => entries,
     })
-    expect((window as ChatUiWindow).__chatUiPerf!.values.eventTimingEntryMs)
-      .toEqual([16, 80])
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.eventTimingEntryMs
+    ).toEqual([16, 80])
     expect(report.mock.calls).toEqual([
       ["eventTimingEntryMs", 16],
       ["eventTimingEntryMs", 80],
@@ -222,6 +250,126 @@ describe("DOM/frame observations", () => {
       (window as ChatUiWindow).__chatUiPerf!.values.typingToFrameMs
     ).toEqual([56])
   })
+
+  it("waits for a delayed scroll event and preserves the oldest pending wheel", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    observer.setPhase("late")
+    const wheel = (at: number) => {
+      now = at
+      const event = new WheelEvent("wheel", { bubbles: true, deltaY: 400 })
+      Object.defineProperty(event, "timeStamp", { value: at })
+      root.dispatchEvent(event)
+    }
+    wheel(100)
+    await paint()
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    observer.setPhase("early")
+    wheel(120)
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    await paint()
+    expect(observer.values.scrollToFrameMs).toEqual([36])
+    expect(observer.values.scrollToFrameLateMs).toEqual([36])
+    expect(observer.values.scrollToFrameEarlyMs).toBeUndefined()
+    root.scrollTop = 450
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(observer.values.scrollToFrameMs).toEqual([36])
+  })
+
+  it("does not credit a scroll mutation after the inspected frame", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const event = new WheelEvent("wheel", { bubbles: true, deltaY: 400 })
+    Object.defineProperty(event, "timeStamp", { value: 0 })
+    root.dispatchEvent(event)
+    await Promise.resolve()
+    now = 16
+    const batch = frames
+    frames = []
+    batch.forEach((callback) => callback(now))
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    now = 18
+    vi.advanceTimersByTime(0)
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    await paint()
+    expect(observer.values.scrollToFrameMs).toEqual([34])
+  })
+  it("does not attribute chat scrolling to a wheel event outside the transcript", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    document.body.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, deltaY: 400 })
+    )
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.scrollToFrameMs
+    ).toBeUndefined()
+  })
+  it.each([
+    { top: 0, init: { deltaY: -100 } },
+    { top: 1000, init: { deltaY: 100 } },
+    { top: 0, init: { deltaY: 100, ctrlKey: true } },
+    { top: 0, init: { deltaY: 100, shiftKey: true } },
+    { top: 0, init: { deltaX: 100 } },
+  ])(
+    "does not arm a wheel that cannot directly scroll the transcript: %j",
+    async ({ top, init }) => {
+      const root = scrollRoot()
+      root.scrollTop = top
+      installChatUiObserver()
+      root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, ...init }))
+      root.scrollTop = 400
+      root.dispatchEvent(new Event("scroll"))
+      await paint()
+      expect(
+        (window as ChatUiWindow).__chatUiPerf!.values.scrollToFrameMs
+      ).toBeUndefined()
+    }
+  )
+  it("does not attribute a nested scroller's wheel to the transcript", async () => {
+    const root = scrollRoot()
+    const nested = document.createElement("div")
+    nested.style.overflowY = "auto"
+    Object.defineProperties(nested, {
+      clientHeight: { value: 100 },
+      scrollHeight: { value: 200 },
+    })
+    root.append(nested)
+    installChatUiObserver()
+    nested.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, deltaY: 100 })
+    )
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.scrollToFrameMs
+    ).toBeUndefined()
+  })
+  it("discards a wheel cancelled after the capture listener", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    root.addEventListener("wheel", (event) => event.preventDefault(), {
+      once: true,
+    })
+    root.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 })
+    )
+    root.scrollTop = 400
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.scrollToFrameMs
+    ).toBeUndefined()
+  })
   it("observes the editor-owned popup without requiring menu semantics", async () => {
     document.body.insertAdjacentHTML(
       "beforeend",
@@ -250,6 +398,98 @@ describe("DOM/frame observations", () => {
     expect(observer.pendingDeltas()).toBe(0)
     observer.bindStream()("text-delta", 10)
     expect(observer.pendingDeltas()).toBe(1)
+  })
+
+  it("does not credit another conversation's content to a detached send", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a data-sidebar-item="true" href="/c/other">Other chat</a>'
+    )
+    installChatUiObserver()
+    send()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    const receive = observer.bindStream()
+    const current = document.createElement("section")
+    current.dataset.turnId = "current"
+    current.innerHTML =
+      '<div data-message-author-role="user">New question</div>'
+    document.body.append(current)
+    await paint()
+    const optimisticSamples = [...observer.values.inputToOptimisticFrameMs!]
+    const link = document.querySelector("a")!
+    link.addEventListener("click", (event) => event.preventDefault())
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true })
+    )
+    // Clicking without a committed destination (including Ctrl-click) preserves A.
+    receive("text-delta", 10)
+    await paint()
+    expect(observer.pendingDeltas()).toBe(1)
+    expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
+
+    history.pushState(null, "", "/c/other")
+    current.remove()
+    answer(100)
+    await paint()
+    receive("text-delta", 10)
+    receive("finish")
+    await paint()
+    expect(observer.values.inputToFirstTextFrameMs).toBeUndefined()
+    expect(observer.values.deltaToContentFrameMs).toBeUndefined()
+    expect(observer.values.terminalToReadyFrameMs).toBeUndefined()
+    expect(observer.pendingDeltas()).toBe(0)
+    expect(observer.values.inputToOptimisticFrameMs).toEqual(optimisticSamples)
+    expect(observer.values.threadSwitchToFrameMs).toHaveLength(1)
+    history.replaceState(null, "", "/")
+  })
+  it("keeps follow-up measurements after clicking the current sidebar row", async () => {
+    history.replaceState(null, "", "/c/current")
+    answer()
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a data-sidebar-item="true" href="/c/current">Current</a>'
+    )
+    installChatUiObserver()
+    const link = document.querySelector("a")!
+    link.addEventListener("click", (event) => event.preventDefault())
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true })
+    )
+    send()
+    answer()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    observer.bindStream()("text-delta", 3)
+    await paint()
+    expect(observer.values.inputToFirstTextFrameMs).toHaveLength(1)
+    expect(observer.values.deltaToContentFrameMs).toHaveLength(1)
+    expect(observer.values.threadSwitchToFrameMs).toBeUndefined()
+    history.replaceState(null, "", "/")
+  })
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])("ignores modified/nonprimary sidebar clicks: %j", async (init) => {
+    answer()
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a data-sidebar-item="true" href="/c/other">Other</a>'
+    )
+    installChatUiObserver()
+    const link = document.querySelector("a")!
+    link.addEventListener("click", (event) => event.preventDefault())
+    link.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, ...init })
+    )
+    history.pushState(null, "", "/c/other")
+    answer()
+    await paint()
+    expect(
+      (window as ChatUiWindow).__chatUiPerf!.values.threadSwitchToFrameMs
+    ).toBeUndefined()
+    history.replaceState(null, "", "/")
   })
   it("does not mistake the preceding answer for the new response, and waits for a frame opportunity", async () => {
     answer()

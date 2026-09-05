@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.chatId = "active-chat"
+  mocks.reset = vi.fn()
 })
 
 vi.mock("@/lib/chat-store/messages/provider", () => ({

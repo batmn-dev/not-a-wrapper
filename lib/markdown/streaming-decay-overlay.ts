@@ -331,7 +331,10 @@ class StreamingDecayManager {
     state.baseline = nextText
     this.states.set(container, state)
     const graceExpired = state.offscreenGraceUntil > 0 && now >= state.offscreenGraceUntil
-    if (graceExpired) state.offscreenGraceUntil = 0
+    if (graceExpired) {
+      state.offscreenGraceUntil = 0
+      container.removeAttribute(decayRootAttribute)
+    }
     // After the bounded fade grace, invisible tails only advance cohorts.
     // Re-entry resumes current cohorts; hidden tabs also skip unseen ranges.
     if (
@@ -438,9 +441,16 @@ class StreamingDecayManager {
       () => []
     )
     for (const [container, state] of this.states) {
+      const eligible = this.isPaintEligible(state, now)
+      // Empty ranges do not remove inherited highlight styles. Release the
+      // off-screen scope and restore it before painting a visible tail again.
+      if (!eligible) container.removeAttribute(decayRootAttribute)
+      else if (!container.hasAttribute(decayRootAttribute)) {
+        container.setAttribute(decayRootAttribute, "")
+      }
       if (
         !container.isConnected ||
-        !this.isPaintEligible(state, now) ||
+        !eligible ||
         state.cohorts.length === 0
       )
         continue

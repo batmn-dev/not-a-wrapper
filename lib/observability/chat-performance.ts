@@ -190,8 +190,8 @@ const EVENT_SCHEMAS: Record<string, Record<string, FieldSpec>> = {
   },
   markdown_projection_advance: { durationMs: REQUIRED_NUMBER },
   shiki_highlight: { durationMs: REQUIRED_NUMBER },
-  long_task: { durationMs: REQUIRED_NUMBER },
-  raf_gap: { durationMs: REQUIRED_NUMBER },
+  long_task: { durationMs: REQUIRED_NUMBER, observedStartMs: REQUIRED_NUMBER },
+  raf_gap: { durationMs: REQUIRED_NUMBER, observedStartMs: REQUIRED_NUMBER },
   durable_settlement_receipt: {
     outcome: oneOf("completed", "failed", "aborted"),
   },

@@ -21,6 +21,7 @@ function result(): ComparableResult {
   return {
     schemaVersion: 2,
     measurementVersion: "dom-frame-v2",
+    identityProtocol: "ci-isolated-v1",
     buildClass: "production",
     instrumentationBuild: true,
     machineClass: "linux-x64",
@@ -177,12 +178,16 @@ describe("performance evidence contract", () => {
   it("fails missing scenarios, missing observations, and environment drift", () => {
     const current = result()
     current.browserVersion = "152.0"
+    current.identityProtocol = "attached-session-v1"
     current.scenarios[0].metrics.inputToFirstTextFrameMs = summarize([])
     expect(compareResults(result(), current).join(" ")).toMatch(
       /missing samples/
     )
     expect(compareResults(result(), current).join(" ")).toMatch(
       /browserVersion mismatch/
+    )
+    expect(compareResults(result(), current).join(" ")).toContain(
+      "identityProtocol mismatch"
     )
     current.scenarios = []
     expect(compareResults(result(), current).join(" ")).toMatch(
@@ -351,7 +356,12 @@ describe("performance evidence contract", () => {
     current.scenarios[0].runs.forEach((run) => {
       delete run.ui!.terminalToReadyFrameMs
       run.ui!.stopToReadyFrameMs = [40]
+      run.stopSourceLengths = { atReady: 100, after250Ms: 80, afterSettlement: 60 }
     })
     expect(validateCoverage(current)).toEqual([])
+    current.scenarios[0].runs[0].stopSourceLengths!.afterSettlement = 90
+    expect(validateCoverage(current).join(" ")).toContain("text grew after Stop")
+    delete current.scenarios[0].runs[0].stopSourceLengths
+    expect(validateCoverage(current).join(" ")).toContain("Stop stability observations are missing")
   })
 })

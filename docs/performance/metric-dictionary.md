@@ -147,6 +147,11 @@ thinking phase is inside this figure.
 | `dom_node_count_start` / `_end`                                  | scenario boundaries                                                                                                                   | yes (harness)                           | proposed                                                         |
 | `heap_growth_bytes`                                              | CDP, harness-only                                                                                                                     | no (advisory)                           | proposed                                                         |
 
+`long_task` and `raf_gap` retain `observedStartMs` plus `durationMs`. Their
+aggregates include full observed intervals overlapping Send through terminal,
+even when the observer callback or next frame arrives after terminal. They do not
+classify work by the later User Timing mark timestamp.
+
 ## 6. Streaming pipeline accounting
 
 | Metric                                      | Definition                                                              | Gate?                   | Status                                                                                                              |
@@ -300,11 +305,11 @@ The observation tab must remain visible.
 | `inputToFirstActivityFrameMs` | Same input to an inspectable activity disclosure. Bare Thinking does not satisfy it. |
 | `typingToFrameMs` | Oldest unobserved key/beforeinput timestamp to an editor update observed across a frame opportunity. Coalesced input retains the oldest delay; no slow-sample cutoff. |
 | `menuToFrameMs` | Composer plus-menu click to visible menu across a frame opportunity. |
-| `scrollToFrameMs` | Wheel event to changed thread scroll position across a frame opportunity. Not a general touch-scroll/INP metric. |
+| `scrollToFrameMs` | Direct vertical wheel event to changed thread scroll position across a frame opportunity. Excludes cancelled events, zoom/horizontal gestures, blocked scroll directions and nested scroll chaining; not a general touch-scroll/INP metric. |
 | `deltaToContentFrameMs` | A sampled received-text watermark to an at-least-equal rendered-source watermark in a visible Markdown container across a frame opportunity. Four samples/sec maximum; no provider gaps included. |
 | `typingToFrameEarlyMs` / `typingToFrameLateMs`, `menuToFrameEarlyMs` / `menuToFrameLateMs`, `deltaToContentFrameEarlyMs` / `deltaToContentFrameLateMs` | Harness phases: early interaction after first text; late interaction after at least 80% of the deterministic fixture source is rendered while the stream remains active. Each phase must produce samples in every run. |
 | `scrollToFrameLateMs` | Scroll response during the late phase, when the long answer has overflow to scroll. |
-| `terminalToReadyFrameMs` | Transport finish/error to idle composer state across a frame opportunity. Local Stop falls back to its input timestamp when transport cancellation omits finish. |
+| `terminalToReadyFrameMs` | Transport finish/error to idle composer state across a frame opportunity. Local Stop without a transport finish does not invent a terminal event. |
 | `stopToReadyFrameMs` | Stop click to visible idle composer state, even when blank Send is disabled. |
 | `threadSwitchToFrameMs` | Sidebar click to changed destination content across a frame opportunity, with destination URL checked. |
 | `lcpMs` | Last observed browser LCP entry; diagnostic, not composer readiness. |
@@ -315,6 +320,11 @@ retains raw content-free samples so budget-exceedance rates can be recomputed.
 Summaries must match their raw observations. Completed foreground runs must drain
 all sampled received content; pending counts remain explicit for Stop, reload, and
 intentional second-tab cutoffs. Any observation-buffer overflow invalidates a run.
+Stop correctness checks assistant source length at idle feedback, 250 ms later,
+and after the terminal/settlement wait and settling buffer. Each checkpoint must
+be no longer than the preceding one; shorter canonical snapshots remain valid.
+These checkpoints do not claim continuous observation between samples.
+Authenticated Stop runs require a durable settlement receipt before the final check.
 `n=0` means absent. p95 is omitted below 20 observations. Repeated keystrokes from
 one run do not replace the requirement for at least five complete journey runs.
 Cold means HTTP cache disabled (CI also creates a fresh context with the benchmark

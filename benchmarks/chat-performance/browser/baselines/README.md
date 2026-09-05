@@ -14,7 +14,9 @@ collect them on the actual runner after this workflow is available on GitHub.
 Suites: `responsiveness`, `standard`, `durable`, `thread-switch`, and optional
 `smoke`. Never use a local Mac result as a Linux CI baseline. Schema version,
 measurement version, exact browser version, CPU model/count, memory class, fixture
-hash, and scenario conditions must match. Refresh deliberately when those change.
+hash, identity protocol, and scenario conditions must match. CI captures begin
+with a fresh authenticated identity; attached personal sessions have a different
+protocol and cannot seed CI baselines. Refresh deliberately when conditions change.
 
 Local first-evidence validation:
 

@@ -317,6 +317,7 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
     vi.stubGlobal("requestAnimationFrame", raf)
     vi.stubGlobal("cancelAnimationFrame", cancel)
     const container = document.createElement("div")
+    const otherContainer = document.createElement("div")
     container.innerHTML = "<p>Ready</p>"
     document.body.append(container)
     try {
@@ -357,6 +358,7 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
         observeStreamingDecay(container)
       }
       expect([...highlights.values()].every((bucket) => bucket.size === 0)).toBe(true)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
       expect(nextFrame).toBeUndefined()
       const clearsWhileHidden = clears.mock.calls.length
       const framesWhileHidden = raf.mock.calls.length
@@ -366,26 +368,37 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       observer.emit(originalTail, true)
       expect(clears).toHaveBeenCalledTimes(clearsWhileHidden)
       expect(raf).toHaveBeenCalledTimes(framesWhileHidden)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
 
       clock.mockReturnValue(550)
       observer.emit(newTail, true)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(true)
       expect(highlights.get("naw-stream-decay-0")!.size).toBe(0)
       expect(highlights.get("naw-stream-decay-1")!.size).toBeGreaterThan(0)
       expect(raf).toHaveBeenCalledTimes(framesWhileHidden + 1)
+      document.body.append(otherContainer)
+      otherContainer.textContent = "Another"
+      observeStreamingDecay(otherContainer)
+      otherContainer.append(" tail")
+      observeStreamingDecay(otherContainer)
       settleStreamingDecay(container)
       expect(observer.disconnect).toHaveBeenCalledTimes(1)
+      expect(otherContainer.hasAttribute("data-streaming-decay-root")).toBe(true)
+      expect(highlights.get("naw-stream-decay-0")!.size).toBeGreaterThan(0)
       const clearsAfterSettle = clears.mock.calls.length
       observer.emit(newTail, false)
       expect(clears).toHaveBeenCalledTimes(clearsAfterSettle)
+      settleStreamingDecay(otherContainer)
 
       observeStreamingDecay(container)
       setStreamingDecayEnabled(false)
-      expect(FakeIntersectionObserver.instances[1]!.disconnect)
+      expect(FakeIntersectionObserver.instances.at(-1)!.disconnect)
         .toHaveBeenCalledTimes(1)
     } finally {
       setStreamingDecayEnabled(false)
       setStreamingDecayEnabled(true)
       container.remove()
+      otherContainer.remove()
       clock.mockRestore()
       clears.mockRestore()
       vi.unstubAllGlobals()

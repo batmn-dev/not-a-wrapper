@@ -13,6 +13,31 @@ export type CollectedMark = {
   detail: Record<string, unknown> | null
 }
 
+/** Full durations of observed intervals overlapping the run, regardless of callback delivery time. */
+export function durationsOverlappingRun(
+  marks: CollectedMark[],
+  name: "long_task" | "raf_gap",
+  runStart: number,
+  runEnd: number
+): number[] {
+  return marks
+    .filter((mark) => mark.name === name)
+    .flatMap((mark) => {
+      const start = mark.detail?.observedStartMs
+      const duration = mark.detail?.durationMs
+      if (
+        typeof start !== "number" ||
+        !Number.isFinite(start) ||
+        start < 0 ||
+        typeof duration !== "number" ||
+        !Number.isFinite(duration) ||
+        duration < 0
+      )
+        throw new Error(`${name} is missing a valid observed interval`)
+      return start < runEnd && start + duration > runStart ? [duration] : []
+    })
+}
+
 export async function readMarks(page: Page): Promise<CollectedMark[]> {
   return page.evaluate(() =>
     performance

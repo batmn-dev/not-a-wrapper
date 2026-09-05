@@ -16,6 +16,20 @@ provider enabled. `BASE_URL` and port 3000 are rejected, preventing accidental
 real-provider requests to an ordinary app server. A Chrome extension alone supports manual validation, not this terminal
 harness. Do not restart the user's browser to obtain CDP access.
 
+CI uses `ci-isolated-v1`: one newly provisioned WorkOS identity per harness
+process, with a UUID suffix even when `PERF_AUTH_EMAIL` supplies the email base.
+The real login and Convex bootstrap give each capture its own sidebar history
+and usage allowance. Setup is outside measured interactions. Chats accumulate
+only within that capture's configured scenario/warmup order. Local attached
+Chrome keeps the person's existing identity and history (`attached-session-v1`).
+Comparisons require the same identity protocol.
+
+Generated test users and fixture data are retained in the benchmark environment.
+They do not enter later captures; automatic deletion is deliberately absent
+because the existing WorkOS deletion hook only disables the app user, without
+removing its chats or accounting records. Environment maintenance is separate
+from benchmark measurement.
+
 ## Suites
 
 - `responsiveness`: cold HTTP-cache entry; follow-up in a seeded existing chat;
@@ -55,6 +69,15 @@ browser timeline `.trace.json` files, and the matching public JavaScript chunks
 for locating sampled functions. These developer diagnostics are separate from
 the content-free measurement JSON in `perf-results`.
 
+With `diagnose=true`, `observer_overhead=true` instead runs one warmup pair and
+five alternating observer-on/off pairs through the existing trace tool. It checks
+the full stream oracle and foreground state, then compares native main-thread
+work and Event Timing entries in `perf-observer-overhead`. The same build and
+fresh guest setup are used for both arms. This measures incremental benchmark
+DOM observer cost during Send-to-terminal; it excludes startup and production
+Sentry reporting and cannot be used as
+a responsiveness baseline or an INP measurement.
+
 Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM
@@ -66,7 +89,15 @@ proxies, not first-pixel timestamps; old React-effect marks remain separate.
 Continuous receipt-to-content samples match a text-source watermark, at most four
 times per second, to the current assistant's rendered source. They exclude provider
 silence but do not prove off-screen characters painted. A known fixture checks
-stream byte fidelity; a 250 ms post-Stop observation checks text no longer grows.
+stream byte fidelity. Stop checks current-assistant source length at ready,
+250 ms later, and after the terminal/settlement wait and settling buffer. Each
+sample must be no longer than the previous one; a shorter canonical snapshot is
+valid. Passing Stop evidence requires `stopSourceLengths.afterSettlement`.
+
+Long-task and rAF-gap marks retain `observedStartMs`. Their observed intervals
+are included when they overlap the send-to-terminal window, even when the
+observer callback arrives after terminal. Full overlapping durations remain
+diagnostic observations; callback delivery time does not determine inclusion.
 Hidden tabs invalidate the entire run; do not interpret any of its timings. Do not remove slow/failed runs.
 Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
 the oldest waiting input. Completed foreground runs fail if any sampled content

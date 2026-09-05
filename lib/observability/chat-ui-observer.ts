@@ -37,7 +37,11 @@ export type ChatUiObserver = {
   dispose: () => void
 }
 
-export type ChatUiWindow = Window & { __chatUiPerf?: ChatUiObserver }
+export type ChatUiWindow = Window & {
+  __chatUiPerf?: ChatUiObserver
+  /** Benchmark opt-out survives a delayed instrumentation import after disposal. */
+  __chatUiPerfDisabled?: boolean
+}
 
 /** Self-contained so the benchmark can install the identical observer before navigation. */
 export function installChatUiObserver(
@@ -47,7 +51,7 @@ export function installChatUiObserver(
   } = {}
 ): void {
   const observedWindow = window as ChatUiWindow
-  if (observedWindow.__chatUiPerf) return
+  if (observedWindow.__chatUiPerfDisabled || observedWindow.__chatUiPerf) return
   const values: ChatUiObserver["values"] = {}
   const observers: PerformanceObserver[] = []
   const frames = new Set<number>()
@@ -70,6 +74,15 @@ export function installChatUiObserver(
   let inputAt: number | undefined
   let inputPending = false
   let menuAt: number | undefined
+  let pendingWheel:
+    | {
+        at: number
+        start: number
+        phase: typeof phase
+        root: HTMLElement
+        event: WheelEvent
+      }
+    | undefined
   let navigation:
     { at: number; previous: Element | undefined; pathname: string } | undefined
   const once = new Set<string>()
@@ -121,12 +134,6 @@ export function installChatUiObserver(
     }, 0)
     frameTasks.add(timer)
   }
-  const afterFrame = (callback: () => void) => {
-    const observedTurn = turn
-    frame(() => postFrameTask(() => {
-      if (turn === observedTurn) callback()
-    }))
-  }
   // scan() inspects DOM in rAF; a later task follows that rendering opportunity
   // without waiting for another frame. This is not a pixel-presentation timestamp.
   const recordFrame = (metric: ChatUiMetric, at: number) => {
@@ -154,6 +161,20 @@ export function installChatUiObserver(
     if (phase) recordFrame(phaseMetric(metric, phase), at)
   }
   const scan = () => {
+    if (pendingWheel) {
+      const wheel = pendingWheel
+      if (
+        wheel.event.defaultPrevented ||
+        document.querySelector("[data-scroll-root]") !== wheel.root
+      ) {
+        pendingWheel = undefined
+      } else if (wheel.root.scrollTop !== wheel.start) {
+        pendingWheel = undefined
+        recordFrame("scrollToFrameMs", wheel.at)
+        if (wheel.phase)
+          recordFrame(phaseMetric("scrollToFrame", wheel.phase), wheel.at)
+      }
+    }
     const editor = document.querySelector(editorSelector)
     const send = document.querySelector<HTMLButtonElement>(sendSelector)
     const row = lastTurn()
@@ -168,6 +189,14 @@ export function installChatUiObserver(
         row !== navigation.previous &&
         location.pathname === navigation.pathname
       ) {
+        // A committed sidebar switch ends the old turn's visible-content probe.
+        // Merely clicking a link (for example, Ctrl-click) does not abandon it.
+        turn++
+        sentAt = sendCandidate = stopAt = terminalAt = undefined
+        clearTimeout(candidateTimer)
+        samples = []
+        pendingWheel = undefined
+        phase = undefined
         recordFrame("threadSwitchToFrameMs", navigation.at)
         navigation = undefined
       }
@@ -257,6 +286,7 @@ export function installChatUiObserver(
     dropped = 0
     inputPending = false
     navigation = undefined
+    pendingWheel = undefined
     frames.forEach(cancelAnimationFrame)
     frames.clear()
     frameTasks.forEach(clearTimeout)
@@ -273,6 +303,8 @@ export function installChatUiObserver(
   }
   const beginSend = (at: number) => {
     turn++
+    pendingWheel = undefined
+    navigation = undefined
     // Keep the document's load and typing observations when beginning its first turn.
     sentAt = at
     phase = undefined
@@ -312,7 +344,15 @@ export function installChatUiObserver(
     const link = target?.closest<HTMLAnchorElement>(
       'a[data-sidebar-item="true"][href^="/c/"]'
     )
-    if (link)
+    if (
+      link &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey &&
+      new URL(link.href).pathname !== location.pathname
+    )
       navigation = {
         at: eventTime(event),
         previous: lastTurn(),
@@ -345,19 +385,50 @@ export function installChatUiObserver(
     }
   }
   const wheel = (event: WheelEvent) => {
-    const at = eventTime(event)
-    const observedPhase = phase
-    const start = document.querySelector("[data-scroll-root]")?.scrollTop
-    afterFrame(() => {
+    const root = document.querySelector<HTMLElement>("[data-scroll-root]")
+    if (
+      !root ||
+      !(event.target instanceof Node) ||
+      !root.contains(event.target) ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.deltaY === 0 ||
+      event.defaultPrevented
+    )
+      return
+    const maxScroll = root.scrollHeight - root.clientHeight
+    if (
+      maxScroll <= 0 ||
+      (event.deltaY < 0 ? root.scrollTop <= 0 : root.scrollTop >= maxScroll)
+    )
+      return
+    // This proxy covers direct transcript scrolling, not nested scroll chaining.
+    for (
+      let node =
+        event.target instanceof Element
+          ? event.target
+          : event.target.parentElement;
+      node && node !== root;
+      node = node.parentElement
+    ) {
       if (
-        start !== undefined &&
-        document.querySelector("[data-scroll-root]")?.scrollTop !== start
-      ) {
-        record("scrollToFrameMs", at)
-        if (observedPhase)
-          record(phaseMetric("scrollToFrame", observedPhase), at)
-      }
-    })
+        node.scrollHeight > node.clientHeight &&
+        /^(auto|scroll|overlay)$/.test(getComputedStyle(node).overflowY)
+      )
+        return
+    }
+    if (pendingWheel?.event.defaultPrevented) pendingWheel = undefined
+    pendingWheel ??= {
+      at: eventTime(event),
+      start: root.scrollTop,
+      phase,
+      root,
+      event,
+    }
+    schedule()
+  }
+  const scroll = (event: Event) => {
+    if (event.target === pendingWheel?.root) schedule()
   }
   const visibility = () => {
     if (document.visibilityState !== "visible") {
@@ -396,6 +467,7 @@ export function installChatUiObserver(
   document.addEventListener("beforeinput", beforeinput, true)
   document.addEventListener("input", input, true)
   document.addEventListener("wheel", wheel, { capture: true, passive: true })
+  document.addEventListener("scroll", scroll, { capture: true, passive: true })
   document.addEventListener("visibilitychange", visibility)
   for (const type of ["largest-contentful-paint", "event"] as const) {
     if (!PerformanceObserver.supportedEntryTypes.includes(type)) continue
@@ -452,6 +524,7 @@ export function installChatUiObserver(
       schedule()
     },
     dispose() {
+      pendingWheel = undefined
       clearTimeout(candidateTimer)
       mutations.disconnect()
       observers.forEach((observer) => observer.disconnect())
@@ -463,6 +536,7 @@ export function installChatUiObserver(
       document.removeEventListener("beforeinput", beforeinput, true)
       document.removeEventListener("input", input, true)
       document.removeEventListener("wheel", wheel, true)
+      document.removeEventListener("scroll", scroll, true)
       document.removeEventListener("visibilitychange", visibility)
       delete observedWindow.__chatUiPerf
     },

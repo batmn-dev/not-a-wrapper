@@ -31,8 +31,8 @@ export type RunMetrics = {
   streamDurationMs?: number
   stopToTerminalMs?: number
   /** Source lengths distinguish actual growth from shorter terminal reconciliation. */
-  stopSourceLengths?: { atReady: number; after250Ms: number }
-  /** Responsiveness (from app-emitted marks during the run window). */
+  stopSourceLengths?: { atReady: number; after250Ms: number; afterSettlement?: number }
+  /** Full observed task/frame intervals overlapping the run window, including delayed callbacks. */
   longTaskCount: number
   longTaskMaxMs: number
   totalBlockingTimeMs: number
@@ -162,6 +162,7 @@ export type ThreadSwitchResult = {
 export type BenchmarkResultFile = {
   schemaVersion: 2
   measurementVersion: "dom-frame-v2"
+  identityProtocol: "ci-isolated-v1" | "attached-session-v1"
   profiled?: boolean
   generatedAt: string
   commit: string

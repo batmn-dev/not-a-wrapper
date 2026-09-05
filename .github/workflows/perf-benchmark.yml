@@ -49,6 +49,10 @@ on:
         description: "Diagnostic scenario IDs, comma-separated"
         type: string
         default: "new-chat-cold,interact-long-answer"
+      observer_overhead:
+        description: "Interleaved DOM observer on/off trace comparison (requires diagnose)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -78,8 +82,12 @@ jobs:
       COLLECT_BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.collect_baseline || false }}
     steps:
       - name: Validate diagnostic suite
-        if: ${{ inputs.diagnose }}
+        if: ${{ inputs.diagnose || inputs.observer_overhead }}
         run: |
+          if [ "${{ inputs.observer_overhead }}" = "true" ] && [ "${{ inputs.diagnose }}" != "true" ]; then
+            echo "::error::observer_overhead requires diagnose=true; these traces cannot certify a baseline."
+            exit 1
+          fi
           if [ "$SUITE" != "responsiveness" ]; then
             echo "::error title=Unsupported diagnostic suite::diagnose=true supports only suite=responsiveness. Disable diagnose to run the selected suite normally."
             exit 1
@@ -122,6 +130,7 @@ jobs:
       # the scenario oracle, and exits non-zero on ANY correctness failure —
       # that alone gates, baseline or not.
       - name: Run browser benchmark
+        if: ${{ !inputs.observer_overhead }}
         run: |
           if [ "$SUITE" != "smoke" ] && [ "$SUITE" != "standard" ] && [ -z "${PERF_AUTH_PASSWORD:-}" ]; then
             echo "::error title=Missing PERF_AUTH_PASSWORD::Set the GitHub Actions secret PERF_AUTH_PASSWORD to a strong, unique benchmark-user password."
@@ -131,10 +140,21 @@ jobs:
         env:
           PERF_AUTH_PASSWORD: ${{ secrets.PERF_AUTH_PASSWORD }}
 
+      - name: Compare DOM observer overhead
+        if: ${{ inputs.observer_overhead }}
+        run: PERF_OBSERVER_AB=true CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
+
       - name: Compare against baseline
         if: ${{ !inputs.diagnose }}
         run: |
-          CURRENT=$(ls -t benchmarks/chat-performance/browser/results/*.json | head -1)
+          CURRENT=$(bun -e '
+            import { readdirSync } from "node:fs";
+            import { join } from "node:path";
+            const directory = "benchmarks/chat-performance/browser/results";
+            const latest = readdirSync(directory).filter(name => name.endsWith(".json") && !name.endsWith(".trace.json")).sort().at(-1);
+            if (!latest) throw new Error("No benchmark result was produced");
+            console.log(join(directory, latest));
+          ')
           echo "current results: $CURRENT"
           BASELINE="benchmarks/chat-performance/browser/baselines/ci-${SUITE}.json"
           if [ "$COLLECT_BASELINE" = "true" ]; then
@@ -143,7 +163,7 @@ jobs:
           bun run benchmarks/chat-performance/browser/compare-results.ts "$BASELINE" "$CURRENT"
 
       - name: Upload results artifact
-        if: always()
+        if: ${{ always() && !inputs.observer_overhead }}
         uses: actions/upload-artifact@v4
         with:
           name: perf-results-${{ env.SUITE }}-${{ github.run_id }}
@@ -153,7 +173,7 @@ jobs:
           retention-days: 90
 
       - name: Upload diagnostic artifacts
-        if: ${{ always() && inputs.diagnose }}
+        if: ${{ always() && inputs.diagnose && !inputs.observer_overhead }}
         uses: actions/upload-artifact@v4
         with:
           name: perf-diagnostics-${{ env.SUITE }}-${{ github.run_id }}
@@ -162,4 +182,12 @@ jobs:
             benchmarks/chat-performance/browser/results/*.cpuprofile
             benchmarks/chat-performance/browser/results/*.trace.json
             .next-perf/static/chunks/**/*.js
+          retention-days: 90
+
+      - name: Upload observer comparison traces
+        if: ${{ always() && inputs.observer_overhead }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-observer-overhead-${{ github.run_id }}
+          path: benchmarks/chat-performance/browser/results/traces/
           retention-days: 90

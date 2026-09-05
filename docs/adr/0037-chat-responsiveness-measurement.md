@@ -84,11 +84,20 @@ artifacts must not be copied into v2 baseline files. Missing baselines fail CI.
 ## Hosted-run follow-through
 
 The first CI run exposed observer blind spots (popup positioning style changes and
-ARIA-disabled Send), not just application latency. Stop correctness now records
-current-assistant source lengths and rejects actual growth; a shorter canonical
-terminal snapshot remains valid. Terminal feedback is measured only from a real
+ARIA-disabled Send), not just application latency. Stop correctness records
+current-assistant source lengths at idle feedback, after 250 ms, and after the
+terminal/settlement wait and settling buffer. Growth between checkpoints fails;
+a shorter canonical terminal snapshot remains valid. These are sampled stability
+checks, not continuous mutation coverage. Terminal feedback is measured only from a real
 terminal event, separately from Stop feedback. Receipt-to-terminal ordering is a
 signed diagnostic because the durable receipt can arrive first.
+Authenticated Stop runs require that receipt before their final length check.
+
+Long-task and rAF-gap marks retain the original observed interval. Aggregates
+include full intervals overlapping Send through terminal, even when the callback
+that emits the mark arrives after terminal; callback timestamps cannot hide the
+last blocking task or frame gap. Streaming cleanup reports a remaining blocked
+frame interval before cancelling its pending callback.
 
 First-send motion uses the existing Composer lifecycle module to animate the live
 form after its synchronous update, retaining the 500 ms shared spring. This avoids
