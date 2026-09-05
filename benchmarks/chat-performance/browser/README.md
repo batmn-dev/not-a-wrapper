@@ -78,6 +78,13 @@ DOM observer cost during Send-to-terminal; it excludes startup and production
 Sentry reporting and cannot be used as
 a responsiveness baseline or an INP measurement.
 
+The manual `diagnose=true, rendering_probe=true` control captures Smooth, Quick,
+and Smooth with injected `contain: inline-size` on Markdown. The third arm tests
+intrinsic-width propagation without changing product CSS. Each capture requires
+the complete stream oracle and records the injected stylesheet hash and final
+geometry. Compare the two Smooth arms for containment; Quick isolates the fade.
+These traces are diagnostic and cannot seed performance baselines.
+
 Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM

@@ -402,6 +402,9 @@ function captureMetadata(browser: Browser, traceCase: TraceCase) {
   const buildIdPath = path.join(REPO_ROOT, DIST_DIR, "BUILD_ID")
   return {
     typingCadenceMs: BENCHMARK_TYPING_DELAY_MS,
+    injectedCssHash: process.env.INJECT_CSS_FILE
+      ? createHash("sha256").update(readFileSync(process.env.INJECT_CSS_FILE)).digest("hex")
+      : null,
     replayPolicy: "disabled-v1",
     commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT, encoding: "utf8" }).trim(),
     buildId: process.env.BASE_URL ? "external-unverified" : readFileSync(buildIdPath, "utf8").trim(),
@@ -588,6 +591,18 @@ async function runCase(
       correctnessOk: true,
       diagnosticOnly: true,
       metadata: captureMetadata(browser, traceCase),
+      geometry: await page.evaluate(() => {
+        const markdown = document.querySelector(".markdown")?.getBoundingClientRect()
+        const root = document.querySelector<HTMLElement>("[data-scroll-root]")
+        return {
+          markdownWidth: markdown?.width,
+          markdownHeight: markdown?.height,
+          scrollWidth: root?.scrollWidth,
+          scrollHeight: root?.scrollHeight,
+          clientWidth: root?.clientWidth,
+          clientHeight: root?.clientHeight,
+        }
+      }),
       streamingPresentation: STREAMING_PRESENTATION ?? "smooth",
       replayPolicy: "disabled-v1",
       observerEnabled: observerRun?.enabled,
@@ -635,8 +650,8 @@ async function main() {
   if (STREAMING_PRESENTATION && !["smooth", "quick"].includes(STREAMING_PRESENTATION)) {
     throw new Error("STREAMING_PRESENTATION must be smooth or quick")
   }
-  if (STREAMING_PRESENTATION && (OBSERVER_AB || process.env.INJECT_CSS_FILE || process.env.EMULATE_REDUCED_MOTION || process.env.BASE_URL)) {
-    throw new Error("Rendering control requires an owned server and cannot combine with observer A/B or other rendering probes")
+  if (STREAMING_PRESENTATION && (OBSERVER_AB || process.env.EMULATE_REDUCED_MOTION || process.env.BASE_URL)) {
+    throw new Error("Rendering control requires an owned server and cannot combine with observer A/B or reduced motion")
   }
   if (OBSERVER_AB && ["BASE_URL", "INJECT_CSS_FILE", "EMULATE_REDUCED_MOTION", "EXTRA_CATEGORIES"].some((key) => process.env[key])) {
     throw new Error("Observer A/B requires the owned perf server and unmodified tracing/rendering configuration")
