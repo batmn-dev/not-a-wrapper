@@ -40,6 +40,7 @@ import {
   type Page,
   type Response,
 } from "playwright"
+import { classifyChatError } from "@/lib/observability/chat-error-taxonomy"
 import { hashValue } from "../fixtures"
 import { waitForTraceCompletion } from "./diagnostic-trace"
 import {
@@ -95,6 +96,11 @@ type ServerPerfLine = Record<string, unknown> & {
 }
 
 const serverPerfLines: ServerPerfLine[] = []
+const serverRouteErrors: Array<{
+  requestId: string
+  errorName: string
+  category: ReturnType<typeof classifyChatError>
+}> = []
 let serverProcess: ChildProcess | null = null
 
 function log(message: string) {
@@ -139,22 +145,37 @@ function spawnPerfServer(baseUrl: string): void {
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
-  const capture = (chunk: Buffer) => {
-    for (const line of chunk.toString().split("\n")) {
-      const trimmed = line.trim()
-      if (!trimmed.startsWith("{")) continue
-      try {
-        const parsed = JSON.parse(trimmed) as Record<string, unknown>
-        if (parsed._tag === "chat_perf") {
-          serverPerfLines.push({ ...parsed, receivedAt: Date.now() })
+  const capture = () => {
+    let pending = ""
+    return (chunk: Buffer) => {
+      const lines = (pending + chunk.toString()).split("\n")
+      pending = lines.pop() ?? ""
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith("{")) continue
+        try {
+          const parsed = JSON.parse(trimmed) as Record<string, unknown>
+          if (parsed._tag === "chat_perf") {
+            serverPerfLines.push({ ...parsed, receivedAt: Date.now() })
+          } else if (
+            parsed._tag === "chat_route_error" &&
+            typeof parsed.requestId === "string" &&
+            typeof parsed.errorName === "string"
+          ) {
+            serverRouteErrors.push({
+              requestId: parsed.requestId,
+              errorName: parsed.errorName,
+              category: classifyChatError({ message: parsed.errorMessage }),
+            })
+          }
+        } catch {
+          // Non-JSON server output.
         }
-      } catch {
-        // Non-JSON server output.
       }
     }
   }
-  serverProcess.stdout?.on("data", capture)
-  serverProcess.stderr?.on("data", capture)
+  serverProcess.stdout?.on("data", capture())
+  serverProcess.stderr?.on("data", capture())
   serverProcess.on("exit", (code) => {
     if (code !== null && code !== 0) log(`perf server exited with code ${code}`)
   })
@@ -396,16 +417,46 @@ async function runScenarioOnce(
   }
 
   let chatResponse: Response | null = null
-  const chatResponseUrls: string[] = []
+  const chatResponseStatuses: number[] = []
+  let rejectFailedPost: (error: Error) => void = () => undefined
+  const failedPost = new Promise<never>((_resolve, reject) => {
+    rejectFailedPost = reject
+  })
+  // A response can fail before the first-visible waiter attaches.
+  void failedPost.catch(() => undefined)
+  let chatRequestCount = 0
+  let routeErrorStart = serverRouteErrors.length
+  page.on("request", (request) => {
+    if (
+      new URL(request.url()).pathname === "/api/chat" &&
+      request.method() === "POST"
+    ) chatRequestCount++
+  })
   page.on("response", (response) => {
     if (
-      response.url().includes("/api/chat") &&
+      new URL(response.url()).pathname === "/api/chat" &&
       response.request().method() === "POST"
     ) {
-      chatResponseUrls.push(`${response.status()} ${response.url()}`)
+      chatResponseStatuses.push(response.status())
       chatResponse = response
+      if (response.status() >= 400) {
+        rejectFailedPost(new Error(`chat POST failed (HTTP ${response.status()})`))
+      }
     }
   })
+
+  const failureEvidence = async () => {
+    const marks = await readMarks(page).catch(() => [])
+    return {
+      postRequests: chatRequestCount,
+      postStatuses: chatResponseStatuses,
+      terminalOutcomes: marks
+        .filter((mark) => mark.name === "stream_terminal")
+        .map((mark) => mark.detail?.outcome),
+      // Route requestIds are not exposed to the browser; these are temporal candidates.
+      routeErrorWindow: serverRouteErrors.slice(routeErrorStart),
+    }
+  }
 
   try {
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" })
@@ -425,17 +476,17 @@ async function runScenarioOnce(
       await page.keyboard.type(directiveFor(FOLLOWUP_SEED), { delay: BENCHMARK_TYPING_DELAY_MS })
       await waitForSendReady(page)
       await page.locator('[data-testid="send-button"]').click()
-      await waitForMark(page, "stream_terminal", 60000)
-      if (
-        markAt(await readMarks(page), "durable_settlement_receipt") ===
-        undefined
-      )
-        await waitForMark(page, "durable_settlement_receipt", 15000)
+      await Promise.race([waitForMark(page, "stream_terminal", 60000), failedPost])
       const seedTerminal = (await readMarks(page)).find(
         (mark) => mark.name === "stream_terminal"
       )
       if (seedTerminal?.detail?.outcome !== "finish")
         throw new Error("follow-up seed did not finish successfully")
+      if (
+        markAt(await readMarks(page), "durable_settlement_receipt") ===
+        undefined
+      )
+        await waitForMark(page, "durable_settlement_receipt", 15000)
       await page
         .locator('[data-testid="send-button"][aria-label="Send prompt"]')
         .waitFor()
@@ -443,7 +494,9 @@ async function runScenarioOnce(
       await page.reload({ waitUntil: "domcontentloaded" })
       await editor.waitFor({ state: "visible" })
       chatResponse = null
-      chatResponseUrls.length = 0
+      chatResponseStatuses.length = 0
+      chatRequestCount = 0
+      routeErrorStart = serverRouteErrors.length
       // A visible composer can precede history hydration. The follow-up's
       // selected-path token must include the settled seed, not an empty path.
       await waitForMark(page, "authoritative_thread_content_received", 30000)
@@ -503,14 +556,20 @@ async function runScenarioOnce(
     let stopSourceLengths: RunMetrics["stopSourceLengths"]
     const awaitFirstVisible = async (): Promise<boolean> => {
       if (!config.auth) {
-        await waitForMark(page, "first_visible_text", timeoutMs)
+        await Promise.race([
+          waitForMark(page, "first_visible_text", timeoutMs),
+          failedPost,
+        ])
         return true
       }
-      const seen = await waitForAnyMark(
-        page,
-        ["first_visible_text", "durable_settlement_receipt"],
-        timeoutMs
-      )
+      const seen = await Promise.race([
+        waitForAnyMark(
+          page,
+          ["first_visible_text", "durable_settlement_receipt"],
+          timeoutMs
+        ),
+        failedPost,
+      ])
       if (seen !== "first_visible_text") {
         liveStreamNotAdopted = true
         return false
@@ -765,13 +824,13 @@ async function runScenarioOnce(
       foldedText = foldSseText(body).text
       if (!bodyAvailable) {
         bodyCaptureNote = chatResponse
-          ? `empty body [${chatResponseUrls.join("; ")}]`
+          ? `empty body [${chatResponseStatuses.join(", ")}]`
           : "no /api/chat response captured"
       }
     } catch (error) {
       // A stopped stream's body may be unavailable; correctness falls back
       // to outcome + prefix rules below.
-      bodyCaptureNote = `body unreadable: ${String(error).split("\n")[0]} [${chatResponseUrls.join("; ")}]`
+      bodyCaptureNote = `body unreadable: ${String(error).split("\n")[0]} [${chatResponseStatuses.join(", ")}]`
     }
 
     const terminalMark = marks.find((mark) => mark.name === "stream_terminal")
@@ -950,7 +1009,7 @@ async function runScenarioOnce(
       .filter((mark) => mark.name === "stream_publication_summary")
       .at(-1)
 
-    return {
+    const result: RunMetrics = {
       ui: uiObservation.values,
       hiddenDuringMeasurement: uiObservation.hidden,
       pendingDeltaSamples: uiObservation.pendingDeltas,
@@ -1055,8 +1114,12 @@ async function runScenarioOnce(
                   : detail,
       },
     }
+    if (!result.correctness.ok) {
+      result.correctness.detail = `${result.correctness.detail ?? "correctness failed"}; evidence=${JSON.stringify(await failureEvidence())}`
+    }
+    return result
   } catch (error) {
-    if (!config.interact && !config.followup) throw error
+    const evidence = await failureEvidence()
     const probe = await page.evaluate((point) => {
       const observer = (window as ChatUiWindow).__chatUiPerf
       const root = document.querySelector<HTMLElement>("[data-scroll-root]")
@@ -1088,13 +1151,11 @@ async function runScenarioOnce(
       }
     }, wheelPoint).catch(() => undefined)
     const message = String(error).split("\n")[0]
-    const responses = chatResponseUrls.map((response) => {
-      const [status, url] = response.split(" ")
-      return { status, origin: new URL(url).origin }
-    })
-    const stage = config.interact ? interactionProbeStage : "follow-up"
+    const stage = config.interact
+      ? interactionProbeStage
+      : config.followup ? "follow-up" : "turn"
     throw new Error(
-      `${config.id}: ${stage}: ${message}; probe=${JSON.stringify(probe)}; responses=${JSON.stringify(responses)}`,
+      `${config.id}: ${stage}: ${message}; evidence=${JSON.stringify(evidence)}; probe=${JSON.stringify(probe)}`,
       { cause: error }
     )
   } finally {
