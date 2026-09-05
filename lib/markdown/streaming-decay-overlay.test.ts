@@ -21,7 +21,8 @@ describe("decayStylesheetText", () => {
     expect(
       css.startsWith("@media (prefers-reduced-motion: no-preference)")
     ).toBe(true)
-    const rules = css.match(/::highlight\(naw-stream-decay-\d+\)/g) ?? []
+    const rules =
+      css.match(/\[data-streaming-decay-root\]::highlight\(naw-stream-decay-\d+\)/g) ?? []
     expect(rules.length).toBe(DECAY_BUCKET_COUNT)
     expect(css).toContain(
       "::highlight(naw-stream-decay-0) { color: color-mix(in oklab, var(--foreground) 4%, transparent); }"
@@ -259,6 +260,7 @@ describe("manager without CSS Custom Highlight support (jsdom)", () => {
       observeStreamingDecay(container)
       settleStreamingDecay(container)
     }).not.toThrow()
+    expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
   })
 })
 
@@ -313,8 +315,9 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
     vi.stubGlobal("StaticRange", FakeStaticRange)
     vi.stubGlobal("requestAnimationFrame", () => 1)
     vi.stubGlobal("cancelAnimationFrame", () => {})
+    const container = document.createElement("div")
+    const setAttribute = vi.spyOn(container, "setAttribute")
     try {
-      const container = document.createElement("div")
       document.body.appendChild(container)
       container.textContent = "Hello"
       // First observation seeds the baseline — the persistent bucket
@@ -322,6 +325,7 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       // KEYS must never churn per paint (Chromium invalidates ::highlight
       // matching document-wide on registry mutation — the B1 layout storm).
       observeStreamingDecay(container)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(true)
       const emptyRangeCount = () =>
         [...highlights.values()].reduce(
           (total, highlight) => total + highlight.ranges.length,
@@ -332,6 +336,10 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
 
       container.textContent = "Hello world"
       observeStreamingDecay(container)
+      expect(setAttribute).toHaveBeenCalledExactlyOnceWith(
+        "data-streaming-decay-root",
+        ""
+      )
       const newest = highlights.get("naw-stream-decay-0")
       expect(newest).toBeDefined()
       // The appended suffix (offsets 5–11) is fully covered by newest-bucket
@@ -345,6 +353,7 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
       // Settlement clears every bucket's ranges synchronously; the
       // registered highlights persist (mutated in place, never re-keyed).
       settleStreamingDecay(container)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
       expect(highlights.size).toBe(12)
       expect(emptyRangeCount()).toBe(0)
       // A long settled prefix must not multiply JS range-construction work.
@@ -383,9 +392,14 @@ describe("paint pipeline with a stubbed CSS Custom Highlight API", () => {
         backward.mockRestore()
         last.mockRestore()
       }
-      settleStreamingDecay(container)
+      // Preference cleanup also releases roots that have already disconnected.
       container.remove()
+      setStreamingDecayEnabled(false)
+      expect(container.hasAttribute("data-streaming-decay-root")).toBe(false)
+      expect(highlights.size).toBe(0)
     } finally {
+      setAttribute.mockRestore()
+      container.remove()
       // The manager is a module singleton: reset its rAF handle (armed with
       // the stubbed requestAnimationFrame above) so later observes can
       // schedule a real loop.

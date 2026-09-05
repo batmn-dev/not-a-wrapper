@@ -384,7 +384,6 @@ export async function runThreadSwitch(
       }
     }
     log(`  visited: ${options.switchCount} switches`)
-    await page.close()
   } finally {
     const closedPages = await Promise.allSettled(
       ownedPages.filter((page) => !page.isClosed()).map((page) => page.close())

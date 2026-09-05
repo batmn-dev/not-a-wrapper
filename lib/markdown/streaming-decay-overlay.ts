@@ -4,12 +4,11 @@
  * Streaming color-decay overlay (ADR-0016).
  *
  * Newly arrived words paint near-transparent and materialize to full foreground
- * color without owning any DOM: cohorts of appended rendered text are painted
+ * color without changing content DOM: cohorts of appended rendered text are painted
  * through the CSS Custom Highlight API (`CSS.highlights` +
  * `::highlight(naw-stream-decay-N)` rules this module injects as a constructed
- * stylesheet). The DOM the React tree renders is untouched, so settled content
- * is canonical by construction and the rendered-DOM equivalence corpus is
- * unaffected.
+ * stylesheet). A temporary root attribute scopes the rules; settlement removes
+ * it, leaving canonical DOM and the rendered-DOM equivalence corpus unaffected.
  *
  * The `::highlight` rules live here rather than in globals.css because
  * Turbopack's CSS parser rejects the pseudo-element and warns on every
@@ -79,6 +78,7 @@ export const PAINT_MIN_INTERVAL_MS = 24
 export const MAX_FLIP_WINDOW_CHARS = 64
 
 const highlightName = (bucket: number) => `naw-stream-decay-${bucket}`
+const decayRootAttribute = "data-streaming-decay-root"
 
 /**
  * The bucket ramp paints each bucket at the midpoint of its slice of the
@@ -86,9 +86,11 @@ const highlightName = (bucket: number) => `naw-stream-decay-${bucket}`
  * near-opaque (96%) instead of pinning the endpoints to 0%/100%.
  */
 export function decayStylesheetText(): string {
+  // Highlight color inherits through descendants independently of their text
+  // color: https://drafts.csswg.org/css-pseudo-4/#highlight-cascade
   const rules = Array.from({ length: DECAY_BUCKET_COUNT }, (_, bucket) => {
     const alpha = Math.round(((bucket + 0.5) / DECAY_BUCKET_COUNT) * 100)
-    return `  ::highlight(${highlightName(bucket)}) { color: color-mix(in oklab, var(--foreground) ${alpha}%, transparent); }`
+    return `  [${decayRootAttribute}]::highlight(${highlightName(bucket)}) { color: color-mix(in oklab, var(--foreground) ${alpha}%, transparent); }`
   }).join("\n")
   return `@media (prefers-reduced-motion: no-preference) {\n${rules}\n}`
 }
@@ -272,7 +274,9 @@ class StreamingDecayManager {
     if (!isSupported() || prefersReducedMotion()) return
     ensureDecayStylesheet(container.ownerDocument)
     const now = performance.now()
-    const state = this.states.get(container) ?? {
+    const existing = this.states.get(container)
+    if (!existing) container.setAttribute(decayRootAttribute, "")
+    const state = existing ?? {
       baseline: null,
       cohorts: [],
     }
@@ -295,6 +299,7 @@ class StreamingDecayManager {
   /** Settlement/unmount: drop the container and repaint without it. */
   settle(container: Element): void {
     if (!this.states.delete(container)) return
+    container.removeAttribute(decayRootAttribute)
     this.paint(performance.now())
   }
 
@@ -305,6 +310,9 @@ class StreamingDecayManager {
       this.rafHandle = null
     }
     if (this.states.size > 0) {
+      for (const container of this.states.keys()) {
+        container.removeAttribute(decayRootAttribute)
+      }
       this.states.clear()
       this.paint(performance.now())
     }

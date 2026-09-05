@@ -3,7 +3,7 @@
 import { Icon } from "@/components/ui/icon"
 import { api } from "@/convex/_generated/api"
 import { useChats } from "@/lib/chat-store/chats/provider"
-import { useMessages } from "@/lib/chat-store/messages/provider"
+import { useResetMessages } from "@/lib/chat-store/messages/provider"
 import { useChatSession } from "@/lib/chat-store/session/provider"
 import type { Chat } from "@/lib/chat-store/types"
 import { Pin, PinOff } from "@/lib/icons"
@@ -41,10 +41,11 @@ export function ChatActionsMenu({
   contentSide = "bottom",
   showShare,
 }: ChatActionsMenuProps) {
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  // Mount on first request, then retain the dialog for its closing transition.
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>()
   const [isShareDrawerOpen, setIsShareDrawerOpen] = useState(false)
   const [isShareLoading, setIsShareLoading] = useState(false)
-  const { resetMessages } = useMessages()
+  const resetMessages = useResetMessages()
   const { deleteChat, togglePinned, updateTitle } = useChats()
   const { chatId } = useChatSession()
   const router = useRouter()
@@ -139,12 +140,14 @@ export function ChatActionsMenu({
         onOpenChange={onOpenChange}
       />
 
-      <DialogDeleteChat
-        isOpen={isDeleteDialogOpen}
-        setIsOpen={setIsDeleteDialogOpen}
-        chatTitle={chat.title || "Untitled chat"}
-        onConfirmDelete={handleConfirmDelete}
-      />
+      {isDeleteDialogOpen !== undefined && (
+        <DialogDeleteChat
+          isOpen={isDeleteDialogOpen}
+          setIsOpen={setIsDeleteDialogOpen}
+          chatTitle={chat.title || "Untitled chat"}
+          onConfirmDelete={handleConfirmDelete}
+        />
+      )}
 
       {showShare && (
         <SharePublishDrawer

@@ -5,6 +5,8 @@ on:
     paths:
       - "app/components/chat/**"
       - "app/components/chat-input/**"
+      - "app/components/layout/chat-actions-menu.tsx"
+      - "app/components/layout/sidebar/**"
       - "app/api/chat/**"
       - "app/globals.css"
       - "components/ui/prompt-input.tsx"
@@ -19,6 +21,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "lib/markdown/**"
+      - "lib/chat-store/messages/**"
       - "lib/observability/**"
       - "benchmarks/chat-performance/**"
       - "instrumentation-client.ts"

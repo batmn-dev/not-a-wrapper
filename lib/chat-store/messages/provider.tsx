@@ -4,7 +4,6 @@ import { toast } from "@/components/ui/toast"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import type { SelectedRunProjection } from "@/convex/messages"
-import { useUser } from "@/lib/user-store/provider"
 import type { DurableMessageStatus } from "@/lib/chat-messages/durable-contract"
 import { durableStoredMessageToUiMessage } from "@/lib/chat-messages/ui-message-adapter"
 import { usePerUserQuery } from "@/lib/convex/use-per-user-query"
@@ -13,6 +12,7 @@ import {
   markChatPerf,
 } from "@/lib/observability/chat-performance"
 import { useChatNavigationPerfMarks } from "@/lib/observability/chat-performance-client"
+import { useUser } from "@/lib/user-store/provider"
 import type { UIMessage } from "ai"
 import { useMutation } from "convex/react"
 import {
@@ -67,12 +67,23 @@ type MessagesContextType = {
 }
 
 const MessagesContext = createContext<MessagesContextType | null>(null)
+const ResetMessagesContext = createContext<
+  MessagesContextType["resetMessages"] | null
+>(null)
 
 export function useMessages() {
   const context = useContext(MessagesContext)
   if (!context)
     throw new Error("useMessages must be used within MessagesProvider")
   return context
+}
+
+/** Command-only consumers do not subscribe to streaming message updates. */
+export function useResetMessages() {
+  const resetMessages = useContext(ResetMessagesContext)
+  if (!resetMessages)
+    throw new Error("useResetMessages must be used within MessagesProvider")
+  return resetMessages
 }
 
 export function MessagesProvider({ children }: { children: React.ReactNode }) {
@@ -321,7 +332,9 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         selectMessageBranch,
       }}
     >
-      {children}
+      <ResetMessagesContext.Provider value={resetMessages}>
+        {children}
+      </ResetMessagesContext.Provider>
     </MessagesContext.Provider>
   )
 }

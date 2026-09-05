@@ -12,7 +12,7 @@ import {
   vi,
 } from "vitest"
 import { resetCachedMessagesSnapshot } from "./api"
-import { MessagesProvider, useMessages } from "./provider"
+import { MessagesProvider, useMessages, useResetMessages } from "./provider"
 
 const persistMocks = vi.hoisted(() => {
   const tables = {
@@ -222,5 +222,61 @@ describe("MessagesProvider local chat hydration", () => {
     expect(capture.current?.isLoading).toBe(false)
     expect(capture.current?.messages).toEqual([])
     expect(convexMocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip")
+  })
+
+  it("isolates reset consumers from message updates and resets only the current chat", async () => {
+    const capture: { current: ReturnType<typeof useMessages> | null } = {
+      current: null,
+    }
+    const commandRender = vi.fn()
+    function ResetControl() {
+      const reset = useResetMessages()
+      commandRender()
+      return <button onClick={() => void reset()}>Reset</button>
+    }
+    const children = (
+      <>
+        <MessagesSnapshot captureRef={capture} />
+        <ResetControl />
+      </>
+    )
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const render = () =>
+      act(() => root?.render(<MessagesProvider>{children}</MessagesProvider>))
+    render()
+    await flushPromises()
+    const initialRenders = commandRender.mock.calls.length
+    act(() =>
+      capture.current?.setMessages([
+        { id: "first-chat-draft", role: "user", parts: [] },
+      ])
+    )
+    expect(
+      container.querySelector("[data-messages]")?.getAttribute("data-messages")
+    ).toBe("first-chat-draft")
+    expect(commandRender).toHaveBeenCalledTimes(initialRenders)
+
+    sessionMocks.chatId = "second-chat"
+    render()
+    await flushPromises()
+    const switchedRenders = commandRender.mock.calls.length
+    act(() =>
+      capture.current?.setMessages([
+        { id: "second-chat-draft", role: "user", parts: [] },
+      ])
+    )
+    expect(commandRender).toHaveBeenCalledTimes(switchedRenders)
+    await act(async () => container?.querySelector("button")?.click())
+    expect(capture.current?.messages).toEqual([])
+    expect(commandRender).toHaveBeenCalledTimes(switchedRenders)
+
+    sessionMocks.chatId = "local-thread"
+    render()
+    await flushPromises()
+    expect(capture.current?.messages.map((message) => message.id)).toEqual([
+      "first-chat-draft",
+    ])
   })
 })
