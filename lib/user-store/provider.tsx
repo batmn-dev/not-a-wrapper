@@ -27,6 +27,8 @@ import { mergeUserProfileWithConvexFields } from "./merge-user-profile"
 type UserContextType = {
   user: UserProfile | null
   isLoading: boolean
+  /** Signed-in chat mutations require the bootstrapped row for this identity. */
+  isChatAdmissionReady: boolean
   updateUser: (updates: Partial<UserProfile>) => Promise<void>
 }
 
@@ -55,7 +57,10 @@ export function UserProvider({
   const updateProfileMutation = useMutation(api.users.updateProfile)
   const createOrUpdateMutation = useMutation(api.users.createOrUpdate)
   const { user: workosUser, loading: isAuthLoading } = useAuth()
-  const { isAuthenticated: isConvexAuthenticated } = useConvexAuth()
+  const {
+    isAuthenticated: isConvexAuthenticated,
+    isLoading: isConvexAuthLoading,
+  } = useConvexAuth()
 
   const { data: convexUser } = usePerUserQuery(api.users.getCurrent)
 
@@ -195,8 +200,16 @@ export function UserProvider({
     [user?.id, updateProfileMutation]
   )
 
+  const isChatAdmissionReady =
+    !isAuthLoading &&
+    (user?.id
+      ? workosUser?.id === user.id &&
+        isConvexAuthenticated &&
+        convexUser?.workosUserId === user.id
+      : !workosUser && !isConvexAuthLoading && !isConvexAuthenticated)
+
   return (
-    <UserContext.Provider value={{ user, isLoading, updateUser }}>
+    <UserContext.Provider value={{ user, isLoading, isChatAdmissionReady, updateUser }}>
       {children}
     </UserContext.Provider>
   )

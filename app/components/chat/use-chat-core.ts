@@ -84,6 +84,7 @@ type UseChatCoreProps = {
   ) => void | Promise<void>
   chatId: string | null
   user: UserProfile | null
+  isChatAdmissionReady: boolean
   checkLimitsAndNotify: (uid: string) => Promise<boolean>
   ensureChatExists: (
     args: EnsureChatForTurnArgs
@@ -100,6 +101,7 @@ export function useChatCore({
   cacheAndAddMessage,
   chatId,
   user,
+  isChatAdmissionReady,
   checkLimitsAndNotify,
   ensureChatExists,
   firstTurn,
@@ -375,6 +377,7 @@ export function useChatCore({
     (detachableStream.commit.chatId === chatId &&
       !isHistoryLoading &&
       (initialMessages.length === 0 || messages.length > 0))
+  const isSendReady = isChatAdmissionReady && isHistoryReady
   const connectionState = useConvexConnectionState()
   const stopGenerationRunMutation = useMutation(
     api.chatRuntime.stopGenerationRun
@@ -773,7 +776,7 @@ export function useChatCore({
   // to clear its persisted draft.
   const submit = useCallback(
     async ({ text, files, attachments }: ChatTurnPayload): Promise<boolean> => {
-      if (!isHistoryReady) return false
+      if (!isSendReady) return false
       const submittedFiles = [...files]
       const optimisticAttachments = attachments.flatMap((attachment) =>
         typeof attachment.name === "string" &&
@@ -816,7 +819,7 @@ export function useChatCore({
       }
       return accepted
     },
-    [chatTurn, messages, bumpChat, isHistoryReady]
+    [chatTurn, messages, bumpChat, isSendReady]
   )
 
   const autoSubmittedPromptRef = useRef<string | null>(null)
@@ -832,7 +835,7 @@ export function useChatCore({
 
     // Wait for preferences and existing history before consuming the once-
     // guard, so the turn retries with the correct model and selected path.
-    if (!turnContextHydrated || !isHistoryReady) return
+    if (!turnContextHydrated || !isSendReady) return
 
     const autoSubmitKey = `${chatId}:${prompt}`
     if (autoSubmittedPromptRef.current === autoSubmitKey) return
@@ -867,7 +870,7 @@ export function useChatCore({
     prompt,
     shouldAutoSubmitPrompt,
     turnContextHydrated,
-    isHistoryReady,
+    isSendReady,
     submit,
   ])
 
@@ -913,7 +916,7 @@ export function useChatCore({
     regenerate,
 
     isSubmitting,
-    isHistoryReady,
+    isSendReady,
     setIsSubmitting,
     hasDialogAuth,
     setHasDialogAuth,

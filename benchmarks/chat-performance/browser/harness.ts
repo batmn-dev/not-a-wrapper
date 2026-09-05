@@ -393,7 +393,17 @@ async function runScenarioOnce(
     await editor.waitFor({ state: "visible", timeout: 15000 })
 
     if (config.followup) {
-      await editor.fill(directiveFor(FOLLOWUP_SEED))
+      await editor.click()
+      await page.keyboard.type(directiveFor(FOLLOWUP_SEED))
+      await page.waitForFunction(() => {
+        const button = document.querySelector<HTMLButtonElement>(
+          '[data-testid="send-button"]'
+        )
+        return button?.getAttribute("aria-label") === "Send prompt" &&
+          !button.disabled && button.getAttribute("aria-disabled") !== "true" &&
+          Boolean((window as ChatUiWindow).__chatUiPerf
+            ?.values.navigationToSendReadyMs?.length)
+      })
       await page.locator('[data-testid="send-button"]').click()
       await waitForMark(page, "stream_terminal", 60000)
       if (

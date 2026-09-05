@@ -167,7 +167,10 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
       getCachedMessagesSnapshot(
         messagePersistenceMode === "localOnly" ? chatId : null
       ),
-    getCachedMessagesServerSnapshot
+    () =>
+      getCachedMessagesServerSnapshot(
+        messagePersistenceMode === "localOnly" ? chatId : null
+      )
   )
   const isLoading =
     (isDurableChat && isMessagesLoading) ||

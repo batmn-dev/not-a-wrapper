@@ -21,6 +21,7 @@ beforeEach(() => {
   // live mock binding leaks into the next test's mount-time readopt.
   resetSharedChatStreamOwnersForTests()
   chatCoreMocks.historyLoading = false
+  chatCoreMocks.chatAdmissionReady = true
   chatCoreMocks.useBindingMessages = false
 })
 
@@ -60,6 +61,7 @@ const chatCoreMocks = vi.hoisted(() => ({
   // Controllable Turn context hydration for the auto-submit gate tests.
   turnContextHydrated: true,
   historyLoading: false,
+  chatAdmissionReady: true,
   // Controllable selected-run projection for the deferred-Stop tests.
   selectedRun: null as unknown,
 }))
@@ -317,6 +319,7 @@ describe("useChatCore prompt query handling", () => {
         cacheAndAddMessage: vi.fn(),
         chatId,
         user: authenticatedUser,
+        isChatAdmissionReady: chatCoreMocks.chatAdmissionReady,
         checkLimitsAndNotify,
         ensureChatExists,
         firstTurn: { begin: () => "chat-1", rollback: () => {} },
@@ -404,10 +407,11 @@ describe("useChatCore prompt query handling", () => {
     expect(window.location.search).toBe("")
   })
 
-  it.each(["context", "history"])("defers auto-submit until %s hydrates, then dispatches once", async (source) => {
+  it.each(["context", "history", "account"])("defers auto-submit until %s hydrates, then dispatches once", async (source) => {
     // Defer before consuming the once-guard, preserving the pending prompt.
     chatCoreMocks.turnContextHydrated = source !== "context"
     chatCoreMocks.historyLoading = source === "history"
+    chatCoreMocks.chatAdmissionReady = source !== "account"
 
     const { rerender } = renderCore({
       search: "?prompt=Project%20question&autoSubmit=1",
@@ -422,6 +426,7 @@ describe("useChatCore prompt query handling", () => {
 
     chatCoreMocks.turnContextHydrated = true
     chatCoreMocks.historyLoading = false
+    chatCoreMocks.chatAdmissionReady = true
     rerender()
     await flushAsyncWork()
 
@@ -438,17 +443,18 @@ describe("useChatCore prompt query handling", () => {
     const { getCore, rerender } = renderCore({ search: "", initialMessages: history })
     const payload = { text: "follow-up", files: [], attachments: [] }
     await act(async () => {
-      expect(getCore()!.isHistoryReady).toBe(false)
+      expect(getCore()!.isSendReady).toBe(false)
       await expect(getCore()!.submit(payload)).resolves.toBe(false)
     })
     chatCoreMocks.historyLoading = false
+    chatCoreMocks.chatAdmissionReady = true
     rerender()
-    expect(getCore()!.isHistoryReady).toBe(false)
+    expect(getCore()!.isSendReady).toBe(false)
     expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
 
     chatCoreMocks.useChatState.messages = history
     rerender()
-    expect(getCore()!.isHistoryReady).toBe(true)
+    expect(getCore()!.isSendReady).toBe(true)
     await act(async () => { await getCore()!.submit(payload) })
     expect(chatCoreMocks.sendMessage).toHaveBeenCalledWith(
       expect.anything(),
@@ -487,10 +493,24 @@ describe("useChatCore prompt query handling", () => {
     )
   })
 
+  it("holds a first send until account admission is ready without dispatching or consuming the draft", async () => {
+    chatCoreMocks.chatAdmissionReady = false
+    const { getCore, rerender } = renderCore({ search: "", chatId: null })
+    const payload = { text: "first prompt", files: [], attachments: [] }
+    expect(getCore()!.isSendReady).toBe(false)
+    await act(async () => { await expect(getCore()!.submit(payload)).resolves.toBe(false) })
+    expect(chatCoreMocks.sendMessage).not.toHaveBeenCalled()
+    chatCoreMocks.chatAdmissionReady = true
+    rerender()
+    expect(getCore()!.isSendReady).toBe(true)
+    await act(async () => { await getCore()!.submit(payload) })
+    expect(chatCoreMocks.sendMessage).toHaveBeenCalledOnce()
+  })
+
   it("allows a first send without waiting for existing-history readiness", async () => {
     chatCoreMocks.historyLoading = true
     const { getCore } = renderCore({ search: "", chatId: null })
-    expect(getCore()!.isHistoryReady).toBe(true)
+    expect(getCore()!.isSendReady).toBe(true)
     await act(async () => {
       await getCore()!.submit({ text: "first prompt", files: [], attachments: [] })
     })
@@ -605,6 +625,7 @@ describe("useChatCore selected-path projection", () => {
       cacheAndAddMessage: vi.fn(),
       chatId,
       user: authenticatedUser,
+        isChatAdmissionReady: chatCoreMocks.chatAdmissionReady,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => ({ chatId: "chat_projection" })),
       firstTurn: { begin: () => "chat-1", rollback: () => {} },
@@ -819,6 +840,7 @@ describe("useChatCore stream re-adoption on return", () => {
       cacheAndAddMessage: vi.fn(),
       chatId,
       user: authenticatedUser,
+        isChatAdmissionReady: chatCoreMocks.chatAdmissionReady,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => ({ chatId: "chat_a" })),
       firstTurn: { begin: () => "chat-1", rollback: () => {} },
@@ -1027,6 +1049,7 @@ describe("useChatCore deferred durable Stop (projection gap)", () => {
       cacheAndAddMessage: vi.fn(),
       chatId: "chat_stopgap",
       user: authenticatedUser,
+        isChatAdmissionReady: chatCoreMocks.chatAdmissionReady,
       checkLimitsAndNotify: vi.fn(async () => true),
       ensureChatExists: vi.fn(async () => ({ chatId: "chat_stopgap" })),
       firstTurn: { begin: () => "chat-1", rollback: () => {} },

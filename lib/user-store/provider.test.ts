@@ -18,6 +18,7 @@ import { UserProvider, useUser } from "./provider"
 const providerMocks = vi.hoisted(() => ({
   authLoading: true,
   convexAuthenticated: true,
+  convexAuthLoading: false,
   convexUser: null as Record<string, unknown> | null | undefined,
   workosUser: null as Record<string, unknown> | null,
   mutation: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("@workos-inc/authkit-nextjs/components", () => ({
 vi.mock("convex/react", () => ({
   useConvexAuth: () => ({
     isAuthenticated: providerMocks.convexAuthenticated,
+    isLoading: providerMocks.convexAuthLoading,
   }),
   useMutation: () => providerMocks.mutation,
 }))
@@ -125,12 +127,13 @@ describe("mergeUserProfileWithConvexFields", () => {
 })
 
 function UserSnapshot() {
-  const { user, updateUser } = useUser()
+  const { user, updateUser, isChatAdmissionReady } = useUser()
 
   return React.createElement(
     "div",
     {
       "data-created-at": user?.created_at ?? "",
+      "data-chat-admission-ready": String(isChatAdmissionReady),
       "data-display-name": user?.display_name ?? "",
       "data-favorite-models": user?.favorite_models?.join(",") ?? "loading",
       "data-profile-image": user?.profile_image ?? "",
@@ -168,6 +171,7 @@ describe("UserProvider", () => {
   beforeEach(() => {
     providerMocks.authLoading = true
     providerMocks.convexAuthenticated = true
+    providerMocks.convexAuthLoading = false
     providerMocks.convexUser = {
       _creationTime: 100,
       displayName: "Convex User",
@@ -230,6 +234,35 @@ describe("UserProvider", () => {
       lastActiveAt: 100,
     }
   }
+
+  it("requires the signed-in identity's bootstrapped row and bypasses it for confirmed guests", () => {
+    setAuthenticatedProfileUser()
+    const readiness = () => container?.querySelector("[data-chat-admission-ready]")
+      ?.getAttribute("data-chat-admission-ready")
+    for (const row of [undefined, null, { workosUserId: "previous-user" }]) {
+      providerMocks.convexUser = row
+      renderProvider()
+      expect(readiness()).toBe("false")
+    }
+    providerMocks.convexUser = { workosUserId: "user-1" }
+    renderProvider()
+    expect(readiness()).toBe("true")
+    providerMocks.workosUser = { ...providerMocks.workosUser, id: "user-2" }
+    renderProvider()
+    expect(readiness()).toBe("false")
+    providerMocks.convexUser = { workosUserId: "user-2" }
+    renderProvider()
+    expect(readiness()).toBe("true")
+    providerMocks.workosUser = null
+    providerMocks.convexUser = null
+    providerMocks.convexAuthenticated = false
+    providerMocks.convexAuthLoading = true
+    renderProvider()
+    expect(readiness()).toBe("false")
+    providerMocks.convexAuthLoading = false
+    renderProvider()
+    expect(readiness()).toBe("true")
+  })
 
   it("applies Convex-managed fields after WorkOS hydrates later", () => {
     renderProvider()

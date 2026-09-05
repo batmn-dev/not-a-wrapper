@@ -121,8 +121,10 @@ export function getCachedMessagesSnapshot(
   return cachedMessagesSnapshots.get(chatId) ?? emptyMessages
 }
 
-export function getCachedMessagesServerSnapshot(): undefined {
-  return undefined
+export function getCachedMessagesServerSnapshot(
+  chatId: string | null | undefined
+): ExtendedUIMessage[] | undefined {
+  return chatId ? undefined : emptyMessages
 }
 
 export function subscribeCachedMessages(

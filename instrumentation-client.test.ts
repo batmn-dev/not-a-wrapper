@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest"
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
+import { installChatUiObserver } from "./lib/observability/chat-ui-observer"
 
 vi.mock("@sentry/nextjs", () => ({
   init: vi.fn(),
@@ -24,6 +25,7 @@ it.each([false, true])("keeps production replay behavior and disables it only fo
   vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "test-key")
   await import("./instrumentation-client")
   await vi.dynamicImportSettled()
+  expect(installChatUiObserver).toHaveBeenCalledTimes(benchmark ? 1 : 0)
   expect(Sentry.init).toHaveBeenCalledWith(expect.objectContaining({
     integrations: benchmark ? [] : [{ name: "Replay" }],
     replaysSessionSampleRate: benchmark ? 0 : 0.1,

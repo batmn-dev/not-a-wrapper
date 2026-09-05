@@ -106,6 +106,18 @@ results. These earlier captures cannot seed that environment's baseline. Normal
 production replay configuration is unchanged; the controlled benchmark excludes
 replay cost and does not replace production responsiveness monitoring.
 
+## Rendering control
+
+[Run 33952533695](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33952533695)
+compared the existing Smooth and Quick preferences on commit `fada0203`, build
+`rb0WBXwvqQCf2B1F7o0se`, Chromium `151.0.7922.34`, Intel Xeon Platinum 8573C
+(four logical CPUs), and the same B1 fixture. Both fresh-guest captures disabled
+replay and held the DOM observer configuration constant. Full-window native
+layout work was 9,513 ms with Smooth and 9,507 ms with Quick; main-thread work
+was 24,552 and 23,926 ms respectively. Both passed the complete stream oracle.
+This one-pair diagnostic rules out the fade as the dominant layout cost in that
+capture. It does not establish a release speedup or identify the remaining cause.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the

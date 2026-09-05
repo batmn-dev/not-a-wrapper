@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 
 import React, { act } from "react"
-import { createRoot, type Root } from "react-dom/client"
+import { createRoot, hydrateRoot, type Root } from "react-dom/client"
+import { renderToString } from "react-dom/server"
 import {
   afterEach,
   beforeAll,
@@ -246,6 +247,24 @@ describe("MessagesProvider local chat hydration", () => {
     }
     renderProvider(capture)
     expect(capture.current?.isLoading).toBe(false)
+    expect(persistMocks.readFromIndexedDB).not.toHaveBeenCalled()
+  })
+
+  it.each([null, "durable-chat"])("hydrates %s without an unrelated local-cache commit", async (chatId) => {
+    sessionMocks.chatId = chatId
+    userMocks.user = { id: "user-1" }
+    const capture: { current: ReturnType<typeof useMessages> | null } = { current: null }
+    const onRender = vi.fn()
+    const tree = (
+      <React.Profiler id="messages" onRender={onRender}>
+        <MessagesProvider><MessagesSnapshot captureRef={capture} /></MessagesProvider>
+      </React.Profiler>
+    )
+    container = document.createElement("div")
+    container.innerHTML = renderToString(tree)
+    document.body.appendChild(container)
+    await act(async () => { root = hydrateRoot(container!, tree) })
+    expect(onRender).toHaveBeenCalledOnce()
     expect(persistMocks.readFromIndexedDB).not.toHaveBeenCalled()
   })
 

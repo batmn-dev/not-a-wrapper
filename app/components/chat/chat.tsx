@@ -114,7 +114,7 @@ function ChatInner({
     cacheAndAddMessage,
     selectMessageBranch,
   } = useMessages()
-  const { user } = useUser()
+  const { user, isChatAdmissionReady } = useUser()
 
   // Turn inputs — reactive reads for rendering; the turn runners read the
   // same values at run time through the context's snapshot getter.
@@ -165,7 +165,7 @@ function ChatInner({
     presentation,
     hasSentFirstMessage,
     isSubmitting,
-    isHistoryReady,
+    isSendReady,
     lastFinishReason,
     scrollToMessageId,
     submit,
@@ -177,6 +177,7 @@ function ChatInner({
     cacheAndAddMessage,
     chatId,
     user,
+    isChatAdmissionReady,
     checkLimitsAndNotify,
     ensureChatExists,
     firstTurn: { begin: beginFirstTurn, rollback: rollbackFirstTurn },
@@ -398,7 +399,7 @@ function ChatInner({
       bottomSpacing="none"
       onTurn={submit}
       isSubmitting={isSubmitting}
-      isSendReady={isHistoryReady}
+      isSendReady={isSendReady}
       status={effectiveStatus}
       stop={stop}
       stoppable={presentation.stoppable}
