@@ -265,6 +265,8 @@ describe("MessagesProvider local chat hydration", () => {
     document.body.appendChild(container)
     await act(async () => { root = hydrateRoot(container!, tree) })
     expect(onRender).toHaveBeenCalledOnce()
+    expect(capture.current?.isLoading).toBe(chatId !== null)
+    expect(capture.current?.messages).toEqual([])
     expect(persistMocks.readFromIndexedDB).not.toHaveBeenCalled()
   })
 

@@ -29,6 +29,7 @@ export type ChatUiObserver = {
   hidden: boolean
   pendingDeltas: () => number
   droppedSamples: () => number
+  programmaticScroll: (root: HTMLElement) => void
   confirmSend: () => void
   setPhase: (phase: "early" | "late") => void
   receive: (type: string, length?: number) => void
@@ -80,10 +81,17 @@ export function installChatUiObserver(
         start: number
         phase: typeof phase
         root: HTMLElement
+        pathname: string
         event: WheelEvent
-        remainingFrames: number
+        watchdog: ReturnType<typeof setTimeout>
       }
     | undefined
+  const clearPendingWheel = (invalid = false) => {
+    if (!pendingWheel) return
+    clearTimeout(pendingWheel.watchdog)
+    pendingWheel = undefined
+    if (invalid) dropped++
+  }
   let navigation:
     { at: number; previous: Element | undefined; pathname: string } | undefined
   const once = new Set<string>()
@@ -166,22 +174,19 @@ export function installChatUiObserver(
       const wheel = pendingWheel
       if (
         wheel.event.defaultPrevented ||
+        location.pathname !== wheel.pathname ||
         document.querySelector("[data-scroll-root]") !== wheel.root
       ) {
-        pendingWheel = undefined
+        clearPendingWheel(true)
       } else if (
         (wheel.root.scrollTop - wheel.start) * Math.sign(wheel.event.deltaY) > 0
       ) {
-        pendingWheel = undefined
+        clearPendingWheel()
         recordFrame("scrollToFrameMs", wheel.at)
         if (wheel.phase)
           recordFrame(phaseMetric("scrollToFrame", wheel.phase), wheel.at)
-      } else if (--wheel.remainingFrames === 0) {
-        // An unmatched wheel invalidates the capture; it cannot claim later scrolling.
-        pendingWheel = undefined
-        dropped++
-      } else {
-        schedule()
+      } else if (wheel.root.scrollTop !== wheel.start) {
+        clearPendingWheel(true)
       }
     }
     const editor = document.querySelector(editorSelector)
@@ -204,7 +209,7 @@ export function installChatUiObserver(
         sentAt = sendCandidate = stopAt = terminalAt = undefined
         clearTimeout(candidateTimer)
         samples = []
-        pendingWheel = undefined
+        clearPendingWheel(true)
         phase = undefined
         recordFrame("threadSwitchToFrameMs", navigation.at)
         navigation = undefined
@@ -295,7 +300,7 @@ export function installChatUiObserver(
     dropped = 0
     inputPending = false
     navigation = undefined
-    pendingWheel = undefined
+    clearPendingWheel()
     frames.forEach(cancelAnimationFrame)
     frames.clear()
     frameTasks.forEach(clearTimeout)
@@ -312,7 +317,7 @@ export function installChatUiObserver(
   }
   const beginSend = (at: number) => {
     turn++
-    pendingWheel = undefined
+    clearPendingWheel(true)
     navigation = undefined
     // Keep the document's load and typing observations when beginning its first turn.
     sentAt = at
@@ -340,7 +345,9 @@ export function installChatUiObserver(
       if (sendCandidate === at) sendCandidate = undefined
     }, 0)
   }
+  const competingInput = () => clearPendingWheel(true)
   const pointer = (event: MouseEvent) => {
+    competingInput()
     const target = event.target instanceof Element ? event.target : null
     const button = target?.closest<HTMLButtonElement>(sendSelector)
     if (button && !button.disabled) {
@@ -369,6 +376,7 @@ export function installChatUiObserver(
       }
   }
   const keydown = (event: KeyboardEvent) => {
+    competingInput()
     const target = event.target instanceof Element ? event.target : null
     if (!target?.closest(editorSelector)) return
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing)
@@ -381,6 +389,7 @@ export function installChatUiObserver(
       inputAt ??= eventTime(event)
   }
   const beforeinput = (event: Event) => {
+    competingInput()
     if (event.target instanceof Element && event.target.closest(editorSelector))
       inputAt ??= eventTime(event)
   }
@@ -426,14 +435,21 @@ export function installChatUiObserver(
       )
         return
     }
-    if (pendingWheel?.event.defaultPrevented) pendingWheel = undefined
+    if (
+      pendingWheel &&
+      (pendingWheel.event.defaultPrevented ||
+        Math.sign(pendingWheel.event.deltaY) !== Math.sign(event.deltaY))
+    )
+      clearPendingWheel(true)
     pendingWheel ??= {
       at: eventTime(event),
       start: root.scrollTop,
       phase,
       root,
+      pathname: location.pathname,
       event,
-      remainingFrames: 2,
+      // A watchdog rejects an incomplete capture; it never caps a measured latency.
+      watchdog: setTimeout(() => clearPendingWheel(true), 5000),
     }
     schedule()
   }
@@ -442,6 +458,7 @@ export function installChatUiObserver(
   }
   const visibility = () => {
     if (document.visibilityState !== "visible") {
+      clearPendingWheel()
       if (!lcpReported && values.lcpMs?.[0] !== undefined) {
         options.report?.("lcpMs", values.lcpMs[0])
         lcpReported = true
@@ -472,6 +489,8 @@ export function installChatUiObserver(
       "aria-expanded",
     ],
   })
+  document.addEventListener("pointerdown", competingInput, true)
+  document.addEventListener("touchstart", competingInput, { capture: true, passive: true })
   document.addEventListener("click", pointer, true)
   document.addEventListener("keydown", keydown, true)
   document.addEventListener("beforeinput", beforeinput, true)
@@ -501,6 +520,9 @@ export function installChatUiObserver(
     reset,
     pendingDeltas: () => samples.length,
     droppedSamples: () => dropped,
+    programmaticScroll(root) {
+      if (pendingWheel?.root === root) clearPendingWheel(true)
+    },
     confirmSend() {
       if (sendCandidate === undefined) return
       beginSend(sendCandidate)
@@ -534,13 +556,15 @@ export function installChatUiObserver(
       schedule()
     },
     dispose() {
-      pendingWheel = undefined
+      clearPendingWheel()
       clearTimeout(candidateTimer)
       mutations.disconnect()
       observers.forEach((observer) => observer.disconnect())
       frames.forEach(cancelAnimationFrame)
       frameTasks.forEach(clearTimeout)
       frameTasks.clear()
+      document.removeEventListener("pointerdown", competingInput, true)
+      document.removeEventListener("touchstart", competingInput, true)
       document.removeEventListener("click", pointer, true)
       document.removeEventListener("keydown", keydown, true)
       document.removeEventListener("beforeinput", beforeinput, true)

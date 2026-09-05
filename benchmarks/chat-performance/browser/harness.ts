@@ -329,6 +329,18 @@ function durations(marks: CollectedMark[], name: string): number[] {
     .filter((value) => Number.isFinite(value))
 }
 
+async function waitForSendReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const button = document.querySelector<HTMLButtonElement>(
+      '[data-testid="send-button"]'
+    )
+    return button?.getAttribute("aria-label") === "Send prompt" &&
+      !button.disabled && button.getAttribute("aria-disabled") !== "true" &&
+      Boolean((window as ChatUiWindow).__chatUiPerf
+        ?.values.navigationToSendReadyMs?.length)
+  })
+}
+
 async function runScenarioOnce(
   context: BrowserContext,
   baseUrl: string,
@@ -395,15 +407,7 @@ async function runScenarioOnce(
     if (config.followup) {
       await editor.click()
       await page.keyboard.type(directiveFor(FOLLOWUP_SEED))
-      await page.waitForFunction(() => {
-        const button = document.querySelector<HTMLButtonElement>(
-          '[data-testid="send-button"]'
-        )
-        return button?.getAttribute("aria-label") === "Send prompt" &&
-          !button.disabled && button.getAttribute("aria-disabled") !== "true" &&
-          Boolean((window as ChatUiWindow).__chatUiPerf
-            ?.values.navigationToSendReadyMs?.length)
-      })
+      await waitForSendReady(page)
       await page.locator('[data-testid="send-button"]').click()
       await waitForMark(page, "stream_terminal", 60000)
       if (
@@ -441,20 +445,7 @@ async function runScenarioOnce(
 
     await editor.click()
     await page.keyboard.type(directiveFor(config))
-    await page.waitForFunction(() => {
-      const button = document.querySelector<HTMLButtonElement>(
-        '[data-testid="send-button"]'
-      )
-      return (
-        button &&
-        !button.disabled &&
-        button.getAttribute("aria-disabled") !== "true" &&
-        Boolean(
-          (window as ChatUiWindow).__chatUiPerf?.values.navigationToSendReadyMs
-            ?.length
-        )
-      )
-    })
+    await waitForSendReady(page)
     if (process.env.PERF_PROFILE === "true") {
       await cdp.send("Profiler.enable")
       await cdp.send("Profiler.start")

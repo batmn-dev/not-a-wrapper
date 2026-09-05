@@ -104,11 +104,12 @@ Hidden tabs invalidate the entire run; do not interpret any of its timings. Do n
 Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
 the oldest waiting input. Completed foreground runs fail if any sampled content
 never reaches the rendered watermark; buffer overflow also fails explicitly.
-An eligible transcript wheel must move in its requested direction within two
-inspected rendering opportunities. An unmatched wheel increments the invalid
-sample count and fails the capture; it cannot claim a later programmatic scroll.
-This is a frame-count bound, not a time cutoff: matching slow samples retain their
-full elapsed duration.
+An eligible transcript wheel waits for movement in its requested direction,
+retaining the oldest pending timestamp across rendering opportunities. Cancelled
+or competing input, opposite movement, navigation/root changes, and application
+scroll commands invalidate the pending observation. A five-second watchdog fails
+an unmatched capture without truncating an accepted duration. Native scroll
+anchoring has no causal input identifier; this remains a DOM/frame proxy.
 
 Normal-profile budgets allow at most 5% over 100 ms for Send/Stop/menu feedback,
 and 50 ms for typing and received-content frames. Relative gates cover load,

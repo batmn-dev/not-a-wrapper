@@ -43,6 +43,15 @@ Each stream binds to the active measurement turn so a detached stream cannot
 contaminate a later send. Generic Thinking feedback is distinct from actual
 inspectable reasoning/tool activity.
 
+Wheel observation waits for actual root movement rather than a fixed number of
+frames. It retains the oldest pending input timestamp; cancellation, competing
+input, opposite movement, navigation/root replacement, and shared application
+scroll commands invalidate the pending sample. A five-second watchdog rejects
+unmatched captures without truncating measured latency. The command bridge is
+inert when the observer is not installed and imports only its type. Native scroll
+anchoring has no exposed input identity, so this remains a DOM/frame proxy rather
+than a claim of compositor-level causality.
+
 Result schema v2 carries complete scenario identity, fixture script hash, browser,
 hardware, cache, network, authentication, and measurement-version dimensions.
 Instrumented benchmark builds disable session replay and declare the required

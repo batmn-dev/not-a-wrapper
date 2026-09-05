@@ -10,6 +10,7 @@ on:
       - "app/api/chat/**"
       - "app/globals.css"
       - "components/ui/prompt-input.tsx"
+      - "components/ui/calendar.tsx"
       - "components/ui/message.tsx"
       - "components/ui/lazy-markdown.ts"
       - "components/ui/markdown.tsx"
@@ -154,8 +155,6 @@ jobs:
 
       - name: Diagnose streaming rendering
         if: ${{ inputs.rendering_probe }}
-        env:
-          EXTRA_CATEGORIES: disabled-by-default-devtools.timeline.invalidationTracking
         run: |
           STREAMING_PRESENTATION=smooth LABEL=smooth CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts
           STREAMING_PRESENTATION=quick LABEL=quick CASE=b1-long-markdown-100-fixed bun run benchmarks/chat-performance/browser/trace-attribution.ts

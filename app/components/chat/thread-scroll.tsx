@@ -8,6 +8,7 @@
  * negative CSS min-height values are ignored.
  */
 import { useBrowserLayoutEffect } from "@/app/hooks/use-browser-layout-effect"
+import { noteChatProgrammaticScroll } from "@/lib/observability/chat-ui-events"
 import { useCallback, useRef, useState } from "react"
 import { ThreadTail } from "./thread-bottom-container"
 import { restoreThreadAnchor, saveThreadAnchor } from "./thread-scroll-anchors"
@@ -217,7 +218,10 @@ function scheduleSubmitTurnScroll(turn: HTMLElement) {
     innerFrame = requestAnimationFrame(() => {
       innerFrame = null
       const root = closestScrollRoot(turn)
-      if (root) setScrollFromEnd(root, false)
+      if (root) {
+        setScrollFromEnd(root, false)
+        noteChatProgrammaticScroll(root)
+      }
       turn.scrollIntoView({
         behavior: SUBMIT_TURN_SCROLL_BEHAVIOR,
         block: "end",
@@ -412,6 +416,7 @@ export function ThreadScrollEdge({
     if (!rootEl) return
     if (chatId !== null && restoreThreadAnchor(chatId, rootEl)) return
     const toBottom = () => {
+      noteChatProgrammaticScroll(rootEl)
       rootEl.scrollTop = rootEl.scrollHeight
     }
     let frame: number | null = requestAnimationFrame(() => {

@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { alignThreadScrollTarget } from "@/app/components/chat/thread-scroll-target"
+import { noteChatProgrammaticScroll } from "./chat-ui-events"
 import { installChatUiObserver, type ChatUiWindow } from "./chat-ui-observer"
 
 let now = 0
@@ -300,15 +302,17 @@ describe("DOM/frame observations", () => {
     await paint()
     expect(observer.values.scrollToFrameMs).toEqual([34])
   })
-  it("invalidates an unmatched wheel after two frames without crediting a later scroll", async () => {
+  it("invalidates an unmatched wheel at the watchdog without crediting a later scroll", async () => {
     const root = scrollRoot()
     installChatUiObserver()
     const observer = (window as ChatUiWindow).__chatUiPerf!
     root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
     await paint()
     expect(observer.droppedSamples()).toBe(0)
-    expect(frames).toHaveLength(1)
     await paint()
+    await paint()
+    expect(observer.droppedSamples()).toBe(0)
+    vi.advanceTimersByTime(5000)
     expect(observer.droppedSamples()).toBe(1)
     expect(frames).toHaveLength(0)
     root.scrollTop = 400
@@ -330,7 +334,7 @@ describe("DOM/frame observations", () => {
     expect(observer.values.scrollToFrameMs).toBeUndefined()
     expect(observer.droppedSamples()).toBe(1)
   })
-  it("keeps the full latency of a slow matching scroll in the second frame", async () => {
+  it("keeps the full latency of native scrolling delayed beyond two frames", async () => {
     const root = scrollRoot()
     installChatUiObserver()
     const observer = (window as ChatUiWindow).__chatUiPerf!
@@ -338,12 +342,84 @@ describe("DOM/frame observations", () => {
     Object.defineProperty(event, "timeStamp", { value: 0 })
     root.dispatchEvent(event)
     await paint()
+    await paint()
+    await paint()
+    expect(observer.droppedSamples()).toBe(0)
     now = 250
     root.scrollTop = 100
     root.dispatchEvent(new Event("scroll"))
     await paint()
     expect(observer.values.scrollToFrameMs).toEqual([266])
     expect(observer.droppedSamples()).toBe(0)
+  })
+  it("invalidates a pending wheel before a programmatic root scroll", async () => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    noteChatProgrammaticScroll(document.createElement("div"))
+    expect(observer.droppedSamples()).toBe(0)
+    const target = document.createElement("section")
+    target.dataset.turnIdContainer = "target"
+    root.append(target)
+    vi.stubGlobal("CSS", { escape: (value: string) => value })
+    target.scrollIntoView = () => {
+      expect(observer.droppedSamples()).toBe(1)
+      root.scrollTop = 100
+    }
+    alignThreadScrollTarget(root, { turnId: "target" }, () => "instant")
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    vi.advanceTimersByTime(5000)
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    expect(observer.droppedSamples()).toBe(1)
+  })
+  it.each(["pointerdown", "keydown", "beforeinput", "touchstart"])("invalidates a pending wheel on competing %s input", async (type) => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    document.dispatchEvent(type === "keydown" ? new KeyboardEvent(type, { key: "ArrowDown" }) : new Event(type))
+    root.scrollTop = 100
+    root.dispatchEvent(new Event("scroll"))
+    await paint()
+    expect(observer.values.scrollToFrameMs).toBeUndefined()
+    expect(observer.droppedSamples()).toBe(1)
+  })
+  it.each(["root", "route"])("invalidates a pending wheel when its %s changes", async (change) => {
+    const previousPath = location.pathname
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    try {
+      if (change === "root") root.remove()
+      else history.pushState(null, "", "/c/wheel-destination")
+      root.scrollTop = 100
+      await paint()
+      expect(observer.values.scrollToFrameMs).toBeUndefined()
+      expect(observer.droppedSamples()).toBe(1)
+      vi.advanceTimersByTime(5000)
+      expect(observer.droppedSamples()).toBe(1)
+    } finally {
+      history.replaceState(null, "", previousPath)
+    }
+  })
+  it.each(["hidden", "dispose", "reset", "send"])("clears the wheel watchdog on %s", (action) => {
+    const root = scrollRoot()
+    installChatUiObserver()
+    const observer = (window as ChatUiWindow).__chatUiPerf!
+    root.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+    if (action === "hidden") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden")
+      document.dispatchEvent(new Event("visibilitychange"))
+    } else if (action === "send") send()
+    else if (action === "dispose") observer.dispose()
+    else observer.reset()
+    const dropped = observer.droppedSamples()
+    vi.advanceTimersByTime(5000)
+    expect(observer.droppedSamples()).toBe(dropped)
+    expect(vi.getTimerCount()).toBe(0)
   })
   it("does not attribute chat scrolling to a wheel event outside the transcript", async () => {
     const root = scrollRoot()
@@ -399,7 +475,7 @@ describe("DOM/frame observations", () => {
       (window as ChatUiWindow).__chatUiPerf!.values.scrollToFrameMs
     ).toBeUndefined()
   })
-  it("discards a wheel cancelled after the capture listener", async () => {
+  it("invalidates a wheel cancelled after the capture listener", async () => {
     const root = scrollRoot()
     installChatUiObserver()
     root.addEventListener("wheel", (event) => event.preventDefault(), {

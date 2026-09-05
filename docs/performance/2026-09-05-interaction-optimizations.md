@@ -118,6 +118,15 @@ was 24,552 and 23,926 ms respectively. Both passed the complete stream oracle.
 This one-pair diagnostic rules out the fade as the dominant layout cost in that
 capture. It does not establish a release speedup or identify the remaining cause.
 
+The subsequent invalidation trace from [run 33953389166](https://github.com/darknightdesigner/not-a-wrapper/actions/runs/33953389166)
+recorded 60,373 subtree invalidations across 497 nodes from the calendar's global
+`nth-child(2)` descendant selector. Unchanged Markdown headings and paragraphs
+were repeatedly removed from and added to layout. The calendar is not mounted
+in this fixture. Its first-day rule now uses the adjacent week-number row header
+instead. That trace exhausted its buffer before the terminal marker, so it is
+root-cause evidence only; it cannot provide whole-window timing or certification.
+The normal rendering probe omits this high-volume optional trace category.
+
 ## Remaining validation
 
 Local authenticated-browser checks were blocked by the locked Mac during the

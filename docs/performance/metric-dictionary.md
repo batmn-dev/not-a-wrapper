@@ -320,9 +320,13 @@ retains raw content-free samples so budget-exceedance rates can be recomputed.
 Summaries must match their raw observations. Completed foreground runs must drain
 all sampled received content; pending counts remain explicit for Stop, reload, and
 intentional second-tab cutoffs. Any observation-buffer overflow invalidates a run.
-Eligible wheel input must produce movement in its direction within two inspected
-rendering opportunities; otherwise the invalid sample count increases and the
-capture fails. Matching slow input keeps its full duration, without a time cutoff.
+Eligible wheel input waits for matching root movement, retaining the oldest
+pending event's full elapsed duration even across multiple rendering opportunities.
+Cancellation, competing input, opposite movement, root/navigation changes, or an
+application scroll command invalidate the pending observation. A five-second
+watchdog fails an unmatched capture; it does not cap accepted sample durations.
+Hidden/reset/disposed observations clear the watchdog. These remain DOM proxies:
+native scroll anchoring exposes no causal input identifier and can affect position.
 Stop correctness checks assistant source length at idle feedback, 250 ms later,
 and after the terminal/settlement wait and settling buffer. Each checkpoint must
 be no longer than the preceding one; shorter canonical snapshots remain valid.

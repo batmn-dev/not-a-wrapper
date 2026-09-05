@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import type { UserProfile } from "@/lib/user/types"
+import type { toast } from "@/components/ui/toast"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -22,7 +23,12 @@ const providerMocks = vi.hoisted(() => ({
   convexUser: null as Record<string, unknown> | null | undefined,
   workosUser: null as Record<string, unknown> | null,
   mutation: vi.fn(),
+  showToast: vi.fn<(...args: Parameters<typeof toast>) => number>(() => 1),
+  dismissToast: vi.fn(),
 }))
+
+vi.mock("@/components/ui/toast", () => ({ toast: providerMocks.showToast }))
+vi.mock("sonner", () => ({ toast: { dismiss: providerMocks.dismissToast } }))
 
 const pendingProfileImageUrl = "https://images.test/new-avatar.png"
 const secondPendingProfileImageUrl =
@@ -195,6 +201,7 @@ describe("UserProvider", () => {
     container = null
     root = null
     vi.clearAllMocks()
+    vi.restoreAllMocks()
   })
 
   function renderProvider() {
@@ -262,6 +269,79 @@ describe("UserProvider", () => {
     providerMocks.convexAuthLoading = false
     renderProvider()
     expect(readiness()).toBe("true")
+  })
+
+  it("retries a rejected bootstrap only on request and keeps admission closed until its row arrives", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    setAuthenticatedProfileUser()
+    providerMocks.convexUser = null
+    providerMocks.mutation.mockRejectedValueOnce(new Error("Setup rejected"))
+    renderProvider()
+    await act(async () => { await Promise.resolve() })
+    expect(providerMocks.mutation).toHaveBeenCalledOnce()
+    expect(providerMocks.showToast).toHaveBeenCalledWith(expect.objectContaining({
+      duration: Infinity,
+      button: expect.objectContaining({ label: "Retry" }),
+    }))
+    expect(container?.querySelector("[data-chat-admission-ready]")?.getAttribute("data-chat-admission-ready")).toBe("false")
+    const retry = providerMocks.showToast.mock.calls[0][0].button!.onClick
+    await act(async () => { retry() })
+    expect(providerMocks.mutation).toHaveBeenCalledTimes(2)
+    expect(providerMocks.dismissToast).toHaveBeenCalledWith(1)
+    await act(async () => { retry() })
+    expect(providerMocks.mutation).toHaveBeenCalledTimes(2)
+    expect(container?.querySelector("[data-chat-admission-ready]")?.getAttribute("data-chat-admission-ready")).toBe("false")
+    providerMocks.convexUser = { workosUserId: "user-1" }
+    renderProvider()
+    expect(container?.querySelector("[data-chat-admission-ready]")?.getAttribute("data-chat-admission-ready")).toBe("true")
+  })
+
+  it("waits out a stale account row and ignores the previous account's pending failure", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    providerMocks.mutation.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    setAuthenticatedProfileUser()
+    providerMocks.convexUser = null
+    renderProvider()
+    providerMocks.workosUser = { ...providerMocks.workosUser, id: "user-2" }
+    providerMocks.convexUser = { workosUserId: "user-1" }
+    renderProvider()
+    expect(providerMocks.mutation).toHaveBeenCalledOnce()
+    providerMocks.convexUser = null
+    renderProvider()
+    expect(providerMocks.mutation).toHaveBeenLastCalledWith(expect.objectContaining({ workosUserId: "user-2" }))
+    await act(async () => { first.reject(new Error("Old account failure")) })
+    expect(providerMocks.showToast).not.toHaveBeenCalled()
+    await act(async () => { second.reject(new Error("Current account failure")) })
+    expect(providerMocks.showToast).toHaveBeenCalledOnce()
+    const staleRetry = providerMocks.showToast.mock.calls[0][0].button!.onClick
+    providerMocks.convexUser = { workosUserId: "user-2" }
+    renderProvider()
+    expect(providerMocks.dismissToast).toHaveBeenCalledWith(1)
+    await act(async () => { staleRetry() })
+    expect(providerMocks.mutation).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([false, true])("cleans up bootstrap recovery on unmount (already failed: %s)", async (failed) => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const pending = Promise.withResolvers<void>()
+    providerMocks.mutation.mockReturnValue(pending.promise)
+    setAuthenticatedProfileUser()
+    providerMocks.convexUser = null
+    renderProvider()
+    if (failed) await act(async () => { pending.reject(new Error("Setup failed")) })
+    const retry = providerMocks.showToast.mock.calls[0]?.[0].button?.onClick
+    act(() => root?.unmount())
+    root = null
+    if (failed) {
+      expect(providerMocks.dismissToast).toHaveBeenCalledWith(1)
+      await act(async () => { retry?.() })
+    } else {
+      await act(async () => { pending.reject(new Error("Late failure")) })
+      expect(providerMocks.showToast).not.toHaveBeenCalled()
+    }
+    expect(providerMocks.mutation).toHaveBeenCalledOnce()
   })
 
   it("applies Convex-managed fields after WorkOS hydrates later", () => {
