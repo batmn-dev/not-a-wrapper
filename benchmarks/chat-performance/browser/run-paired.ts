@@ -127,7 +127,8 @@ function main() {
     if (digest(path.join(root, file)) !== digest(path.join(baselineRoot, file)))
       throw new Error(`${file} differs; this paired protocol requires identical dependencies, fixtures, and timing helpers`)
   const harnessFiles = readdirSync(path.join(root, harnessDirectory))
-    .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+    // Next typechecks tests too; their protocol types must match the copied driver.
+    .filter((file) => file.endsWith(".ts"))
   for (const file of harnessFiles)
     cpSync(path.join(root, harnessDirectory, file), path.join(baselineRoot, harnessDirectory, file))
   const measurementHashes = Object.fromEntries(
