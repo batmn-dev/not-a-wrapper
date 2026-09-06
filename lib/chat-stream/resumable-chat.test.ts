@@ -587,7 +587,11 @@ it.each([true, false])(
   async (ended) => {
     const events = [
       { type: "base", highWater: "4-0" },
-      ...chunks.map((chunk) => ({ type: "chunk", id: "1-0", chunk })),
+      ...chunks.map((chunk, index) => ({
+        type: "chunk",
+        id: `${index + 1}-0`,
+        chunk,
+      })),
       {
         type: "chunk",
         id: "4-0",

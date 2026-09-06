@@ -107,7 +107,11 @@ const FINISH = `
 if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] or redis.call('HGET', KEYS[1], 'status') ~= 'active' then return 0 end
 redis.call('HSET', KEYS[1], 'status', ARGV[2])
 redis.call('EXPIRE', KEYS[1], ARGV[3])
-redis.call('EXPIRE', KEYS[2], ARGV[3])
+if ARGV[2] == 'unavailable' then
+  redis.call('DEL', KEYS[2])
+else
+  redis.call('EXPIRE', KEYS[2], ARGV[3])
+end
 return 1
 `
 

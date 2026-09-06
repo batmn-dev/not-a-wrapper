@@ -43,7 +43,11 @@ export function validateDependencyOverlay(input: {
   assertUnchanged(baseRootSettings, headRootSettings, "Root workspace settings")
   assertUnchanged(baseDeps, baseRootDeps, "Base manifest/lock dependency agreement")
   assertUnchanged(headDeps, headRootDeps, "Head manifest/lock dependency agreement")
-  const addedPackages = additions(record.parse(basePackages), record.parse(headPackages), "Locked package")
+  const headPackageRecords = record.parse(headPackages)
+  const addedPackages = additions(record.parse(basePackages), headPackageRecords, "Locked package")
+  for (const name of addedDependencies)
+    if (!Object.hasOwn(headPackageRecords, name))
+      throw new Error(`Added dependency ${name} has no locked package entry`)
   if (addedDependencies.length === 0)
     throw new Error("Dependency overlay requires added dependencies")
   return { addedDependencies, addedPackages }

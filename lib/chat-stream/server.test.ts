@@ -198,6 +198,11 @@ describe.runIf(Boolean(url))(
         })
       )
       expect(await readRetainedChatStream(runId)).toBeNull()
+      expect(
+        await client.exists(
+          `chat-stream:v1:{${encodeURIComponent(runId)}}:events`
+        )
+      ).toBe(0)
     })
     it("retains accepted chunks and a sanitized terminal error when the source fails", async () => {
       const runId = newRun()
