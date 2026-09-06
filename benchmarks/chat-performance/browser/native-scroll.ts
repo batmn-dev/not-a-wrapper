@@ -56,31 +56,33 @@ type TraceEvent = z.infer<typeof traceEvent>
 
 function presentedFrame(events: TraceEvent[], begin: TraceEvent, end: number): number | undefined {
   const inputId = begin.args?.event_latency?.event_latency_id
+  if (inputId === undefined) throw new Error("Native scroll update has no exact trace identifier")
   const submits = events.filter((event) =>
     event.name === "Graphics.Pipeline" && event.ph === "X" && event.pid === begin.pid &&
-    event.ts >= begin.ts && event.ts <= end && inputId !== undefined &&
+    event.ts >= begin.ts && event.ts <= end &&
     event.args?.chrome_graphics_pipeline?.step === "STEP_SUBMIT_COMPOSITOR_FRAME" &&
     event.args.chrome_graphics_pipeline.latency_ids?.includes(inputId)
   )
   const inputs = events.filter((event) =>
     event.name === "InputLatency::GestureScrollUpdate" && event.ph === "b" &&
-    inputId !== undefined && event.args?.chrome_latency_info?.trace_id === inputId
+    event.args?.chrome_latency_info?.trace_id === inputId
   )
-  if (inputs.length > 1) throw new Error("Ambiguous native scroll latency record")
-  const swaps = inputs[0]?.args?.chrome_latency_info?.component_info?.filter((component) =>
+  if (inputs.length !== 1 || inputs[0].ts !== begin.ts)
+    throw new Error("Missing or ambiguous native scroll latency record")
+  const originals = inputs[0].args?.chrome_latency_info?.component_info?.filter((component) =>
+    component.component_type === "COMPONENT_INPUT_EVENT_LATENCY_ORIGINAL"
+  ) ?? []
+  if (originals.length !== 1 || originals[0].time_us !== begin.ts)
+    throw new Error("Native scroll latency record does not match input")
+  const swaps = inputs[0].args?.chrome_latency_info?.component_info?.filter((component) =>
     component.component_type === "COMPONENT_INPUT_EVENT_LATENCY_FRAME_SWAP"
   ) ?? []
   // An aborted LatencyInfo swap promise can leave EventLatency as the only
   // presentation evidence. A declared swap with no matching submit is invalid.
   if (submits.length === 0 && swaps.length === 0) return undefined
   if (submits.length !== 1) throw new Error("Missing or ambiguous native scroll frame submission")
-  if (inputs.length !== 1 || inputs[0].ts !== begin.ts || swaps.length !== 1)
+  if (swaps.length !== 1)
     throw new Error("Missing or ambiguous native scroll frame swap")
-  const originals = inputs[0].args?.chrome_latency_info?.component_info?.filter((component) =>
-    component.component_type === "COMPONENT_INPUT_EVENT_LATENCY_ORIGINAL"
-  ) ?? []
-  if (originals.length !== 1 || originals[0].time_us !== begin.ts)
-    throw new Error("Native scroll latency record does not match input")
   const submit = submits[0]
   const surface = submit.args?.chrome_graphics_pipeline?.surface_frame_trace_id
   if (!surface) throw new Error("Native scroll submission has no surface frame identifier")

@@ -2,18 +2,24 @@ import { describe, expect, it } from "vitest"
 import { parseNativeScroll } from "./native-scroll"
 
 const anchor = { name: "perf:wheel", eventAt: 1000, observedAt: 1400 }
+const inputId = "7364717213562621727"
 const event = (name: string, ph: string, ts: number, local = "0x1d") => ({
   name, ph, ts, pid: 3290, cat: "benchmark,input", id2: { local }, args: {},
 })
 const begin = (ts: number, type = "FIRST_GESTURE_SCROLL_UPDATE") => ({
   ...event("EventLatency", "b", ts),
-  args: { event_latency: { event_type: type } },
+  args: { event_latency: { event_type: type, event_latency_id: ts === 290223824 ? inputId : String(ts) } },
 })
 // Real Chrome nested async shape; presentation arrives after the last renderer stage.
 const fixture = () => [
   event(anchor.name, "I", 290623824, "anchor"),
   begin(289000000), event("EventLatency", "e", 289500000),
   begin(290223824),
+  { ...event("InputLatency::GestureScrollUpdate", "b", 290223824), args: {
+    chrome_latency_info: { trace_id: inputId, component_info: [
+      { component_type: "COMPONENT_INPUT_EVENT_LATENCY_ORIGINAL", time_us: 290223824 },
+    ] },
+  } },
   event("GenerationToBrowserMain", "b", 290223824),
   event("GenerationToBrowserMain", "e", 290585547),
   event("LatchToSwapEnd", "e", 291078167),
@@ -93,11 +99,10 @@ describe("native scroll presentation", () => {
   })
 })
 
-const inputId = "7364717213562621727"
 const surfaceId = "4388705654518307780"
 const displayId = "4388705654518307778"
 const forkedFixture = () => [
-  ...fixture().filter((e) => !e.name.startsWith("SwapEnd")).map((e) =>
+  ...fixture().filter((e) => !e.name.startsWith("SwapEnd") && e.name !== "InputLatency::GestureScrollUpdate").map((e) =>
     e.name === "EventLatency" && e.ph === "b" && e.ts === 290223824
       ? { ...e, args: { event_latency: { event_type: "FIRST_GESTURE_SCROLL_UPDATE", event_latency_id: inputId } } }
       : e
@@ -157,18 +162,21 @@ describe("forked compositor presentation", () => {
   })
 
   it("keeps the direct presentation when the independent fork was dropped before submission", () => {
-    const traceEvents = fixture().map((e) => e.ts === 290223824 && e.name === "EventLatency"
-      ? { ...e, args: { event_latency: { event_type: "FIRST_GESTURE_SCROLL_UPDATE", event_latency_id: inputId } } } : e)
-    const trace = rawTrace([...traceEvents, {
-      ...event("InputLatency::GestureScrollUpdate", "b", 290223824),
-      args: { chrome_latency_info: { trace_id: inputId, component_info: [
-        { component_type: "COMPONENT_INPUT_EVENT_LATENCY_ORIGINAL", time_us: 290223824 },
-      ] } },
-    }, {
+    const trace = rawTrace([...fixture(), {
       ...event("PipelineReporter", "b", 290600000, "dropped"),
       args: { frame_reporter: { state: "STATE_DROPPED", surface_frame_trace_id: surfaceId } },
     }])
     expect(parseNativeScroll(trace, anchor).inputToPresentationMs).toBe(854.448)
+  })
+
+  it("rejects missing or mismatched input identity despite complete direct presentation", () => {
+    const trace = rawTrace(fixture())
+    expect(() => parseNativeScroll(trace.replace(`,\"event_latency_id\":${inputId}`, ""), anchor))
+      .toThrow("Native scroll update has no exact trace identifier")
+    expect(() => parseNativeScroll(rawTrace(fixture().filter((e) => e.name !== "InputLatency::GestureScrollUpdate")), anchor))
+      .toThrow("Missing or ambiguous native scroll latency record")
+    expect(() => parseNativeScroll(trace.replace('"time_us":290223824', '"time_us":290223825'), anchor))
+      .toThrow("Native scroll latency record does not match input")
   })
 
   it("rejects a missing submit even when a complete direct endpoint remains", () => {
