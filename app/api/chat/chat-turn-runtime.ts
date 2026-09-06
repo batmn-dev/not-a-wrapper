@@ -2305,7 +2305,8 @@ export function createChatTurnRuntime(args: {
         })
         if (retained) await retained.consume(retainedBranch)
         else await consumeStream({ stream: retainedBranch })
-      })().catch(() => {
+      })().catch(async () => {
+        if (!retainedBranch.locked) await consumeStream({ stream: retainedBranch })
         console.warn("chat_stream_replay_unavailable", { runId: streamRunId })
       })
       // Start now: after() alone would defer consumption until disconnect.

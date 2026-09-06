@@ -70,6 +70,13 @@ describe("precedence ladder", () => {
       actionsSuppressed: true,
       shouldStopLocalStream: false,
     })
+    expect(resolve({ ...replay, pendingStopRunId: "older-run" })).toMatchObject({
+      state: "local-streaming",
+      shouldStopLocalStream: false,
+    })
+    expect(resolve({ ...replay, pendingStopRunId: "run_1" })).toMatchObject({
+      shouldStopLocalStream: true,
+    })
     expect(
       resolve({ ...replay, localStatus: "ready", localReplayRunId: null })
     ).toMatchObject({ state: "completed", active: false })

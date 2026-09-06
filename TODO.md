@@ -67,8 +67,9 @@ expensive platform-funded generations.
 visual system after the product's core interaction patterns stabilize.
 - **Thread code splitting:** Shared lazy Markdown and Composer intent warming
 are implemented. Attribute and defer charts/composer extras, audit client Zod,
-and split remaining thread-only code. Verify cold `/` JS bytes, requests, typing
-latency, and first-text timing in the browser. Target: ≥250 KB Brotli reduction
+and split remaining thread-only code. Verify cold `/` JS bytes, request count,
+`input_to_next_paint`, and separate `send_to_first_visible_text` and
+`first_text_to_visible` stages in the browser. Target: ≥250 KB Brotli reduction
 from the 2026-08-31 baseline, no first-text regression or new first-send long task.
 Existing script-size evidence is not browser validation; see
 `docs/performance/2026-09-05-interaction-optimizations.md`.

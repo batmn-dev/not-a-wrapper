@@ -73,7 +73,8 @@ configuration remain separate work.
 Independent artifact review led to bounded splitting of historical deltas,
 readable replay without the decay overlay, preservation of an already-painted
 checkpoint, and submission-only scroll placement. Further live tracing identified
-the semantic-list containment collapse described above. Temporary diagnostics
+the semantic-list containment collapse described in
+[ADR-0039](../adr/0039-resumable-generation-stream.md). Temporary diagnostics
 were removed before the final build.
 
 The new matched-model/prompt comparison uses real timestamped screenshots in

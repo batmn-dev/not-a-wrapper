@@ -214,6 +214,7 @@ export class ResumableChat extends Chat<UIMessage> {
       chatId: string | null
       isAuthenticated: boolean
       isLoading: boolean
+      isSubmitting?: boolean
     }
   ) {
     const live = run && ["queued", "running", "streaming"].includes(run.status)
@@ -231,6 +232,7 @@ export class ResumableChat extends Chat<UIMessage> {
       if (!run && conversation?.isLoading) return
       this.detachObserver()
     }
+    if (conversation?.isSubmitting) return
     const discover =
       !run &&
       conversation?.isAuthenticated &&

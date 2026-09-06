@@ -1988,14 +1988,14 @@ code {
    100 KB stream. Locking settled off-screen blocks caps that walk at the
    visible content: TBT 4,021 ms → 3 ms with the fade intact. The growing
    terminal block stays unlocked. Lists can reopen when a partial next item
-   temporarily parses as a sibling paragraph. Keep list roots unlocked even
-   after settlement: first-time containment can replace their real height with
-   the fallback and clamp the reader's scroll position.
+   temporarily parses as a sibling paragraph. Keep lists and blocks containing
+   lists unlocked even after settlement: containment can replace their real
+   height with the fallback and clamp the reader's scroll position.
    `contain-intrinsic-size: auto` remembers height after a block renders with
    auto containment; blocks without that measurement use the 3rem fallback.
    Guarded so browsers without content-visibility never see the size hint. */
 @supports (content-visibility: auto) {
-  .markdown > :not(:last-child):not(ol):not(ul) {
+  .markdown > :not(:last-child):not(ol):not(ul):not(:has(ol, ul)) {
     content-visibility: auto;
     contain-intrinsic-size: auto 3rem;
   }

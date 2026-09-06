@@ -1,6 +1,16 @@
+import { DURABLE_MESSAGE_STATUSES } from "@/lib/chat-messages/durable-contract"
 import { validateTypes } from "@ai-sdk/provider-utils"
 import { uiMessageChunkSchema, validateUIMessages } from "ai"
 import { z } from "zod"
+
+const presentationFields = z.object({
+  content: z.string().optional(),
+  createdAt: z.iso
+    .datetime()
+    .transform((value) => new Date(value))
+    .optional(),
+  status: z.enum(DURABLE_MESSAGE_STATUSES).optional(),
+})
 
 export const retainedChatStreamCursorSchema = z
   .string()
@@ -13,9 +23,13 @@ export const retainedChatStreamFrameSchema = z.discriminatedUnion("type", [
     type: z.literal("selection"),
     runId: z.string(),
     assistantMessageId: z.string(),
-    messages: z
-      .array(z.unknown())
-      .transform((messages) => validateUIMessages({ messages })),
+    messages: z.array(z.unknown()).transform(async (values) => {
+      const messages = await validateUIMessages({ messages: values })
+      return messages.map((message, index) => ({
+        ...presentationFields.parse(values[index]),
+        ...message,
+      }))
+    }),
   }),
   z.object({
     type: z.literal("base"),

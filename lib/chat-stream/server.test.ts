@@ -9,7 +9,11 @@ import { initializeRetainedChatStream, readRetainedChatStream } from "./server"
 
 const url = process.env.CHAT_STREAM_TEST_REDIS_URL
 const runs: string[] = []
-const client = createClient({ url })
+const client = createClient({
+  url,
+  disableOfflineQueue: true,
+  socket: { connectTimeout: 3000, reconnectStrategy: false },
+})
 client.on("error", () => undefined)
 
 function newRun() {
@@ -45,12 +49,16 @@ describe.runIf(Boolean(url))(
       await client.connect()
     })
     afterAll(async () => {
-      for (const run of runs) {
-        const prefix = `chat-stream:v1:{${encodeURIComponent(run)}}`
-        await client.del([`${prefix}:meta`, `${prefix}:events`])
+      try {
+        if (client.isReady)
+          for (const run of runs) {
+            const prefix = `chat-stream:v1:{${encodeURIComponent(run)}}`
+            await client.del([`${prefix}:meta`, `${prefix}:events`])
+          }
+      } finally {
+        if (client.isOpen) client.destroy()
+        vi.unstubAllEnvs()
       }
-      client.destroy()
-      vi.unstubAllEnvs()
     })
 
     it("replays a fixed prefix then follows the same ordered log without gaps", async () => {

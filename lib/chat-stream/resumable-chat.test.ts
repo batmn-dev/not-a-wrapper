@@ -127,7 +127,7 @@ it("restores an approval baseline and retained output together before live updat
     },
     new AbortController().signal
   )
-  expect([...new Set(updates)]).toEqual([
+  expect(updates).toEqual([
     "Before approval.Hello",
     "Before approval.Hello world",
   ])
@@ -284,6 +284,9 @@ it("restores the checkpoint before subscription hydration and silently catches u
           id: "assistant",
           role: "assistant",
           parts: [{ type: "text", text: "x".repeat(800) }],
+          createdAt: "2026-09-05T12:00:00.000Z",
+          content: "x".repeat(800),
+          status: "streaming",
         },
       ],
     })
@@ -306,6 +309,11 @@ it("restores the checkpoint before subscription hydration and silently catches u
       .join("") ?? ""
   await vi.waitFor(() => expect(text().length).toBeGreaterThan(0))
   expect(text()).toBe("x".repeat(800))
+  expect(chat.messages.at(-1)).toMatchObject({
+    createdAt: new Date("2026-09-05T12:00:00.000Z"),
+    content: "x".repeat(800),
+    status: "streaming",
+  })
   chat.syncRun(
     {
       chatId: "chat",
@@ -677,3 +685,31 @@ it("accepts mutable live data after reaching the checkpoint", async () => {
     { type: "data-progress", id: "progress", data: { phase: "running" } },
   ])
 })
+
+it.each([false, true])(
+  "defers retained reads during local submission (selected run=%s)",
+  (selected) => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal("fetch", fetchMock)
+    const chat = new ResumableChat({ messages: [] })
+    const run = selected
+      ? {
+          chatId: "chat",
+          runId: "run",
+          assistantMessageId: "assistant",
+          status: "streaming",
+        }
+      : null
+    const conversation = {
+      chatId: "chat",
+      isAuthenticated: true,
+      isLoading: true,
+      isSubmitting: true,
+    }
+    chat.syncRun(run, [], conversation)
+    expect(fetchMock).not.toHaveBeenCalled()
+    chat.syncRun(run, [], { ...conversation, isSubmitting: false })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    chat.detachObserver()
+  }
+)

@@ -747,6 +747,7 @@ describe("Composer primary action", () => {
     expect(button).not.toBeNull()
     act(() => button?.click())
     expect(stop).toHaveBeenCalledTimes(1)
+    expect(button?.getAttribute("aria-label")).toBe("Send prompt")
     expect(onTurn).not.toHaveBeenCalled()
     expect(promptInputMockCalls.at(-1)?.value).toBe("A draft for later")
   })

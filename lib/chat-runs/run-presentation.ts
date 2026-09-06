@@ -173,7 +173,7 @@ export function resolveGenerationPresentation(
     localMatchesRun &&
     inputs.localReplayRunId === selectedRun.runId &&
     !deferredStopPending &&
-    pendingStopRunId === null
+    pendingStopRunId !== selectedRun.runId
   ) {
     return {
       state: "local-streaming",

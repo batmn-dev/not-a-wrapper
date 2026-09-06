@@ -668,6 +668,7 @@ export function useCommitDetachableChatStream({
   selectedRun,
   isAuthenticated = false,
   isHistoryLoading = false,
+  isSubmitting = false,
   handlers,
   onChatTransition,
 }: {
@@ -677,6 +678,7 @@ export function useCommitDetachableChatStream({
   selectedRun?: SelectedRunProjection | null
   isAuthenticated?: boolean
   isHistoryLoading?: boolean
+  isSubmitting?: boolean
   handlers: ChatStreamHandlers
   onChatTransition: (
     previousChatId: string | null,
@@ -769,7 +771,7 @@ export function useCommitDetachableChatStream({
       binding.chat.syncRun(
         selectedRun && chatId ? { ...selectedRun, chatId } : null,
         initialMessages,
-        { chatId, isAuthenticated, isLoading: isHistoryLoading }
+        { chatId, isAuthenticated, isLoading: isHistoryLoading, isSubmitting }
       )
     }
     latestStreamRef.current = stream

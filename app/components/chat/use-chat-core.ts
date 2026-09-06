@@ -636,6 +636,7 @@ export function useChatCore({
     selectedRun,
     isAuthenticated,
     isHistoryLoading,
+    isSubmitting,
     handlers: {
       onData: handleStreamData,
       onAttachedFinish: handleAttachedFinish,

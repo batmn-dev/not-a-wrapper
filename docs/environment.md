@@ -150,6 +150,7 @@ Set these Vercel Preview environment variables:
 - `CSRF_SECRET`
 - `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
+- `CHAT_STREAM_REDIS_URL` for retained streaming (a separate Preview Redis endpoint)
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
 - optional `SCHEMA_GUARD_REPO_URL` when Vercel cannot fetch the base branch
@@ -229,6 +230,7 @@ Set these Vercel Production environment variables:
 - `CSRF_SECRET`
 - `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
+- `CHAT_STREAM_REDIS_URL` for retained streaming (the Production Redis endpoint)
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
 - optional `SCHEMA_GUARD_REPO_URL` when the production deploy environment
