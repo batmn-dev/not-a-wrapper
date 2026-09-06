@@ -29,13 +29,13 @@ import { buildChatTurnRequestBody } from "@/lib/chat-turn/turn-plans"
 import { routePersistsChatMessages } from "@/lib/chat-turn/turn-store"
 import { attachStagedFilesToChat } from "@/lib/file-handling"
 import { isChatPerfClientEnabled } from "@/lib/observability/chat-performance"
-import { useChatResponsivenessMarks } from "@/lib/observability/chat-responsiveness"
 import {
   beginChatPerfTurn,
   clearArmedChatPerfHeader,
   deriveChatPerfTurnFacts,
   useChatTurnPerfMarks,
 } from "@/lib/observability/chat-performance-client"
+import { useChatResponsivenessMarks } from "@/lib/observability/chat-responsiveness"
 import { API_ROUTE_CHAT } from "@/lib/routes"
 import type { UserProfile } from "@/lib/user/types"
 import type { UIMessage } from "@ai-sdk/react"
@@ -395,6 +395,7 @@ export function useChatCore({
     chatId,
     isAuthenticated,
     localStatus: status,
+    localReplayRunId: detachableStream.chat.replayRunId,
     isSubmitting,
     localAssistantMessageId,
     selectedRun,
@@ -632,6 +633,9 @@ export function useChatCore({
     stream: detachableStream,
     chatId,
     initialMessages,
+    selectedRun,
+    isAuthenticated,
+    isHistoryLoading,
     handlers: {
       onData: handleStreamData,
       onAttachedFinish: handleAttachedFinish,
@@ -913,6 +917,7 @@ export function useChatCore({
   return {
     messages,
     status,
+    replayingMessageId: detachableStream.chat.replayingMessageId,
     error,
     // Stop local transport first, then settle the exact run so all tabs converge.
     stop: handleStop,

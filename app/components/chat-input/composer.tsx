@@ -24,8 +24,8 @@ import { useChatDraft } from "@/app/hooks/use-chat-draft"
 import { ModelSelector } from "@/components/common/model-selector/base"
 import { Button } from "@/components/ui/button"
 import { Icon } from "@/components/ui/icon"
-import { Kbd } from "@/components/ui/kbd"
 import { useIntentPrefetch } from "@/components/ui/intent-prefetch"
+import { Kbd } from "@/components/ui/kbd"
 import { preloadMarkdown } from "@/components/ui/lazy-markdown"
 import {
   PromptInput,
@@ -56,6 +56,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
 } from "react"
 import { flushSync } from "react-dom"
 import { ButtonPlusMenu } from "./button-plus-menu"
@@ -207,8 +208,8 @@ function useComposerDraftDisplay(
   return { localValue, valueRef, applyValue, isCurrentDraft }
 }
 
-export const Composer = memo(forwardRef<ComposerHandle, ComposerProps>(
-  function Composer(
+export const Composer = memo(
+  forwardRef<ComposerHandle, ComposerProps>(function Composer(
     {
       chatId,
       onTurn,
@@ -449,13 +450,18 @@ export const Composer = memo(forwardRef<ComposerHandle, ComposerProps>(
       stoppable,
     ])
 
-    const handlePrimaryActionClick = useCallback(() => {
-      if (primaryAction.disabled || primaryAction.intent !== "stop") {
-        return
-      }
+    const handlePrimaryActionClick = useCallback(
+      (event: MouseEvent<HTMLButtonElement>) => {
+        // Stop can synchronously turn this same element into a submit button.
+        event.preventDefault()
+        if (primaryAction.disabled || primaryAction.intent !== "stop") {
+          return
+        }
 
-      stop?.()
-    }, [primaryAction.disabled, primaryAction.intent, stop])
+        stop?.()
+      },
+      [primaryAction.disabled, primaryAction.intent, stop]
+    )
 
     const rendererIntentRef = useIntentPrefetch<HTMLDivElement>(preloadMarkdown)
     const handleComposerSubmit = useCallback(() => {
@@ -777,5 +783,5 @@ export const Composer = memo(forwardRef<ComposerHandle, ComposerProps>(
         </InputDropZone>
       </div>
     )
-  }
-))
+  })
+)

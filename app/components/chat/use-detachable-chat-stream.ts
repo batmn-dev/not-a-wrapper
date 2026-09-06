@@ -1,3 +1,4 @@
+import type { SelectedRunProjection } from "@/convex/messages"
 import type { ChatTurnBodyFields } from "@/lib/chat-messages/chat-turn-contract"
 import {
   getGenerationBudget,
@@ -8,6 +9,7 @@ import {
   restoreLocallyResolvedApprovals,
 } from "@/lib/chat-runs/approval-auto-send-gate"
 import { isSelectedPathDivergent } from "@/lib/chat-store/turns/selected-path"
+import { ResumableChat } from "@/lib/chat-stream/resumable-chat"
 import type { ChatTurnMessage } from "@/lib/chat-turn/turn-plans"
 import {
   isChatPerfClientEnabled,
@@ -58,7 +60,7 @@ type SendMessage = Chat<UIMessage>["sendMessage"]
 type SendMessageArgs = Parameters<SendMessage>
 
 type StreamBinding = {
-  chat: Chat<UIMessage>
+  chat: ResumableChat
 }
 
 type ReadoptResult =
@@ -365,7 +367,7 @@ function createDetachableChatStreamOwner(
   return {
     createBinding(messages, ownerChatId) {
       const binding: StreamBinding = {
-        chat: null as unknown as Chat<UIMessage>,
+        chat: null as unknown as ResumableChat,
       }
       lifecycles.set(binding, {
         state: "attached",
@@ -381,7 +383,7 @@ function createDetachableChatStreamOwner(
       // recovery); a finished dispatch discards them, keeping the arm
       // one-shot across remounts.
       let armedContinuationApprovalIds: string[] = []
-      binding.chat = new Chat<UIMessage>({
+      binding.chat = new ResumableChat({
         transport,
         messages,
         sendAutomaticallyWhen: (args) => {
@@ -420,6 +422,8 @@ function createDetachableChatStreamOwner(
     detach(binding) {
       const lifecycle = lifecycles.get(binding)
       if (!lifecycle || lifecycle.state === "detached") return
+      // A resumed reader has no initiating request to park or finish.
+      binding.chat.detachObserver()
       const detached: DetachedLifecycle = {
         state: "detached",
         originChatId: lifecycle.ownerChatId,
@@ -585,7 +589,7 @@ function getSharedOwner(
 }
 
 export type DetachableChatStream = {
-  chat: Chat<UIMessage>
+  chat: ResumableChat
   sendMessageAndWaitForAcceptance: (
     sendMessage: SendMessage,
     ...args: SendMessageArgs
@@ -661,12 +665,18 @@ export function useCommitDetachableChatStream({
   stream,
   chatId,
   initialMessages,
+  selectedRun,
+  isAuthenticated = false,
+  isHistoryLoading = false,
   handlers,
   onChatTransition,
 }: {
   stream: DetachableChatStream
   chatId: string | null
   initialMessages: UIMessage[]
+  selectedRun?: SelectedRunProjection | null
+  isAuthenticated?: boolean
+  isHistoryLoading?: boolean
   handlers: ChatStreamHandlers
   onChatTransition: (
     previousChatId: string | null,
@@ -681,9 +691,9 @@ export function useCommitDetachableChatStream({
   const latestStreamRef = useRef(stream)
   useLayoutEffect(() => {
     const { owner, chatId: committedChatId, binding } = stream.commit
+    let readopted = false
 
     if (committedChatId === chatId) {
-      let readopted = false
       if (!attemptedMountReadopt.current) {
         attemptedMountReadopt.current = true
         const currentStreamIsLive =
@@ -755,6 +765,13 @@ export function useCommitDetachableChatStream({
     }
 
     owner.setHandlers(handlers)
+    if (!readopted && stream.commit.chatId === chatId) {
+      binding.chat.syncRun(
+        selectedRun && chatId ? { ...selectedRun, chatId } : null,
+        initialMessages,
+        { chatId, isAuthenticated, isLoading: isHistoryLoading }
+      )
+    }
     latestStreamRef.current = stream
   })
 

@@ -270,6 +270,7 @@ function renderRowTurnId(row: ConversationRenderRow): string {
 
 type ConversationProps = {
   messages: ConversationMessage[]
+  replayingMessageId?: string | null
   /** Stable observation time for one render; injectable by deterministic
    * lifecycle tests without mocking the global clock. */
   now?: Date
@@ -354,6 +355,7 @@ const PENDING_TURN_VIEW: AssistantTurnView = deriveAssistantTurnView(
 
 export function Conversation({
   messages,
+  replayingMessageId = null,
   now = new Date(),
   status = "ready",
   isSubmitting = false,
@@ -386,6 +388,39 @@ export function Conversation({
     scrollToMessageId
   )
   const observation = useConversationTurnObservation()
+  const generationActive = isGenerationActive(status, isSubmitting)
+  const lastMessage = messages[messages.length - 1]
+  const previousMessage = messages[messages.length - 2]
+  const [submittedTurn, setSubmittedTurn] = useState<{
+    chatId: string | null
+    turnId: string | null
+  }>({ chatId, turnId: null })
+  const keepsSubmittedTurn =
+    submittedTurn.chatId === chatId ||
+    // First-send route adoption retains the same optimistic user identity.
+    (submittedTurn.chatId === null &&
+      submittedTurn.turnId !== null &&
+      messages.some(
+        (message) =>
+          message.role === "user" && message.id === submittedTurn.turnId
+      ))
+  // Only local submission arms placement. A retained GET also streams, but
+  // must preserve the reader's position throughout replay and live updates.
+  const submitScrollTurnId =
+    status === "submitted" || isSubmitting
+      ? lastMessage?.role === "user"
+        ? lastMessage.id
+        : lastMessage?.role === "assistant" && previousMessage?.role === "user"
+          ? previousMessage.id
+          : null
+      : generationActive && keepsSubmittedTurn
+        ? submittedTurn.turnId
+        : null
+  if (
+    submittedTurn.chatId !== chatId ||
+    submittedTurn.turnId !== submitScrollTurnId
+  )
+    setSubmittedTurn({ chatId, turnId: submitScrollTurnId })
   const handleEditingChange = useCallback(
     (messageId: string, isEditing: boolean) => {
       setEditingState((current) =>
@@ -401,9 +436,6 @@ export function Conversation({
   if (!messages || messages.length === 0)
     return <div className="w-full flex-1"></div>
 
-  const generationActive = isGenerationActive(status, isSubmitting)
-  const lastMessage = messages[messages.length - 1]
-  const previousMessage = messages[messages.length - 2]
   const activeTurn = resolveActiveAssistantTurn({
     messages,
     status,
@@ -417,15 +449,6 @@ export function Conversation({
     hasPendingAssistantTurn && lastMessage?.role === "assistant"
       ? messages.slice(0, -1)
       : messages
-  // The active final user turn owns submit placement. Branch switches and load
-  // hydration never satisfy this, so they never issue a scroll command.
-  const submitScrollTurnId = !generationActive
-    ? null
-    : lastMessage?.role === "user"
-      ? lastMessage.id
-      : lastMessage?.role === "assistant" && previousMessage?.role === "user"
-        ? previousMessage.id
-        : null
   const timestampHeaders = deriveConversationTimestampHeaders(
     renderedMessages,
     now
@@ -612,6 +635,7 @@ export function Conversation({
           const messageContent = (
             <Message
               model={rowModel}
+              isReplaying={message.id === replayingMessageId}
               onEdit={onEdit}
               onEditingChange={handleEditingChange}
               onReload={onReload}

@@ -61,6 +61,8 @@ export type RunPresentationInputs = {
    * id — never "last run in chat".
    */
   localAssistantMessageId: string | null
+  /** Exact run whose retained reader is restoring or receiving output. */
+  localReplayRunId?: string | null
   /** Raw durable facts from the run-state query; null for guests/non-owners. */
   selectedRun: SelectedRunProjection | null
   /** Run id of a durable Stop mutation currently in flight, if any. */
@@ -163,7 +165,29 @@ export function resolveGenerationPresentation(
     terminalReason,
   })
 
-  // 1. Durable terminal result wins — including during hydration.
+  // Successful generation can finish before its retained output reaches the
+  // screen. Keep that exact replay active until it drains; cancellation wins.
+  if (
+    selectedRun?.status === "completed" &&
+    localLive &&
+    localMatchesRun &&
+    inputs.localReplayRunId === selectedRun.runId &&
+    !deferredStopPending &&
+    pendingStopRunId === null
+  ) {
+    return {
+      state: "local-streaming",
+      source: "local",
+      active: true,
+      stoppable: true,
+      stopTargetRunId: null,
+      caretEligible: true,
+      actionsSuppressed: true,
+      shouldStopLocalStream: false,
+    }
+  }
+
+  // 1. Other durable terminal results win — including during hydration.
   if (selectedRun && TERMINAL_RUN_STATUSES.has(selectedRun.status)) {
     return settledBase(terminalState(selectedRun), selectedRun.terminalReason)
   }

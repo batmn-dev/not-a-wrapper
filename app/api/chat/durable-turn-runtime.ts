@@ -455,6 +455,9 @@ export type DurableTurnRuntime = {
    * return null and let the parent derive the first-turn version locally. */
   getTitleGeneration(): number | null
 
+  /** Identity of the prepared execution, distinct from its reused message. */
+  getStreamRunId(): string | null
+
   /**
    * Binds `ToolFacts` for the stream lifetime and returns the AI SDK
    * lifecycle binding. One-shot, after `prepare()`, before the stream starts.
@@ -878,6 +881,9 @@ export function createGuestDurableTurn(
       return sanitizeModelHistoryMessages(input.messages) as MessageAISDK[]
     },
     getTitleGeneration() {
+      return null
+    },
+    getStreamRunId() {
       return null
     },
     bind() {
@@ -1636,6 +1642,9 @@ export function createConvexDurableTurn(args: {
       return durableMessages as MessageAISDK[]
     },
 
+    getStreamRunId() {
+      return runId
+    },
     getTitleGeneration() {
       return titleGeneration
     },

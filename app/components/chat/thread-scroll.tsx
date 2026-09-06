@@ -381,8 +381,8 @@ export function ThreadScrollEdge({
   }, [])
 
   // (3) Stream lifecycle: `data-stream-active` gives descendants such as the
-  // gutter and scroll control their streaming presentation. The root keeps
-  // native scroll anchoring.
+  // gutter and scroll control their streaming presentation. The root disables
+  // native anchoring while streamed Markdown is changing.
   useBrowserLayoutEffect(() => {
     const rootEl = rootRef.current
     if (!rootEl) return

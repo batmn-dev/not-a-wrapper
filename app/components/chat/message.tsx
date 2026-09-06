@@ -12,6 +12,7 @@ import { MessageUser } from "./message-user"
 
 type MessageProps = {
   model: TurnRowModel
+  isReplaying?: boolean
   onEdit: (
     id: string,
     newText: string
@@ -29,6 +30,7 @@ type MessageProps = {
  */
 function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
   if (!turnRowModelsEqual(prev.model, next.model)) return false
+  if (prev.isReplaying !== next.isReplaying) return false
   if (Boolean(prev.onReload) !== Boolean(next.onReload)) return false
   if (prev.onSelectBranch !== next.onSelectBranch) return false
   return true
@@ -36,6 +38,7 @@ function areMessagesEqual(prev: MessageProps, next: MessageProps): boolean {
 
 function MessageInner({
   model,
+  isReplaying = false,
   onEdit,
   onEditingChange,
   onReload,
@@ -128,6 +131,7 @@ function MessageInner({
   if (model.kind === "assistant") {
     return (
       <MessageAssistant
+        isReplaying={isReplaying}
         copied={copied}
         copyToClipboard={copyToClipboard}
         onReload={onReload}

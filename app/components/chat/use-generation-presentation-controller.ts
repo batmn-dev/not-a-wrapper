@@ -32,6 +32,7 @@ type GenerationPresentationControllerArgs = {
   localStatus: LocalTransportStatus
   isSubmitting: boolean
   localAssistantMessageId: string | null
+  localReplayRunId?: string | null
   selectedRun: SelectedRunProjection | null
   isConnected: boolean
   stopLocal: () => void | Promise<void>
@@ -77,6 +78,7 @@ export function useGenerationPresentationController({
   localStatus,
   isSubmitting,
   localAssistantMessageId,
+  localReplayRunId,
   selectedRun,
   isConnected,
   stopLocal,
@@ -120,6 +122,7 @@ export function useGenerationPresentationController({
         localStatus,
         isSubmitting,
         localAssistantMessageId,
+        localReplayRunId,
         selectedRun,
         pendingStopRunId: activeState.pendingStopRunId,
         deferredStopPending: activeState.deferredStop !== null,
@@ -131,6 +134,7 @@ export function useGenerationPresentationController({
       localStatus,
       isSubmitting,
       localAssistantMessageId,
+      localReplayRunId,
       selectedRun,
       activeState.pendingStopRunId,
       activeState.deferredStop,
@@ -205,6 +209,14 @@ export function useGenerationPresentationController({
       return
     }
 
+    if (
+      selectedRun?.status === "completed" &&
+      localReplayRunId === selectedRun.runId
+    ) {
+      void stopLocal()
+      return
+    }
+
     const targetRunId = presentation.stopTargetRunId
     if (targetRunId) {
       await fireDurableStop(targetRunId)
@@ -233,6 +245,7 @@ export function useGenerationPresentationController({
     isAuthenticated,
     fireDurableStop,
     localStatus,
+    localReplayRunId,
     presentation.stopTargetRunId,
     selectedRun,
     stopLocal,

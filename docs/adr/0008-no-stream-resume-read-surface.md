@@ -1,6 +1,8 @@
 # 8. The Convex chat runtime has no stream-resume read surface
 
 - Status: accepted
+- Amended by ADR-0039 (2026-09-05): reconnect uses retained Redis UI chunks;
+  the removed Convex delta/read APIs remain removed.
 - Date: 2026-07-05
 - Context: Architecture deepening — generation runtime core; branch
   `darknight/bat-signal-20260705-133514`

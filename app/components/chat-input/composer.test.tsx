@@ -5,6 +5,7 @@ import { resolveGenerationPresentation } from "@/lib/chat-runs/run-presentation"
 import { checkFileUploadLimit, uploadStagedFile } from "@/lib/file-handling"
 import { validateFile } from "@/lib/file/validation"
 import React, { act } from "react"
+import { flushSync } from "react-dom"
 import { createRoot, Root } from "react-dom/client"
 import {
   afterEach,
@@ -733,6 +734,21 @@ describe("Composer primary action", () => {
     // this proves the real Composer control reaches it rather than only unit-
     // invoking useChatCore's returned callback.
     expect(stop).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not submit a waiting draft when Stop synchronously becomes Send", () => {
+    const onTurn = vi.fn(() => true)
+    const stop = vi.fn(() => {
+      flushSync(() => root?.render(composerElement({ status: "ready", onTurn })))
+    })
+    const mounted = renderComposer({ status: "streaming", stoppable: true, stop, onTurn })
+    changeComposerValue("A draft for later")
+    const button = mounted.querySelector<HTMLButtonElement>('button[aria-label="Stop"]')
+    expect(button).not.toBeNull()
+    act(() => button?.click())
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(onTurn).not.toHaveBeenCalled()
+    expect(promptInputMockCalls.at(-1)?.value).toBe("A draft for later")
   })
 
   it("stays compact for empty and attachment-only states; expands for hard newlines", () => {

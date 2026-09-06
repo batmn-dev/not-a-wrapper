@@ -148,6 +148,17 @@ vi.mock("@ai-sdk/react", () => ({
   },
 }))
 
+// Transport replay is covered with the real SDK in resumable-chat.test.ts.
+vi.mock("@/lib/chat-stream/resumable-chat", async () => {
+  const { Chat } = await import("@ai-sdk/react")
+  return {
+    ResumableChat: class extends Chat<UIMessage> {
+      syncRun = vi.fn()
+      detachObserver = vi.fn()
+    },
+  }
+})
+
 vi.mock("./use-frame-aligned-chat", () => ({
   useFrameAlignedChat: ({
     chat,

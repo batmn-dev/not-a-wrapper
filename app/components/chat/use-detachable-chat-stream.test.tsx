@@ -1,11 +1,10 @@
 /** @vitest-environment jsdom */
 
-import { resetSharedChatStreamOwnersForTests } from "./use-detachable-chat-stream"
-import type { UIMessage } from "@ai-sdk/react"
 import {
   clearLocallyResolvedApprovals,
   markApprovalResolvedLocally,
 } from "@/lib/chat-runs/approval-auto-send-gate"
+import type { UIMessage } from "@ai-sdk/react"
 import React, { act, useLayoutEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -18,6 +17,7 @@ import {
   vi,
 } from "vitest"
 import {
+  resetSharedChatStreamOwnersForTests,
   useCommitDetachableChatStream,
   useDetachableChatStream,
   type ChatStreamFinishEvent,
@@ -38,6 +38,7 @@ const lifecycleMocks = vi.hoisted(() => ({
     }
     status: string
     stop: ReturnType<typeof vi.fn>
+    stopRequest: ReturnType<typeof vi.fn>
   }>,
   approvalGate: vi.fn(() => true),
   markChatPerf: vi.fn(),
@@ -46,7 +47,8 @@ const lifecycleMocks = vi.hoisted(() => ({
 vi.mock("@ai-sdk/react", () => ({
   Chat: class MockChat {
     status = "ready"
-    readonly stop = vi.fn()
+    readonly stopRequest = vi.fn()
+    readonly stop = this.stopRequest
 
     constructor(
       readonly options: {
@@ -67,10 +69,9 @@ vi.mock("ai", () => ({
 }))
 
 vi.mock("@/lib/observability/chat-performance", async () => {
-  const actual =
-    await vi.importActual<
-      typeof import("@/lib/observability/chat-performance")
-    >("@/lib/observability/chat-performance")
+  const actual = await vi.importActual<
+    typeof import("@/lib/observability/chat-performance")
+  >("@/lib/observability/chat-performance")
   return {
     ...actual,
     markChatPerf: lifecycleMocks.markChatPerf,
@@ -212,7 +213,7 @@ describe("detachable chat stream lifecycle", () => {
     harness.setChatId("chat-b")
 
     expect(vi.getTimerCount()).toBe(0)
-    expect(originBinding.stop).not.toHaveBeenCalled()
+    expect(originBinding.stopRequest).not.toHaveBeenCalled()
   })
 
   it("settles a normally finished attached gauge exactly once", () => {
@@ -278,7 +279,7 @@ describe("detachable chat stream lifecycle", () => {
     // Finish clears the one detached watchdog; it cannot later stop twice.
     expect(vi.getTimerCount()).toBe(0)
     vi.advanceTimersByTime(120_000)
-    expect(originBinding.stop).not.toHaveBeenCalled()
+    expect(originBinding.stopRequest).not.toHaveBeenCalled()
   })
 
   it("watchdogs and counts a later-turn stream after finished has latched", () => {

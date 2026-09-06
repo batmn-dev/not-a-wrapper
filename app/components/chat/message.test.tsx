@@ -96,11 +96,13 @@ describe("Message memoization", () => {
     onReload,
     retryModelId,
     retryDisabled,
+    isReplaying,
   }: {
     id?: string
     onReload?: (messageId: string) => void
     retryModelId?: string
     retryDisabled?: boolean
+    isReplaying?: boolean
   } = {}) {
     if (!container) {
       container = document.createElement("div")
@@ -121,10 +123,18 @@ describe("Message memoization", () => {
           }}
           onEdit={() => {}}
           onReload={onReload}
+          isReplaying={isReplaying}
         />
       )
     })
   }
+
+  it("updates replay presentation when the message content is unchanged", () => {
+    renderMessage({ isReplaying: true })
+    expect(lastAssistantProps.current.isReplaying).toBe(true)
+    renderMessage({ isReplaying: false })
+    expect(lastAssistantProps.current.isReplaying).toBe(false)
+  })
 
   it("updates assistant reload availability when only the callback presence changes", () => {
     const firstReloadHandler = vi.fn()

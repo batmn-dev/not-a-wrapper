@@ -14,6 +14,7 @@ import {
   getWorkDurationMs,
 } from "@/lib/chat-messages/metadata"
 import { extractTextFromMessageParts } from "@/lib/chat-messages/parts"
+import { initializeRetainedChatStream } from "@/lib/chat-stream/server"
 import {
   fallbackChatTitle,
   generateChatTitle,
@@ -1494,7 +1495,10 @@ export function createChatTurnRuntime(args: {
         // to, and it places the first output chunk on this process's clock
         // for the receipt's first-write delay without the retry gap inside.
         onLanguageModelCallStart: () => {
-          if (liveness.stepCount() === 0 && firstOutputReleasedPerfMs === null) {
+          if (
+            liveness.stepCount() === 0 &&
+            firstOutputReleasedPerfMs === null
+          ) {
             firstCallStartPerfMs = performance.now()
           }
         },
@@ -2260,7 +2264,7 @@ export function createChatTurnRuntime(args: {
     // Receipt-anchored transport spans (sampled requests only): first chunk
     // enqueued toward the wire and stream close. An identity transform — no
     // chunk is inspected or retained; unsampled requests skip the extra hop.
-    const observedResponseStream = perf.sampled
+    let observedResponseStream = perf.sampled
       ? (() => {
           let firstWriteRecorded = false
           return responseStream.pipeThrough(
@@ -2285,6 +2289,28 @@ export function createChatTurnRuntime(args: {
           )
         })()
       : responseStream
+
+    const streamRunId = durableTurn.getStreamRunId()
+    if (streamRunId) {
+      const original = lifecycle.envelope
+        .identity(validatedMessages)
+        .originalMessages.at(-1)
+      const [responseBranch, retainedBranch] = observedResponseStream.tee()
+      observedResponseStream = responseBranch
+      // Connect independently so Redis availability never delays the response.
+      const persistence = (async () => {
+        const retained = await initializeRetainedChatStream({
+          runId: streamRunId,
+          baseMessage: original?.role === "assistant" ? original : undefined,
+        })
+        if (retained) await retained.consume(retainedBranch)
+        else await consumeStream({ stream: retainedBranch })
+      })().catch(() => {
+        console.warn("chat_stream_replay_unavailable", { runId: streamRunId })
+      })
+      // Start now: after() alone would defer consumption until disconnect.
+      deps.after(() => persistence)
+    }
 
     return createUIMessageStreamResponse({
       stream: observedResponseStream,
