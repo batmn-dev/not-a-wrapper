@@ -3,7 +3,7 @@ import { parseNativeScroll } from "./native-scroll"
 
 const anchor = { name: "perf:wheel", eventAt: 1000, observedAt: 1400 }
 const event = (name: string, ph: string, ts: number, local = "0x1d") => ({
-  name, ph, ts, pid: 3290, id2: { local }, args: {},
+  name, ph, ts, pid: 3290, cat: "benchmark,input", id2: { local }, args: {},
 })
 const begin = (ts: number, type = "FIRST_GESTURE_SCROLL_UPDATE") => ({
   ...event("EventLatency", "b", ts),
@@ -90,5 +90,81 @@ describe("native scroll presentation", () => {
     ["wrong gesture type", (events: ReturnType<typeof fixture>) => events.map((e) => e.name === "EventLatency" && e.ph === "b" ? begin(e.ts, "MOUSE_WHEEL") : e)],
   ])("rejects %s without accepting a fallback stage", (_label, change) => {
     expect(() => parseNativeScroll({ traceEvents: change(fixture()) }, anchor)).toThrow()
+  })
+})
+
+const inputId = "7364717213562621727"
+const surfaceId = "4388705654518307780"
+const forkedFixture = () => [
+  ...fixture().filter((e) => !e.name.startsWith("SwapEnd")).map((e) =>
+    e.name === "EventLatency" && e.ph === "b" && e.ts === 290223824
+      ? { ...e, args: { event_latency: { event_type: "FIRST_GESTURE_SCROLL_UPDATE", event_latency_id: inputId } } }
+      : e
+  ),
+  { ...event("Graphics.Pipeline", "X", 290700000), args: {
+    chrome_graphics_pipeline: { step: "STEP_SUBMIT_COMPOSITOR_FRAME", latency_ids: [inputId], surface_frame_trace_id: surfaceId },
+  } },
+  { ...event("PipelineReporter", "b", 290600000, "frame"), args: {
+    frame_reporter: { state: "STATE_PRESENTED_ALL", surface_frame_trace_id: surfaceId },
+  } },
+  event("SwapEndToPresentationCompositorFrame", "b", 291078167, "frame"),
+  event("SwapEndToPresentationCompositorFrame", "e", 291078272, "frame"),
+  event("PipelineReporter", "e", 291078272, "frame"),
+  { ...event("PipelineReporter", "b", 290600000, "aborted"), args: {
+    frame_reporter: { state: "STATE_NO_UPDATE_DESIRED", surface_frame_trace_id: surfaceId },
+  } },
+  event("PipelineReporter", "e", 291078272, "aborted"),
+]
+
+// Emit uint64 JSON tokens as Chromium does, without first rounding them in JS.
+const rawTrace = (traceEvents: unknown) => JSON.stringify({ traceEvents })
+  .replace(/"(-?\d{19})"/g, "$1")
+
+describe("forked compositor presentation", () => {
+  it("uses the exact submitted presented frame when the original event reporter aborts", () => {
+    expect(parseNativeScroll(rawTrace(forkedFixture()), anchor)).toEqual({
+      inputToPresentationMs: 854.448, automationDispatchMs: 361.723, browserToPresentationMs: 492.725,
+    })
+  })
+
+  it("accepts signed Chromium event identifiers without rounding", () => {
+    const trace = rawTrace(forkedFixture()).replaceAll(inputId, "-1844411730683114345")
+    expect(parseNativeScroll(trace, anchor).inputToPresentationMs).toBe(854.448)
+  })
+
+  it("preserves adjacent uint64 identifiers that JavaScript numbers round together", () => {
+    const traceEvents = forkedFixture()
+    traceEvents.push({ ...event("Graphics.Pipeline", "X", 290700001), args: {
+      chrome_graphics_pipeline: {
+        step: "STEP_SUBMIT_COMPOSITOR_FRAME", latency_ids: ["7364717213562621728"], surface_frame_trace_id: surfaceId,
+      },
+    } })
+    expect(parseNativeScroll(rawTrace(traceEvents), anchor).inputToPresentationMs).toBe(854.448)
+    expect(() => parseNativeScroll(JSON.parse(rawTrace(traceEvents)), anchor)).toThrow()
+  })
+
+  it.each([
+    ["missing submit", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.name !== "Graphics.Pipeline")],
+    ["ambiguous submit", (events: ReturnType<typeof forkedFixture>) => [...events, events.find((e) => e.name === "Graphics.Pipeline")]],
+    ["missing surface join", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.name !== "PipelineReporter")],
+    ["unpresented state", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.id2.local !== "frame")],
+    ["ambiguous presented reporter", (events: ReturnType<typeof forkedFixture>) => [...events, events.find((e) => e.name === "PipelineReporter" && e.id2.local === "frame")]],
+    ["missing presentation", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => !e.name.startsWith("SwapEnd"))],
+    ["incomplete presentation", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => !(e.name.startsWith("SwapEnd") && e.ph === "e"))],
+    ["reused frame interval", (events: ReturnType<typeof forkedFixture>) => [...events, event("PipelineReporter", "b", 290800000, "frame")]],
+    ["menu before presentation", (events: ReturnType<typeof forkedFixture>) => events.map((e) => e.id2.local === "0x3" ? { ...e, ts: 291078271 } : e)],
+  ])("rejects %s without substituting a renderer or unrelated frame endpoint", (_label, change) => {
+    expect(() => parseNativeScroll(rawTrace(change(forkedFixture())), anchor)).toThrow()
+  })
+
+  it.each([fixture, forkedFixture])("rejects presentation stages from a different async category", (makeFixture) => {
+    const traceEvents = makeFixture().map((e) => e.name.startsWith("SwapEnd")
+      ? { ...e, cat: "cc,benchmark,other-track" } : e)
+    expect(() => parseNativeScroll(rawTrace(traceEvents), anchor)).toThrow()
+  })
+
+  it("does not hide an incomplete direct presentation behind the frame join", () => {
+    const traceEvents = [...forkedFixture(), event("SwapEndToPresentationCompositorFrame", "b", 291078167)]
+    expect(() => parseNativeScroll(rawTrace(traceEvents), anchor)).toThrow("Missing or ambiguous compositor presentation")
   })
 })

@@ -1091,7 +1091,7 @@ async function runScenarioOnce(
       if (tracing) await stopTrace()
       const trace = await readTrace()
       if (traceDataLoss) throw new Error("Native trace lost events")
-      nativeScroll = parseNativeScroll(JSON.parse(trace.toString()), nativeWheel)
+      nativeScroll = parseNativeScroll(trace.toString(), nativeWheel)
     }
 
     const result: RunMetrics = {

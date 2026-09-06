@@ -74,8 +74,14 @@ Changing gesture injection would change the input workload; retaining the wheel
 and separating its native stages preserves the existing user journey.
 An isolated wheel's
 event timestamp and UserTiming anchor select one process/string-local async track
-and its bounded interval. Missing, ambiguous, incomplete, or lost trace evidence
-fails. Required protocols are `wheelProtocol: native-browser-presentation-v1` and
+and its bounded interval. Chromium can present the scroll on a forked compositor
+frame while terminating the original input track without frame history. In that
+case, exact input and submitted-frame IDs must identify one presented frame's
+`SwapEndToPresentationCompositorFrame` endpoint. Preserve 64-bit IDs losslessly;
+never substitute a nearby frame, swap time, or termination timestamp. Missing,
+ambiguous, incomplete, or lost trace evidence fails. This attribution repair
+retains the native endpoints and runs identically on both sides of a pair.
+Required protocols are `wheelProtocol: native-browser-presentation-v1` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`; earlier scroll captures
 are incompatible. Normal runs retain native traces in CI artifacts without CPU
 profiling and disable the old geometry-reading wheel observer. Chromium's native

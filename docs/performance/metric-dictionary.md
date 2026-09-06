@@ -299,6 +299,9 @@ mutation or animation completion. Rescans require a matching source watermark,
 viewport intersection, and an active finite animation, and stop when its remaining
 duration expires. Pending content remains explicit if it never becomes visible.
 Benchmark native scroll presentation is separate from these DOM/frame proxies.
+If Chromium forks the scroll's compositor frame, exact input and submitted-frame
+IDs identify its native presentation endpoint. IDs are preserved losslessly;
+missing or ambiguous links fail rather than selecting a nearby frame or swap time.
 `contentFrameProtocol: publisher-frame-v1` adds a guarded observation after an
 SDK publication inside rAF. A committed watermark can be inspected in that same
 rendering opportunity, avoiding an extra frame when the ordinary observer ran
