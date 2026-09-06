@@ -204,7 +204,7 @@ Missing, invalid, or incompatible baselines fail in both modes; relative regress
 is **NOT EVALUATED** when it cannot be established. Explicit `--collect-baseline`
 validates first evidence without claiming a relative comparison. Collection is
 strict unless `--regression-only` is also supplied. Follow `baselines/README.md`;
-old schema-v1 artifacts cannot arm this gate.
+older-schema artifacts cannot arm this gate.
 
 Same-repository relevant PRs run the core suite. Standard, durable, and thread-switch
 suites run weekly. PRs compare the PR merge base; scheduled and manual runs default
