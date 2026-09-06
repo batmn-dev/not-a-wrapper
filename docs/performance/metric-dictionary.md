@@ -287,7 +287,11 @@ calls are counted (`providerToolCalls`) because their time stays in the window.
   populations.
 - `p95` on sample sets smaller than 20 — report median/max only and say so.
 
-## 14. DOM/frame responsiveness contract (schema v2, ADR-0037)
+## 14. DOM/frame responsiveness contract (schema v3, ADR-0037)
+
+Summary p50 is the conventional median, averaging the middle pair for even sample
+counts. The p75/p95 rank formulas remain unchanged. Schema v2's upper-middle
+summaries are incompatible; version checks and raw-sample validation reject them.
 
 These names are separate from the older React-effect marks. A frame observation
 checks DOM in a rendering callback, then records in a task after that rendering

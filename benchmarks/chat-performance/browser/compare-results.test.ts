@@ -24,7 +24,7 @@ const SUITES = {
 
 function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     measurementVersion: "dom-frame-v3",
     typingCadenceMs: 40,
     replayPolicy: "disabled-v1",
@@ -517,10 +517,24 @@ describe("performance evidence contract", () => {
     expect(
       resultContract.safeParse({ ...result(), schemaVersion: 1 }).success
     ).toBe(false)
+    expect(resultContract.safeParse({ ...result(), schemaVersion: 2 }).success).toBe(false)
     expect(resultContract.safeParse({ ...result(), measurementVersion: "dom-frame-v2" }).success).toBe(false)
     expect(resultContract.safeParse({ ...result(), typingCadenceMs: undefined }).success).toBe(false)
     expect(() => summarize([1, NaN])).toThrow()
     expect(summarize([-1]).p50).toBe(-1) // DOM growth is a signed count.
+  })
+
+  it("uses the middle-pair median without changing tail summaries or input order", () => {
+    const values = [40, 10, 30, 20]
+    expect(summarize(values)).toEqual({ n: 4, p50: 25, p75: 40, max: 40 })
+    expect(values).toEqual([40, 10, 30, 20])
+    expect(summarize([30, 10, 20]).p50).toBe(20)
+    expect(summarize([-4, -2]).p50).toBe(-3)
+    expect(summarize([])).toEqual({ n: 0, p50: 0, p75: 0, max: 0 })
+    expect(summarize(Array.from({ length: 20 }, (_, index) => index + 1)))
+      .toEqual({ n: 20, p50: 10.5, p75: 16, p95: 20, max: 20 })
+    // The correction can strengthen detection too; upper-middle values differ by 10.
+    expect(summarize([80, 110]).p50 - summarize([0, 100]).p50).toBe(45)
   })
 
   it("keeps sample counts honest and withholds p95 for small runs", () => {

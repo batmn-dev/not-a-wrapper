@@ -176,7 +176,7 @@ export type ThreadSwitchResult = {
 }
 
 export type BenchmarkResultFile = {
-  schemaVersion: 2
+  schemaVersion: 3
   measurementVersion: "dom-frame-v3"
   typingCadenceMs: 40
   replayPolicy: "disabled-v1"
@@ -208,11 +208,15 @@ export function summarize(values: number[]): MetricSummary {
   }
   if (values.length === 0) return { n: 0, p50: 0, p75: 0, max: 0 }
   const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  const median = sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2
   const at = (q: number) =>
     sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
   return {
     n: sorted.length,
-    p50: round2(at(0.5)),
+    p50: round2(median),
     p75: round2(at(0.75)),
     ...(sorted.length >= 20 ? { p95: round2(at(0.95)) } : {}),
     max: round2(sorted[sorted.length - 1]),

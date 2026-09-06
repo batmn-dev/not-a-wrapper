@@ -81,7 +81,7 @@ const scenario = z
 
 export const resultContract = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     measurementVersion: z.literal("dom-frame-v3"),
     typingCadenceMs: z.literal(40),
     replayPolicy: z.literal("disabled-v1"),

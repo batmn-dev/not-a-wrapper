@@ -134,6 +134,8 @@ are included when they overlap the send-to-terminal window, even when the
 observer callback arrives after terminal. Full overlapping durations remain
 diagnostic observations; callback delivery time does not determine inclusion.
 Hidden tabs invalidate the entire run; do not interpret any of its timings. Do not remove slow/failed runs.
+Result schema v3 uses the conventional middle-pair median for even sample counts;
+older schemas are rejected. Tail percentile formulas and all gates are unchanged.
 Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
 the oldest waiting input. Completed foreground runs fail if any sampled content
 never reaches the rendered watermark; buffer overflow also fails explicitly.

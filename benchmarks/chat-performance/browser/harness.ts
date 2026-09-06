@@ -1054,11 +1054,9 @@ async function runScenarioOnce(
         })
         .filter((value): value is number => Number.isFinite(value))
       if (deltas.length > 0) {
-        const sorted = [...deltas].sort((a, b) => a - b)
-        snapshotToSecondTabMedianMs = round2(
-          sorted[Math.floor(sorted.length / 2)]
-        )
-        snapshotToSecondTabMaxMs = round2(sorted[sorted.length - 1])
+        const summary = summarize(deltas)
+        snapshotToSecondTabMedianMs = summary.p50
+        snapshotToSecondTabMaxMs = summary.max
       }
       const tab1Origin = await page.evaluate(() => performance.timeOrigin)
       const tab2Origin = await secondTab.evaluate(() => performance.timeOrigin)
@@ -1710,7 +1708,7 @@ async function main() {
     .toString()
     .trim()
   const file: BenchmarkResultFile = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     measurementVersion: "dom-frame-v3",
     accountReadinessProtocol: "matching-account-v1",
     typingCadenceMs: BENCHMARK_TYPING_DELAY_MS,

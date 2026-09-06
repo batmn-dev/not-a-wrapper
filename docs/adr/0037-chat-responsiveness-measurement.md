@@ -93,8 +93,16 @@ profiling and disable the old geometry-reading wheel observer. Chromium's native
 presentation signal is not proof of physical pixels. Production `scrollToFrameMs`
 remains a separate wheel-to-observed-movement DOM/frame proxy.
 
-Result schema v2 carries complete scenario identity, fixture script hash, browser,
+Result schema v3 carries complete scenario identity, fixture script hash, browser,
 hardware, cache, network, authentication, and measurement-version dimensions.
+Schema v3 uses the conventional sample median: the middle value for odd counts
+and the mean of the middle pair for even counts, matching the existing composer
+benchmark and [NIST's definition](https://www.itl.nist.gov/div898/handbook/eda/section3/eda351.htm).
+Schema v2 used the upper middle value, which can jump between two timing clusters
+when just one sample changes sides. Older result versions are rejected; raw
+captures are not relabeled. The existing p75/p95 rank formulas, sample counts,
+tail budgets, and regression thresholds remain unchanged. This correction can
+increase or decrease a relative difference and applies to both sides of every pair.
 Instrumented benchmark builds disable session replay and declare the required
 `replayPolicy: disabled-v1` dimension. This holds remotely configured and sampled
 recording work out of the controlled chat workload; production replay remains
