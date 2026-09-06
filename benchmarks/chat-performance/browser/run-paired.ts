@@ -4,6 +4,7 @@ import { createHash } from "node:crypto"
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { validateDependencyOverlay } from "./dependency-overlay"
 import { LEGACY_MEASUREMENT_BASE, MEASUREMENT_FILES, MEASUREMENT_HOOK_FILES, measurementBootstrap } from "./measurement-overlay"
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..")
@@ -106,7 +107,21 @@ function main() {
   if (measurementBootstrap(readFileSync(path.join(root, bootstrap), "utf8")) !==
       measurementBootstrap(readFileSync(path.join(baselineRoot, bootstrap), "utf8")))
     throw new Error("Measurement bootstrap differs; review a measurement-only overlay before comparing")
-  // Copy the driver, not the product. Deterministic fixtures and dependencies must match.
+  // Both builds install the exact same dependencies. Only additive changes can
+  // be overlaid; upgrades/removals and build configuration changes fail closed.
+  const originalBaseDependencySha256 = digest(path.join(baselineRoot, "bun.lock"))
+  let dependencyOverlay: ReturnType<typeof validateDependencyOverlay> | null = null
+  if (originalBaseDependencySha256 !== digest(path.join(root, "bun.lock"))) {
+    dependencyOverlay = validateDependencyOverlay({
+      baseManifest: readFileSync(path.join(baselineRoot, "package.json"), "utf8"),
+      headManifest: readFileSync(path.join(root, "package.json"), "utf8"),
+      baseLock: readFileSync(path.join(baselineRoot, "bun.lock"), "utf8"),
+      headLock: readFileSync(path.join(root, "bun.lock"), "utf8"),
+    })
+    for (const file of ["package.json", "bun.lock"])
+      cpSync(path.join(root, file), path.join(baselineRoot, file))
+  }
+  // Copy the driver, not the product. Fixtures, dependencies and clocks must match.
   for (const file of ["bun.lock", "app/api/chat/deterministic-provider.ts", "benchmarks/chat-performance/fixtures.ts", "convex/lib/runTimingReceipt.ts"])
     if (digest(path.join(root, file)) !== digest(path.join(baselineRoot, file)))
       throw new Error(`${file} differs; this paired protocol requires identical dependencies, fixtures, and timing helpers`)
@@ -126,6 +141,7 @@ function main() {
     overlaySha256: legacy ? digest(path.join(root, harnessDirectory, "measurement-overlay.patch")) : null,
     measurementHashes, timingHelperSha256: digest(path.join(root, "convex/lib/runTimingReceipt.ts")),
     dependencySha256: digest(path.join(root, "bun.lock")),
+    originalBaseDependencySha256, dependencyOverlay,
     hookSources: Object.fromEntries(MEASUREMENT_HOOK_FILES.map((file) => [file, {
       base: digest(path.join(baselineRoot, file)), head: digest(path.join(root, file)),
     }])),

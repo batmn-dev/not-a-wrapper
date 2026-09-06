@@ -95,4 +95,20 @@ The [updated comparison video](https://drive.google.com/file/d/1MhblZ5qkHbh_FUCW
 preserves capture timing and labels the cut to later live output. Full video
 decode passed. Final focused validation passed 70 tests, typecheck, targeted
 ESLint and the optimized Next.js build. This remains local verification on
-localhost:3002; production has not been deployed by this work.
+localhost:3002; production had not been deployed at this verification point.
+
+## PR benchmark dependency normalization
+
+The Redis dependency addition initially stopped the paired CI benchmark before
+measurement because its lockfiles differed. The runner now permits only additive
+production dependencies with every baseline package resolution, existing manifest
+setting and workspace setting unchanged. It installs the head manifest and lock
+in the isolated baseline checkout, then retains the identical-lockfile check.
+Dependency upgrades/removals and fixture or timing-helper drift still fail closed.
+
+Both builds therefore use the same installed dependencies while retaining their
+own product source. The manifest records the original baseline lock hash and all
+added dependency/package names; the baseline diff records the normalization.
+This measures product changes under common dependencies, not dependency-upgrade
+performance. Five focused rejection/acceptance tests and validation against this
+branch's real lockfiles passed. Hosted benchmark results remain authoritative.
