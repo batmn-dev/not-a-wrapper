@@ -71,6 +71,8 @@ export type MarkdownProps = {
    * row without changing how status is derived.
    */
   streaming?: boolean
+  /** Retained history stays fully readable while incremental parsing continues. */
+  animateStreaming?: boolean
 }
 
 /**
@@ -405,6 +407,7 @@ function MarkdownComponent({
   className,
   components,
   streaming = false,
+  animateStreaming = true,
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
@@ -466,8 +469,7 @@ function MarkdownComponent({
     [components]
   )
 
-  // After every streamed commit, the ADR-0016 decay overlay
-  // every streamed commit the overlay diffs this container's rendered text
+  // On live commits, the ADR-0016 overlay diffs this container's rendered text
   // and paints appended cohorts via CSS Custom Highlights — paint only, no
   // DOM ownership. Layout effect on purpose: a passive effect runs after the
   // browser paints, so appended text would flash one frame at full color and
@@ -477,18 +479,18 @@ function MarkdownComponent({
   // changed.
   const containerRef = useRef<HTMLDivElement>(null)
   useBrowserLayoutEffect(() => {
-    if (!streaming || !containerRef.current) return
+    if (!streaming || !animateStreaming || !containerRef.current) return
     observeStreamingDecay(containerRef.current)
   })
-  // Settlement, streaming→false, and unmount all clear this container's
+  // Settlement, historical replay, and unmount all clear this container's
   // cohorts before the settled content paints, so settled paint is plain
   // canonical color from its first frame.
   useBrowserLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
-    if (!streaming) settleStreamingDecay(container)
+    if (!streaming || !animateStreaming) settleStreamingDecay(container)
     return () => settleStreamingDecay(container)
-  }, [streaming])
+  }, [streaming, animateStreaming])
 
   // React retries this render before reconciling children with adjusted state.
   if (current !== projection) return null

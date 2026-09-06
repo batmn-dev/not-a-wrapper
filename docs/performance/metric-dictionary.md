@@ -287,7 +287,11 @@ calls are counted (`providerToolCalls`) because their time stays in the window.
   populations.
 - `p95` on sample sets smaller than 20 — report median/max only and say so.
 
-## 14. DOM/frame responsiveness contract (schema v2, ADR-0037)
+## 14. DOM/frame responsiveness contract (schema v3, ADR-0037)
+
+Summary p50 is the conventional median, averaging the middle pair for even sample
+counts. The p75/p95 rank formulas remain unchanged. Schema v2's upper-middle
+summaries are incompatible; version checks and raw-sample validation reject them.
 
 These names are separate from the older React-effect marks. A frame observation
 checks DOM in a rendering callback, then records in a task after that rendering
@@ -299,6 +303,9 @@ mutation or animation completion. Rescans require a matching source watermark,
 viewport intersection, and an active finite animation, and stop when its remaining
 duration expires. Pending content remains explicit if it never becomes visible.
 Benchmark native scroll presentation is separate from these DOM/frame proxies.
+If Chromium forks the scroll's compositor frame, exact input and submitted-frame
+IDs identify its native presentation endpoint. IDs are preserved losslessly;
+missing or ambiguous links fail rather than selecting a nearby frame or swap time.
 `contentFrameProtocol: publisher-frame-v1` adds a guarded observation after an
 SDK publication inside rAF. A committed watermark can be inspected in that same
 rendering opportunity, avoiding an extra frame when the ordinary observer ran
@@ -354,10 +361,14 @@ intentional second-tab cutoffs. Any observation-buffer overflow invalidates a ru
 Readiness requires global `accountReadinessProtocol: matching-account-v1`.
 The original-base overlay publishes the same observation-only admission predicate
 without changing its product gate; earlier readiness captures are incompatible.
-Native benchmark scrolling requires `wheelProtocol: native-browser-presentation-v1` and
+Native benchmark scrolling requires `wheelProtocol: native-browser-presentation-v2` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`. The isolated wheel's
-event timestamp and UserTiming anchor select a unique process/string-local async
-track and complete bounded presentation interval. Lost, missing, ambiguous, or
+event timestamp and UserTiming anchor select a unique category/process/local async
+track. Version 2 identifies the exact submitted scroll frame using input, surface,
+and display IDs plus its native frame-swap timestamp, even if the original input
+track later presents a main frame. Direct attribution requires the independent
+submission path to be unavailable. Version 1 captures are incompatible and cannot
+be relabeled. Lost, missing, ambiguous, or
 incomplete evidence fails. Native traces remain CI artifacts; normal runs do not
 CPU-profile. Production wheel observation remains a movement proxy, invalidated by
 cancellation, competing input, navigation, or application scroll commands.

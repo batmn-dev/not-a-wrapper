@@ -299,8 +299,12 @@ The sparse semantic events that accompany a foreground assistant stream: its sta
 _Avoid_: per-delta metadata, empty metadata, metadata heartbeat
 
 **Foreground stream authority**:
-The active tab's local AI SDK message state while that tab owns the direct HTTP response. It alone drives foreground token presentation; Convex records run status, periodic durable snapshots, and terminal state for reload, navigation, tab, and device recovery without feeding the owner tab's token-by-token render path.
+The active tab's local AI SDK message state, fed by the direct HTTP response or an authenticated replay of the same generation run (ADR-0039). It alone drives foreground token presentation; Convex records run status, periodic durable snapshots, and terminal state. A refreshed document restores saved text immediately, reconstructs retained history silently, then follows live chunks at their arrival cadence. Reconnection can begin before client subscription hydration through the same owner-checked route; unavailable replay leaves checkpoint recovery active.
 _Avoid_: Convex-driven foreground streaming, dual foreground authority, snapshot-as-token-state
+
+**Retained generation stream**:
+The short-lived ordered Redis log of one execution's structured UI chunks and immutable starting assistant state. Its identity is the generation run, including a new run for each approval continuation. It supports replay followed by live reads without starting generation; ownership, selected path, Stop and settlement remain in Convex. Reader disconnection never cancels the producer. Refresh restores saved text immediately, reconstructs retained history silently, then presents new live output; old text is never animated from the beginning.
+_Avoid_: second run lifecycle, snapshot smoothing, worker-crash continuation guarantee
 
 **Foreground notification cadence**:
 The maximum one-browser-frame window in which the active AI SDK message state may coalesce notifications before React presents the latest canonical text. It is a client state-notification boundary, not a second presentation queue; the browser may still combine multiple mutations into one painted frame.

@@ -1987,13 +1987,15 @@ code {
    (~5.8 µs/object) per streamed commit — 10.4 s of layout / 4.0 s TBT on a
    100 KB stream. Locking settled off-screen blocks caps that walk at the
    visible content: TBT 4,021 ms → 3 ms with the fade intact. The growing
-   block is the container's :last-child by construction and stays unlocked.
-   `contain-intrinsic-size: auto` memoizes each block's real rendered height,
-   so blocks rendered once re-lock at exact size (no scroll jumps); the 3rem
-   fallback only sizes blocks that were never rendered. Guarded so browsers
-   without content-visibility never see the intrinsic-size hint. */
+   terminal block stays unlocked. Lists can reopen when a partial next item
+   temporarily parses as a sibling paragraph. Keep lists and blocks containing
+   lists unlocked even after settlement: containment can replace their real
+   height with the fallback and clamp the reader's scroll position.
+   `contain-intrinsic-size: auto` remembers height after a block renders with
+   auto containment; blocks without that measurement use the 3rem fallback.
+   Guarded so browsers without content-visibility never see the size hint. */
 @supports (content-visibility: auto) {
-  .markdown > :not(:last-child) {
+  .markdown > :not(:last-child):not(ol):not(ul):not(:has(ol, ul)) {
     content-visibility: auto;
     contain-intrinsic-size: auto 3rem;
   }

@@ -66,6 +66,24 @@ For local WorkOS AuthKit, configure:
 - App homepage URL: `http://localhost:3000`
 - CORS origin: `http://localhost:3000`
 
+## Retained chat streaming
+
+Hard-refresh streaming uses a short-lived Redis Stream alongside Convex checkpoints
+([ADR-0039](adr/0039-resumable-generation-stream.md)). Run Redis locally on
+`127.0.0.1:6379`, or set the server-only `CHAT_STREAM_REDIS_URL` to a Redis
+TCP/TLS endpoint. An HTTP-only Redis REST endpoint is insufficient. Preview and
+production require the variable explicitly; use separate Redis instances or
+databases for deployment environments. Place Redis near the Vercel function region.
+
+Keep Redis private and use TLS/authentication for hosted connections. Replay logs
+contain assistant text, reasoning and tool events. They expire ten minutes after
+completion; active logs renew a one-hour TTL and have a 16 MiB per-run limit.
+Individual records and starting assistant state are limited to 1 MiB before
+transmission, so oversized output cannot exceed hosted Redis request limits.
+Missing or unavailable replay leaves Convex checkpoint recovery active. A reconnect
+retries transient failures with bounded backoff, then falls back after five failures
+without new output. Redis does not make the existing model worker survive a crash.
+
 ## Convex Env
 
 Convex functions do not read secrets from `.env.local`. Set WorkOS values on
@@ -132,6 +150,7 @@ Set these Vercel Preview environment variables:
 - `CSRF_SECRET`
 - `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
+- `CHAT_STREAM_REDIS_URL` for retained streaming (a separate Preview Redis endpoint)
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
 - optional `SCHEMA_GUARD_REPO_URL` when Vercel cannot fetch the base branch
@@ -211,6 +230,7 @@ Set these Vercel Production environment variables:
 - `CSRF_SECRET`
 - `CHAT_ADMISSION_SECRET`
 - `ENCRYPTION_KEY`
+- `CHAT_STREAM_REDIS_URL` for retained streaming (the Production Redis endpoint)
 - AI provider keys needed by the deployment
 - optional analytics and observability keys
 - optional `SCHEMA_GUARD_REPO_URL` when the production deploy environment

@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api"
 import { getAllModels } from "@/lib/models"
+import * as retainedChatStream from "@/lib/chat-stream/server"
 import {
   resolveReasoningEffort,
   shapeRequest,
@@ -949,6 +950,40 @@ describe("createChatTurnRuntime — prepare()", () => {
 })
 
 describe("createChatTurnRuntime — generated titles", () => {
+  it("drains the retained tee if setup throws before taking its reader", async () => {
+    const initialize = vi.spyOn(retainedChatStream, "initializeRetainedChatStream").mockRejectedValueOnce(new Error("setup failed"))
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const harness = makeStreamHarness()
+    let source!: ReadableStreamDefaultController<import("ai").UIMessageChunk>
+    vi.mocked(toUIMessageStream).mockImplementationOnce(() => new ReadableStream({
+      start(controller) { source = controller },
+    }))
+    const afterCallbacks: Array<() => unknown> = []
+    const runtime = createChatTurnRuntime({
+      input: makeInput(),
+      deps: makeDeps(harness, makeFetchMutation(), {
+        after: ((callback: () => unknown) => { afterCallbacks.push(callback) }) as ChatTurnDeps["after"],
+      }),
+    })
+    try {
+      await runtime.prepare()
+      const response = await runtime.toResponse(notAbortedSignal())
+      const responseBody = response.text()
+      let settled = false
+      const persistence = Promise.all(afterCallbacks.map((callback) => callback())).then(() => { settled = true })
+      await vi.waitFor(() => expect(initialize).toHaveBeenCalled())
+      expect(settled).toBe(false)
+      source.enqueue({ type: "start", messageId: "assistant" })
+      source.close()
+      await persistence
+      await responseBody
+      expect(warn).toHaveBeenCalledWith("chat_stream_replay_unavailable", { runId: "run1" })
+    } finally {
+      initialize.mockRestore()
+      warn.mockRestore()
+    }
+  })
+
   it("persists an accepted durable first-turn title through the versioned mutation", async () => {
     const harness = makeStreamHarness()
     const fetchMutation = vi.fn(async (ref: unknown) => {

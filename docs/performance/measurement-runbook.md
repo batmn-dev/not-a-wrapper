@@ -90,7 +90,7 @@ Before treating instrumentation numbers as user-facing truth, compare an
 instrumented and uninstrumented build of the same deterministic scenario. The
 instrumented run must not introduce a new task longer than 50 ms.
 
-## Responsiveness workflow (schema v2)
+## Responsiveness workflow (schema v3)
 
 Read ADR-0037 and metric dictionary group 14. `SUITE=responsiveness` is the small
 signed-in core: cold entry, follow-up after reloading its seeded conversation,

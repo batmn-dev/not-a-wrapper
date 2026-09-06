@@ -1,6 +1,8 @@
 # 8. The Convex chat runtime has no stream-resume read surface
 
-- Status: accepted
+- Status: accepted for removal of unused Convex APIs; no-resume policy superseded
+- Amended by ADR-0039 (2026-09-05): reconnect uses retained Redis UI chunks;
+  the removed Convex delta/read APIs remain removed.
 - Date: 2026-07-05
 - Context: Architecture deepening — generation runtime core; branch
   `darknight/bat-signal-20260705-133514`
@@ -39,10 +41,10 @@ interface is exactly the lifecycle the Chat turn runtime drives —
 `markGenerationRunFailed`, `markGenerationRunAborted` — plus the two
 client approval actions (`approveToolCall`, `denyToolCall`).
 
-Stream resume is **descoped, not deferred**: reconnect works by rendering
-durable message docs, and any future resume feature must re-justify its
-own read surface against that baseline (it would likely subscribe to the
-message doc, not replay `assistantMessageSnapshots` rows).
+The original decision descoped stream resume in favor of rendering durable
+message docs. [ADR-0039](0039-resumable-generation-stream.md) supersedes that
+exclusion with an authenticated retained Redis stream. Durable message docs
+remain the checkpoint fallback; the unused Convex delta/read APIs stay removed.
 
 `chatVersion` remains a request-local input for telemetry and tool-call
 diagnostics, but it is not stored on generation runs.
@@ -59,5 +61,5 @@ diagnostics, but it is not stored on generation runs.
 - Durable message docs carry projected output. `lastSnapshotSequence` on the
   generation run rejects stale checkpoints and records whether a reused
   regeneration produced output; no append-only snapshot table is retained.
-- A future architecture pass finding "no recovery reads" should treat
-  that as this decision, not as a gap.
+- Recovery now combines the retained-stream read in ADR-0039 with durable
+  message projection. The removed Convex reads are still intentionally absent.

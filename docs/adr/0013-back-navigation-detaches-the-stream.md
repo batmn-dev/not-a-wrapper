@@ -1,8 +1,10 @@
 # 13. Back navigation detaches the client stream instead of aborting the run
 
 - Status: accepted
+- Extended by ADR-0039: native requests retain this detach behavior; resumed
+  readers disconnect on navigation and reattach through their retained run log.
 - Date: 2026-07-18
-- Related: ADR-0008 (no stream-resume read surface — intact), ADR-0011
+- Related: ADR-0008 (removed Convex read surface remains removed), ADR-0011
   (durable turn settlement — the server half this relies on; its deferred
   lease/reaper is inherited here), ADR-0012 (atomic first-turn creation —
   owns the shallow-pushState flow whose Back edge this governs)

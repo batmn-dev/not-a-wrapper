@@ -74,16 +74,35 @@ Changing gesture injection would change the input workload; retaining the wheel
 and separating its native stages preserves the existing user journey.
 An isolated wheel's
 event timestamp and UserTiming anchor select one process/string-local async track
-and its bounded interval. Missing, ambiguous, incomplete, or lost trace evidence
-fails. Required protocols are `wheelProtocol: native-browser-presentation-v1` and
+and its bounded interval. Chromium can present the scroll on a forked compositor
+frame before the original input track terminates or presents a later main frame.
+Version 2 consistently selects the exact submitted scroll frame when that evidence
+exists, using input and surface IDs plus the input's native frame-swap timestamp
+to identify its `SwapEndToPresentationCompositorFrame` interval. Direct input-track
+attribution is valid only when the independent submission path is unavailable.
+Preserve 64-bit IDs losslessly;
+never substitute a nearby frame, swap time, or termination timestamp. Missing,
+ambiguous, incomplete, or lost trace evidence fails. This attribution repair
+retains native clock boundaries and runs identically on both sides of a pair.
+Version 1 mixed the earlier compositor frame with later main-frame completion;
+its captures cannot be relabeled or compared against version 2 results.
+Required protocols are `wheelProtocol: native-browser-presentation-v2` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`; earlier scroll captures
 are incompatible. Normal runs retain native traces in CI artifacts without CPU
 profiling and disable the old geometry-reading wheel observer. Chromium's native
 presentation signal is not proof of physical pixels. Production `scrollToFrameMs`
 remains a separate wheel-to-observed-movement DOM/frame proxy.
 
-Result schema v2 carries complete scenario identity, fixture script hash, browser,
+Result schema v3 carries complete scenario identity, fixture script hash, browser,
 hardware, cache, network, authentication, and measurement-version dimensions.
+Schema v3 uses the conventional sample median: the middle value for odd counts
+and the mean of the middle pair for even counts, matching the existing composer
+benchmark and [NIST's definition](https://www.itl.nist.gov/div898/handbook/eda/section3/eda351.htm).
+Schema v2 used the upper middle value, which can jump between two timing clusters
+when just one sample changes sides. Older result versions are rejected; raw
+captures are not relabeled. The existing p75/p95 rank formulas, sample counts,
+tail budgets, and regression thresholds remain unchanged. This correction can
+increase or decrease a relative difference and applies to both sides of every pair.
 Instrumented benchmark builds disable session replay and declare the required
 `replayPolicy: disabled-v1` dimension. This holds remotely configured and sampled
 recording work out of the controlled chat workload; production replay remains

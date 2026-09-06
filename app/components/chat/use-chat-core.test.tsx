@@ -44,6 +44,7 @@ const chatCoreMocks = vi.hoisted(() => ({
   convexMutation: vi.fn(),
   regenerate: vi.fn(),
   sendMessage: vi.fn(),
+  syncRun: vi.fn(),
   setMessages: vi.fn(),
   setWebSearchEnabled: vi.fn(),
   stop: vi.fn(),
@@ -147,6 +148,17 @@ vi.mock("@ai-sdk/react", () => ({
     stop = () => chatCoreMocks.bindingStop(this)
   },
 }))
+
+// Transport replay is covered with the real SDK in resumable-chat.test.ts.
+vi.mock("@/lib/chat-stream/resumable-chat", async () => {
+  const { Chat } = await import("@ai-sdk/react")
+  return {
+    ResumableChat: class extends Chat<UIMessage> {
+      syncRun = chatCoreMocks.syncRun
+      detachObserver = vi.fn()
+    },
+  }
+})
 
 vi.mock("./use-frame-aligned-chat", () => ({
   useFrameAlignedChat: ({
@@ -584,6 +596,25 @@ describe("useChatCore prompt query handling", () => {
     } finally {
       delete process.env.NEXT_PUBLIC_CHAT_PERF_INSTRUMENTATION
     }
+  })
+
+  it("does not discover a retained stream while first-turn creation is submitting", async () => {
+    let finishCreation!: (value: { chatId: string }) => void
+    const ensureChatExists = vi.fn(() => new Promise<{ chatId: string }>((resolve) => { finishCreation = resolve }))
+    const { getCore, rerender } = renderCore({ search: "", chatId: null, ensureChatExists })
+      let submitted!: Promise<boolean>
+      await act(async () => {
+        submitted = getCore()!.submit({ text: "First turn", files: [], attachments: [] })
+        await vi.waitFor(() => expect(ensureChatExists).toHaveBeenCalledTimes(1))
+      })
+      chatCoreMocks.historyLoading = true
+      rerender({ chatId: "chat-first", initialMessages: [], search: "" })
+      expect(getCore()!.isSubmitting).toBe(true)
+      expect(chatCoreMocks.syncRun.mock.calls.at(-1)?.[2]).toMatchObject({ chatId: "chat-first", isLoading: true, isSubmitting: true })
+      await act(async () => {
+        finishCreation({ chatId: "chat-first" })
+        await submitted
+      })
   })
 
   it("carries Stop across first-turn chat creation and prevents generation dispatch", async () => {

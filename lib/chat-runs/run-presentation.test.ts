@@ -58,6 +58,41 @@ describe("guest / local-only reduction (selectedRun always null)", () => {
 })
 
 describe("precedence ladder", () => {
+  it("lets only the exact successful retained replay drain before showing completion", () => {
+    const replay = {
+      localStatus: "streaming" as const,
+      localAssistantMessageId: "msg_1",
+      localReplayRunId: "run_1",
+      selectedRun: makeRun({ status: "completed" }),
+    }
+    expect(resolve(replay)).toMatchObject({
+      active: true,
+      actionsSuppressed: true,
+      shouldStopLocalStream: false,
+    })
+    expect(resolve({ ...replay, pendingStopRunId: "older-run" })).toMatchObject({
+      state: "local-streaming",
+      shouldStopLocalStream: false,
+    })
+    expect(resolve({ ...replay, pendingStopRunId: "run_1" })).toMatchObject({
+      shouldStopLocalStream: true,
+    })
+    expect(
+      resolve({ ...replay, localStatus: "ready", localReplayRunId: null })
+    ).toMatchObject({ state: "completed", active: false })
+    expect(
+      resolve({ ...replay, localReplayRunId: "another-run" })
+    ).toMatchObject({ state: "completed", shouldStopLocalStream: true })
+    expect(
+      resolve({
+        ...replay,
+        selectedRun: makeRun({
+          status: "aborted",
+          terminalReason: "user_stop",
+        }),
+      })
+    ).toMatchObject({ state: "stopped", shouldStopLocalStream: true })
+  })
   it("durable terminal beats a still-streaming matching local transport and cuts it", () => {
     const presentation = resolve({
       localStatus: "streaming",

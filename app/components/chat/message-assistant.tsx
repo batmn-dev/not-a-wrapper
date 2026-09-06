@@ -41,6 +41,7 @@ import { useAssistantMessageSelection } from "./useAssistantMessageSelection"
 
 type MessageAssistantProps = {
   children: string
+  isReplaying?: boolean
   /** The Assistant turn view — the single derivation of everything this row
    * renders from the message's parts/metadata. See CONTEXT.md. */
   view: AssistantTurnView
@@ -60,6 +61,7 @@ type MessageAssistantProps = {
 
 export function MessageAssistant({
   children,
+  isReplaying = false,
   view,
   isLast,
   copied,
@@ -269,6 +271,7 @@ export function MessageAssistant({
                   // growing code block. Conversation already scopes live
                   // status to the last row, so no isLast gate is needed here.
                   streaming={status === "submitted" || status === "streaming"}
+                  animateStreaming={!isReplaying}
                 >
                   {children}
                 </MessageContent>

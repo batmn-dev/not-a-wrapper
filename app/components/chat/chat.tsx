@@ -167,6 +167,7 @@ const ChatInner = memo(function ChatInner({
     status,
     stop,
     presentation,
+    replayingMessageId,
     hasSentFirstMessage,
     isSubmitting,
     isSendReady,
@@ -322,6 +323,7 @@ const ChatInner = memo(function ChatInner({
   const conversationProps = useMemo(
     () => ({
       messages,
+      replayingMessageId,
       status: effectiveStatus,
       isSubmitting,
       chatId,
@@ -337,6 +339,7 @@ const ChatInner = memo(function ChatInner({
     }),
     [
       messages,
+      replayingMessageId,
       effectiveStatus,
       isSubmitting,
       chatId,

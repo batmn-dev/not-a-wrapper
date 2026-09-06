@@ -12,6 +12,7 @@
 
 import { GROWING_HIGHLIGHT_IDLE_MS } from "@/lib/chat-performance/streaming-code-render"
 import * as growingBlockTail from "@/lib/markdown/growing-block-tail"
+import * as streamingDecay from "@/lib/markdown/streaming-decay-overlay"
 import React, { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import {
@@ -84,22 +85,54 @@ describe("Markdown terminal-block stability", () => {
     vi.useRealTimers()
   })
 
-  function mount(markdown: string, streaming: boolean) {
+  function mount(markdown: string, streaming: boolean, animateStreaming = true) {
     container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
-    const render = (nextMarkdown: string, nextStreaming: boolean) => {
+    const render = (
+      nextMarkdown: string,
+      nextStreaming: boolean,
+      nextAnimateStreaming = true
+    ) => {
       act(() => {
         root?.render(
-          <Markdown id="stability" streaming={nextStreaming}>
+          <Markdown
+            id="stability"
+            streaming={nextStreaming}
+            animateStreaming={nextAnimateStreaming}
+          >
             {nextMarkdown}
           </Markdown>
         )
       })
     }
-    render(markdown, streaming)
+    render(markdown, streaming, animateStreaming)
     return { rerender: render }
   }
+
+  it("keeps replay readable and clears live decay when switching back to replay", () => {
+    const observe = vi.spyOn(streamingDecay, "observeStreamingDecay")
+    const settle = vi.spyOn(streamingDecay, "settleStreamingDecay")
+    try {
+      const { rerender } = mount("Retained", true, false)
+      rerender("Retained history", true, false)
+      expect(container?.textContent).toBe("Retained history")
+      expect(observe).not.toHaveBeenCalled()
+
+      rerender("Retained history and live", true)
+      expect(observe).toHaveBeenCalled()
+      observe.mockClear()
+      settle.mockClear()
+
+      rerender("Retained history and live", true, false)
+      expect(observe).not.toHaveBeenCalled()
+      expect(settle).toHaveBeenCalled()
+      expect(container?.textContent).toBe("Retained history and live")
+    } finally {
+      observe.mockRestore()
+      settle.mockRestore()
+    }
+  })
 
   async function advance(ms: number) {
     await act(async () => {

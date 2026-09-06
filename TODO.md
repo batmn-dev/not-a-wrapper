@@ -18,10 +18,8 @@ should expose an **Always** option that lets users force `web_search`, alongside
 the existing Off and Auto behavior where the model decides whether to search.
 Research and implement the multiple search-quantity controls exposed by
 t3.chat, including their interaction model and request-level mapping.
-- **Update Activity UX:** Make activity feel progressive in the chat thread.
-Currently all activity is logged in the right panel. Show thinking activity and
-intermediate text in the thread while keeping the full right-panel history
-available.
+- **Progressive Activity UX:** Inline thinking/status exists. Add progressive
+reasoning and intermediate text in the thread; retain full Activity-panel history.
 - **Chat composer text editing:** Add chat composer text / markdown editing (link, bold, italic, headings, etc...)
 - **Dictation:** Add chat-composer dictation
 - **Image generation:** Nano banna and state of the art image gen tools (Using Vercel's SDK Framework)
@@ -59,46 +57,27 @@ do not leak context across project boundaries.
 - **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
 - **Evaluate Next.js to TanStack migration:** From [Theo's post](https://x.com/theo/status/1997406196660400228?lang=en)
 - **Evaluate inference on Fluid:** From [Theo's post](https://x.com/theo/status/1997784385337372877)
+- **Retained-stream admission:** Before multi-user rollout, bound concurrent
+replay readers per user across instances and measure Redis command/connection
+usage. Reuse existing admission patterns; preserve refresh and multi-tab recovery.
 - **Evaluate Vercel's BotID:** Consider narrowly scoped bot attestation before
 expensive platform-funded generations.
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools
 - **Agentic design system (future):** Define an agent-readable, customizable
 visual system after the product's core interaction patterns stabilize.
-- **Investigate route-level code splitting of the thread (replicate T3 Chat):**
-t3.chat loads its thread route chunk and read-only bar on demand (Vite,
-134 chunks). Our `/` and `/c/[chatId]` ship byte-identical first-load JS
-(1.157 MB Brotli measured 2026-08-31), with the markdown pipeline chunk
-(127 KB br), full zod v4 (~66 KB br), and recharts statically imported on
-first load, and `optimizePackageImports` unset. Plan: attribute the bundle
-with the Next analyzer, defer the markdown/KaTeX/Shiki renderer until the
-first assistant message exists (prefetch on composer focus so streaming is
-never blocked on a chunk), dynamic-import composer extras and charts, and
-check whether zod is needed on the client at all. Verifiable test: scripted
-unauth cold load of `/` before and after recording total JS bytes (Brotli),
-request count, and `input_to_next_paint`; guard that `send_to_first_visible_text`
-and `first_text_to_visible` do not regress on the smoke suite. Expected: at
-least 250 KB br less first-load JS on `/` and no new long task at first send.
-Progress (2026-09-05): Message, Activity, and reasoning now share a lazy Markdown
-boundary, warmed through Composer intent. The production homepage's declared
-script set fell by 113,794 locally Brotli-compressed bytes (11.4%); this is not a
-hydrated-browser load/latency measurement. See
-`docs/performance/2026-09-05-interaction-optimizations.md`. Remaining: browser
-first-text validation, charts/composer extras attribution, client zod audit,
-and broader thread-route splitting.
-- **Investigate a warm client cache for chats (replicate T3 Chat's local-first
-feel):** t3.chat serves the sidebar and thread switches from a client store,
-so revisiting a thread paints without a loading state. We mount no Convex
-query cache (no `ConvexQueryCacheProvider`, no `preloadQuery`), so every chat
-switch cold-subscribes through `lib/convex/use-per-user-query.ts`. Plan:
-mount the convex-helpers query cache with a bounded TTL, preload the current
-chat's messages on route entry and on sidebar hover, and evaluate persisting
-the thread list across reloads. Verifiable test: add a `nav_to_thread_painted`
-mark (sidebar click to first message row painted) and measure before and
-after on a fixture with a visited and an unvisited chat, p50/p95 across the
-harness runs, plus Convex subscription count per switch and client memory
-after 50 switches. Expected: a revisited chat paints within one frame of the
-click with no loading state, unvisited chats no slower, memory bounded.
-Remaining (ADR-0031 shipped the cache, hover/click warm, mark and `SUITE=thread-switch`): a revisited switch paints at ~81 ms p50, not within one frame (route commit ~14 ms with rows in it; the rest is post-commit thread-surface work), and reload persistence is unevaluated.
+- **Thread code splitting:** Shared lazy Markdown and Composer intent warming
+are implemented. Attribute and defer charts/composer extras, audit client Zod,
+and split remaining thread-only code. Verify cold `/` JS bytes, request count,
+`input_to_next_paint`, and separate `send_to_first_visible_text` and
+`first_text_to_visible` stages in the browser. Target: ≥250 KB Brotli reduction
+from the 2026-08-31 baseline, no first-text regression or new first-send long task.
+Existing script-size evidence is not browser validation; see
+`docs/performance/2026-09-05-interaction-optimizations.md`.
+- **Warm chat navigation:** Bounded query caching, hover/click warming, and
+`SUITE=thread-switch` shipped (ADR-0031). Reach one-frame revisited navigation
+and evaluate thread-list persistence across reloads. Verify visited/unvisited
+p50/p95 paint times, subscriptions per switch, and memory after 50 switches;
+keep unvisited navigation no slower and memory bounded.
 - **Investigate visibility-gated chat hydration (replicate T3 Chat):** observed
 on 2026-09-02 while benchmarking against t3.chat: their chat client does not
 finish hydrating while `document.visibilityState` is `hidden`. The composer
@@ -189,10 +168,10 @@ dependency audit, and validate with the normal project checks.
 with the supported runtime; defer jsdom 30 until the Node engine floor is
 compatible; and handle ESLint 10, Motion 13, and Recharts 3.10 as separate,
 focused upgrades with migration-specific lint, animation, and visual checks.
-- **Assistant responsiveness:** investigate and improve time to first token and
-text-streaming feel end to end. Measure TTFT through the chat-performance spans,
-check whether title usage delays terminal settlement, and re-verify perceived
-streaming smoothness in the browser.
+- **Assistant responsiveness:** Rendering optimizations shipped; end-to-end
+responsiveness remains open. Measure TTFT with chat-performance spans, quantify
+the platform-funded title-usage wait before settlement, and verify streaming
+smoothness in the browser.
 - **Burst responses after ~10 s (benchmark finding 1):** in the 2026-09-02
 comparison (`docs/performance/2026-09-02-ttft-tps-vs-t3-chat.md`) five of 27
 production turns on Claude Haiku 4.5 and GLM-5.3 arrived as one burst: SDK

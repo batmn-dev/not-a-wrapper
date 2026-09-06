@@ -97,7 +97,7 @@ the complete stream oracle and records the injected stylesheet hash and final
 geometry. Compare the two Smooth arms for containment; Quick isolates the fade.
 These traces are diagnostic and cannot seed performance baselines.
 
-Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
+Schema-v3 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM
 in a rendering callback and records in a task queued after that rendering
@@ -134,6 +134,8 @@ are included when they overlap the send-to-terminal window, even when the
 observer callback arrives after terminal. Full overlapping durations remain
 diagnostic observations; callback delivery time does not determine inclusion.
 Hidden tabs invalidate the entire run; do not interpret any of its timings. Do not remove slow/failed runs.
+Result schema v3 uses the conventional middle-pair median for even sample counts;
+older schemas are rejected. Tail percentile formulas and all gates are unchanged.
 Menu-consumed Enter does not begin a send measurement. Coalesced typing retains
 the oldest waiting input. Completed foreground runs fail if any sampled content
 never reaches the rendered watermark; buffer overflow also fails explicitly.
@@ -143,15 +145,20 @@ CDP timestamps synthetic wheel input before a visual-state synchronization barri
 `scrollAutomationDispatchMs` reports that pre-forward interval separately. The raw
 `scrollInputToPresentationMs` total remains visible, but is not a physical-input
 latency claim or regression gate. Both components must sum to that total. An
-isolated wheel event and its UserTiming anchor identify one process/string-local
-async track within a complete bounded interval. Missing, ambiguous, incomplete,
+isolated wheel event and its UserTiming anchor identify one category/process/local
+async track within a complete bounded interval. Scroll protocol v2 follows the
+exact submitted scroll frame using lossless input, surface, and display IDs plus
+the input's native frame-swap timestamp. This avoids crediting a later original
+main frame when the scroll already appeared on a forked compositor frame. Direct
+input-track attribution applies only when the submission path is unavailable.
+Version 1 captures cannot be relabeled. Missing, ambiguous, incomplete,
 or lost native evidence fails collection. Menu input must follow the wheel's
 native presentation; the handoff uses one rAF-to-task opportunity. The late menu
 is clicked natively at its verified pre-wheel position in the sticky composer,
 avoiding extra locator stability waits. Its actual pointerdown must open the menu
-while streaming remains active; no retry or fallback is permitted. Version2 rejects
+while streaming remains active; no retry or fallback is permitted. Interaction v2 rejects
 the earlier two-rAF/locator-click sequencing.
-`wheelProtocol: native-browser-presentation-v1`
+`wheelProtocol: native-browser-presentation-v2`
 and `interactionProtocol: late-typing-native-wheel-menu-v2` reject older captures.
 Normal runs retain native traces in CI artifacts without CPU profiling and disable
 the old geometry-reading wheel observer. Production `scrollToFrameMs` remains a
@@ -197,7 +204,7 @@ Missing, invalid, or incompatible baselines fail in both modes; relative regress
 is **NOT EVALUATED** when it cannot be established. Explicit `--collect-baseline`
 validates first evidence without claiming a relative comparison. Collection is
 strict unless `--regression-only` is also supplied. Follow `baselines/README.md`;
-old schema-v1 artifacts cannot arm this gate.
+older-schema artifacts cannot arm this gate.
 
 Same-repository relevant PRs run the core suite. Standard, durable, and thread-switch
 suites run weekly. PRs compare the PR merge base; scheduled and manual runs default

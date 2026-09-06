@@ -691,6 +691,17 @@ describe("Conversation regeneration availability", () => {
     act(() => {
       root?.render(
         <Conversation
+          messages={streamingTail.slice(0, 1)}
+          status="submitted"
+          onEdit={vi.fn()}
+          onReload={vi.fn()}
+          isDurableChat
+        />
+      )
+    })
+    act(() => {
+      root?.render(
+        <Conversation
           messages={streamingTail}
           status="streaming"
           onEdit={vi.fn()}
@@ -710,6 +721,63 @@ describe("Conversation regeneration availability", () => {
         ?.querySelector('[data-turn="user"]')
         ?.getAttribute("data-submit-scroll-active")
     ).toBe("true")
+  })
+
+  it("never arms resumed streams, but arms later local regeneration and resets across chats", () => {
+    cleanupRender()
+    const mounted = document.createElement("div")
+    document.body.appendChild(mounted)
+    container = mounted
+    root = createRoot(mounted)
+    const messages = [
+      { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ] satisfies UIMessage[]
+    const render = (
+      status: "streaming" | "ready" | "submitted",
+      chatId: string | null = "chat-1",
+      isSubmitting = false,
+      nextMessages: UIMessage[] = messages
+    ) => {
+      act(() =>
+        root?.render(
+          <Conversation
+            chatId={chatId}
+            messages={nextMessages}
+            status={status}
+            isSubmitting={isSubmitting}
+            onEdit={vi.fn()}
+            onReload={vi.fn()}
+            onCenterIntersectionChange={vi.fn()}
+          />
+        )
+      )
+      return container
+        ?.querySelector('[data-turn="user"]')
+        ?.getAttribute("data-submit-scroll-active")
+    }
+
+    expect(render("streaming")).toBe("false")
+    // Changed observer callbacks reattach TurnRow's combined ref.
+    expect(render("streaming")).toBe("false")
+    expect(render("ready")).toBe("false")
+    expect(render("ready", "chat-1", true)).toBe("true")
+    expect(render("submitted")).toBe("true")
+    expect(render("streaming")).toBe("true")
+    expect(render("ready")).toBe("false")
+    expect(render("submitted")).toBe("true")
+    expect(render("streaming", "chat-2")).toBe("false")
+    expect(render("ready")).toBe("false")
+    const nextUser = [
+      { id: "user-2", role: "user", parts: [{ type: "text", text: "next" }] },
+    ] satisfies UIMessage[]
+    expect(render("submitted", "chat-1", false, nextUser)).toBe("true")
+    expect(render("submitted", null, false, nextUser)).toBe("true")
+    expect(render("streaming", "new-chat", false, nextUser)).toBe("true")
   })
 
   it("keeps historical assistant views ready while the current assistant streams", () => {

@@ -544,7 +544,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
     expect(spacer.style.height).toBe("0px")
   })
 
-  it("publishes stream state for descendant group variants", () => {
+  it("applies stream state to root anchoring and descendant variants", () => {
     act(() => {
       root.render(
         <ScrollRoot data-stream-active="">
@@ -559,7 +559,7 @@ describe("ScrollRoot viewport and footer measurement", () => {
 
     expect(scrollRoot.hasAttribute("data-stream-active")).toBe(true)
     expect(scrollRoot.className).toContain(
-      "group-data-stream-active/scroll-root:[overflow-anchor:none]"
+      "data-stream-active:[overflow-anchor:none]"
     )
   })
 

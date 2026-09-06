@@ -35,7 +35,7 @@ const scenario = z
     cache: z.enum(["cold", "warm"]),
     auth: z.boolean(),
     followup: z.boolean(),
-    wheelProtocol: z.literal("native-browser-presentation-v1").optional(),
+    wheelProtocol: z.literal("native-browser-presentation-v2").optional(),
     menuProtocol: z.literal("activation-v1").optional(),
     interactionProtocol: z.literal("late-typing-native-wheel-menu-v2").optional(),
     contentFrameProtocol: z.literal("publisher-frame-v1").optional(),
@@ -81,7 +81,7 @@ const scenario = z
 
 export const resultContract = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     measurementVersion: z.literal("dom-frame-v3"),
     typingCadenceMs: z.literal(40),
     replayPolicy: z.literal("disabled-v1"),
@@ -299,7 +299,7 @@ export function validateCoverage(result: ComparableResult): string[] {
           cache: config.cache ?? "warm",
           auth: config.auth ?? false,
           followup: config.followup ?? false,
-          wheelProtocol: config.interact ? "native-browser-presentation-v1" : undefined,
+          wheelProtocol: config.interact ? "native-browser-presentation-v2" : undefined,
           menuProtocol: config.interact ? "activation-v1" : undefined,
           interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
           contentFrameProtocol: "publisher-frame-v1",

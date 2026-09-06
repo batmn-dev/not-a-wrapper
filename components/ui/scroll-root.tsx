@@ -6,8 +6,8 @@
  *
  * There is deliberately NO JS stick-to-bottom controller here. The thread
  * controller performs one submit-time turn pin. Native scroll anchoring stays
- * enabled for normal reflow and manual scroll ownership; virtualized row
- * replacement applies its own visible-edge correction in thread-scroll.tsx.
+ * enabled for settled reflow; active text growth disables it so Markdown
+ * updates cannot replace the reader's manually chosen position.
  *
  * The element owns the CSS variable system every scroll policy derives from:
  *
@@ -105,7 +105,7 @@ function ScrollRoot({ children, className, ...props }: ScrollRootProps) {
         data-scroll-root=""
         data-scrollable-surface=""
         className={cn(
-          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] touch:[scrollbar-width:none] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto group-data-stream-active/scroll-root:[overflow-anchor:none] not-print:data-expanded-composer:overflow-y-hidden! not-print:data-voice-focus-mode:overflow-y-hidden!",
+          "@w-sm/main:[scrollbar-gutter:var(--stage-scroll-gutter)] touch:[scrollbar-width:none] group/scroll-root relative flex min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] flex-col not-print:overflow-x-clip not-print:overflow-y-auto data-stream-active:[overflow-anchor:none] not-print:data-expanded-composer:overflow-y-hidden! not-print:data-voice-focus-mode:overflow-y-hidden!",
           "scroll-pt-(--header-height) [--sticky-padding-bottom:0px] [--sticky-padding-top:var(--header-height)]",
           "[--scroll-root-safe-area-inset-top:calc(var(--sticky-padding-top)+env(safe-area-inset-top,0px))]",
           "[--scroll-root-safe-area-inset-bottom:calc(var(--sticky-padding-bottom)+var(--screen-keyboard-height,0px)+env(safe-area-inset-bottom,0px))]",

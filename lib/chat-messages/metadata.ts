@@ -107,6 +107,15 @@ export function getServerMessageId(metadata: unknown): string | undefined {
   return readServerMessageId(metadata)
 }
 
+/** Stream metadata is partial; keep the checkpoint's identity and branch fields. */
+export function mergeStreamMetadata(
+  previous: unknown,
+  incoming: unknown
+): unknown {
+  if (!isRecord(incoming)) return previous
+  return { ...(isRecord(previous) ? previous : {}), ...incoming }
+}
+
 /**
  * Read the typed branch descriptor off a message (or its metadata), if present.
  */

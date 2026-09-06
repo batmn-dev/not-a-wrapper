@@ -2,6 +2,10 @@
 
 - Status: accepted (2026-07-27), amended (2026-07-31)
 - Date: 2026-07-27
+- Extended by ADR-0039: authenticated retained-stream replay feeds the same
+  SDK rendering state after refresh. Saved text restores immediately; historical
+  chunks reconstruct silently until caught up, and live chunks then retain
+  their arrival cadence and existing paint treatment.
 - Related: ADR-0009 (durable turn runtime — 750 ms snapshot cadence, unchanged),
   ADR-0011 (settlement, unchanged), ADR-0013 (back-navigation detach, unchanged),
   ADR-0015 (presentation reveal — superseded by this decision). Implementation
