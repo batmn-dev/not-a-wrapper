@@ -47,8 +47,29 @@ const toolProgress = {
 
 function hasVisiblePrefix(next: UIMessage, previous: UIMessage | undefined) {
   if (!previous) return true
-  return previous.parts.every((part, index) => {
-    const candidate = next.parts[index]
+  const previousParts = previous.parts.filter(
+    (part) => part.type !== "step-start"
+  )
+  const nextParts = next.parts.filter((part) => part.type !== "step-start")
+  // Durable in-flight checkpoints aggregate text/reasoning across SDK steps.
+  // Match their visible content without requiring the richer replay's layout.
+  if (
+    previousParts.every(
+      (part) => part.type === "text" || part.type === "reasoning"
+    )
+  ) {
+    return (["text", "reasoning"] as const).every((type) => {
+      const before = previousParts
+        .flatMap((part) => (part.type === type ? [part.text] : []))
+        .join("")
+      const after = nextParts
+        .flatMap((part) => (part.type === type ? [part.text] : []))
+        .join("")
+      return after.startsWith(before)
+    })
+  }
+  return previousParts.every((part, index) => {
+    const candidate = nextParts[index]
     if (!candidate || candidate.type !== part.type) return false
     if (part.type === "text" || part.type === "reasoning")
       return "text" in candidate && candidate.text.startsWith(part.text)
