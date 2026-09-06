@@ -97,7 +97,7 @@ the complete stream oracle and records the injected stylesheet hash and final
 geometry. Compare the two Smooth arms for containment; Quick isolates the fade.
 These traces are diagnostic and cannot seed performance baselines.
 
-Schema-v2 JSON retains content-free per-run observations and n/p50/p75/max
+Schema-v3 JSON retains content-free per-run observations and n/p50/p75/max
 aggregates. p95 exists only from 20 observations. The activating click/Enter is
 the start of perceived-latency measurements. The observer checks the relevant DOM
 in a rendering callback and records in a task queued after that rendering
