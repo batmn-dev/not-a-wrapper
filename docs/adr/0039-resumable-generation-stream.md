@@ -15,6 +15,8 @@ A refreshed browser starts an authenticated reconnect before its Convex WebSocke
 
 The refreshed document restores the selected saved messages immediately, without clearing the assistant's parts. The retained stream reconstructs the SDK state silently from its immutable starting state; the caught-up fence publishes the restored answer once, then live chunks publish at their arrival cadence. Historical output has no pacing or typewriter animation. A subscription checkpoint already displayed, or a transient reconnect's visible prefix, is never replaced with a shorter prefix. Replay does not execute client tools, auto-submit approvals, or call initiating-turn finish handlers.
 
+Checkpoint adoption compares visible content in the representation the checkpoint preserves. Live Convex checkpoints aggregate reasoning and text and omit SDK step boundaries; those checkpoints require cumulative reasoning and text prefixes independently. Invisible `step-start` parts do not participate in comparison. Checkpoints containing structured parts retain ordered per-part guards for text, tools, data, sources and files. Rewriting checkpoint persistence to retain full SDK structure is unnecessary for this handoff.
+
 An ephemeral exact assistant identity bypasses Markdown decay during reconstruction. It never enters message metadata or persistence. Incremental parsing and the existing live-stream paint treatment remain in place.
 
 Conversation scroll placement is armed by local submission or preflight, never by streaming status alone. The exact submitted user turn stays armed through its native stream and first-send URL adoption; settlement or another chat clears it. A resumed GET therefore cannot re-pin the prompt after the reader scrolls into the answer.
@@ -68,6 +70,17 @@ records and starting state now have a 1 MiB preflight cap, and the existing
 16 MiB total limit is checked before sending as well as atomically in Redis.
 Oversized retained output falls back to checkpoints without poisoning the client.
 All five Redis integration tests pass against the hosted instance.
+
+### Production checkpoint handoff correction (2026-09-06)
+
+The first production verification after PR #181 restored 9,766 characters from
+a pre-reload 9,472-character answer, but then froze until terminal persistence.
+Redis continued receiving chunks and the authenticated retained route returned
+200. The SDK reconstructed `[step-start, text]` while the live checkpoint held
+`[text]`; comparing part indexes rejected every replay publication. Local browser
+evidence therefore did not establish production acceptance. Production-shaped
+SDK frames reproduce this failure and cover the corrected adoption rule above.
+Production acceptance still requires a fresh live reload test after this fix.
 
 ## References
 

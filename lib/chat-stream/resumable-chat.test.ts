@@ -717,3 +717,131 @@ it.each([false, true])(
     chat.detachObserver()
   }
 )
+
+it.each([false, true])(
+  "adopts an aggregated durable checkpoint through SDK step markers and continues live (multiple steps=%s)",
+  async (multipleSteps) => {
+    // The durable tracker aggregates reasoning/text; the SDK retains step order.
+    const checkpoint: UIMessage = {
+      id: "assistant",
+      role: "assistant",
+      parts: [
+        ...(multipleSteps
+          ? [{ type: "reasoning" as const, text: "Think again" }]
+          : []),
+        { type: "text", text: "Hello world!" },
+      ],
+    }
+    const history: UIMessageChunk[] = [
+      { type: "start", messageId: "assistant" },
+      { type: "start-step" },
+      ...(multipleSteps
+        ? [
+            { type: "reasoning-start" as const, id: "reason-1" },
+            {
+              type: "reasoning-delta" as const,
+              id: "reason-1",
+              delta: "Think ",
+            },
+            { type: "reasoning-end" as const, id: "reason-1" },
+          ]
+        : []),
+      { type: "text-start", id: "text-1" },
+      { type: "text-delta", id: "text-1", delta: "Hello " },
+      ...(multipleSteps
+        ? [
+            { type: "text-end" as const, id: "text-1" },
+            { type: "finish-step" as const },
+            { type: "start-step" as const },
+            { type: "reasoning-start" as const, id: "reason-2" },
+            {
+              type: "reasoning-delta" as const,
+              id: "reason-2",
+              delta: "again",
+            },
+            { type: "reasoning-end" as const, id: "reason-2" },
+            { type: "text-start" as const, id: "text-2" },
+          ]
+        : []),
+      {
+        type: "text-delta",
+        id: multipleSteps ? "text-2" : "text-1",
+        delta: "world",
+      },
+    ]
+    let source!: ReadableStreamDefaultController<Uint8Array>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                source = controller
+              },
+            })
+          )
+      )
+    )
+    const chat = new ResumableChat({ messages: [checkpoint] })
+    const visibleText = () =>
+      chat.messages[0].parts
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("")
+    const updates: string[] = []
+    chat["~registerMessagesCallback"](() => updates.push(visibleText()))
+    chat.syncRun(
+      {
+        chatId: "chat",
+        runId: "run",
+        assistantMessageId: "assistant",
+        status: "streaming",
+      },
+      [checkpoint]
+    )
+    try {
+      await vi.waitFor(() => expect(source).toBeDefined())
+      source.enqueue(
+        frame({
+          type: "selection",
+          runId: "run",
+          assistantMessageId: "assistant",
+          messages: [checkpoint],
+        })
+      )
+      source.enqueue(frame({ type: "base", highWater: `${history.length}-0` }))
+      history.forEach((chunk, index) =>
+        source.enqueue(frame({ type: "chunk", id: `${index + 1}-0`, chunk }))
+      )
+      source.enqueue(frame({ type: "caught-up" }))
+      await vi.waitFor(() => {
+        expect(source.desiredSize).toBe(1)
+        expect(chat.replayingMessageId).toBeNull()
+      })
+      expect(chat.messages[0].parts).toEqual(checkpoint.parts)
+      source.enqueue(
+        frame({
+          type: "chunk",
+          id: `${history.length + 1}-0`,
+          chunk: {
+            type: "text-delta",
+            id: multipleSteps ? "text-2" : "text-1",
+            delta: "! Still streaming.",
+          },
+        })
+      )
+      await vi.waitFor(() =>
+        expect(visibleText()).toBe("Hello world! Still streaming.")
+      )
+      expect(chat.status).toBe("streaming")
+      expect(
+        chat.messages[0].parts.some((part) => part.type === "step-start")
+      ).toBe(true)
+      expect(updates.every((text) => text.startsWith("Hello world!"))).toBe(
+        true
+      )
+    } finally {
+      chat.detachObserver()
+    }
+  }
+)
