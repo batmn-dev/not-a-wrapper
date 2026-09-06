@@ -288,9 +288,7 @@ it("restores the checkpoint before subscription hydration and silently catches u
       ],
     })
   )
-  source.enqueue(
-    frame({ type: "base", highWater: "20-0" })
-  )
+  source.enqueue(frame({ type: "base", highWater: "20-0" }))
   source.enqueue(frame({ type: "chunk", id: "1-0", chunk: chunks[0] }))
   source.enqueue(frame({ type: "chunk", id: "2-0", chunk: chunks[1] }))
   for (let i = 0; i < 12; i++)
@@ -427,4 +425,255 @@ it("keeps a checkpoint painted while discovery was pending", async () => {
   await vi.waitFor(() => expect(published.at(-1)).toBe("Hello world"))
   expect(published.every((text) => text.startsWith("Hello"))).toBe(true)
   expect(chat.replayingMessageId).toBeNull()
+})
+
+it.each([
+  {
+    name: "tool result",
+    checkpoint: {
+      type: "tool-search",
+      toolCallId: "tool",
+      state: "output-available",
+      input: { query: "test" },
+      output: { answer: "saved" },
+    },
+    history: [
+      {
+        type: "tool-search",
+        toolCallId: "tool",
+        state: "input-available",
+        input: { query: "test" },
+      },
+    ],
+    catchUp: [
+      {
+        type: "tool-output-available",
+        toolCallId: "tool",
+        output: { answer: "saved" },
+      },
+    ],
+  },
+  {
+    name: "newer tool output",
+    checkpoint: {
+      type: "tool-search",
+      toolCallId: "tool",
+      state: "output-available",
+      input: { query: "test" },
+      output: { answer: "saved" },
+    },
+    history: [
+      {
+        type: "tool-search",
+        toolCallId: "tool",
+        state: "output-available",
+        input: { query: "test" },
+        output: { answer: "old" },
+      },
+    ],
+    catchUp: [
+      {
+        type: "tool-output-available",
+        toolCallId: "tool",
+        output: { answer: "saved" },
+      },
+    ],
+  },
+  {
+    name: "source",
+    checkpoint: {
+      type: "source-url",
+      sourceId: "source",
+      url: "https://example.com",
+      title: "Saved citation",
+    },
+    history: [],
+    catchUp: [
+      {
+        type: "source-url",
+        sourceId: "source",
+        url: "https://example.com",
+        title: "Saved citation",
+      },
+    ],
+  },
+  {
+    name: "file",
+    checkpoint: {
+      type: "file",
+      mediaType: "image/png",
+      url: "https://example.com/image.png",
+    },
+    history: [],
+    catchUp: [
+      {
+        type: "file",
+        mediaType: "image/png",
+        url: "https://example.com/image.png",
+      },
+    ],
+  },
+] satisfies {
+  name: string
+  checkpoint: UIMessage["parts"][number]
+  history: UIMessage["parts"]
+  catchUp: UIMessageChunk[]
+}[])(
+  "keeps the checkpoint's $name until retained structured output catches up",
+  async ({ checkpoint, history, catchUp }) => {
+    const message: UIMessage = {
+      id: "assistant",
+      role: "assistant",
+      parts: [{ type: "text", text: "Saved" }, checkpoint],
+    }
+    let source!: ReadableStreamDefaultController<Uint8Array>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                source = controller
+              },
+            })
+          )
+      )
+    )
+    const chat = new ResumableChat({ messages: [message] })
+    const updates: UIMessage[] = []
+    chat["~registerMessagesCallback"](() => updates.push(chat.messages[0]))
+    chat.syncRun(
+      {
+        chatId: "chat",
+        runId: "run",
+        assistantMessageId: "assistant",
+        status: "streaming",
+      },
+      [message]
+    )
+    await vi.waitFor(() => expect(source).toBeDefined())
+    source.enqueue(
+      frame({
+        type: "base",
+        highWater: "0-0",
+        message: { ...message, parts: [message.parts[0], ...history] },
+      })
+    )
+    source.enqueue(frame({ type: "caught-up" }))
+    await vi.waitFor(() => expect(source.desiredSize).toBe(1))
+    expect(chat.messages[0]).toEqual(message)
+    expect(updates).toEqual([])
+    for (const chunk of catchUp)
+      source.enqueue(frame({ type: "chunk", id: "1-0", chunk }))
+    source.enqueue(frame({ type: "end" }))
+    source.close()
+    await vi.waitFor(() => expect(chat.replayRunId).toBeNull())
+    expect(updates.length).toBeGreaterThan(0)
+    for (const update of updates) expect(update.parts).toEqual(message.parts)
+  }
+)
+
+it.each([true, false])(
+  "a generation error retries only if its transport is incomplete (end=%s)",
+  async (ended) => {
+    const events = [
+      { type: "base", highWater: "4-0" },
+      ...chunks.map((chunk) => ({ type: "chunk", id: "1-0", chunk })),
+      {
+        type: "chunk",
+        id: "4-0",
+        chunk: { type: "error", errorText: "Model failed" },
+      },
+      { type: "caught-up" },
+      ...(ended ? [{ type: "end" }] : []),
+    ]
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              for (const event of events) controller.enqueue(frame(event))
+              controller.close()
+            },
+          })
+        )
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const chat = new ResumableChat({ messages: [] })
+    chat.syncRun(
+      {
+        chatId: "chat",
+        runId: "run",
+        assistantMessageId: "assistant",
+        status: "streaming",
+      },
+      []
+    )
+    if (ended) {
+      await vi.waitFor(() => expect(chat.replayRunId).toBeNull())
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } else {
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), {
+        timeout: 1500,
+      })
+      chat.detachObserver()
+    }
+    expect(chat.messages[0].parts).toEqual([
+      { type: "text", text: "Hello", state: "streaming" },
+    ])
+  }
+)
+
+it("accepts mutable live data after reaching the checkpoint", async () => {
+  const message: UIMessage = {
+    id: "assistant",
+    role: "assistant",
+    parts: [
+      { type: "data-progress", id: "progress", data: { phase: "queued" } },
+    ],
+  }
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                frame({ type: "base", highWater: "0-0", message })
+              )
+              controller.enqueue(frame({ type: "caught-up" }))
+              controller.enqueue(
+                frame({
+                  type: "chunk",
+                  id: "1-0",
+                  chunk: {
+                    type: "data-progress",
+                    id: "progress",
+                    data: { phase: "running" },
+                  },
+                })
+              )
+              controller.enqueue(frame({ type: "end" }))
+              controller.close()
+            },
+          })
+        )
+    )
+  )
+  const chat = new ResumableChat({ messages: [message] })
+  chat.syncRun(
+    {
+      chatId: "chat",
+      runId: "run",
+      assistantMessageId: "assistant",
+      status: "streaming",
+    },
+    [message]
+  )
+  await vi.waitFor(() => expect(chat.replayRunId).toBeNull())
+  expect(chat.messages[0].parts).toEqual([
+    { type: "data-progress", id: "progress", data: { phase: "running" } },
+  ])
 })

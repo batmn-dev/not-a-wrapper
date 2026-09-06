@@ -141,7 +141,7 @@ describe.runIf(Boolean(url))(
       expect(frames.at(-1)).toEqual({ type: "end" })
     })
 
-    it("marks an oversized log unavailable instead of replaying a trimmed prefix", async () => {
+    it("rejects oversized records before the wire and keeps Redis usable", async () => {
       const runId = newRun()
       const writer = await initializeRetainedChatStream({ runId })
       await writer!.consume(
@@ -153,6 +153,39 @@ describe.runIf(Boolean(url))(
               delta: "x".repeat(16 * 1024 * 1024),
             })
             controller.close()
+          },
+        })
+      )
+      expect(await readRetainedChatStream(runId)).toBeNull()
+      const prefix = `chat-stream:v1:{${encodeURIComponent(runId)}}`
+      expect(await client.hGet(`${prefix}:meta`, "status")).toBe("unavailable")
+      expect(
+        await initializeRetainedChatStream({
+          runId: newRun(),
+          baseMessage: {
+            id: "assistant",
+            role: "assistant",
+            parts: [{ type: "text", text: "x".repeat(2 * 1024 * 1024) }],
+          },
+        })
+      ).toBeNull()
+      expect(
+        await initializeRetainedChatStream({ runId: newRun() })
+      ).not.toBeNull()
+    })
+    it("bounds the aggregate log even when individual chunks fit", async () => {
+      const runId = newRun()
+      const writer = await initializeRetainedChatStream({ runId })
+      let emitted = 0
+      await writer!.consume(
+        new ReadableStream({
+          pull(controller) {
+            if (emitted++ === 33) return controller.close()
+            controller.enqueue({
+              type: "text-delta",
+              id: "text",
+              delta: "x".repeat(512 * 1024),
+            })
           },
         })
       )

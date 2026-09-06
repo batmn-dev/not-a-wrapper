@@ -78,6 +78,8 @@ databases for deployment environments. Place Redis near the Vercel function regi
 Keep Redis private and use TLS/authentication for hosted connections. Replay logs
 contain assistant text, reasoning and tool events. They expire ten minutes after
 completion; active logs renew a one-hour TTL and have a 16 MiB per-run limit.
+Individual records and starting assistant state are limited to 1 MiB before
+transmission, so oversized output cannot exceed hosted Redis request limits.
 Missing or unavailable replay leaves Convex checkpoint recovery active. A reconnect
 retries transient failures with bounded backoff, then falls back after five failures
 without new output. Redis does not make the existing model worker survive a crash.

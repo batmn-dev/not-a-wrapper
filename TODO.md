@@ -57,6 +57,9 @@ do not leak context across project boundaries.
 - **Agent-first file library:** Create a computer-like environment where agents can easily discover files?
 - **Evaluate Next.js to TanStack migration:** From [Theo's post](https://x.com/theo/status/1997406196660400228?lang=en)
 - **Evaluate inference on Fluid:** From [Theo's post](https://x.com/theo/status/1997784385337372877)
+- **Retained-stream admission:** Before multi-user rollout, bound concurrent
+replay readers per user across instances and measure Redis command/connection
+usage. Reuse existing admission patterns; preserve refresh and multi-tab recovery.
 - **Evaluate Vercel's BotID:** Consider narrowly scoped bot attestation before
 expensive platform-funded generations.
 - **Connectors:** Integrations with Google, YouTube, Figma, and personal tools

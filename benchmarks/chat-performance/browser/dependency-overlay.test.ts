@@ -25,9 +25,17 @@ describe("paired dependency overlay", () => {
     })
   })
 
+  it("accepts a new direct dependency already locked as a transitive dependency", () => {
+    expect(validateDependencyOverlay({
+      ...input(),
+      baseLock: JSON.stringify({ ...baseLock, packages: headLock.packages }),
+    })).toEqual({ addedDependencies: ["redis"], addedPackages: [] })
+  })
+
   it.each([
     { headManifest: JSON.stringify({ ...head, scripts: { build: "different build" } }) },
     { headManifest: JSON.stringify({ ...head, dependencies: { redis: "6" } }) },
+    { headLock: JSON.stringify(baseLock) },
     { headLock: JSON.stringify({ ...headLock, packages: { ...headLock.packages, react: ["react@20", "integrity"] } }) },
     { headLock: JSON.stringify({ ...headLock, workspaces: { "": { name: "different", dependencies: head.dependencies } } }) },
   ])("rejects baseline changes instead of hiding them in the overlay", (change) => {

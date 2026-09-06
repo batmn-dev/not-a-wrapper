@@ -111,7 +111,8 @@ function main() {
   // be overlaid; upgrades/removals and build configuration changes fail closed.
   const originalBaseDependencySha256 = digest(path.join(baselineRoot, "bun.lock"))
   let dependencyOverlay: ReturnType<typeof validateDependencyOverlay> | null = null
-  if (originalBaseDependencySha256 !== digest(path.join(root, "bun.lock"))) {
+  if (originalBaseDependencySha256 !== digest(path.join(root, "bun.lock")) ||
+      digest(path.join(baselineRoot, "package.json")) !== digest(path.join(root, "package.json"))) {
     dependencyOverlay = validateDependencyOverlay({
       baseManifest: readFileSync(path.join(baselineRoot, "package.json"), "utf8"),
       headManifest: readFileSync(path.join(root, "package.json"), "utf8"),

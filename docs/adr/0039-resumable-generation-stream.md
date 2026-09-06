@@ -56,7 +56,18 @@ Focused validation passed 66 tests, targeted ESLint, typecheck and optimized
 Next.js build. Independent installed-SDK probes covered text, metadata and
 partial tool JSON at the catch-up boundary. The [before/after video](https://drive.google.com/file/d/1HHeqTFCWfx6DFbl2luawIqPNQhs9SkEL/view)
 labels the old paced replay and the corrected restoration behavior; timing is preserved.
-Production remains unchanged.
+This browser verification preceded production deployment.
+
+### Hosted Redis and PR verification
+
+The production Vercel project now has a dedicated Upstash Redis instance in
+`iad1`, on the free plan with automatic paid upgrades disabled. Its TLS URL is
+configured as the server-only `CHAT_STREAM_REDIS_URL` secret. Local Redis remains
+separate. The hosted service exposed a request-size constraint absent locally:
+records and starting state now have a 1 MiB preflight cap, and the existing
+16 MiB total limit is checked before sending as well as atomically in Redis.
+Oversized retained output falls back to checkpoints without poisoning the client.
+All five Redis integration tests pass against the hosted instance.
 
 ## References
 

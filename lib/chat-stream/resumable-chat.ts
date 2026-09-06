@@ -1,6 +1,7 @@
 import { mergeStreamMetadata } from "@/lib/chat-messages/metadata"
 import { Chat } from "@ai-sdk/react"
 import {
+  isToolUIPart,
   readUIMessageStream,
   type ChatInit,
   type UIMessage,
@@ -13,16 +14,60 @@ import {
 
 type Selection = Extract<RetainedChatStreamFrame, { type: "selection" }>
 
+function containsValue(
+  next: unknown,
+  previous: unknown,
+  partialInput = false
+): boolean {
+  if (previous === undefined || Object.is(next, previous)) return true
+  if (partialInput && typeof previous === "string" && typeof next === "string")
+    return next.startsWith(previous)
+  if (
+    !previous ||
+    !next ||
+    typeof previous !== "object" ||
+    typeof next !== "object"
+  )
+    return false
+  if (Array.isArray(previous) !== Array.isArray(next)) return false
+  return Object.entries(previous).every(([key, value]) =>
+    containsValue((next as Record<string, unknown>)[key], value, partialInput)
+  )
+}
+
+const toolProgress = {
+  "input-streaming": 0,
+  "input-available": 1,
+  "approval-requested": 2,
+  "approval-responded": 3,
+  "output-available": 4,
+  "output-error": 4,
+  "output-denied": 4,
+} as const
+
 function hasVisiblePrefix(next: UIMessage, previous: UIMessage | undefined) {
   if (!previous) return true
-  const text = (message: UIMessage) =>
-    message.parts.flatMap((part) =>
-      part.type === "text" || part.type === "reasoning" ? [part.text] : []
-    )
-  const nextText = text(next)
-  return text(previous).every((part, index) =>
-    nextText[index]?.startsWith(part)
-  )
+  return previous.parts.every((part, index) => {
+    const candidate = next.parts[index]
+    if (!candidate || candidate.type !== part.type) return false
+    if (part.type === "text" || part.type === "reasoning")
+      return "text" in candidate && candidate.text.startsWith(part.text)
+    if (isToolUIPart(part) && isToolUIPart(candidate)) {
+      if (part.toolCallId !== candidate.toolCallId) return false
+      const progress = toolProgress[candidate.state] - toolProgress[part.state]
+      if (progress < 0 || (progress === 0 && candidate.state !== part.state))
+        return false
+      // Partial tool inputs may change shape as their JSON becomes complete.
+      if (part.state === "input-streaming" && progress > 0) return true
+      if (part.state === "output-available" && part.preliminary) {
+        const { output: _output, preliminary: _preliminary, ...stable } = part
+        return containsValue(candidate, stable)
+      }
+      const { state: _state, ...visible } = part
+      return containsValue(candidate, visible, part.state === "input-streaming")
+    }
+    return containsValue(candidate, part)
+  })
 }
 
 /** Rebuild history silently; publish the restored answer and then live chunks. */
@@ -63,6 +108,7 @@ export async function consumeRetainedResponse(
           onSelection?.(frame)
         } else if (frame.type === "base") {
           if (input) throw new Error("Repeated stream base")
+          restored = frame.message
           const pipe = new TransformStream<UIMessageChunk, UIMessageChunk>()
           input = pipe.writable.getWriter()
           consume = (async () => {
@@ -80,6 +126,8 @@ export async function consumeRetainedResponse(
           void consume.catch(() => {})
         } else if (frame.type === "chunk") {
           if (!input) throw new Error("Missing stream base")
+          // Convex owns generation errors; only transport/reducer failures retry.
+          if (frame.chunk.type === "error") continue
           await input.write(frame.chunk)
         } else if (frame.type === "caught-up") {
           if (!input) throw new Error("Missing stream base")
@@ -233,6 +281,7 @@ export class ResumableChat extends Chat<UIMessage> {
           if ([204, 401, 403, 404].includes(response.status)) return
           if (!response.ok || !response.body)
             throw new Error("Stream temporarily unavailable")
+          let restoredCheckpoint = false
           await consumeRetainedResponse(
             response.body,
             (message) => {
@@ -242,7 +291,11 @@ export class ResumableChat extends Chat<UIMessage> {
                 (item) => item.id === message.id
               )
               const previous = this.messages[index]
-              if (!hasVisiblePrefix(message, previous)) return
+              if (!restoredCheckpoint && !hasVisiblePrefix(message, previous))
+                return
+              // Once this reader reaches the checkpoint, its ordered SDK
+              // updates own mutable tool/data parts until the next reconnect.
+              restoredCheckpoint = true
               failures = 0
               this.setStatus({ status: "streaming" })
               const messages = [...this.messages]

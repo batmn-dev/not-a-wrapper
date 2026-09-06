@@ -13,6 +13,8 @@ import {
 } from "./protocol"
 
 const MAX_LOG_BYTES = 16 * 1024 * 1024
+// Keep a single base/chunk well below hosted Redis request-size limits.
+const MAX_RECORD_BYTES = 1024 * 1024
 const COMPLETED_TTL_SECONDS = 600
 const DEFAULT_ACTIVE_TTL_SECONDS = 3600
 const BATCH_INTERVAL_MS = 20
@@ -124,7 +126,8 @@ export async function initializeRetainedChatStream({
   const key = keys(runId)
   const owner = crypto.randomUUID()
   const base = JSON.stringify(baseMessage ?? null)
-  if (Buffer.byteLength(base) > MAX_LOG_BYTES) return null
+  const baseBytes = Buffer.byteLength(base)
+  if (baseBytes > MAX_RECORD_BYTES) return null
   const activeTtl = Math.max(COMPLETED_TTL_SECONDS, Math.ceil(activeTtlSeconds))
   try {
     const initialized = await client.eval(INITIALIZE, {
@@ -148,27 +151,33 @@ export async function initializeRetainedChatStream({
       consumed = true
       const reader = stream.getReader()
       let available = true
+      let logBytes = baseBytes
       let pending: ReturnType<typeof reader.read> | undefined
       async function append(batch: string[]) {
         if (!available || batch.length === 0) return
+        const batchBytes = batch.reduce(
+          (sum, chunk) => sum + Buffer.byteLength(chunk),
+          0
+        )
+        if (logBytes + batchBytes > MAX_LOG_BYTES) {
+          available = false
+          await finish("unavailable")
+          return
+        }
         try {
           available =
             (await client!.eval(APPEND, {
               keys: [key.metadata, key.events],
               arguments: [
                 owner,
-                String(
-                  batch.reduce(
-                    (sum, chunk) => sum + Buffer.byteLength(chunk),
-                    0
-                  )
-                ),
+                String(batchBytes),
                 String(MAX_LOG_BYTES),
                 String(activeTtl),
                 String(COMPLETED_TTL_SECONDS),
                 ...batch,
               ],
             })) === 1
+          logBytes += batchBytes
         } catch {
           available = false
           await finish("unavailable")
@@ -209,8 +218,14 @@ export async function initializeRetainedChatStream({
               }
               if (available) {
                 const encoded = JSON.stringify(result.value)
+                const encodedBytes = Buffer.byteLength(encoded)
+                if (encodedBytes > MAX_RECORD_BYTES) {
+                  available = false
+                  await finish("unavailable")
+                  continue
+                }
                 batch.push(encoded)
-                bytes += Buffer.byteLength(encoded)
+                bytes += encodedBytes
               }
             }
           } catch (error) {

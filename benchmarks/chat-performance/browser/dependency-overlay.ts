@@ -44,7 +44,7 @@ export function validateDependencyOverlay(input: {
   assertUnchanged(baseDeps, baseRootDeps, "Base manifest/lock dependency agreement")
   assertUnchanged(headDeps, headRootDeps, "Head manifest/lock dependency agreement")
   const addedPackages = additions(record.parse(basePackages), record.parse(headPackages), "Locked package")
-  if (addedDependencies.length === 0 || addedPackages.length === 0)
-    throw new Error("Dependency overlay requires added dependencies and locked packages")
+  if (addedDependencies.length === 0)
+    throw new Error("Dependency overlay requires added dependencies")
   return { addedDependencies, addedPackages }
 }
