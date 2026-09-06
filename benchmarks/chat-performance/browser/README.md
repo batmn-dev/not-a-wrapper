@@ -143,15 +143,20 @@ CDP timestamps synthetic wheel input before a visual-state synchronization barri
 `scrollAutomationDispatchMs` reports that pre-forward interval separately. The raw
 `scrollInputToPresentationMs` total remains visible, but is not a physical-input
 latency claim or regression gate. Both components must sum to that total. An
-isolated wheel event and its UserTiming anchor identify one process/string-local
-async track within a complete bounded interval. Missing, ambiguous, incomplete,
+isolated wheel event and its UserTiming anchor identify one category/process/local
+async track within a complete bounded interval. Scroll protocol v2 follows the
+exact submitted scroll frame using lossless input, surface, and display IDs plus
+the input's native frame-swap timestamp. This avoids crediting a later original
+main frame when the scroll already appeared on a forked compositor frame. Direct
+input-track attribution applies only when the submission path is unavailable.
+Version 1 captures cannot be relabeled. Missing, ambiguous, incomplete,
 or lost native evidence fails collection. Menu input must follow the wheel's
 native presentation; the handoff uses one rAF-to-task opportunity. The late menu
 is clicked natively at its verified pre-wheel position in the sticky composer,
 avoiding extra locator stability waits. Its actual pointerdown must open the menu
-while streaming remains active; no retry or fallback is permitted. Version2 rejects
+while streaming remains active; no retry or fallback is permitted. Interaction v2 rejects
 the earlier two-rAF/locator-click sequencing.
-`wheelProtocol: native-browser-presentation-v1`
+`wheelProtocol: native-browser-presentation-v2`
 and `interactionProtocol: late-typing-native-wheel-menu-v2` reject older captures.
 Normal runs retain native traces in CI artifacts without CPU profiling and disable
 the old geometry-reading wheel observer. Production `scrollToFrameMs` remains a

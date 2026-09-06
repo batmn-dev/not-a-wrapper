@@ -95,6 +95,7 @@ describe("native scroll presentation", () => {
 
 const inputId = "7364717213562621727"
 const surfaceId = "4388705654518307780"
+const displayId = "4388705654518307778"
 const forkedFixture = () => [
   ...fixture().filter((e) => !e.name.startsWith("SwapEnd")).map((e) =>
     e.name === "EventLatency" && e.ph === "b" && e.ts === 290223824
@@ -104,8 +105,20 @@ const forkedFixture = () => [
   { ...event("Graphics.Pipeline", "X", 290700000), args: {
     chrome_graphics_pipeline: { step: "STEP_SUBMIT_COMPOSITOR_FRAME", latency_ids: [inputId], surface_frame_trace_id: surfaceId },
   } },
+  { ...event("InputLatency::GestureScrollUpdate", "b", 290223824), args: {
+    chrome_latency_info: { trace_id: inputId, component_info: [
+      { component_type: "COMPONENT_INPUT_EVENT_LATENCY_ORIGINAL", time_us: 290223824 },
+      { component_type: "COMPONENT_INPUT_EVENT_LATENCY_FRAME_SWAP", time_us: 291078167 },
+    ] },
+  } },
+  { ...event("Graphics.Pipeline", "X", 290800000), args: {
+    chrome_graphics_pipeline: {
+      step: "STEP_SURFACE_AGGREGATION", display_trace_id: displayId,
+      aggregated_surface_frame_trace_ids: [surfaceId],
+    },
+  } },
   { ...event("PipelineReporter", "b", 290600000, "frame"), args: {
-    frame_reporter: { state: "STATE_PRESENTED_ALL", surface_frame_trace_id: surfaceId },
+    frame_reporter: { state: "STATE_PRESENTED_ALL", surface_frame_trace_id: surfaceId, display_trace_id: displayId },
   } },
   event("SwapEndToPresentationCompositorFrame", "b", 291078167, "frame"),
   event("SwapEndToPresentationCompositorFrame", "e", 291078272, "frame"),
@@ -127,6 +140,61 @@ describe("forked compositor presentation", () => {
     })
   })
 
+  it("selects the input's early fork even when its original main reporter eventually presents", () => {
+    const traceEvents = forkedFixture().map((e) =>
+      e.name === "EventLatency" && e.ph === "e" && e.ts === 291078272 ? { ...e, ts: 291178272 } : e)
+    traceEvents.push(
+      event("SwapEndToPresentationCompositorFrame", "b", 291178167),
+      event("SwapEndToPresentationCompositorFrame", "e", 291178272),
+      { ...event("PipelineReporter", "b", 290600000, "slow-main"), args: {
+        frame_reporter: { state: "STATE_PRESENTED_ALL", surface_frame_trace_id: surfaceId, display_trace_id: "4388705654518307779" },
+      } },
+      event("SwapEndToPresentationCompositorFrame", "b", 291178167, "slow-main"),
+      event("SwapEndToPresentationCompositorFrame", "e", 291178272, "slow-main"),
+      event("PipelineReporter", "e", 291178272, "slow-main"),
+    )
+    expect(parseNativeScroll(rawTrace(traceEvents), anchor).inputToPresentationMs).toBe(854.448)
+  })
+
+  it("keeps the direct presentation when the independent fork was dropped before submission", () => {
+    const traceEvents = fixture().map((e) => e.ts === 290223824 && e.name === "EventLatency"
+      ? { ...e, args: { event_latency: { event_type: "FIRST_GESTURE_SCROLL_UPDATE", event_latency_id: inputId } } } : e)
+    const trace = rawTrace([...traceEvents, {
+      ...event("InputLatency::GestureScrollUpdate", "b", 290223824),
+      args: { chrome_latency_info: { trace_id: inputId, component_info: [
+        { component_type: "COMPONENT_INPUT_EVENT_LATENCY_ORIGINAL", time_us: 290223824 },
+      ] } },
+    }, {
+      ...event("PipelineReporter", "b", 290600000, "dropped"),
+      args: { frame_reporter: { state: "STATE_DROPPED", surface_frame_trace_id: surfaceId } },
+    }])
+    expect(parseNativeScroll(trace, anchor).inputToPresentationMs).toBe(854.448)
+  })
+
+  it("rejects a missing submit even when a complete direct endpoint remains", () => {
+    const traceEvents = forkedFixture().filter((e) => !(e.name === "Graphics.Pipeline" && e.ts === 290700000))
+    traceEvents.push(
+      event("SwapEndToPresentationCompositorFrame", "b", 291078167),
+      event("SwapEndToPresentationCompositorFrame", "e", 291078272),
+    )
+    expect(() => parseNativeScroll(rawTrace(traceEvents), anchor)).toThrow("Missing or ambiguous native scroll frame submission")
+  })
+
+  it("rejects a different surface that collides on the same reporter interval", () => {
+    const traceEvents = [...forkedFixture(), {
+      ...event("PipelineReporter", "b", 290600000, "frame"),
+      args: { frame_reporter: { state: "STATE_PRESENTED_ALL", surface_frame_trace_id: "4388705654518307781" } },
+    }]
+    expect(() => parseNativeScroll(rawTrace(traceEvents), anchor)).toThrow("Ambiguous presented frame interval")
+  })
+
+  it("rejects a forged swap timestamp and a display that aggregated another surface", () => {
+    const trace = rawTrace(forkedFixture())
+    expect(() => parseNativeScroll(trace.replace('"time_us":291078167', '"time_us":291078168'), anchor)).toThrow()
+    expect(() => parseNativeScroll(trace.replace(`"aggregated_surface_frame_trace_ids":[${surfaceId}]`,
+      '"aggregated_surface_frame_trace_ids":[4388705654518307781]'), anchor)).toThrow()
+  })
+
   it("accepts signed Chromium event identifiers without rounding", () => {
     const trace = rawTrace(forkedFixture()).replaceAll(inputId, "-1844411730683114345")
     expect(parseNativeScroll(trace, anchor).inputToPresentationMs).toBe(854.448)
@@ -146,6 +214,8 @@ describe("forked compositor presentation", () => {
   it.each([
     ["missing submit", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.name !== "Graphics.Pipeline")],
     ["ambiguous submit", (events: ReturnType<typeof forkedFixture>) => [...events, events.find((e) => e.name === "Graphics.Pipeline")]],
+    ["missing input latency", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.name !== "InputLatency::GestureScrollUpdate")],
+    ["missing display aggregation", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => !(e.name === "Graphics.Pipeline" && e.ts === 290800000))],
     ["missing surface join", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.name !== "PipelineReporter")],
     ["unpresented state", (events: ReturnType<typeof forkedFixture>) => events.filter((e) => e.id2.local !== "frame")],
     ["ambiguous presented reporter", (events: ReturnType<typeof forkedFixture>) => [...events, events.find((e) => e.name === "PipelineReporter" && e.id2.local === "frame")]],

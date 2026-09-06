@@ -22,7 +22,7 @@ Measurement changes require a reviewed overlay; never relabel older captures.
 
 Current protocols include `dom-frame-v3`, 40 ms typing, `disabled-v1` replay,
 `matching-account-v1` admission readiness, `publisher-frame-v1` streamed content,
-`native-browser-presentation-v1` scrolling, `activation-v1` menus, and
+`native-browser-presentation-v2` scrolling, `activation-v1` menus, and
 `late-typing-native-wheel-menu-v2` probe order. Older captures cannot be relabeled.
 Send control enablement is distinct from simultaneous enabled/admitted readiness.
 Scroll gates browser-forwarding to native presentation; CDP pre-forward delay and

@@ -75,13 +75,18 @@ and separating its native stages preserves the existing user journey.
 An isolated wheel's
 event timestamp and UserTiming anchor select one process/string-local async track
 and its bounded interval. Chromium can present the scroll on a forked compositor
-frame while terminating the original input track without frame history. In that
-case, exact input and submitted-frame IDs must identify one presented frame's
-`SwapEndToPresentationCompositorFrame` endpoint. Preserve 64-bit IDs losslessly;
+frame before the original input track terminates or presents a later main frame.
+Version 2 consistently selects the exact submitted scroll frame when that evidence
+exists, using input and surface IDs plus the input's native frame-swap timestamp
+to identify its `SwapEndToPresentationCompositorFrame` interval. Direct input-track
+attribution is valid only when the independent submission path is unavailable.
+Preserve 64-bit IDs losslessly;
 never substitute a nearby frame, swap time, or termination timestamp. Missing,
 ambiguous, incomplete, or lost trace evidence fails. This attribution repair
-retains the native endpoints and runs identically on both sides of a pair.
-Required protocols are `wheelProtocol: native-browser-presentation-v1` and
+retains native clock boundaries and runs identically on both sides of a pair.
+Version 1 mixed the earlier compositor frame with later main-frame completion;
+its captures cannot be relabeled or compared against version 2 results.
+Required protocols are `wheelProtocol: native-browser-presentation-v2` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`; earlier scroll captures
 are incompatible. Normal runs retain native traces in CI artifacts without CPU
 profiling and disable the old geometry-reading wheel observer. Chromium's native

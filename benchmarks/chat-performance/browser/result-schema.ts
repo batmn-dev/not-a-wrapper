@@ -108,7 +108,7 @@ export type ScenarioResult = {
   auth: boolean
   followup: boolean
   /** Native input/frame trace joins replace the DOM scroll proxy. */
-  wheelProtocol?: "native-browser-presentation-v1"
+  wheelProtocol?: "native-browser-presentation-v2"
   /** Opening intent precedes native menu mousedown handling. */
   menuProtocol?: "activation-v1"
   /** Late probes finish before unmeasured menu dismissal. */

@@ -357,10 +357,14 @@ intentional second-tab cutoffs. Any observation-buffer overflow invalidates a ru
 Readiness requires global `accountReadinessProtocol: matching-account-v1`.
 The original-base overlay publishes the same observation-only admission predicate
 without changing its product gate; earlier readiness captures are incompatible.
-Native benchmark scrolling requires `wheelProtocol: native-browser-presentation-v1` and
+Native benchmark scrolling requires `wheelProtocol: native-browser-presentation-v2` and
 `interactionProtocol: late-typing-native-wheel-menu-v2`. The isolated wheel's
-event timestamp and UserTiming anchor select a unique process/string-local async
-track and complete bounded presentation interval. Lost, missing, ambiguous, or
+event timestamp and UserTiming anchor select a unique category/process/local async
+track. Version 2 identifies the exact submitted scroll frame using input, surface,
+and display IDs plus its native frame-swap timestamp, even if the original input
+track later presents a main frame. Direct attribution requires the independent
+submission path to be unavailable. Version 1 captures are incompatible and cannot
+be relabeled. Lost, missing, ambiguous, or
 incomplete evidence fails. Native traces remain CI artifacts; normal runs do not
 CPU-profile. Production wheel observation remains a movement proxy, invalidated by
 cancellation, competing input, navigation, or application scroll commands.

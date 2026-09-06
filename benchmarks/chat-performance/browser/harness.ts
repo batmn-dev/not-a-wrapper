@@ -1585,7 +1585,7 @@ async function main() {
       action: config.action,
       sampleCount: RUNS,
       warmupRuns: WARMUPS,
-      wheelProtocol: config.interact ? "native-browser-presentation-v1" : undefined,
+      wheelProtocol: config.interact ? "native-browser-presentation-v2" : undefined,
       menuProtocol: config.interact ? "activation-v1" : undefined,
       interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
       contentFrameProtocol: "publisher-frame-v1",

@@ -66,7 +66,7 @@ function result(suite: keyof typeof SUITES = "smoke"): ComparableResult {
         auth: config.auth ?? false,
         followup: config.followup ?? false,
         contentFrameProtocol: "publisher-frame-v1",
-        wheelProtocol: config.interact ? "native-browser-presentation-v1" : undefined,
+        wheelProtocol: config.interact ? "native-browser-presentation-v2" : undefined,
         menuProtocol: config.interact ? "activation-v1" : undefined,
         interactionProtocol: config.interact ? "late-typing-native-wheel-menu-v2" : undefined,
         sampleCount: 5,
@@ -397,7 +397,7 @@ describe("performance evidence contract", () => {
     const current = result("responsiveness")
     delete before.scenarios[3].wheelProtocol
     expect(compareResults(before, current).join(" ")).toContain("scenario missing")
-    before.scenarios[3].wheelProtocol = "native-browser-presentation-v1"
+    before.scenarios[3].wheelProtocol = "native-browser-presentation-v2"
     expect(compareResults(before, current)).toEqual([])
   })
 
@@ -475,6 +475,7 @@ describe("performance evidence contract", () => {
     for (const protocol of [
       { wheelProtocol: "prepared-wheel-v1" },
       { wheelProtocol: "native-presentation-v1" },
+      { wheelProtocol: "native-browser-presentation-v1" },
       { interactionProtocol: "late-typing-wheel-menu-v1" },
     ]) {
       const legacy = structuredClone(current)
